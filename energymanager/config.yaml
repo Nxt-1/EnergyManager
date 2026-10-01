@@ -1,0 +1,17 @@
+name: Energy Manager
+version: "0.1.0"
+slug: energy_manager
+description: Predictive home energy manager for Home Assistant
+url: https://github.com/Nxt-1/EnergyManager
+arch:
+  - amd64
+startup: application
+boot: auto
+stage: experimental
+homeassistant_api: true
+image: ghcr.io/nxt-1/energymanager
+options:
+  log_level: info
+schema:
+  log_level: list(debug|info|warning|error)
+  grid_power_entity: str?
