@@ -6,7 +6,6 @@ import asyncio
 import logging
 import os
 import signal
-import sys
 
 from . import __version__
 from .app import EnergyManagerApp

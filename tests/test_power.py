@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from energymanager.power import PowerStateError, power_w_from_state
 
 

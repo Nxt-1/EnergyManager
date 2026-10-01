@@ -26,7 +26,7 @@ class HomeAssistantClient:
         self._token = token
         self._session: aiohttp.ClientSession | None = None
 
-    async def __aenter__(self) -> "HomeAssistantClient":
+    async def __aenter__(self) -> HomeAssistantClient:
         timeout = aiohttp.ClientTimeout(total=15)
         headers = {
             "Authorization": f"Bearer {self._token}",

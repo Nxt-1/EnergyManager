@@ -24,7 +24,7 @@ class Settings:
     grid_power_entity: str | None = None
 
     @classmethod
-    def load(cls, path: Path = _OPTIONS_PATH) -> "Settings":
+    def load(cls, path: Path = _OPTIONS_PATH) -> Settings:
         """Load and validate settings from the Home Assistant app options file."""
         if not path.exists():
             return cls()
