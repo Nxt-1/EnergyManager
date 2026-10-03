@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- Re-published the v0.3 house-state release after missing source files were added to the repository.
+- No intended functional changes from v0.3.0.
+
 ## 0.3.0
 
 - Added grouped runtime configuration for Grid, ESS, PV and EV inputs.
