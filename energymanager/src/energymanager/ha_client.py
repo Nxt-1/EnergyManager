@@ -1,4 +1,4 @@
-"""Minimal asynchronous Home Assistant API client for the Energy Manager app."""
+"""Minimal asynchronous Home Assistant/Supervisor API client for Energy Manager."""
 
 from __future__ import annotations
 
@@ -11,14 +11,15 @@ import aiohttp
 
 REST_BASE_URL = "http://supervisor/core/api"
 WEBSOCKET_URL = "ws://supervisor/core/websocket"
+SUPERVISOR_BASE_URL = "http://supervisor"
 
 
 class HomeAssistantError(RuntimeError):
-    """Raised when communication with Home Assistant fails."""
+    """Raised when communication with Home Assistant or Supervisor fails."""
 
 
 class HomeAssistantClient:
-    """Read Home Assistant state and publish diagnostics through the Supervisor proxy."""
+    """Read Home Assistant state and publish Energy Manager diagnostics."""
 
     def __init__(self, token: str) -> None:
         if not token:
@@ -67,6 +68,28 @@ class HomeAssistantClient:
 
         async with session.post(url, json=payload) as response:
             if response.status not in {200, 201}:
+                body = await response.text()
+                raise HomeAssistantError(f"POST {url} returned HTTP {response.status}: {body}")
+
+    async def delete_state(self, entity_id: str) -> bool:
+        """Delete an Energy Manager-created state; return whether it existed."""
+        session = self._require_session()
+        encoded_entity = quote(entity_id, safe="._-")
+        url = f"{REST_BASE_URL}/states/{encoded_entity}"
+        async with session.delete(url) as response:
+            if response.status == 404:
+                return False
+            if response.status != 200:
+                body = await response.text()
+                raise HomeAssistantError(f"DELETE {url} returned HTTP {response.status}: {body}")
+            return True
+
+    async def replace_own_options(self, options: dict[str, Any]) -> None:
+        """Replace this app's stored options, used for one-time config migration."""
+        session = self._require_session()
+        url = f"{SUPERVISOR_BASE_URL}/addons/self/options"
+        async with session.post(url, json={"options": options}) as response:
+            if response.status != 200:
                 body = await response.text()
                 raise HomeAssistantError(f"POST {url} returned HTTP {response.status}: {body}")
 

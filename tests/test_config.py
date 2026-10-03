@@ -5,26 +5,50 @@ from pathlib import Path
 
 import pytest
 
-from energymanager.config import ConfigurationError, Settings
+from energymanager.config import (
+    ConfigurationError,
+    EssSettings,
+    EvSettings,
+    GridSettings,
+    PvSettings,
+    Settings,
+)
 
 
 def test_missing_options_file_uses_defaults(tmp_path: Path) -> None:
     settings = Settings.load(tmp_path / "missing.json")
 
     assert settings.log_level == "info"
-    assert settings.grid_import_power_entity is None
-    assert settings.grid_export_power_entity is None
+    assert settings.grid.import_power_entity is None
+    assert settings.grid.export_power_entity is None
+    assert settings.ess.power_positive_means == "discharge"
     assert settings.grid_power_configured is False
 
 
-def test_options_are_loaded(tmp_path: Path) -> None:
+def test_grouped_options_are_loaded(tmp_path: Path) -> None:
     path = tmp_path / "options.json"
     path.write_text(
         json.dumps(
             {
                 "log_level": "debug",
-                "grid_import_power_entity": "sensor.grid_import_power",
-                "grid_export_power_entity": "sensor.grid_export_power",
+                "grid": {
+                    "import_power_entity": "sensor.grid_import_power",
+                    "export_power_entity": "sensor.grid_export_power",
+                },
+                "ess": {
+                    "soc_entity": "sensor.ess_soc",
+                    "power_entity": "sensor.ess_power",
+                    "power_positive_means": "charge",
+                },
+                "pv": {
+                    "solax_power_entity": "sensor.solax_power",
+                    "shed_power_entity": "sensor.shed_power",
+                },
+                "ev": {
+                    "soc_entity": "sensor.ev_soc",
+                    "connected_entity": "binary_sensor.ev_connected",
+                    "charging_power_entity": "sensor.ev_power",
+                },
             }
         ),
         encoding="utf-8",
@@ -33,42 +57,91 @@ def test_options_are_loaded(tmp_path: Path) -> None:
     settings = Settings.load(path)
 
     assert settings.log_level == "debug"
-    assert settings.grid_import_power_entity == "sensor.grid_import_power"
-    assert settings.grid_export_power_entity == "sensor.grid_export_power"
+    assert settings.grid.import_power_entity == "sensor.grid_import_power"
+    assert settings.grid.export_power_entity == "sensor.grid_export_power"
+    assert settings.ess.soc_entity == "sensor.ess_soc"
+    assert settings.ess.power_positive_means == "charge"
+    assert settings.pv.shed_power_entity == "sensor.shed_power"
+    assert settings.ev.connected_entity == "binary_sensor.ev_connected"
     assert settings.grid_power_configured is True
+    assert settings.legacy_options_detected is False
 
 
-@pytest.mark.parametrize("key", ["grid_import_power_entity", "grid_export_power_entity"])
-def test_empty_grid_entity_becomes_none(tmp_path: Path, key: str) -> None:
+def test_v02_flat_grid_options_are_loaded_for_migration(tmp_path: Path) -> None:
     path = tmp_path / "options.json"
-    path.write_text(json.dumps({key: "   "}), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "grid_import_power_entity": "sensor.grid_import",
+                "grid_export_power_entity": "sensor.grid_export",
+            }
+        ),
+        encoding="utf-8",
+    )
 
     settings = Settings.load(path)
 
-    assert getattr(settings, key) is None
-    assert settings.grid_power_configured is False
+    assert settings.grid.import_power_entity == "sensor.grid_import"
+    assert settings.grid.export_power_entity == "sensor.grid_export"
+    assert settings.legacy_options_detected is True
+    assert "grid_import_power_entity" not in settings.as_options()
+    assert settings.as_options()["grid"]["import_power_entity"] == "sensor.grid_import"
 
 
-@pytest.mark.parametrize("key", ["grid_import_power_entity", "grid_export_power_entity"])
-def test_invalid_entity_id_is_rejected(tmp_path: Path, key: str) -> None:
+def test_configured_entities_are_deduplicated() -> None:
+    settings = Settings(
+        grid=GridSettings("sensor.import", "sensor.export"),
+        ess=EssSettings(soc_entity="sensor.shared", power_entity="sensor.ess_power"),
+        pv=PvSettings(solax_power_entity="sensor.shared"),
+        ev=EvSettings(charging_power_entity="sensor.ev_power"),
+    )
+
+    assert settings.configured_entities().count("sensor.shared") == 1
+
+
+@pytest.mark.parametrize(
+    ("group", "key"),
+    [
+        ("grid", "import_power_entity"),
+        ("grid", "export_power_entity"),
+        ("ess", "soc_entity"),
+        ("ess", "power_entity"),
+        ("pv", "solax_power_entity"),
+        ("pv", "shed_power_entity"),
+        ("ev", "soc_entity"),
+        ("ev", "connected_entity"),
+        ("ev", "charging_power_entity"),
+    ],
+)
+def test_invalid_entity_id_is_rejected(tmp_path: Path, group: str, key: str) -> None:
     path = tmp_path / "options.json"
-    path.write_text(json.dumps({key: "Not an entity"}), encoding="utf-8")
+    path.write_text(json.dumps({group: {key: "Not an entity"}}), encoding="utf-8")
 
     with pytest.raises(ConfigurationError):
         Settings.load(path)
 
 
-def test_same_import_and_export_entity_is_rejected(tmp_path: Path) -> None:
+def test_same_grid_import_and_export_entity_is_rejected(tmp_path: Path) -> None:
     path = tmp_path / "options.json"
     path.write_text(
         json.dumps(
             {
-                "grid_import_power_entity": "sensor.grid_power",
-                "grid_export_power_entity": "sensor.grid_power",
+                "grid": {
+                    "import_power_entity": "sensor.grid_power",
+                    "export_power_entity": "sensor.grid_power",
+                }
             }
         ),
         encoding="utf-8",
     )
+
+    with pytest.raises(ConfigurationError):
+        Settings.load(path)
+
+
+def test_invalid_ess_power_sign_is_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "options.json"
+    path.write_text(json.dumps({"ess": {"power_positive_means": "magic"}}), encoding="utf-8")
 
     with pytest.raises(ConfigurationError):
         Settings.load(path)

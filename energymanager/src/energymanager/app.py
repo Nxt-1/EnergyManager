@@ -1,9 +1,11 @@
-"""Energy Manager shadow-mode application lifecycle."""
+"""Energy Manager read-only house-state application lifecycle."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from collections import defaultdict
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import aiohttp
@@ -11,55 +13,54 @@ import aiohttp
 from .config import Settings
 from .diagnostics import DiagnosticsPublisher
 from .ha_client import HomeAssistantClient, HomeAssistantError
-from .power import PowerStateError, grid_net_power_w, power_w_from_state
+from .house_state import HouseState
+from .inputs import InputSpec, build_input_specs
+from .power import PowerStateError
 
 _LOGGER = logging.getLogger(__name__)
+_REFRESH_INTERVAL = 30.0
+_STALE_AFTER = timedelta(seconds=90)
 
 
 class EnergyManagerApp:
-    """Observe separate grid import/export entities and publish a canonical read-only grid state."""
+    """Observe configured Home Assistant inputs and maintain a normalized house state."""
 
     def __init__(self, settings: Settings, client: HomeAssistantClient) -> None:
         self._settings = settings
         self._client = client
-        self._diagnostics = DiagnosticsPublisher(
-            client,
-            settings.grid_import_power_entity,
-            settings.grid_export_power_entity,
-        )
-        self._grid_values: dict[str, float | None] = {"import": None, "export": None}
-        self._grid_states: dict[str, dict[str, Any] | None] = {"import": None, "export": None}
-        self._grid_errors: dict[str, str | None] = {"import": None, "export": None}
+        self._diagnostics = DiagnosticsPublisher(client)
+        self._house_state = HouseState()
+        self._specs = build_input_specs(settings)
+        self._specs_by_entity: dict[str, list[InputSpec]] = defaultdict(list)
         self._last_status: tuple[str, str | None] | None = None
+
+        for spec in self._specs:
+            self._house_state.ensure_input(spec.key, spec.entity_id)
+            if spec.entity_id is not None:
+                self._specs_by_entity[spec.entity_id].append(spec)
+
+    @property
+    def house_state(self) -> HouseState:
+        """Expose the canonical state for later predictors/planner code."""
+        return self._house_state
 
     async def run(self, stop_event: asyncio.Event) -> None:
         """Run until Home Assistant stops the app."""
         await self._safe_publish_status("starting")
-
-        if not self._settings.grid_power_configured:
-            missing = []
-            if self._settings.grid_import_power_entity is None:
-                missing.append("grid_import_power_entity")
-            if self._settings.grid_export_power_entity is None:
-                missing.append("grid_export_power_entity")
-            message = f"Missing required grid configuration: {', '.join(missing)}"
-            _LOGGER.warning("%s; waiting in read-only idle mode", message)
-            await self._safe_publish_status("waiting_for_configuration", error=message)
-            await stop_event.wait()
-            await self._safe_publish_status("stopping")
-            return
+        await self._migrate_legacy_configuration()
+        await self._cleanup_legacy_diagnostics()
 
         retry_delay = 1.0
         while not stop_event.is_set():
             try:
-                await self._observe_grid_power(stop_event)
+                await self._observe_inputs(stop_event)
                 retry_delay = 1.0
             except asyncio.CancelledError:
                 raise
             except (HomeAssistantError, aiohttp.ClientError, OSError, TimeoutError) as exc:
                 _LOGGER.warning("Home Assistant connection failed: %s", exc)
                 await self._safe_publish_status("reconnecting", error=str(exc))
-            except Exception as exc:  # noqa: BLE001 - keep daemon alive on unforeseen integration failures.
+            except Exception as exc:  # noqa: BLE001 - daemon should survive unforeseen integration failures.
                 _LOGGER.exception("Unexpected Energy Manager runtime error")
                 await self._safe_publish_status("reconnecting", error=f"{type(exc).__name__}: {exc}")
 
@@ -75,108 +76,155 @@ class EnergyManagerApp:
 
         await self._safe_publish_status("stopping")
 
-    async def _observe_grid_power(self, stop_event: asyncio.Event) -> None:
-        import_entity = self._settings.grid_import_power_entity
-        export_entity = self._settings.grid_export_power_entity
-        if import_entity is None or export_entity is None:
+    async def _observe_inputs(self, stop_event: asyncio.Event) -> None:
+        entities = tuple(self._specs_by_entity)
+        await self._refresh_all_inputs()
+        await self._publish_house_state()
+
+        if not entities:
+            _LOGGER.warning("No Home Assistant input entities are configured")
+            await stop_event.wait()
             return
 
-        import_state, export_state = await asyncio.gather(
-            self._client.get_state(import_entity),
-            self._client.get_state(export_entity),
-        )
-        await self._process_grid_state("import", import_state)
-        await self._process_grid_state("export", export_state)
-        await self._publish_grid_health()
-
-        _LOGGER.info(
-            "Connected to Home Assistant; observing grid import %s and export %s",
-            import_entity,
-            export_entity,
-        )
-
-        state_changes = self._client.state_changes((import_entity, export_entity))
+        _LOGGER.info("Connected to Home Assistant; observing %d configured entities", len(entities))
+        state_changes = self._client.state_changes(entities)
         try:
+            next_state_task = asyncio.create_task(anext(state_changes))
+            refresh_task = asyncio.create_task(asyncio.sleep(_REFRESH_INTERVAL))
+            stop_task = asyncio.create_task(stop_event.wait())
+
             while not stop_event.is_set():
-                next_state_task = asyncio.create_task(anext(state_changes))
-                stop_task = asyncio.create_task(stop_event.wait())
-                done, pending = await asyncio.wait(
-                    {next_state_task, stop_task},
+                done, _ = await asyncio.wait(
+                    {next_state_task, refresh_task, stop_task},
                     return_when=asyncio.FIRST_COMPLETED,
                 )
 
-                for task in pending:
-                    task.cancel()
-                await asyncio.gather(*pending, return_exceptions=True)
-
                 if stop_task in done:
-                    return
+                    break
 
-                entity_id, new_state = next_state_task.result()
-                kind = "import" if entity_id == import_entity else "export"
-                await self._process_grid_state(kind, new_state)
-                await self._publish_grid_health()
+                if next_state_task in done:
+                    entity_id, new_state = next_state_task.result()
+                    self._process_entity_state(entity_id, new_state)
+                    await self._publish_house_state()
+                    next_state_task = asyncio.create_task(anext(state_changes))
+
+                if refresh_task in done:
+                    await self._refresh_all_inputs()
+                    self._house_state.update_staleness(_STALE_AFTER)
+                    await self._publish_house_state()
+                    refresh_task = asyncio.create_task(asyncio.sleep(_REFRESH_INTERVAL))
         finally:
+            for task in (locals().get("next_state_task"), locals().get("refresh_task"), locals().get("stop_task")):
+                if isinstance(task, asyncio.Task) and not task.done():
+                    task.cancel()
+            await asyncio.gather(
+                *[
+                    task
+                    for task in (
+                        locals().get("next_state_task"),
+                        locals().get("refresh_task"),
+                        locals().get("stop_task"),
+                    )
+                    if isinstance(task, asyncio.Task)
+                ],
+                return_exceptions=True,
+            )
             await state_changes.aclose()
 
-    async def _process_grid_state(self, kind: str, state: dict[str, Any]) -> None:
-        self._grid_states[kind] = state
+    async def _refresh_all_inputs(self) -> None:
+        """Refresh all configured inputs so unchanged HA states also stay fresh."""
+        entities = tuple(self._specs_by_entity)
+        if not entities:
+            return
+
+        results = await asyncio.gather(
+            *(self._client.get_state(entity_id) for entity_id in entities),
+            return_exceptions=True,
+        )
+        now = datetime.now(UTC)
+        for entity_id, result in zip(entities, results, strict=True):
+            if isinstance(result, Exception):
+                self._mark_entity_invalid(entity_id, str(result), observed_at_utc=now)
+                continue
+            self._process_entity_state(entity_id, result, observed_at_utc=now)
+
+    def _process_entity_state(
+        self,
+        entity_id: str,
+        state: dict[str, Any],
+        *,
+        observed_at_utc: datetime | None = None,
+    ) -> None:
+        observed_at = observed_at_utc or datetime.now(UTC)
+        source_last_updated = state.get("last_updated") or state.get("last_reported")
+        for spec in self._specs_by_entity.get(entity_id, ()):
+            reading = self._house_state.reading(spec.key)
+            try:
+                value = spec.parser(state)
+            except PowerStateError as exc:
+                reading.set_invalid(
+                    str(exc),
+                    observed_at_utc=observed_at,
+                    source_last_updated=source_last_updated,
+                )
+                _LOGGER.warning("Input %s (%s) is unavailable: %s", spec.key, entity_id, exc)
+                continue
+
+            reading.set_valid(
+                value,
+                unit=spec.unit,
+                observed_at_utc=observed_at,
+                source_last_updated=source_last_updated,
+            )
+            _LOGGER.debug("Observed %s from %s: %r %s", spec.key, entity_id, value, spec.unit or "")
+
+    def _mark_entity_invalid(self, entity_id: str, reason: str, *, observed_at_utc: datetime) -> None:
+        for spec in self._specs_by_entity.get(entity_id, ()):
+            self._house_state.reading(spec.key).set_invalid(reason, observed_at_utc=observed_at_utc)
+        _LOGGER.warning("Unable to refresh %s: %s", entity_id, reason)
+
+    async def _publish_house_state(self) -> None:
+        for reading in self._house_state.readings.values():
+            await self._diagnostics.publish_reading(reading)
+        await self._diagnostics.publish_derived(self._house_state)
+
+        status, error = self._current_health()
+        health = "healthy" if status == "connected" else status
+        await self._diagnostics.publish_input_health(self._house_state, health)
+        await self._safe_publish_status(status, error=error)
+
+    def _current_health(self) -> tuple[str, str | None]:
+        if not self._settings.grid.configured:
+            return "waiting_for_configuration", "Grid import/export entities are not both configured"
+
+        problems = self._house_state.invalid_or_stale
+        if problems:
+            summary = "; ".join(f"{reading.key}: {reading.error or reading.status.value}" for reading in problems)
+            return "degraded", summary
+        return "connected", None
+
+    async def _migrate_legacy_configuration(self) -> None:
+        if not self._settings.legacy_options_detected:
+            return
         try:
-            power_w = power_w_from_state(state)
-            if power_w < 0:
-                raise PowerStateError(f"Grid {kind} power cannot be negative: {power_w} W")
-        except PowerStateError as exc:
-            self._grid_values[kind] = None
-            self._grid_errors[kind] = str(exc)
-            _LOGGER.warning("Grid %s input is unavailable: %s", kind, exc)
-            if kind == "import":
-                await self._diagnostics.publish_import_unavailable(str(exc), state)
-            else:
-                await self._diagnostics.publish_export_unavailable(str(exc), state)
+            await self._client.replace_own_options(self._settings.as_options())
+        except HomeAssistantError as exc:
+            _LOGGER.warning("Could not migrate v0.2 flat configuration to grouped options: %s", exc)
             return
+        _LOGGER.info("Migrated v0.2 grid options to grouped v0.3 configuration")
 
-        self._grid_values[kind] = power_w
-        self._grid_errors[kind] = None
-        _LOGGER.debug("Observed grid %s power: %.3f W", kind, power_w)
-        if kind == "import":
-            await self._diagnostics.publish_grid_import_power(power_w, state)
-        else:
-            await self._diagnostics.publish_grid_export_power(power_w, state)
-
-    async def _publish_grid_health(self) -> None:
-        import_power = self._grid_values["import"]
-        export_power = self._grid_values["export"]
-        import_state = self._grid_states["import"]
-        export_state = self._grid_states["export"]
-
-        if import_power is None or export_power is None or import_state is None or export_state is None:
-            errors = [
-                f"{kind}: {error}"
-                for kind, error in self._grid_errors.items()
-                if error is not None
-            ]
-            reason = "; ".join(errors) if errors else "Waiting for valid import and export measurements"
-            await self._diagnostics.publish_grid_power_unavailable(reason)
-            await self._safe_publish_status("degraded", error=reason)
-            return
-
+    async def _cleanup_legacy_diagnostics(self) -> None:
         try:
-            net_power = grid_net_power_w(import_power, export_power)
-        except PowerStateError as exc:
-            await self._diagnostics.publish_grid_power_unavailable(str(exc))
-            await self._safe_publish_status("degraded", error=str(exc))
-            return
-
-        await self._diagnostics.publish_grid_power(net_power, import_state, export_state)
-        await self._safe_publish_status("connected")
-        _LOGGER.debug("Derived net grid power: %.3f W", net_power)
+            await self._diagnostics.cleanup_legacy_entities()
+        except HomeAssistantError as exc:
+            _LOGGER.warning("Could not remove legacy Energy Manager diagnostics: %s", exc)
 
     async def _safe_publish_status(self, status: str, *, error: str | None = None) -> None:
         signature = (status, error)
         if signature == self._last_status:
             return
         try:
-            await self._diagnostics.publish_status(status, error=error)
+            await self._diagnostics.publish_status(status, house_state=self._house_state, error=error)
         except Exception as exc:  # noqa: BLE001 - diagnostics must never terminate the controller process.
             _LOGGER.debug("Unable to publish status %s: %s", status, exc)
             return

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0
+
+- Added grouped runtime configuration for Grid, ESS, PV and EV inputs.
+- Added a normalized internal House State with per-input validity, observation time and source metadata.
+- Added ESS SoC/power, separate PV powers, EV SoC/connection/charging-power inputs.
+- Added canonical ESS sign handling: positive discharge, negative charge.
+- Added total-PV and aggregate input-health diagnostics.
+- Added periodic 30-second input reconciliation alongside event-driven WebSocket updates.
+- Added automatic migration of the v0.2 flat grid configuration to the grouped v0.3 format.
+- Removes the obsolete v0.1 `sensor.energy_manager_observed_grid_power` state on startup.
+- Remains read-only; no device control is present.
+
 ## 0.2.0
 
 - Replaced the single grid-power input with separate momentary import and export entities.

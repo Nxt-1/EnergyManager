@@ -7,156 +7,179 @@ from typing import Any
 
 from . import __version__
 from .ha_client import HomeAssistantClient
+from .house_state import HouseState, InputReading
 
 STATUS_ENTITY = "sensor.energy_manager_status"
+INPUT_HEALTH_ENTITY = "sensor.energy_manager_input_health"
 GRID_IMPORT_POWER_ENTITY = "sensor.energy_manager_grid_import_power"
 GRID_EXPORT_POWER_ENTITY = "sensor.energy_manager_grid_export_power"
 GRID_NET_POWER_ENTITY = "sensor.energy_manager_grid_power"
+ESS_SOC_ENTITY = "sensor.energy_manager_ess_soc"
+ESS_POWER_ENTITY = "sensor.energy_manager_ess_power"
+PV_SOLAX_POWER_ENTITY = "sensor.energy_manager_pv_solax_power"
+PV_SHED_POWER_ENTITY = "sensor.energy_manager_pv_shed_power"
+PV_TOTAL_POWER_ENTITY = "sensor.energy_manager_pv_total_power"
+EV_SOC_ENTITY = "sensor.energy_manager_ev_soc"
+EV_CONNECTED_ENTITY = "binary_sensor.energy_manager_ev_connected"
+EV_CHARGING_POWER_ENTITY = "sensor.energy_manager_ev_charging_power"
+
+LEGACY_ENTITIES = ("sensor.energy_manager_observed_grid_power",)
+
+_DIAGNOSTIC_INPUTS: dict[str, tuple[str, str, str | None, str | None]] = {
+    "grid.import_power": (GRID_IMPORT_POWER_ENTITY, "Energy Manager Grid Import Power", "W", "power"),
+    "grid.export_power": (GRID_EXPORT_POWER_ENTITY, "Energy Manager Grid Export Power", "W", "power"),
+    "ess.soc": (ESS_SOC_ENTITY, "Energy Manager ESS SoC", "%", "battery"),
+    "ess.power": (ESS_POWER_ENTITY, "Energy Manager ESS Power", "W", "power"),
+    "pv.solax_power": (PV_SOLAX_POWER_ENTITY, "Energy Manager Solax PV Power", "W", "power"),
+    "pv.shed_power": (PV_SHED_POWER_ENTITY, "Energy Manager Shed PV Power", "W", "power"),
+    "ev.soc": (EV_SOC_ENTITY, "Energy Manager EV SoC", "%", "battery"),
+    "ev.connected": (EV_CONNECTED_ENTITY, "Energy Manager EV Connected", None, "connectivity"),
+    "ev.charging_power": (EV_CHARGING_POWER_ENTITY, "Energy Manager EV Charging Power", "W", "power"),
+}
 
 
 class DiagnosticsPublisher:
-    """Publish read-only Energy Manager status and normalized grid measurements."""
+    """Publish read-only normalized house-state diagnostics."""
 
-    def __init__(
-        self,
-        client: HomeAssistantClient,
-        source_import_entity: str | None,
-        source_export_entity: str | None,
-    ) -> None:
+    def __init__(self, client: HomeAssistantClient) -> None:
         self._client = client
-        self._source_import_entity = source_import_entity
-        self._source_export_entity = source_export_entity
 
-    async def publish_status(self, status: str, *, error: str | None = None) -> None:
-        """Publish Energy Manager connectivity/status information."""
+    async def publish_status(
+        self,
+        status: str,
+        *,
+        house_state: HouseState | None = None,
+        error: str | None = None,
+    ) -> None:
+        """Publish Energy Manager runtime status."""
         attributes: dict[str, Any] = {
             "friendly_name": "Energy Manager Status",
             "version": __version__,
             "shadow_mode": True,
-            "grid_import_power_entity": self._source_import_entity,
-            "grid_export_power_entity": self._source_export_entity,
             "last_update_utc": datetime.now(UTC).isoformat(),
         }
+        if house_state is not None:
+            attributes["configured_inputs"] = house_state.configured_count
         if error:
             attributes["error"] = error
-
         await self._client.set_state(STATUS_ENTITY, status, attributes)
 
-    async def publish_grid_import_power(self, power_w: float, source_state: dict[str, Any]) -> None:
-        """Publish normalized grid import power."""
-        await self._publish_source_power(
-            GRID_IMPORT_POWER_ENTITY,
-            "Energy Manager Grid Import Power",
-            power_w,
-            self._source_import_entity,
-            source_state,
-        )
+    async def publish_reading(self, reading: InputReading) -> None:
+        """Publish one configured normalized source reading."""
+        if reading.entity_id is None:
+            return
 
-    async def publish_grid_export_power(self, power_w: float, source_state: dict[str, Any]) -> None:
-        """Publish normalized grid export power."""
-        await self._publish_source_power(
-            GRID_EXPORT_POWER_ENTITY,
-            "Energy Manager Grid Export Power",
-            power_w,
-            self._source_export_entity,
-            source_state,
-        )
+        diagnostic = _DIAGNOSTIC_INPUTS.get(reading.key)
+        if diagnostic is None:
+            return
+        entity_id, friendly_name, unit, device_class = diagnostic
 
-    async def publish_grid_power(
-        self,
-        power_w: float,
-        import_state: dict[str, Any],
-        export_state: dict[str, Any],
-    ) -> None:
-        """Publish canonical net grid power: positive import, negative export."""
-        attributes = self._power_attributes("Energy Manager Grid Power")
-        attributes.update(
-            {
-                "positive_means": "import",
-                "negative_means": "export",
-                "source_import_entity": self._source_import_entity,
-                "source_export_entity": self._source_export_entity,
-                "source_import_last_updated": import_state.get("last_updated"),
-                "source_export_last_updated": export_state.get("last_updated"),
-            }
-        )
-        await self._client.set_state(GRID_NET_POWER_ENTITY, round(power_w, 3), attributes)
-
-    async def publish_import_unavailable(self, reason: str, source_state: dict[str, Any] | None = None) -> None:
-        """Mark the normalized grid-import diagnostic as unavailable."""
-        await self._publish_unavailable(
-            GRID_IMPORT_POWER_ENTITY,
-            "Energy Manager Grid Import Power",
-            self._source_import_entity,
-            reason,
-            source_state,
-        )
-
-    async def publish_export_unavailable(self, reason: str, source_state: dict[str, Any] | None = None) -> None:
-        """Mark the normalized grid-export diagnostic as unavailable."""
-        await self._publish_unavailable(
-            GRID_EXPORT_POWER_ENTITY,
-            "Energy Manager Grid Export Power",
-            self._source_export_entity,
-            reason,
-            source_state,
-        )
-
-    async def publish_grid_power_unavailable(self, reason: str) -> None:
-        """Mark canonical net grid power as unavailable."""
-        attributes = self._power_attributes("Energy Manager Grid Power")
-        attributes.update(
-            {
-                "positive_means": "import",
-                "negative_means": "export",
-                "source_import_entity": self._source_import_entity,
-                "source_export_entity": self._source_export_entity,
-                "error": reason,
-            }
-        )
-        await self._client.set_state(GRID_NET_POWER_ENTITY, "unavailable", attributes)
-
-    async def _publish_source_power(
-        self,
-        entity_id: str,
-        friendly_name: str,
-        power_w: float,
-        source_entity: str | None,
-        source_state: dict[str, Any],
-    ) -> None:
-        attributes = self._power_attributes(friendly_name)
-        attributes.update(
-            {
-                "source_entity": source_entity,
-                "source_last_updated": source_state.get("last_updated"),
-            }
-        )
-        await self._client.set_state(entity_id, round(power_w, 3), attributes)
-
-    async def _publish_unavailable(
-        self,
-        entity_id: str,
-        friendly_name: str,
-        source_entity: str | None,
-        reason: str,
-        source_state: dict[str, Any] | None,
-    ) -> None:
-        attributes = self._power_attributes(friendly_name)
-        attributes.update(
-            {
-                "source_entity": source_entity,
-                "source_last_updated": (source_state or {}).get("last_updated"),
-                "error": reason,
-            }
-        )
-        await self._client.set_state(entity_id, "unavailable", attributes)
-
-    @staticmethod
-    def _power_attributes(friendly_name: str) -> dict[str, Any]:
-        return {
+        attributes: dict[str, Any] = {
             "friendly_name": friendly_name,
-            "unit_of_measurement": "W",
-            "device_class": "power",
-            "state_class": "measurement",
+            "source_entity": reading.entity_id,
+            "input_status": reading.status.value,
+            "observed_at_utc": _iso(reading.observed_at_utc),
+            "source_last_updated": reading.source_last_updated,
             "last_update_utc": datetime.now(UTC).isoformat(),
         }
+        if unit is not None:
+            attributes["unit_of_measurement"] = unit
+        if device_class is not None:
+            attributes["device_class"] = device_class
+        if entity_id.startswith("sensor."):
+            attributes["state_class"] = "measurement"
+        if reading.key == "ess.power":
+            attributes["positive_means"] = "discharge"
+            attributes["negative_means"] = "charge"
+        if reading.error:
+            attributes["error"] = reading.error
+
+        if not reading.valid or reading.value is None:
+            await self._client.set_state(entity_id, "unavailable", attributes)
+            return
+
+        if isinstance(reading.value, bool):
+            state: str | float = "on" if reading.value else "off"
+        else:
+            state = round(float(reading.value), 3)
+        await self._client.set_state(entity_id, state, attributes)
+
+    async def publish_derived(self, house_state: HouseState) -> None:
+        """Publish grid-net and total-PV values derived from the canonical house state."""
+        await self._publish_grid_net(house_state)
+        await self._publish_pv_total(house_state)
+
+    async def publish_input_health(self, house_state: HouseState, health: str) -> None:
+        """Publish aggregate input validity/freshness information."""
+        problem_readings = house_state.invalid_or_stale
+        attributes = {
+            "friendly_name": "Energy Manager Input Health",
+            "configured_inputs": house_state.configured_count,
+            "problem_inputs": [reading.key for reading in problem_readings],
+            "problem_count": len(problem_readings),
+            "last_update_utc": datetime.now(UTC).isoformat(),
+        }
+        await self._client.set_state(INPUT_HEALTH_ENTITY, health, attributes)
+
+    async def cleanup_legacy_entities(self) -> None:
+        """Remove diagnostics created by older Energy Manager releases."""
+        for entity_id in LEGACY_ENTITIES:
+            await self._client.delete_state(entity_id)
+
+    async def _publish_grid_net(self, house_state: HouseState) -> None:
+        import_reading = house_state.readings.get("grid.import_power")
+        export_reading = house_state.readings.get("grid.export_power")
+        if import_reading is None or export_reading is None:
+            return
+        if import_reading.entity_id is None and export_reading.entity_id is None:
+            return
+
+        attributes = _power_attributes("Energy Manager Grid Power")
+        attributes.update(
+            {
+                "positive_means": "import",
+                "negative_means": "export",
+                "source_import_entity": import_reading.entity_id,
+                "source_export_entity": export_reading.entity_id,
+            }
+        )
+        value = house_state.grid_power_w
+        if value is None:
+            attributes["error"] = "Grid import and export inputs are not both valid/fresh"
+            await self._client.set_state(GRID_NET_POWER_ENTITY, "unavailable", attributes)
+            return
+        await self._client.set_state(GRID_NET_POWER_ENTITY, round(value, 3), attributes)
+
+    async def _publish_pv_total(self, house_state: HouseState) -> None:
+        solax = house_state.readings.get("pv.solax_power")
+        shed = house_state.readings.get("pv.shed_power")
+        if not any(reading is not None and reading.entity_id is not None for reading in (solax, shed)):
+            return
+
+        attributes = _power_attributes("Energy Manager Total PV Power")
+        attributes.update(
+            {
+                "source_solax_entity": solax.entity_id if solax else None,
+                "source_shed_entity": shed.entity_id if shed else None,
+            }
+        )
+        value = house_state.pv_total_power_w
+        if value is None:
+            attributes["error"] = "One or more configured PV inputs are not valid/fresh"
+            await self._client.set_state(PV_TOTAL_POWER_ENTITY, "unavailable", attributes)
+            return
+        await self._client.set_state(PV_TOTAL_POWER_ENTITY, round(value, 3), attributes)
+
+
+def _power_attributes(friendly_name: str) -> dict[str, Any]:
+    return {
+        "friendly_name": friendly_name,
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "state_class": "measurement",
+        "last_update_utc": datetime.now(UTC).isoformat(),
+    }
+
+
+def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None

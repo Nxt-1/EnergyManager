@@ -2,9 +2,49 @@ configuration:
   log_level:
     name: Log level
     description: Logging detail written to the Energy Manager app log.
-  grid_import_power_entity:
-    name: Grid import power entity
-    description: Home Assistant entity ID for momentary grid import power. The sensor must report W or kW.
-  grid_export_power_entity:
-    name: Grid export power entity
-    description: Home Assistant entity ID for momentary grid export power. The sensor must report W or kW.
+  grid:
+    name: Grid
+    description: P1 momentary grid measurements.
+    fields:
+      import_power_entity:
+        name: Import power entity
+        description: Home Assistant entity ID for momentary grid import power in W or kW.
+      export_power_entity:
+        name: Export power entity
+        description: Home Assistant entity ID for momentary grid export power in W or kW.
+  ess:
+    name: ESS
+    description: Battery/ESS measurements used to build the canonical house state.
+    fields:
+      soc_entity:
+        name: SoC entity
+        description: Home Assistant entity ID for ESS state of charge in percent.
+      power_entity:
+        name: Power entity
+        description: Home Assistant entity ID for ESS power in W or kW.
+      power_positive_means:
+        name: Positive ESS power means
+        description: Select how positive values from the configured ESS power entity should be interpreted.
+  pv:
+    name: PV
+    description: Separate PV production measurements. Total PV is derived from the configured inputs.
+    fields:
+      solax_power_entity:
+        name: Solax PV power entity
+        description: Home Assistant entity ID for AC-coupled Solax PV power in W or kW.
+      shed_power_entity:
+        name: Shed PV power entity
+        description: Home Assistant entity ID for shed/Victron MPPT PV power in W or kW.
+  ev:
+    name: EV
+    description: Vehicle and charging measurements.
+    fields:
+      soc_entity:
+        name: EV SoC entity
+        description: Home Assistant entity ID for vehicle state of charge in percent.
+      connected_entity:
+        name: EV connected entity
+        description: Home Assistant entity ID indicating whether the vehicle is connected/plugged in.
+      charging_power_entity:
+        name: EV charging power entity
+        description: Home Assistant entity ID for present EV charging power in W or kW.
