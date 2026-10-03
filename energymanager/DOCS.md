@@ -1,81 +1,85 @@
 # Energy Manager
 
-Version 0.3.0 remains a fully read-only shadow-mode release. It introduces the first normalized internal house state and
-expands the Home Assistant inputs beyond the grid.
+Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.4.0 adds the first predictor: a
+four-plane PV forecast running directly in Python.
 
 ## Configuration
 
-Inputs are grouped by function on the app Configuration page. Entity IDs remain runtime configuration; none are hardcoded
-in Energy Manager.
+Entity IDs remain runtime configuration and are not hardcoded. Existing Grid, ESS, PV and EV configuration is preserved.
 
 ### Grid
 
 Configure separate momentary import and export power entities. Both must report `W` or `kW` and must be non-negative.
-Energy Manager derives canonical grid power as:
-
-`grid power = import power - export power`
-
-Positive canonical grid power means import; negative means export.
+Canonical grid power is `import - export`: positive means import, negative means export.
 
 ### ESS
 
-- **SoC entity**: percentage from 0 to 100.
-- **Power entity**: power in W or kW.
-- **Positive ESS power means**: tells Energy Manager how the source sensor signs its value.
+ESS SoC is normalized to percent. ESS power is normalized so positive means discharge and negative means charge.
 
-Internally, ESS power is normalized so **positive means discharge** and **negative means charge**.
+### PV measurements
 
-### PV
+The Solax and shed/Victron PV power entities remain optional measurement inputs. Total measured PV is the sum of configured
+valid PV inputs.
 
-Configure the Solax and/or shed/Victron PV power entities. Each configured input must report non-negative power in W or kW.
-Total PV power is the sum of all configured valid PV inputs.
+`forecast_enabled` controls the built-in PV predictor and defaults to enabled when omitted.
 
-### EV
+## PV predictor
 
-- **SoC entity**: percentage from 0 to 100.
-- **Connected entity**: common binary/connection states such as on/off, true/false or connected/disconnected.
-- **Charging power entity**: non-negative charging power in W or kW.
+The predictor requests three local calendar days from Open-Meteo using the KNMI HARMONIE AROME Netherlands model. It uses
+four physical PV planes:
 
-### Log level
+- Front roof: 3.28 kWp, tilt 38°, Open-Meteo azimuth +50°.
+- Rear pitched roof: 1.64 kWp, tilt 46°, azimuth -130°.
+- Rear flat-roof section: 0.82 kWp, tilt 13°, azimuth -130°.
+- Shed: 6.18 kWp, tilt 9.5°, azimuth -40°.
 
-Available values: `debug`, `info`, `warning`, `error`.
+Each plane uses global tilted irradiance and a cell-temperature estimate. The three original CECEP planes retain the
+existing -0.34 %/°C Pmax coefficient. The DMEGC DM515G12RT-B54HBW shed plane uses -0.29 %/°C. The shed starts without an
+empirical correction until enough operating history exists.
+
+### Seed calibration
+
+The physical model is corrected only at measurable group level:
+
+- Front group: front roof.
+- Rear group: rear pitched + rear flat.
+- Shed group: shed plane.
+
+The initial front/rear calibration was derived from recorded forecast and string-production history from 20 August through
+3 October 2026. It models time-of-day shading and a conservative seasonal change on the rear group. Weak irradiance blends
+the correction toward the unshaded physical model because the historical shade penalty was much smaller under weak/diffuse
+conditions. Seasonal calibration is clamped outside the observed period instead of extrapolated into unobserved seasons.
+
+The predictor also records direct radiation, diffuse radiation and cloud cover in its hourly forecast points so later
+calibration can test weather-dependent effects without changing the planner interface.
+
+### Day-ahead snapshots
+
+After 20:15 local time, the first successful forecast stores a snapshot for the following day under
+`/data/pv_forecast_snapshots.json`. App data survives normal app updates. Snapshots are kept for approximately 90 days and
+will later support forecast calibration.
+
+## PV forecast diagnostics
+
+Version 0.4.0 adds:
+
+- `sensor.energy_manager_pv_forecast_status`
+- `sensor.energy_manager_pv_forecast_today_energy`
+- `sensor.energy_manager_pv_forecast_tomorrow_energy`
+- `sensor.energy_manager_pv_forecast_next_hour_power`
+- `sensor.energy_manager_pv_day_ahead_today_energy`
+- `sensor.energy_manager_pv_day_ahead_tomorrow_energy`
+
+Daily forecast sensors expose front, rear and shed energy as attributes. The next-hour sensor exposes calibrated and raw
+power by group plus the available cloud/direct/diffuse forecast values.
 
 ## Input validity and freshness
 
-Energy Manager subscribes to Home Assistant state changes for fast updates and also refreshes all configured inputs every
-30 seconds. This periodic refresh prevents a sensor that simply remains at the same value from being mistaken for stale
-data. The internal input model records the normalized value, source entity, source timestamp, observation time and any
-validation error.
-
-An invalid/unavailable configured input makes the aggregate input health `degraded`. Grid import/export remain the minimum
-configuration needed for overall status `connected`.
-
-## Diagnostic states
-
-Depending on what is configured, v0.3.0 publishes:
-
-- `sensor.energy_manager_status`
-- `sensor.energy_manager_input_health`
-- `sensor.energy_manager_grid_import_power`
-- `sensor.energy_manager_grid_export_power`
-- `sensor.energy_manager_grid_power`
-- `sensor.energy_manager_ess_soc`
-- `sensor.energy_manager_ess_power`
-- `sensor.energy_manager_pv_solax_power`
-- `sensor.energy_manager_pv_shed_power`
-- `sensor.energy_manager_pv_total_power`
-- `sensor.energy_manager_ev_soc`
-- `binary_sensor.energy_manager_ev_connected`
-- `sensor.energy_manager_ev_charging_power`
-
-The obsolete v0.1.0 `sensor.energy_manager_observed_grid_power` state is removed automatically on startup.
-
-## Configuration migration
-
-When upgrading from v0.2.0, Energy Manager understands the previous flat grid options and attempts to migrate them to the
-new grouped Grid configuration automatically.
+Home Assistant measurement inputs are event-driven and also reconciled every 30 seconds. Invalid, unavailable or stale
+configured measurement inputs degrade `sensor.energy_manager_input_health`. PV forecast health is deliberately separate in
+`sensor.energy_manager_pv_forecast_status` because an external weather API failure must not invalidate local measurements.
 
 ## Safety
 
-This release contains no actuator and no command path. It cannot alter the ESS, EV charger, heat pump, ventilation, or any
-other Home Assistant device.
+This release still contains no actuator and no command path. It cannot alter the ESS, EV charger, heat pump, ventilation,
+or any other Home Assistant device.

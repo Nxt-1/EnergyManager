@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from . import __version__
 from .ha_client import HomeAssistantClient
 from .house_state import HouseState, InputReading
+from .pv_forecast import CALIBRATION_VERSION, PvDailyEnergy, PvForecast, PvSnapshot
 
 STATUS_ENTITY = "sensor.energy_manager_status"
 INPUT_HEALTH_ENTITY = "sensor.energy_manager_input_health"
@@ -22,6 +23,12 @@ PV_TOTAL_POWER_ENTITY = "sensor.energy_manager_pv_total_power"
 EV_SOC_ENTITY = "sensor.energy_manager_ev_soc"
 EV_CONNECTED_ENTITY = "binary_sensor.energy_manager_ev_connected"
 EV_CHARGING_POWER_ENTITY = "sensor.energy_manager_ev_charging_power"
+PV_FORECAST_STATUS_ENTITY = "sensor.energy_manager_pv_forecast_status"
+PV_FORECAST_TODAY_ENTITY = "sensor.energy_manager_pv_forecast_today_energy"
+PV_FORECAST_TOMORROW_ENTITY = "sensor.energy_manager_pv_forecast_tomorrow_energy"
+PV_FORECAST_NEXT_HOUR_ENTITY = "sensor.energy_manager_pv_forecast_next_hour_power"
+PV_DAY_AHEAD_TODAY_ENTITY = "sensor.energy_manager_pv_day_ahead_today_energy"
+PV_DAY_AHEAD_TOMORROW_ENTITY = "sensor.energy_manager_pv_day_ahead_tomorrow_energy"
 
 LEGACY_ENTITIES = ("sensor.energy_manager_observed_grid_power",)
 
@@ -39,7 +46,7 @@ _DIAGNOSTIC_INPUTS: dict[str, tuple[str, str, str | None, str | None]] = {
 
 
 class DiagnosticsPublisher:
-    """Publish read-only normalized house-state diagnostics."""
+    """Publish read-only normalized house-state and forecast diagnostics."""
 
     def __init__(self, client: HomeAssistantClient) -> None:
         self._client = client
@@ -121,6 +128,56 @@ class DiagnosticsPublisher:
         }
         await self._client.set_state(INPUT_HEALTH_ENTITY, health, attributes)
 
+    async def publish_pv_forecast_status(
+        self,
+        status: str,
+        *,
+        generated_at_utc: datetime | None = None,
+        error: str | None = None,
+    ) -> None:
+        """Publish independent health for the external PV predictor."""
+        attributes: dict[str, Any] = {
+            "friendly_name": "Energy Manager PV Forecast Status",
+            "model": "Open-Meteo KNMI HARMONIE AROME Netherlands",
+            "calibration_version": CALIBRATION_VERSION,
+            "last_update_utc": datetime.now(UTC).isoformat(),
+        }
+        if generated_at_utc is not None:
+            attributes["forecast_generated_at_utc"] = generated_at_utc.isoformat()
+        if error:
+            attributes["error"] = error
+        await self._client.set_state(PV_FORECAST_STATUS_ENTITY, status, attributes)
+
+    async def publish_pv_forecast(
+        self,
+        forecast: PvForecast,
+        *,
+        today_snapshot: PvSnapshot | None,
+        tomorrow_snapshot: PvSnapshot | None,
+        now_local: datetime,
+    ) -> None:
+        """Publish compact forecast summaries while retaining full hourly data in Python."""
+        today = forecast.daily_energy(now_local.date())
+        tomorrow = forecast.daily_energy(now_local.date() + timedelta(days=1))
+        await self._publish_pv_daily(PV_FORECAST_TODAY_ENTITY, "PV Forecast Today", today, forecast)
+        await self._publish_pv_daily(
+            PV_FORECAST_TOMORROW_ENTITY,
+            "PV Forecast Tomorrow",
+            tomorrow,
+            forecast,
+        )
+        await self._publish_pv_snapshot(
+            PV_DAY_AHEAD_TODAY_ENTITY,
+            "PV Day-Ahead Forecast Today",
+            today_snapshot,
+        )
+        await self._publish_pv_snapshot(
+            PV_DAY_AHEAD_TOMORROW_ENTITY,
+            "PV Day-Ahead Forecast Tomorrow",
+            tomorrow_snapshot,
+        )
+        await self._publish_pv_next_hour(forecast, now_local)
+
     async def cleanup_legacy_entities(self) -> None:
         """Remove diagnostics created by older Energy Manager releases."""
         for entity_id in LEGACY_ENTITIES:
@@ -170,6 +227,72 @@ class DiagnosticsPublisher:
             return
         await self._client.set_state(PV_TOTAL_POWER_ENTITY, round(value, 3), attributes)
 
+    async def _publish_pv_daily(
+        self,
+        entity_id: str,
+        friendly_name: str,
+        daily: PvDailyEnergy | None,
+        forecast: PvForecast,
+    ) -> None:
+        attributes = _energy_attributes(friendly_name)
+        attributes.update(
+            {
+                "forecast_generated_at_utc": forecast.generated_at_utc.isoformat(),
+                "calibration_version": CALIBRATION_VERSION,
+            }
+        )
+        if daily is None:
+            await self._client.set_state(entity_id, "unavailable", attributes)
+            return
+        attributes.update(_group_energy_attributes(daily))
+        await self._client.set_state(entity_id, round(daily.total_kwh, 3), attributes)
+
+    async def _publish_pv_snapshot(
+        self,
+        entity_id: str,
+        friendly_name: str,
+        snapshot: PvSnapshot | None,
+    ) -> None:
+        attributes = _energy_attributes(friendly_name)
+        attributes["calibration_version"] = CALIBRATION_VERSION
+        if snapshot is None:
+            attributes["error"] = "No stored day-ahead snapshot for this date"
+            await self._client.set_state(entity_id, "unavailable", attributes)
+            return
+        attributes.update(
+            {
+                "target_date": snapshot.target_date.isoformat(),
+                "captured_at_utc": snapshot.captured_at_utc.isoformat(),
+                "front_kwh": round(snapshot.front_kwh, 3),
+                "rear_kwh": round(snapshot.rear_kwh, 3),
+                "shed_kwh": round(snapshot.shed_kwh, 3),
+            }
+        )
+        await self._client.set_state(entity_id, round(snapshot.total_kwh, 3), attributes)
+
+    async def _publish_pv_next_hour(self, forecast: PvForecast, now_local: datetime) -> None:
+        point = forecast.next_hour(now_local)
+        attributes = _power_attributes("Energy Manager PV Forecast Next Hour Power")
+        attributes["calibration_version"] = CALIBRATION_VERSION
+        if point is None:
+            await self._client.set_state(PV_FORECAST_NEXT_HOUR_ENTITY, "unavailable", attributes)
+            return
+        attributes.update(
+            {
+                "period_end_local": point.period_end_local.isoformat(),
+                "front_power_w": round(point.front_power_w, 1),
+                "rear_power_w": round(point.rear_power_w, 1),
+                "shed_power_w": round(point.shed_power_w, 1),
+                "raw_front_power_w": round(point.front_raw_power_w, 1),
+                "raw_rear_power_w": round(point.rear_raw_power_w, 1),
+                "raw_shed_power_w": round(point.shed_raw_power_w, 1),
+                "cloud_cover_pct": point.cloud_cover_pct,
+                "direct_radiation_wm2": point.direct_radiation_wm2,
+                "diffuse_radiation_wm2": point.diffuse_radiation_wm2,
+            }
+        )
+        await self._client.set_state(PV_FORECAST_NEXT_HOUR_ENTITY, round(point.total_power_w, 1), attributes)
+
 
 def _power_attributes(friendly_name: str) -> dict[str, Any]:
     return {
@@ -178,6 +301,23 @@ def _power_attributes(friendly_name: str) -> dict[str, Any]:
         "device_class": "power",
         "state_class": "measurement",
         "last_update_utc": datetime.now(UTC).isoformat(),
+    }
+
+
+def _energy_attributes(friendly_name: str) -> dict[str, Any]:
+    return {
+        "friendly_name": friendly_name,
+        "unit_of_measurement": "kWh",
+        "last_update_utc": datetime.now(UTC).isoformat(),
+    }
+
+
+def _group_energy_attributes(daily: PvDailyEnergy) -> dict[str, Any]:
+    return {
+        "target_date": daily.target_date.isoformat(),
+        "front_kwh": round(daily.front_kwh, 3),
+        "rear_kwh": round(daily.rear_kwh, 3),
+        "shed_kwh": round(daily.shed_kwh, 3),
     }
 
 

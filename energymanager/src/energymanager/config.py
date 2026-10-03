@@ -42,10 +42,11 @@ class EssSettings:
 
 @dataclass(frozen=True, slots=True)
 class PvSettings:
-    """PV input mapping."""
+    """PV input mapping and predictor settings."""
 
     solax_power_entity: str | None = None
     shed_power_entity: str | None = None
+    forecast_enabled: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +110,7 @@ class Settings:
                 {
                     "solax_power_entity": self.pv.solax_power_entity,
                     "shed_power_entity": self.pv.shed_power_entity,
+                    "forecast_enabled": self.pv.forecast_enabled,
                 }
             ),
             "ev": _without_none(
@@ -182,6 +184,10 @@ class Settings:
                 shed_power_entity=_optional_entity_id(
                     pv_raw.get("shed_power_entity"), "pv.shed_power_entity"
                 ),
+                forecast_enabled=_bool_option(
+                    pv_raw.get("forecast_enabled", True),
+                    "pv.forecast_enabled",
+                ),
             ),
             ev=EvSettings(
                 soc_entity=_optional_entity_id(ev_raw.get("soc_entity"), "ev.soc_entity"),
@@ -219,3 +225,9 @@ def _optional_entity_id(value: object, option_name: str) -> str | None:
 
 def _without_none(values: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in values.items() if value is not None}
+
+
+def _bool_option(value: object, option_name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    raise ConfigurationError(f"{option_name} must be true or false")

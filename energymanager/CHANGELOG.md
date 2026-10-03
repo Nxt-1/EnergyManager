@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0
+
+- Added the first Python predictor: a four-plane Open-Meteo PV forecast.
+- Migrated the existing three-plane physical PV calculation into the app and added the 6.18 kWp shed plane.
+- Added separate front/rear group calibration seeded from August-October 2026 production history.
+- Added time-of-day shading correction and conservative rear seasonal interpolation without extrapolating past observed data.
+- Added direct/diffuse radiation and cloud-cover forecast inputs for later calibration work.
+- Added persistent day-ahead PV snapshots after 20:15 local time.
+- Added PV forecast status, daily-energy, day-ahead and next-hour diagnostic entities.
+- Added an optional `pv.forecast_enabled` runtime setting; existing entity mappings remain unchanged.
+- Added Docker build-time imports for core/predictor modules to catch missing source files before publication.
+- Remains shadow mode; no device control is present.
+
 ## 0.3.1
 
 - Re-published the v0.3 house-state release after missing source files were added to the repository.

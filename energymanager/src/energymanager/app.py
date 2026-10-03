@@ -6,7 +6,7 @@ import asyncio
 import logging
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
@@ -17,6 +17,9 @@ from .house_state import HouseState
 from .inputs import InputSpec, build_input_specs
 from .power import PowerStateError
 
+if TYPE_CHECKING:
+    from .pv_service import PvForecastService
+
 _LOGGER = logging.getLogger(__name__)
 _REFRESH_INTERVAL = 30.0
 _STALE_AFTER = timedelta(seconds=90)
@@ -25,9 +28,15 @@ _STALE_AFTER = timedelta(seconds=90)
 class EnergyManagerApp:
     """Observe configured Home Assistant inputs and maintain a normalized house state."""
 
-    def __init__(self, settings: Settings, client: HomeAssistantClient) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        client: HomeAssistantClient,
+        pv_forecast_service: PvForecastService | None = None,
+    ) -> None:
         self._settings = settings
         self._client = client
+        self._pv_forecast_service = pv_forecast_service
         self._diagnostics = DiagnosticsPublisher(client)
         self._house_state = HouseState()
         self._specs = build_input_specs(settings)
@@ -50,29 +59,38 @@ class EnergyManagerApp:
         await self._migrate_legacy_configuration()
         await self._cleanup_legacy_diagnostics()
 
-        retry_delay = 1.0
-        while not stop_event.is_set():
-            try:
-                await self._observe_inputs(stop_event)
-                retry_delay = 1.0
-            except asyncio.CancelledError:
-                raise
-            except (HomeAssistantError, aiohttp.ClientError, OSError, TimeoutError) as exc:
-                _LOGGER.warning("Home Assistant connection failed: %s", exc)
-                await self._safe_publish_status("reconnecting", error=str(exc))
-            except Exception as exc:  # noqa: BLE001 - daemon should survive unforeseen integration failures.
-                _LOGGER.exception("Unexpected Energy Manager runtime error")
-                await self._safe_publish_status("reconnecting", error=f"{type(exc).__name__}: {exc}")
+        pv_task = None
+        if self._pv_forecast_service is not None:
+            pv_task = asyncio.create_task(self._pv_forecast_service.run(stop_event))
 
-            if stop_event.is_set():
-                break
+        try:
+            retry_delay = 1.0
+            while not stop_event.is_set():
+                try:
+                    await self._observe_inputs(stop_event)
+                    retry_delay = 1.0
+                except asyncio.CancelledError:
+                    raise
+                except (HomeAssistantError, aiohttp.ClientError, OSError, TimeoutError) as exc:
+                    _LOGGER.warning("Home Assistant connection failed: %s", exc)
+                    await self._safe_publish_status("reconnecting", error=str(exc))
+                except Exception as exc:  # noqa: BLE001 - daemon should survive unforeseen integration failures.
+                    _LOGGER.exception("Unexpected Energy Manager runtime error")
+                    await self._safe_publish_status("reconnecting", error=f"{type(exc).__name__}: {exc}")
 
-            _LOGGER.info("Retrying Home Assistant connection in %.1f s", retry_delay)
-            try:
-                await asyncio.wait_for(stop_event.wait(), timeout=retry_delay)
-            except TimeoutError:
-                pass
-            retry_delay = min(retry_delay * 2.0, 30.0)
+                if stop_event.is_set():
+                    break
+
+                _LOGGER.info("Retrying Home Assistant connection in %.1f s", retry_delay)
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=retry_delay)
+                except TimeoutError:
+                    pass
+                retry_delay = min(retry_delay * 2.0, 30.0)
+        finally:
+            if pv_task is not None and not pv_task.done():
+                pv_task.cancel()
+                await asyncio.gather(pv_task, return_exceptions=True)
 
         await self._safe_publish_status("stopping")
 

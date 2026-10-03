@@ -145,3 +145,27 @@ def test_invalid_ess_power_sign_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(ConfigurationError):
         Settings.load(path)
+
+
+def test_pv_forecast_is_enabled_by_default(tmp_path: Path) -> None:
+    settings = Settings.load(tmp_path / "missing.json")
+
+    assert settings.pv.forecast_enabled is True
+
+
+def test_pv_forecast_can_be_disabled(tmp_path: Path) -> None:
+    path = tmp_path / "options.json"
+    path.write_text(json.dumps({"pv": {"forecast_enabled": False}}), encoding="utf-8")
+
+    settings = Settings.load(path)
+
+    assert settings.pv.forecast_enabled is False
+    assert settings.as_options()["pv"]["forecast_enabled"] is False
+
+
+def test_invalid_pv_forecast_flag_is_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "options.json"
+    path.write_text(json.dumps({"pv": {"forecast_enabled": "yes"}}), encoding="utf-8")
+
+    with pytest.raises(ConfigurationError):
+        Settings.load(path)

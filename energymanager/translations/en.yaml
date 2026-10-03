@@ -35,6 +35,9 @@ configuration:
       shed_power_entity:
         name: Shed PV power entity
         description: Home Assistant entity ID for shed/Victron MPPT PV power in W or kW.
+      forecast_enabled:
+        name: Enable PV forecast
+        description: Run the built-in four-plane Open-Meteo PV predictor. Enabled by default if omitted.
   ev:
     name: EV
     description: Vehicle and charging measurements.

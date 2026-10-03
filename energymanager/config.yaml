@@ -1,5 +1,5 @@
 name: Energy Manager
-version: "0.3.1"
+version: "0.4.0"
 slug: energy_manager
 description: Predictive home energy manager for Home Assistant
 url: https://github.com/Nxt-1/EnergyManager
@@ -29,6 +29,7 @@ schema:
   pv:
     solax_power_entity: str?
     shed_power_entity: str?
+    forecast_enabled: bool?
   ev:
     soc_entity: str?
     connected_entity: str?

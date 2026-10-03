@@ -11,6 +11,8 @@ from . import __version__
 from .app import EnergyManagerApp
 from .config import ConfigurationError, Settings
 from .ha_client import HomeAssistantClient
+from .open_meteo import OpenMeteoClient
+from .pv_service import PvForecastService
 
 
 async def async_main() -> int:
@@ -43,8 +45,14 @@ async def async_main() -> int:
             pass
 
     async with HomeAssistantClient(supervisor_token) as client:
-        app = EnergyManagerApp(settings, client)
-        await app.run(stop_event)
+        if settings.pv.forecast_enabled:
+            async with OpenMeteoClient() as meteo_client:
+                pv_service = PvForecastService(client, meteo_client)
+                app = EnergyManagerApp(settings, client, pv_forecast_service=pv_service)
+                await app.run(stop_event)
+        else:
+            app = EnergyManagerApp(settings, client)
+            await app.run(stop_event)
 
     logger.info("Energy Manager stopped")
     return 0
