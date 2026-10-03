@@ -1,6 +1,6 @@
 # Energy Manager
 
-Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.4.0 adds the first predictor: a
+Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.4.1 adds the first predictor: a
 four-plane PV forecast running directly in Python.
 
 ## Configuration
@@ -61,7 +61,7 @@ will later support forecast calibration.
 
 ## PV forecast diagnostics
 
-Version 0.4.0 adds:
+Version 0.4.1 adds:
 
 - `sensor.energy_manager_pv_forecast_status`
 - `sensor.energy_manager_pv_forecast_today_energy`

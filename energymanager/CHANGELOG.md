@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+
+- Fixed Python 3.13/Ruff import placement for `Mapping`.
+- Re-published the v0.4 predictor release under 0.4.1 after the 0.4.0 CI failure.
+- No intended functional changes from 0.4.0.
+
 ## 0.4.0
 
 - Added the first Python predictor: a four-plane Open-Meteo PV forecast.
