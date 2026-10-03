@@ -21,7 +21,13 @@ class Settings:
     """Runtime settings exposed by the Home Assistant app configuration."""
 
     log_level: str = "info"
-    grid_power_entity: str | None = None
+    grid_import_power_entity: str | None = None
+    grid_export_power_entity: str | None = None
+
+    @property
+    def grid_power_configured(self) -> bool:
+        """Return whether both grid power inputs have been configured."""
+        return self.grid_import_power_entity is not None and self.grid_export_power_entity is not None
 
     @classmethod
     def load(cls, path: Path = _OPTIONS_PATH) -> Settings:
@@ -42,12 +48,31 @@ class Settings:
             allowed = ", ".join(sorted(_VALID_LOG_LEVELS))
             raise ConfigurationError(f"log_level must be one of: {allowed}")
 
-        grid_power_entity = raw.get("grid_power_entity")
-        if grid_power_entity is not None:
-            grid_power_entity = str(grid_power_entity).strip()
-            if not grid_power_entity:
-                grid_power_entity = None
-            elif not _ENTITY_ID_RE.fullmatch(grid_power_entity):
-                raise ConfigurationError(f"Invalid Home Assistant entity ID: {grid_power_entity!r}")
+        grid_import_power_entity = _optional_entity_id(raw.get("grid_import_power_entity"), "grid_import_power_entity")
+        grid_export_power_entity = _optional_entity_id(raw.get("grid_export_power_entity"), "grid_export_power_entity")
 
-        return cls(log_level=log_level, grid_power_entity=grid_power_entity)
+        if (
+            grid_import_power_entity is not None
+            and grid_export_power_entity is not None
+            and grid_import_power_entity == grid_export_power_entity
+        ):
+            raise ConfigurationError("grid_import_power_entity and grid_export_power_entity must be different entities")
+
+        return cls(
+            log_level=log_level,
+            grid_import_power_entity=grid_import_power_entity,
+            grid_export_power_entity=grid_export_power_entity,
+        )
+
+
+def _optional_entity_id(value: object, option_name: str) -> str | None:
+    """Normalize and validate an optional Home Assistant entity ID."""
+    if value is None:
+        return None
+
+    entity_id = str(value).strip()
+    if not entity_id:
+        return None
+    if not _ENTITY_ID_RE.fullmatch(entity_id):
+        raise ConfigurationError(f"Invalid Home Assistant entity ID for {option_name}: {entity_id!r}")
+    return entity_id

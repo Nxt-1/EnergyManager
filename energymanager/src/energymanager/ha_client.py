@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from typing import Any
 from urllib.parse import quote
 
@@ -70,42 +70,53 @@ class HomeAssistantClient:
                 body = await response.text()
                 raise HomeAssistantError(f"POST {url} returned HTTP {response.status}: {body}")
 
-    async def state_changes(self, entity_id: str) -> AsyncIterator[dict[str, Any]]:
-        """Yield new state objects whenever the selected entity changes."""
+    async def state_changes(self, entity_ids: Iterable[str]) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+        """Yield ``(entity_id, new_state)`` for changes to any selected entity."""
         session = self._require_session()
+        entities = tuple(dict.fromkeys(entity_ids))
+        if not entities:
+            raise ValueError("At least one entity ID is required")
 
         async with session.ws_connect(WEBSOCKET_URL, heartbeat=30) as websocket:
             await self._authenticate_websocket(websocket)
-            subscription_id = 1
-            await websocket.send_json(
-                {
-                    "id": subscription_id,
-                    "type": "subscribe_trigger",
-                    "trigger": {
-                        "platform": "state",
-                        "entity_id": entity_id,
-                    },
-                }
-            )
+            subscriptions: dict[int, str] = {}
 
-            subscription_result = await self._receive_json(websocket)
-            if (
-                subscription_result.get("type") != "result"
-                or subscription_result.get("id") != subscription_id
-                or not subscription_result.get("success")
-            ):
-                raise HomeAssistantError(f"Unable to subscribe to {entity_id}: {subscription_result}")
+            for subscription_id, entity_id in enumerate(entities, start=1):
+                await websocket.send_json(
+                    {
+                        "id": subscription_id,
+                        "type": "subscribe_trigger",
+                        "trigger": {
+                            "platform": "state",
+                            "entity_id": entity_id,
+                        },
+                    }
+                )
+
+                subscription_result = await self._receive_json(websocket)
+                if (
+                    subscription_result.get("type") != "result"
+                    or subscription_result.get("id") != subscription_id
+                    or not subscription_result.get("success")
+                ):
+                    raise HomeAssistantError(f"Unable to subscribe to {entity_id}: {subscription_result}")
+                subscriptions[subscription_id] = entity_id
 
             async for message in websocket:
                 if message.type == aiohttp.WSMsgType.TEXT:
-                    payload = json.loads(message.data)
-                    if payload.get("type") != "event" or payload.get("id") != subscription_id:
+                    try:
+                        payload = json.loads(message.data)
+                    except json.JSONDecodeError as exc:
+                        raise HomeAssistantError("Home Assistant returned invalid WebSocket JSON") from exc
+
+                    subscription_id = payload.get("id")
+                    if payload.get("type") != "event" or subscription_id not in subscriptions:
                         continue
 
                     trigger = payload.get("event", {}).get("variables", {}).get("trigger", {})
                     new_state = trigger.get("to_state")
                     if isinstance(new_state, dict):
-                        yield new_state
+                        yield subscriptions[subscription_id], new_state
                     continue
 
                 if message.type in {

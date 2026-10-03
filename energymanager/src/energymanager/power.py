@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 
@@ -24,6 +25,9 @@ def power_w_from_state(state: dict[str, Any]) -> float:
     except (TypeError, ValueError) as exc:
         raise PowerStateError(f"Power state is not numeric: {raw_value!r}") from exc
 
+    if not math.isfinite(value):
+        raise PowerStateError(f"Power state is not finite: {raw_value!r}")
+
     attributes = state.get("attributes") or {}
     unit = str(attributes.get("unit_of_measurement", "")).strip()
 
@@ -33,3 +37,12 @@ def power_w_from_state(state: dict[str, Any]) -> float:
         return value * 1000.0
 
     raise PowerStateError(f"Unsupported power unit {unit!r}; expected 'W' or 'kW'")
+
+
+def grid_net_power_w(import_power_w: float, export_power_w: float) -> float:
+    """Return canonical net grid power: positive import, negative export."""
+    if import_power_w < 0:
+        raise PowerStateError(f"Grid import power cannot be negative: {import_power_w} W")
+    if export_power_w < 0:
+        raise PowerStateError(f"Grid export power cannot be negative: {export_power_w} W")
+    return import_power_w - export_power_w

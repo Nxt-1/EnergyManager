@@ -2,6 +2,9 @@ configuration:
   log_level:
     name: Log level
     description: Logging detail written to the Energy Manager app log.
-  grid_power_entity:
-    name: Grid power entity
-    description: Home Assistant entity ID for net grid power. The sensor must report W or kW.
+  grid_import_power_entity:
+    name: Grid import power entity
+    description: Home Assistant entity ID for momentary grid import power. The sensor must report W or kW.
+  grid_export_power_entity:
+    name: Grid export power entity
+    description: Home Assistant entity ID for momentary grid export power. The sensor must report W or kW.
