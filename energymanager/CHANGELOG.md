@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1
+
+- Clamp small negative EV charging-power readings between -100 W and 0 W to zero.
+- Keep larger negative EV charging-power readings invalid so a real sign/configuration problem is still visible.
+- No configuration schema changes.
+- Remains shadow mode; no device control is present.
+
 ## 0.5.0
 
 - Replaced the fixed 20:15 day-ahead snapshot workflow with a continuously refreshed rolling forecast.

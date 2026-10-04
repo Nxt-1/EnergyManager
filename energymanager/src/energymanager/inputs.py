@@ -11,6 +11,8 @@ from .power import PowerStateError, percentage_from_state, power_w_from_state, s
 
 Parser = Callable[[dict[str, Any]], float | bool]
 
+_EV_CHARGING_POWER_NOISE_FLOOR_W = 100.0
+
 
 @dataclass(frozen=True, slots=True)
 class InputSpec:
@@ -64,7 +66,7 @@ def build_input_specs(settings: Settings) -> tuple[InputSpec, ...]:
             "ev.charging_power",
             settings.ev.charging_power_entity,
             "W",
-            _non_negative_power,
+            _ev_charging_power,
         ),
     )
 
@@ -73,4 +75,14 @@ def _non_negative_power(state: dict[str, Any]) -> float:
     value = power_w_from_state(state)
     if value < 0:
         raise PowerStateError(f"Directional power cannot be negative: {value} W")
+    return value
+
+
+def _ev_charging_power(state: dict[str, Any]) -> float:
+    """Normalize go-e charging power while ignoring small negative zero-offset noise."""
+    value = power_w_from_state(state)
+    if -_EV_CHARGING_POWER_NOISE_FLOOR_W <= value < 0:
+        return 0.0
+    if value < 0:
+        raise PowerStateError(f"EV charging power cannot be negative beyond noise floor: {value} W")
     return value

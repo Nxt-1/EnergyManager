@@ -1,7 +1,7 @@
 # Energy Manager
 
-Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.5.0 extends the Python PV predictor to a
-continuously refreshed week-ahead forecast and stores compact forecast revisions for later accuracy analysis.
+Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.5.1 keeps the continuously refreshed week-ahead PV forecast and adds tolerant handling for
+small negative zero-offset noise from the EV charging-power measurement.
 
 ## Configuration
 
@@ -85,6 +85,9 @@ The old fixed `pv_day_ahead_today` and `pv_day_ahead_tomorrow` diagnostics are r
 Assistant states are deleted at startup.
 
 ## Input validity and freshness
+
+The EV charging-power input treats values from -100 W up to 0 W as measurement noise and normalizes them to 0 W. More
+negative values remain invalid so a real sensor-sign or configuration problem is not hidden.
 
 Home Assistant measurement inputs are event-driven and also reconciled every 30 seconds. Invalid, unavailable or stale
 configured measurement inputs degrade `sensor.energy_manager_input_health`. PV forecast health is deliberately separate in
