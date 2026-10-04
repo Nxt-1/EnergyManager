@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0
+
+- Replaced the fixed 20:15 day-ahead snapshot workflow with a continuously refreshed rolling forecast.
+- Extended the PV horizon to today plus seven full future calendar days.
+- Switched Open-Meteo to `knmi_seamless`, using KNMI HARMONIE AROME in the near term and ECMWF beyond it.
+- Added `sensor.energy_manager_pv_forecast_next_7_days_energy` with per-day front/rear/shed breakdowns.
+- Added append-only `/data/pv_forecast_revisions.jsonl` history with each 30-minute forecast revision and daily totals.
+- Removed the two fixed day-ahead diagnostic entities; v0.5 cleans their stale Home Assistant states on startup.
+- Kept the existing today, tomorrow and next-hour live forecast diagnostics.
+- No configuration schema changes; existing v0.4.1 options remain valid.
+- Remains shadow mode; no device control is present.
+
 ## 0.4.1
 
 - Fixed Python 3.13/Ruff import placement for `Mapping`.

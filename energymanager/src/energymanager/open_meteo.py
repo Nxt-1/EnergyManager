@@ -12,7 +12,8 @@ import aiohttp
 from .pv_forecast import PlaneWeatherHour, PlaneWeatherSeries, PvPlane
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
-FORECAST_MODEL = "knmi_harmonie_arome_netherlands"
+FORECAST_MODEL = "knmi_seamless"
+FORECAST_DAYS = 8
 FORECAST_TIMEZONE = "Europe/Brussels"
 _LOCAL_TZ = ZoneInfo(FORECAST_TIMEZONE)
 
@@ -58,7 +59,7 @@ class OpenMeteoClient:
         longitude: float,
         plane: PvPlane,
     ) -> PlaneWeatherSeries:
-        """Fetch three local calendar days for one physical PV plane."""
+        """Fetch today plus seven full future calendar days for one PV plane."""
         session = self._require_session()
         params = {
             "latitude": latitude,
@@ -70,7 +71,7 @@ class OpenMeteoClient:
             "tilt": plane.tilt_deg,
             "azimuth": plane.azimuth_deg,
             "models": FORECAST_MODEL,
-            "forecast_days": 3,
+            "forecast_days": FORECAST_DAYS,
             "timezone": FORECAST_TIMEZONE,
         }
         async with session.get(FORECAST_URL, params=params) as response:

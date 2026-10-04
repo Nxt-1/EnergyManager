@@ -8,7 +8,8 @@ from typing import Any
 from . import __version__
 from .ha_client import HomeAssistantClient
 from .house_state import HouseState, InputReading
-from .pv_forecast import CALIBRATION_VERSION, PvDailyEnergy, PvForecast, PvSnapshot
+from .open_meteo import FORECAST_DAYS, FORECAST_MODEL
+from .pv_forecast import CALIBRATION_VERSION, PvDailyEnergy, PvForecast
 
 STATUS_ENTITY = "sensor.energy_manager_status"
 INPUT_HEALTH_ENTITY = "sensor.energy_manager_input_health"
@@ -27,10 +28,13 @@ PV_FORECAST_STATUS_ENTITY = "sensor.energy_manager_pv_forecast_status"
 PV_FORECAST_TODAY_ENTITY = "sensor.energy_manager_pv_forecast_today_energy"
 PV_FORECAST_TOMORROW_ENTITY = "sensor.energy_manager_pv_forecast_tomorrow_energy"
 PV_FORECAST_NEXT_HOUR_ENTITY = "sensor.energy_manager_pv_forecast_next_hour_power"
-PV_DAY_AHEAD_TODAY_ENTITY = "sensor.energy_manager_pv_day_ahead_today_energy"
-PV_DAY_AHEAD_TOMORROW_ENTITY = "sensor.energy_manager_pv_day_ahead_tomorrow_energy"
+PV_FORECAST_NEXT_7_DAYS_ENTITY = "sensor.energy_manager_pv_forecast_next_7_days_energy"
 
-LEGACY_ENTITIES = ("sensor.energy_manager_observed_grid_power",)
+LEGACY_ENTITIES = (
+    "sensor.energy_manager_observed_grid_power",
+    "sensor.energy_manager_pv_day_ahead_today_energy",
+    "sensor.energy_manager_pv_day_ahead_tomorrow_energy",
+)
 
 _DIAGNOSTIC_INPUTS: dict[str, tuple[str, str, str | None, str | None]] = {
     "grid.import_power": (GRID_IMPORT_POWER_ENTITY, "Energy Manager Grid Import Power", "W", "power"),
@@ -138,7 +142,9 @@ class DiagnosticsPublisher:
         """Publish independent health for the external PV predictor."""
         attributes: dict[str, Any] = {
             "friendly_name": "Energy Manager PV Forecast Status",
-            "model": "Open-Meteo KNMI HARMONIE AROME Netherlands",
+            "model": "Open-Meteo KNMI Seamless (HARMONIE AROME + ECMWF)",
+            "model_id": FORECAST_MODEL,
+            "forecast_days_requested": FORECAST_DAYS,
             "calibration_version": CALIBRATION_VERSION,
             "last_update_utc": datetime.now(UTC).isoformat(),
         }
@@ -152,8 +158,6 @@ class DiagnosticsPublisher:
         self,
         forecast: PvForecast,
         *,
-        today_snapshot: PvSnapshot | None,
-        tomorrow_snapshot: PvSnapshot | None,
         now_local: datetime,
     ) -> None:
         """Publish compact forecast summaries while retaining full hourly data in Python."""
@@ -166,16 +170,7 @@ class DiagnosticsPublisher:
             tomorrow,
             forecast,
         )
-        await self._publish_pv_snapshot(
-            PV_DAY_AHEAD_TODAY_ENTITY,
-            "PV Day-Ahead Forecast Today",
-            today_snapshot,
-        )
-        await self._publish_pv_snapshot(
-            PV_DAY_AHEAD_TOMORROW_ENTITY,
-            "PV Day-Ahead Forecast Tomorrow",
-            tomorrow_snapshot,
-        )
+        await self._publish_pv_next_7_days(forecast, now_local)
         await self._publish_pv_next_hour(forecast, now_local)
 
     async def cleanup_legacy_entities(self) -> None:
@@ -247,28 +242,44 @@ class DiagnosticsPublisher:
         attributes.update(_group_energy_attributes(daily))
         await self._client.set_state(entity_id, round(daily.total_kwh, 3), attributes)
 
-    async def _publish_pv_snapshot(
-        self,
-        entity_id: str,
-        friendly_name: str,
-        snapshot: PvSnapshot | None,
-    ) -> None:
-        attributes = _energy_attributes(friendly_name)
-        attributes["calibration_version"] = CALIBRATION_VERSION
-        if snapshot is None:
-            attributes["error"] = "No stored day-ahead snapshot for this date"
-            await self._client.set_state(entity_id, "unavailable", attributes)
-            return
+    async def _publish_pv_next_7_days(self, forecast: PvForecast, now_local: datetime) -> None:
+        attributes = _energy_attributes("Energy Manager PV Forecast Next 7 Days")
         attributes.update(
             {
-                "target_date": snapshot.target_date.isoformat(),
-                "captured_at_utc": snapshot.captured_at_utc.isoformat(),
-                "front_kwh": round(snapshot.front_kwh, 3),
-                "rear_kwh": round(snapshot.rear_kwh, 3),
-                "shed_kwh": round(snapshot.shed_kwh, 3),
+                "forecast_generated_at_utc": forecast.generated_at_utc.isoformat(),
+                "calibration_version": CALIBRATION_VERSION,
             }
         )
-        await self._client.set_state(entity_id, round(snapshot.total_kwh, 3), attributes)
+        daily = []
+        for offset in range(1, 8):
+            item = forecast.daily_energy(now_local.date() + timedelta(days=offset))
+            if item is not None:
+                daily.append(item)
+
+        if not daily:
+            await self._client.set_state(PV_FORECAST_NEXT_7_DAYS_ENTITY, "unavailable", attributes)
+            return
+
+        attributes.update(
+            {
+                "start_date": daily[0].target_date.isoformat(),
+                "end_date": daily[-1].target_date.isoformat(),
+                "days_available": len(daily),
+                "complete": len(daily) == 7,
+                "days": [
+                    {
+                        "date": item.target_date.isoformat(),
+                        "front_kwh": round(item.front_kwh, 3),
+                        "rear_kwh": round(item.rear_kwh, 3),
+                        "shed_kwh": round(item.shed_kwh, 3),
+                        "total_kwh": round(item.total_kwh, 3),
+                    }
+                    for item in daily
+                ],
+            }
+        )
+        total_kwh = sum(item.total_kwh for item in daily)
+        await self._client.set_state(PV_FORECAST_NEXT_7_DAYS_ENTITY, round(total_kwh, 3), attributes)
 
     async def _publish_pv_next_hour(self, forecast: PvForecast, now_local: datetime) -> None:
         point = forecast.next_hour(now_local)

@@ -1,12 +1,11 @@
-"""Runtime PV forecast service and persistent day-ahead snapshot handling."""
+"""Runtime PV forecast service and rolling forecast revision archive."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-from dataclasses import asdict
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -14,115 +13,69 @@ import aiohttp
 
 from .diagnostics import DiagnosticsPublisher
 from .ha_client import HomeAssistantClient, HomeAssistantError
-from .open_meteo import OpenMeteoClient, OpenMeteoError
-from .pv_forecast import PV_PLANES, PvForecast, PvSnapshot, build_pv_forecast
+from .open_meteo import FORECAST_MODEL, OpenMeteoClient, OpenMeteoError
+from .pv_forecast import CALIBRATION_VERSION, PV_PLANES, PvForecast, build_pv_forecast
 
 _LOGGER = logging.getLogger(__name__)
 _LOCAL_TZ = ZoneInfo("Europe/Brussels")
 _REFRESH_SECONDS = 1800.0
 _RETRY_SECONDS = 300.0
-_SNAPSHOT_TIME = time(20, 15)
-_DEFAULT_SNAPSHOT_PATH = Path("/data/pv_forecast_snapshots.json")
+_DEFAULT_ARCHIVE_PATH = Path("/data/pv_forecast_revisions.jsonl")
 
 
-class PvSnapshotStore:
-    """Persist evening day-ahead forecasts across app restarts/updates."""
+class PvForecastArchive:
+    """Append compact daily forecast revisions for later accuracy analysis."""
 
-    def __init__(self, path: Path = _DEFAULT_SNAPSHOT_PATH) -> None:
+    def __init__(self, path: Path = _DEFAULT_ARCHIVE_PATH) -> None:
         self._path = path
-        self._snapshots: dict[date, PvSnapshot] = {}
-        self._load()
 
-    def get(self, target_date: date) -> PvSnapshot | None:
-        return self._snapshots.get(target_date)
-
-    def capture_if_needed(self, forecast: PvForecast, now_local: datetime) -> PvSnapshot | None:
-        """Capture tomorrow once the local day-ahead snapshot time has passed."""
-        if now_local.timetz().replace(tzinfo=None) < _SNAPSHOT_TIME:
-            return None
-
-        target = now_local.date() + timedelta(days=1)
-        existing = self._snapshots.get(target)
-        if existing is not None:
-            return existing
-
-        daily = forecast.daily_energy(target)
-        if daily is None:
-            return None
-        snapshot = PvSnapshot.from_daily_energy(daily, captured_at_utc=datetime.now(UTC))
-        self._snapshots[target] = snapshot
-        self._prune(now_local.date() - timedelta(days=90))
-        self._save()
-        return snapshot
-
-    def _load(self) -> None:
-        if not self._path.exists():
-            return
-        try:
-            raw = json.loads(self._path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            _LOGGER.warning("Could not read PV snapshot store %s: %s", self._path, exc)
+    def record(self, forecast: PvForecast, now_local: datetime) -> None:
+        """Append one revision containing daily totals for the complete current horizon."""
+        daily = forecast.daily_energies()
+        if not daily:
             return
 
-        if not isinstance(raw, list):
-            _LOGGER.warning("Ignoring malformed PV snapshot store %s", self._path)
-            return
-
-        for item in raw:
-            if not isinstance(item, dict):
-                continue
-            try:
-                snapshot = PvSnapshot(
-                    target_date=date.fromisoformat(str(item["target_date"])),
-                    captured_at_utc=datetime.fromisoformat(str(item["captured_at_utc"])),
-                    front_kwh=float(item["front_kwh"]),
-                    rear_kwh=float(item["rear_kwh"]),
-                    shed_kwh=float(item["shed_kwh"]),
-                    total_kwh=float(item["total_kwh"]),
-                )
-            except (KeyError, TypeError, ValueError):
-                continue
-            self._snapshots[snapshot.target_date] = snapshot
-
-    def _save(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        payload = []
-        for snapshot in sorted(self._snapshots.values(), key=lambda item: item.target_date):
-            item = asdict(snapshot)
-            item["target_date"] = snapshot.target_date.isoformat()
-            item["captured_at_utc"] = snapshot.captured_at_utc.isoformat()
-            payload.append(item)
-        temporary = self._path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        temporary.replace(self._path)
-
-    def _prune(self, oldest_date: date) -> None:
-        self._snapshots = {
-            target_date: snapshot
-            for target_date, snapshot in self._snapshots.items()
-            if target_date >= oldest_date
+        payload = {
+            "issued_at_utc": forecast.generated_at_utc.isoformat(),
+            "issued_at_local": now_local.isoformat(),
+            "model": FORECAST_MODEL,
+            "calibration_version": CALIBRATION_VERSION,
+            "daily": [
+                {
+                    "target_date": item.target_date.isoformat(),
+                    "front_kwh": round(item.front_kwh, 4),
+                    "rear_kwh": round(item.rear_kwh, 4),
+                    "shed_kwh": round(item.shed_kwh, 4),
+                    "total_kwh": round(item.total_kwh, 4),
+                }
+                for item in daily
+            ],
         }
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        with self._path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, separators=(",", ":")))
+            handle.write("\n")
 
 
 class PvForecastService:
-    """Fetch, calculate, persist and publish the live four-plane PV forecast."""
+    """Fetch, calculate, archive and publish the live four-plane PV forecast."""
 
     def __init__(
         self,
         ha_client: HomeAssistantClient,
         meteo_client: OpenMeteoClient,
         *,
-        snapshot_store: PvSnapshotStore | None = None,
+        archive: PvForecastArchive | None = None,
     ) -> None:
         self._ha = ha_client
         self._meteo = meteo_client
         self._diagnostics = DiagnosticsPublisher(ha_client)
-        self._snapshots = snapshot_store or PvSnapshotStore()
+        self._archive = archive or PvForecastArchive()
         self._forecast: PvForecast | None = None
 
     @property
     def forecast(self) -> PvForecast | None:
-        """Expose the latest forecast for the future planner."""
+        """Expose the latest rolling forecast for the future planner."""
         return self._forecast
 
     async def run(self, stop_event: asyncio.Event) -> None:
@@ -151,28 +104,28 @@ class PvForecastService:
                 pass
 
     async def update_once(self, *, now_local: datetime | None = None) -> PvForecast:
-        """Run one complete forecast update; useful for runtime and tests."""
+        """Run one complete rolling forecast update; useful for runtime and tests."""
         latitude, longitude = await self._home_coordinates()
         series = await self._meteo.fetch_planes(latitude, longitude, PV_PLANES)
         forecast = build_pv_forecast(series)
         self._forecast = forecast
 
         local_now = now_local or datetime.now(_LOCAL_TZ)
-        self._snapshots.capture_if_needed(forecast, local_now)
-        await self._diagnostics.publish_pv_forecast(
-            forecast,
-            today_snapshot=self._snapshots.get(local_now.date()),
-            tomorrow_snapshot=self._snapshots.get(local_now.date() + timedelta(days=1)),
-            now_local=local_now,
-        )
+        try:
+            self._archive.record(forecast, local_now)
+        except OSError as exc:
+            _LOGGER.warning("Could not archive PV forecast revision: %s", exc)
+
+        await self._diagnostics.publish_pv_forecast(forecast, now_local=local_now)
         await self._diagnostics.publish_pv_forecast_status(
             "connected",
             generated_at_utc=forecast.generated_at_utc,
         )
         _LOGGER.info(
-            "PV forecast updated: today %.2f kWh, tomorrow %.2f kWh",
+            "PV forecast updated: today %.2f kWh, tomorrow %.2f kWh, next 7 days %.2f kWh",
             _total_or_zero(forecast, local_now.date()),
             _total_or_zero(forecast, local_now.date() + timedelta(days=1)),
+            _future_week_total(forecast, local_now.date()),
         )
         return forecast
 
@@ -188,3 +141,12 @@ class PvForecastService:
 def _total_or_zero(forecast: PvForecast, target_date: date) -> float:
     daily = forecast.daily_energy(target_date)
     return daily.total_kwh if daily else 0.0
+
+
+def _future_week_total(forecast: PvForecast, today: date) -> float:
+    total = 0.0
+    for offset in range(1, 8):
+        daily = forecast.daily_energy(today + timedelta(days=offset))
+        if daily is not None:
+            total += daily.total_kwh
+    return total

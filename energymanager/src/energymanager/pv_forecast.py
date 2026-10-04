@@ -103,6 +103,11 @@ class PvForecast:
         shed = sum(point.shed_power_w for point in points) / 1000.0
         return PvDailyEnergy(target_date, front, rear, shed, front + rear + shed)
 
+    def daily_energies(self) -> tuple[PvDailyEnergy, ...]:
+        """Return all available local calendar-day energy summaries in chronological order."""
+        dates = sorted({point.energy_date for point in self.points})
+        return tuple(daily for target in dates if (daily := self.daily_energy(target)) is not None)
+
     def next_hour(self, now_local: datetime) -> PvForecastPoint | None:
         """Return the first forecast interval ending after the supplied local time."""
         if now_local.tzinfo is None:
@@ -111,29 +116,6 @@ class PvForecast:
             if point.period_end_local > now_local:
                 return point
         return None
-
-
-@dataclass(frozen=True, slots=True)
-class PvSnapshot:
-    """Persisted evening day-ahead forecast."""
-
-    target_date: date
-    captured_at_utc: datetime
-    front_kwh: float
-    rear_kwh: float
-    shed_kwh: float
-    total_kwh: float
-
-    @classmethod
-    def from_daily_energy(cls, daily: PvDailyEnergy, *, captured_at_utc: datetime) -> PvSnapshot:
-        return cls(
-            target_date=daily.target_date,
-            captured_at_utc=captured_at_utc,
-            front_kwh=daily.front_kwh,
-            rear_kwh=daily.rear_kwh,
-            shed_kwh=daily.shed_kwh,
-            total_kwh=daily.total_kwh,
-        )
 
 
 def build_pv_forecast(

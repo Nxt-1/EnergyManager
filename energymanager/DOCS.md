@@ -1,11 +1,12 @@
 # Energy Manager
 
-Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.4.1 adds the first predictor: a
-four-plane PV forecast running directly in Python.
+Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.5.0 extends the Python PV predictor to a
+continuously refreshed week-ahead forecast and stores compact forecast revisions for later accuracy analysis.
 
 ## Configuration
 
 Entity IDs remain runtime configuration and are not hardcoded. Existing Grid, ESS, PV and EV configuration is preserved.
+There are no configuration-schema changes from v0.4.1.
 
 ### Grid
 
@@ -25,8 +26,12 @@ valid PV inputs.
 
 ## PV predictor
 
-The predictor requests three local calendar days from Open-Meteo using the KNMI HARMONIE AROME Netherlands model. It uses
-four physical PV planes:
+The predictor refreshes every 30 minutes. It requests today plus seven full future calendar days from Open-Meteo using
+`knmi_seamless`. Open-Meteo uses KNMI HARMONIE AROME for the short-range forecast and extends the horizon with ECMWF.
+The full hourly forecast remains available inside Energy Manager for the future planner; Home Assistant receives compact
+summary sensors.
+
+The physical model uses four PV planes:
 
 - Front roof: 3.28 kWp, tilt 38°, Open-Meteo azimuth +50°.
 - Rear pitched roof: 1.64 kWp, tilt 46°, azimuth -130°.
@@ -53,25 +58,31 @@ conditions. Seasonal calibration is clamped outside the observed period instead 
 The predictor also records direct radiation, diffuse radiation and cloud cover in its hourly forecast points so later
 calibration can test weather-dependent effects without changing the planner interface.
 
-### Day-ahead snapshots
+### Rolling forecast history
 
-After 20:15 local time, the first successful forecast stores a snapshot for the following day under
-`/data/pv_forecast_snapshots.json`. App data survives normal app updates. Snapshots are kept for approximately 90 days and
-will later support forecast calibration.
+There is no longer a special evening lock-in time. Every successful 30-minute refresh is the current operational forecast.
+The planner will always use the newest available forecast.
+
+For later accuracy analysis, each successful refresh appends a compact revision to
+`/data/pv_forecast_revisions.jsonl`. Each revision stores its issue time, model/calibration version, and daily front/rear/
+shed/total energy for the complete current horizon. The full hourly profile is not archived indefinitely.
 
 ## PV forecast diagnostics
 
-Version 0.4.1 adds:
+Version 0.5.0 publishes:
 
 - `sensor.energy_manager_pv_forecast_status`
 - `sensor.energy_manager_pv_forecast_today_energy`
 - `sensor.energy_manager_pv_forecast_tomorrow_energy`
+- `sensor.energy_manager_pv_forecast_next_7_days_energy`
 - `sensor.energy_manager_pv_forecast_next_hour_power`
-- `sensor.energy_manager_pv_day_ahead_today_energy`
-- `sensor.energy_manager_pv_day_ahead_tomorrow_energy`
 
-Daily forecast sensors expose front, rear and shed energy as attributes. The next-hour sensor exposes calibrated and raw
-power by group plus the available cloud/direct/diffuse forecast values.
+The next-7-days sensor state is the total predicted energy for the seven full future calendar days, excluding today. Its
+`days` attribute contains a daily total and front/rear/shed split for each date. The today and tomorrow sensors remain for
+simple dashboards. The next-hour sensor exposes calibrated and raw power by group plus cloud/direct/diffuse forecast data.
+
+The old fixed `pv_day_ahead_today` and `pv_day_ahead_tomorrow` diagnostics are removed in v0.5.0 and their stale Home
+Assistant states are deleted at startup.
 
 ## Input validity and freshness
 
