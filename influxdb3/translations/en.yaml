@@ -1,0 +1,8 @@
+configuration:
+  license_email:
+    name: "At-Home license email"
+    description: >-
+      Email address used by InfluxData to activate the free non-commercial At-Home
+      license. A verification email is sent on first start.
+network:
+  8181/tcp: "InfluxDB API and Explorer UI"

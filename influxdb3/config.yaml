@@ -1,0 +1,20 @@
+name: "InfluxDB 3 Enterprise"
+version: "0.1.0"
+slug: "influxdb3_enterprise"
+description: "InfluxDB 3 Enterprise with integrated Explorer UI for EnergyManager"
+url: "https://docs.influxdata.com/influxdb3/enterprise/"
+arch:
+  - amd64
+startup: system
+boot: auto
+init: false
+image: "ghcr.io/nxt-1/energymanager-influxdb3"
+ports:
+  8181/tcp: 8181
+ports_description:
+  8181/tcp: "InfluxDB API and Explorer UI"
+webui: "http://[HOST]:[PORT:8181]"
+options:
+  license_email: null
+schema:
+  license_email: email
