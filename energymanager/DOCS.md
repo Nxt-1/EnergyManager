@@ -1,7 +1,6 @@
 # Energy Manager
 
-Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.6.0 adds the canonical measured load
-signals that will form the input to the future background-demand predictor.
+Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.7.0 adds the first rolling background-demand predictor on top of the canonical load signals.
 
 ## Configuration
 
@@ -105,6 +104,31 @@ generated, not AC house consumption.
 
 Configured-but-invalid inputs propagate to the derived signal as unavailable rather than silently assuming zero. An
 unconfigured EV charging-power input contributes zero to known controllable load.
+
+## Background-load predictor
+
+Version 0.7.0 samples `sensor.energy_manager_background_load_power` internally every five minutes and keeps a local
+35-day history in `/data/background_load_history.jsonl`. Forecasts are recalculated every 30 minutes at 15-minute
+resolution and retained in Python for the future planner.
+
+The initial model is deliberately simple and robust. It first learns time-of-day behavior, then distinguishes weekday from
+weekend behavior, and uses the same weekday from previous weeks once enough history exists. During the first week the
+status remains `learning`; this is expected and does not degrade the main Energy Manager input-health status.
+
+Home Assistant receives compact summaries:
+
+- `sensor.energy_manager_background_load_forecast_status`
+- `sensor.energy_manager_background_load_forecast_next_hour_power`
+- `sensor.energy_manager_background_load_forecast_next_24_hours_energy`
+- `sensor.energy_manager_background_load_forecast_next_7_days_energy`
+
+The seven-day sensor contains seven complete future calendar days in its `days` attribute. Each 30-minute forecast revision
+is also appended to `/data/background_load_forecast_revisions.jsonl` so prediction accuracy can be evaluated later without
+freezing the live operational forecast.
+
+This model intentionally predicts only the current generic background signal. As individually measured loads such as the
+heat pump are promoted to separate models later, they can be removed from the generic background signal without changing
+the planner-facing forecast concept.
 
 ## Input validity and freshness
 

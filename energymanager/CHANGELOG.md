@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.0
+
+- Added persistent sampling of canonical background-load power every five minutes.
+- Added a 15-minute rolling background-load forecast for the future planner.
+- The baseline model learns robust time-of-day patterns, then weekday/weekend and same-weekday behavior as history grows.
+- Added next-hour power, next-24-hours energy and next-seven-days energy diagnostics.
+- Added independent predictor status with learning progress and retained-history metadata.
+- Added `/data/background_load_history.jsonl` with 35-day retention and compact forecast revision history.
+- No configuration schema changes; the predictor uses the v0.6 canonical background-load signal.
+- Remains shadow mode; no device control is present.
+
 ## 0.6.0
 
 - Added canonical instantaneous AC house-load power derived from grid net power, Solax AC PV and normalized ESS AC power.

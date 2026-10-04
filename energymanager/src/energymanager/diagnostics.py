@@ -8,6 +8,7 @@ from typing import Any
 from . import __version__
 from .ha_client import HomeAssistantClient
 from .house_state import HouseState, InputReading
+from .load_forecast import MODEL_VERSION, BackgroundLoadForecast
 from .open_meteo import FORECAST_DAYS, FORECAST_MODEL
 from .pv_forecast import CALIBRATION_VERSION, PvDailyEnergy, PvForecast
 
@@ -27,6 +28,10 @@ EV_CHARGING_POWER_ENTITY = "sensor.energy_manager_ev_charging_power"
 HOUSE_LOAD_POWER_ENTITY = "sensor.energy_manager_house_load_power"
 KNOWN_CONTROLLABLE_LOAD_POWER_ENTITY = "sensor.energy_manager_known_controllable_load_power"
 BACKGROUND_LOAD_POWER_ENTITY = "sensor.energy_manager_background_load_power"
+BACKGROUND_LOAD_FORECAST_STATUS_ENTITY = "sensor.energy_manager_background_load_forecast_status"
+BACKGROUND_LOAD_FORECAST_NEXT_HOUR_ENTITY = "sensor.energy_manager_background_load_forecast_next_hour_power"
+BACKGROUND_LOAD_FORECAST_NEXT_24_HOURS_ENTITY = "sensor.energy_manager_background_load_forecast_next_24_hours_energy"
+BACKGROUND_LOAD_FORECAST_NEXT_7_DAYS_ENTITY = "sensor.energy_manager_background_load_forecast_next_7_days_energy"
 PV_FORECAST_STATUS_ENTITY = "sensor.energy_manager_pv_forecast_status"
 PV_FORECAST_TODAY_ENTITY = "sensor.energy_manager_pv_forecast_today_energy"
 PV_FORECAST_TOMORROW_ENTITY = "sensor.energy_manager_pv_forecast_tomorrow_energy"
@@ -137,6 +142,100 @@ class DiagnosticsPublisher:
             "last_update_utc": datetime.now(UTC).isoformat(),
         }
         await self._client.set_state(INPUT_HEALTH_ENTITY, health, attributes)
+
+
+    async def publish_background_load_forecast_status(
+        self,
+        status: str,
+        *,
+        forecast: BackgroundLoadForecast | None = None,
+        error: str | None = None,
+    ) -> None:
+        """Publish health and learning progress for the background-load predictor."""
+        attributes: dict[str, Any] = {
+            "friendly_name": "Energy Manager Background Load Forecast Status",
+            "model": "Local 15-minute time-of-day baseline",
+            "model_version": MODEL_VERSION,
+            "last_update_utc": datetime.now(UTC).isoformat(),
+        }
+        if forecast is not None:
+            attributes.update(
+                {
+                    "forecast_generated_at_utc": forecast.generated_at_utc.isoformat(),
+                    "history_sample_count": forecast.history_sample_count,
+                    "history_days": round(forecast.history_days, 3),
+                }
+            )
+        if error:
+            attributes["error"] = error
+        await self._client.set_state(BACKGROUND_LOAD_FORECAST_STATUS_ENTITY, status, attributes)
+
+    async def publish_background_load_forecast(
+        self,
+        forecast: BackgroundLoadForecast,
+        *,
+        now_local: datetime,
+    ) -> None:
+        """Publish compact summaries while keeping the 15-minute forecast in Python."""
+        common = {
+            "forecast_generated_at_utc": forecast.generated_at_utc.isoformat(),
+            "model_version": MODEL_VERSION,
+            "model_stage": forecast.model_stage,
+            "history_sample_count": forecast.history_sample_count,
+            "history_days": round(forecast.history_days, 3),
+        }
+
+        next_hour = forecast.next_hour_average_power_w()
+        attributes = _power_attributes("Energy Manager Background Load Forecast Next Hour Power")
+        attributes.update(common)
+        if forecast.points:
+            attributes["window_start_local"] = forecast.points[0].period_start_local.isoformat()
+            attributes["window_end_local"] = (
+                forecast.points[min(3, len(forecast.points) - 1)].period_start_local + timedelta(minutes=15)
+            ).isoformat()
+            attributes["methods"] = sorted({point.method for point in forecast.points[:4]})
+        await self._client.set_state(
+            BACKGROUND_LOAD_FORECAST_NEXT_HOUR_ENTITY,
+            "unavailable" if next_hour is None else round(next_hour, 1),
+            attributes,
+        )
+
+        next_24 = forecast.next_24_hours_energy_kwh()
+        attributes = _energy_attributes("Energy Manager Background Load Forecast Next 24 Hours")
+        attributes.update(common)
+        await self._client.set_state(
+            BACKGROUND_LOAD_FORECAST_NEXT_24_HOURS_ENTITY,
+            "unavailable" if next_24 is None else round(next_24, 3),
+            attributes,
+        )
+
+        daily = []
+        for offset in range(1, 8):
+            item = forecast.daily_energy(now_local.date() + timedelta(days=offset))
+            if item is not None:
+                daily.append(item)
+        attributes = _energy_attributes("Energy Manager Background Load Forecast Next 7 Days")
+        attributes.update(common)
+        if not daily:
+            await self._client.set_state(BACKGROUND_LOAD_FORECAST_NEXT_7_DAYS_ENTITY, "unavailable", attributes)
+            return
+        attributes.update(
+            {
+                "start_date": daily[0].target_date.isoformat(),
+                "end_date": daily[-1].target_date.isoformat(),
+                "days_available": len(daily),
+                "complete": len(daily) == 7,
+                "days": [
+                    {
+                        "date": item.target_date.isoformat(),
+                        "energy_kwh": round(item.energy_kwh, 3),
+                    }
+                    for item in daily
+                ],
+            }
+        )
+        total = sum(item.energy_kwh for item in daily)
+        await self._client.set_state(BACKGROUND_LOAD_FORECAST_NEXT_7_DAYS_ENTITY, round(total, 3), attributes)
 
     async def publish_pv_forecast_status(
         self,
