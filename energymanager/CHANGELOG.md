@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0
+
+- Added canonical instantaneous AC house-load power derived from grid net power, Solax AC PV and normalized ESS AC power.
+- Explicitly excludes the DC-coupled shed MPPT from the house-load balance so shed PV is not double-counted.
+- Added known controllable-load power; v0.6 starts with measured EV charging power.
+- Added background-load power as house load minus known controllable loads.
+- Added Home Assistant diagnostics for house load, controllable load and background load.
+- No configuration schema changes; existing v0.5.1 entity mappings are reused.
+- Remains shadow mode; no device control is present.
+
 ## 0.5.1
 
 - Clamp small negative EV charging-power readings between -100 W and 0 W to zero.

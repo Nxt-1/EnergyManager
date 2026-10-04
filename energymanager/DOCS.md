@@ -1,12 +1,12 @@
 # Energy Manager
 
-Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.5.1 keeps the continuously refreshed week-ahead PV forecast and adds tolerant handling for
-small negative zero-offset noise from the EV charging-power measurement.
+Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.6.0 adds the canonical measured load
+signals that will form the input to the future background-demand predictor.
 
 ## Configuration
 
 Entity IDs remain runtime configuration and are not hardcoded. Existing Grid, ESS, PV and EV configuration is preserved.
-There are no configuration-schema changes from v0.4.1.
+There are no configuration-schema changes from v0.5.1.
 
 ### Grid
 
@@ -55,6 +55,9 @@ The initial front/rear calibration was derived from recorded forecast and string
 the correction toward the unshaded physical model because the historical shade penalty was much smaller under weak/diffuse
 conditions. Seasonal calibration is clamped outside the observed period instead of extrapolated into unobserved seasons.
 
+Future shed calibration must exclude curtailed intervals. The shed MPPT can stop producing when the ESS is full and the
+MultiPlus has no AC demand/export path, so measured shed production is not always equal to available PV potential.
+
 The predictor also records direct radiation, diffuse radiation and cloud cover in its hourly forecast points so later
 calibration can test weather-dependent effects without changing the planner interface.
 
@@ -83,6 +86,25 @@ simple dashboards. The next-hour sensor exposes calibrated and raw power by grou
 
 The old fixed `pv_day_ahead_today` and `pv_day_ahead_tomorrow` diagnostics are removed in v0.5.0 and their stale Home
 Assistant states are deleted at startup.
+
+## Canonical load measurements
+
+Version 0.6.0 adds three derived power signals for later demand forecasting:
+
+- `sensor.energy_manager_house_load_power` is the instantaneous AC house consumption. It is calculated as
+  `grid net + Solax AC PV + ESS AC power`, using the normalized ESS convention where positive means discharge.
+- `sensor.energy_manager_known_controllable_load_power` is the measured consumption of loads Energy Manager already knows
+  it can schedule or control. Version 0.6 starts with EV charging only.
+- `sensor.energy_manager_background_load_power` is `house load - known controllable load`. This is the signal intended to
+  become the first background-demand predictor input.
+
+The shed MPPT is deliberately not added to the AC house-load equation. It is DC-coupled to the ESS, so any shed power that
+reaches the AC bus is already represented by `ess.power`. Adding the MPPT power separately would double-count it. The total
+PV diagnostic still includes both Solax and shed production because that sensor answers a different question: total PV being
+generated, not AC house consumption.
+
+Configured-but-invalid inputs propagate to the derived signal as unavailable rather than silently assuming zero. An
+unconfigured EV charging-power input contributes zero to known controllable load.
 
 ## Input validity and freshness
 

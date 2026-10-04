@@ -24,6 +24,9 @@ PV_TOTAL_POWER_ENTITY = "sensor.energy_manager_pv_total_power"
 EV_SOC_ENTITY = "sensor.energy_manager_ev_soc"
 EV_CONNECTED_ENTITY = "binary_sensor.energy_manager_ev_connected"
 EV_CHARGING_POWER_ENTITY = "sensor.energy_manager_ev_charging_power"
+HOUSE_LOAD_POWER_ENTITY = "sensor.energy_manager_house_load_power"
+KNOWN_CONTROLLABLE_LOAD_POWER_ENTITY = "sensor.energy_manager_known_controllable_load_power"
+BACKGROUND_LOAD_POWER_ENTITY = "sensor.energy_manager_background_load_power"
 PV_FORECAST_STATUS_ENTITY = "sensor.energy_manager_pv_forecast_status"
 PV_FORECAST_TODAY_ENTITY = "sensor.energy_manager_pv_forecast_today_energy"
 PV_FORECAST_TOMORROW_ENTITY = "sensor.energy_manager_pv_forecast_tomorrow_energy"
@@ -116,9 +119,12 @@ class DiagnosticsPublisher:
         await self._client.set_state(entity_id, state, attributes)
 
     async def publish_derived(self, house_state: HouseState) -> None:
-        """Publish grid-net and total-PV values derived from the canonical house state."""
+        """Publish derived power-balance values from the canonical house state."""
         await self._publish_grid_net(house_state)
         await self._publish_pv_total(house_state)
+        await self._publish_house_load(house_state)
+        await self._publish_known_controllable_load(house_state)
+        await self._publish_background_load(house_state)
 
     async def publish_input_health(self, house_state: HouseState, health: str) -> None:
         """Publish aggregate input validity/freshness information."""
@@ -221,6 +227,52 @@ class DiagnosticsPublisher:
             await self._client.set_state(PV_TOTAL_POWER_ENTITY, "unavailable", attributes)
             return
         await self._client.set_state(PV_TOTAL_POWER_ENTITY, round(value, 3), attributes)
+
+    async def _publish_house_load(self, house_state: HouseState) -> None:
+        attributes = _power_attributes("Energy Manager House Load Power")
+        attributes.update(
+            {
+                "positive_means": "consumption",
+                "formula": "grid_net + solax_ac_pv + ess_ac_power",
+                "shed_pv_handling": "excluded because shed MPPT is DC-coupled; AC effect is in ESS power",
+            }
+        )
+        value = house_state.house_load_power_w
+        if value is None:
+            attributes["error"] = "Required configured power-balance inputs are not valid/fresh"
+            await self._client.set_state(HOUSE_LOAD_POWER_ENTITY, "unavailable", attributes)
+            return
+        await self._client.set_state(HOUSE_LOAD_POWER_ENTITY, round(value, 3), attributes)
+
+    async def _publish_known_controllable_load(self, house_state: HouseState) -> None:
+        attributes = _power_attributes("Energy Manager Known Controllable Load Power")
+        attributes.update(
+            {
+                "positive_means": "consumption",
+                "included_loads": ["ev.charging_power"],
+            }
+        )
+        value = house_state.known_controllable_load_power_w
+        if value is None:
+            attributes["error"] = "A configured controllable-load input is not valid/fresh"
+            await self._client.set_state(KNOWN_CONTROLLABLE_LOAD_POWER_ENTITY, "unavailable", attributes)
+            return
+        await self._client.set_state(KNOWN_CONTROLLABLE_LOAD_POWER_ENTITY, round(value, 3), attributes)
+
+    async def _publish_background_load(self, house_state: HouseState) -> None:
+        attributes = _power_attributes("Energy Manager Background Load Power")
+        attributes.update(
+            {
+                "positive_means": "consumption",
+                "formula": "house_load - known_controllable_load",
+            }
+        )
+        value = house_state.background_load_power_w
+        if value is None:
+            attributes["error"] = "House load or controllable-load power is not available"
+            await self._client.set_state(BACKGROUND_LOAD_POWER_ENTITY, "unavailable", attributes)
+            return
+        await self._client.set_state(BACKGROUND_LOAD_POWER_ENTITY, round(value, 3), attributes)
 
     async def _publish_pv_daily(
         self,

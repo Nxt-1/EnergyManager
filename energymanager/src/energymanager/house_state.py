@@ -130,6 +130,46 @@ class HouseState:
         return sum(float(reading.value) for reading in configured)
 
     @property
+    def house_load_power_w(self) -> float | None:
+        """Return instantaneous AC house load from the measured power balance.
+
+        The shed MPPT is DC-coupled to the ESS and is therefore deliberately not
+        added here. Its contribution to the AC bus is already represented by the
+        normalized ESS AC power.
+        """
+        grid_power = self.grid_power_w
+        if grid_power is None:
+            return None
+
+        solax_power = self._optional_configured_float("pv.solax_power")
+        ess_power = self._optional_configured_float("ess.power")
+        if solax_power is None or ess_power is None:
+            return None
+
+        return grid_power + solax_power + ess_power
+
+    @property
+    def known_controllable_load_power_w(self) -> float | None:
+        """Return the measured power of controllable loads currently modeled.
+
+        Version 0.6 starts with EV charging only. Unconfigured controllable loads
+        contribute zero; configured-but-invalid inputs make the result unavailable.
+        """
+        ev_power = self._optional_configured_float("ev.charging_power")
+        if ev_power is None:
+            return None
+        return ev_power
+
+    @property
+    def background_load_power_w(self) -> float | None:
+        """Return house load after removing known controllable consumption."""
+        house_load = self.house_load_power_w
+        controllable_load = self.known_controllable_load_power_w
+        if house_load is None or controllable_load is None:
+            return None
+        return house_load - controllable_load
+
+    @property
     def configured_count(self) -> int:
         return sum(reading.entity_id is not None for reading in self.readings.values())
 
@@ -146,3 +186,12 @@ class HouseState:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return None
         return float(value)
+
+    def _optional_configured_float(self, key: str) -> float | None:
+        """Return zero when an optional source is unconfigured, else its valid value."""
+        reading = self.readings.get(key)
+        if reading is None or reading.entity_id is None:
+            return 0.0
+        if not reading.valid or isinstance(reading.value, bool) or not isinstance(reading.value, (int, float)):
+            return None
+        return float(reading.value)
