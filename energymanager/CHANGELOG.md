@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.10.0
+
+- Added a runtime rolling-origin backtest for the background-load predictor; no household-specific correction constants are compiled into the application.
+- Evaluates the current EnergyManager model against three simple baselines: persistence, same time yesterday and same time last week.
+- Measures 1 h, 3 h, 6 h, 12 h and 24 h forecast MAE, bias, p90 absolute error, energy MAE and coverage.
+- Adds current-model error breakdowns for night/morning/afternoon/evening and weekday/weekend to identify where separate models or inputs may be useful.
+- Uses only data that would have been available at each historical forecast issue time, avoiding look-ahead leakage.
+- Runs the evaluation at runtime from the current InfluxDB-backed history and refreshes at most once per 24 hours.
+- Stores backtest summaries in InfluxDB and exposes `sensor.energy_manager_background_load_backtest` for inspection.
+- Leaves the production background-load predictor unchanged; v0.10 is an evaluation release intended to guide later runtime-learning model improvements.
+- No configuration schema changes and no actuator/control changes.
+
 ## 0.9.3
 
 - Treats stale EV charging-power history as 0 W after the existing 15-minute freshness window, instead of dropping the entire background-load sample.

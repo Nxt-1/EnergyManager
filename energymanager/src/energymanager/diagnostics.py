@@ -8,6 +8,7 @@ from typing import Any
 from . import __version__
 from .ha_client import HomeAssistantClient
 from .house_state import HouseState, InputReading
+from .load_backtest import BACKTEST_VERSION, BackgroundLoadBacktest
 from .load_forecast import MODEL_VERSION, BackgroundLoadForecast
 from .open_meteo import FORECAST_DAYS, FORECAST_MODEL
 from .pv_forecast import CALIBRATION_VERSION, PvDailyEnergy, PvForecast
@@ -32,6 +33,7 @@ BACKGROUND_LOAD_FORECAST_STATUS_ENTITY = "sensor.energy_manager_background_load_
 BACKGROUND_LOAD_FORECAST_NEXT_HOUR_ENTITY = "sensor.energy_manager_background_load_forecast_next_hour_power"
 BACKGROUND_LOAD_FORECAST_NEXT_24_HOURS_ENTITY = "sensor.energy_manager_background_load_forecast_next_24_hours_energy"
 BACKGROUND_LOAD_FORECAST_NEXT_7_DAYS_ENTITY = "sensor.energy_manager_background_load_forecast_next_7_days_energy"
+BACKGROUND_LOAD_BACKTEST_ENTITY = "sensor.energy_manager_background_load_backtest"
 PV_FORECAST_STATUS_ENTITY = "sensor.energy_manager_pv_forecast_status"
 PV_FORECAST_TODAY_ENTITY = "sensor.energy_manager_pv_forecast_today_energy"
 PV_FORECAST_TOMORROW_ENTITY = "sensor.energy_manager_pv_forecast_tomorrow_energy"
@@ -296,6 +298,83 @@ class DiagnosticsPublisher:
         )
         total = sum(item.energy_kwh for item in daily)
         await self._client.set_state(BACKGROUND_LOAD_FORECAST_NEXT_7_DAYS_ENTITY, round(total, 3), attributes)
+
+    async def publish_background_load_backtest(
+        self,
+        result: BackgroundLoadBacktest | None,
+        *,
+        error: str | None = None,
+    ) -> None:
+        """Publish rolling-origin load-forecast evaluation without changing the production model."""
+        attributes: dict[str, Any] = {
+            "friendly_name": "Energy Manager Background Load Backtest",
+            "backtest_version": BACKTEST_VERSION,
+            "model_version": MODEL_VERSION,
+            "last_update_utc": datetime.now(UTC).isoformat(),
+        }
+        if error is not None:
+            attributes["error"] = error
+            await self._client.set_state(BACKGROUND_LOAD_BACKTEST_ENTITY, "unavailable", attributes)
+            return
+        if result is None:
+            attributes["reason"] = "insufficient_history"
+            await self._client.set_state(BACKGROUND_LOAD_BACKTEST_ENTITY, "unavailable", attributes)
+            return
+
+        horizons: dict[str, Any] = {}
+        for horizon in sorted({metric.horizon_hours for metric in result.metrics}):
+            models = {}
+            for metric in result.metrics:
+                if metric.horizon_hours != horizon:
+                    continue
+                models[metric.model] = {
+                    "mae_w": round(metric.mae_w, 1),
+                    "bias_w": round(metric.bias_w, 1),
+                    "p90_abs_error_w": round(metric.p90_abs_error_w, 1),
+                    "energy_mae_kwh": (
+                        None if metric.energy_mae_kwh is None else round(metric.energy_mae_kwh, 3)
+                    ),
+                    "points": metric.points,
+                    "issue_count": metric.issue_count,
+                    "coverage": round(metric.coverage, 3),
+                }
+            horizons[f"{horizon}h"] = {
+                "best_model": result.best_by_horizon.get(horizon),
+                "models": models,
+            }
+
+        attributes.update(
+            {
+                "generated_at_utc": result.generated_at_utc.isoformat(),
+                "evaluation_start_local": result.evaluation_start_local.isoformat(),
+                "evaluation_end_local": result.evaluation_end_local.isoformat(),
+                "issue_count": result.issue_count,
+                "horizons": horizons,
+                "current_model_dayparts": {
+                    name: {
+                        "mae_w": round(item.mae_w, 1),
+                        "bias_w": round(item.bias_w, 1),
+                        "p90_abs_error_w": round(item.p90_abs_error_w, 1),
+                        "points": item.points,
+                    }
+                    for name, item in result.daypart_breakdown.items()
+                },
+                "current_model_daytypes": {
+                    name: {
+                        "mae_w": round(item.mae_w, 1),
+                        "bias_w": round(item.bias_w, 1),
+                        "p90_abs_error_w": round(item.p90_abs_error_w, 1),
+                        "points": item.points,
+                    }
+                    for name, item in result.daytype_breakdown.items()
+                },
+            }
+        )
+        current_24h = result.metric("energy_manager", 24)
+        state: str | float = "unavailable" if current_24h is None else round(current_24h.mae_w, 1)
+        attributes["unit_of_measurement"] = "W"
+        attributes["state_class"] = "measurement"
+        await self._client.set_state(BACKGROUND_LOAD_BACKTEST_ENTITY, state, attributes)
 
     async def publish_pv_forecast_status(
         self,

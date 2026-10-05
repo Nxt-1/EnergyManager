@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime, timedelta
@@ -12,12 +13,14 @@ from .database import EnergyManagerStore, InfluxDatabaseError
 from .diagnostics import DiagnosticsPublisher
 from .ha_client import HomeAssistantClient, HomeAssistantError
 from .house_state import HouseState
+from .load_backtest import BackgroundLoadBacktest, BackgroundLoadBacktester
 from .load_forecast import MODEL_VERSION, BackgroundLoadForecast, BackgroundLoadModel, LoadSample
 
 _LOGGER = logging.getLogger(__name__)
 _LOCAL_TZ = ZoneInfo("Europe/Brussels")
 _SAMPLE_INTERVAL = timedelta(minutes=5)
 _FORECAST_INTERVAL = timedelta(minutes=30)
+_BACKTEST_INTERVAL = timedelta(hours=24)
 _MEMORY_RETENTION = timedelta(days=35)
 _DEFAULT_HISTORY_PATH = Path("/data/background_load_history.jsonl")
 _DEFAULT_ARCHIVE_PATH = Path("/data/background_load_forecast_revisions.jsonl")
@@ -136,16 +139,19 @@ class BackgroundLoadService:
         history: BackgroundLoadHistory | None = None,
         archive: BackgroundLoadForecastArchive | None = None,
         model: BackgroundLoadModel | None = None,
+        backtester: BackgroundLoadBacktester | None = None,
         store: EnergyManagerStore | None = None,
     ) -> None:
         self._diagnostics = DiagnosticsPublisher(ha_client)
         self._history = history or BackgroundLoadHistory()
         self._archive = archive or BackgroundLoadForecastArchive()
         self._model = model or BackgroundLoadModel()
+        self._backtester = backtester or BackgroundLoadBacktester()
         self._store = store
         self._forecast: BackgroundLoadForecast | None = None
         self._last_forecast_at_utc: datetime | None = None
         self._last_compact_at_utc: datetime | None = None
+        self._last_backtest_at_utc: datetime | None = None
 
     @property
     def forecast(self) -> BackgroundLoadForecast | None:
@@ -222,6 +228,50 @@ class BackgroundLoadService:
             forecast.next_24_hours_energy_kwh() or 0.0,
             forecast.history_days,
         )
+        await self._run_backtest_if_due(now_utc, now_local)
+
+    async def _run_backtest_if_due(self, now_utc: datetime, now_local: datetime) -> None:
+        if self._last_backtest_at_utc is not None and now_utc - self._last_backtest_at_utc < _BACKTEST_INTERVAL:
+            return
+        self._last_backtest_at_utc = now_utc
+        try:
+            result = await asyncio.to_thread(
+                self._backtester.evaluate,
+                self._history.samples,
+                now_local=now_local,
+                generated_at_utc=now_utc,
+            )
+            await self._diagnostics.publish_background_load_backtest(result)
+            if result is None:
+                _LOGGER.info("Background-load backtest waiting for sufficient history")
+                return
+            await self._archive_backtest(result)
+            current_1h = result.metric("energy_manager", 1)
+            current_24h = result.metric("energy_manager", 24)
+            _LOGGER.info(
+                "Background-load backtest updated: issues=%d, current MAE 1h=%.0f W, 24h=%.0f W, best 24h=%s",
+                result.issue_count,
+                current_1h.mae_w if current_1h is not None else 0.0,
+                current_24h.mae_w if current_24h is not None else 0.0,
+                result.best_by_horizon.get(24, "n/a"),
+            )
+        except (InfluxDatabaseError, HomeAssistantError, OSError, ValueError) as exc:
+            _LOGGER.warning("Background-load backtest failed: %s", exc)
+            await self._safe_publish_backtest_error(str(exc))
+        except Exception as exc:  # noqa: BLE001 - evaluation failure must not stop Energy Manager.
+            _LOGGER.exception("Unexpected background-load backtest error")
+            await self._safe_publish_backtest_error(f"{type(exc).__name__}: {exc}")
+
+    async def _archive_backtest(self, result: BackgroundLoadBacktest) -> None:
+        if self._store is None:
+            return
+        await self._store.record_background_backtest(result)
+
+    async def _safe_publish_backtest_error(self, error: str) -> None:
+        try:
+            await self._diagnostics.publish_background_load_backtest(None, error=error)
+        except HomeAssistantError as exc:
+            _LOGGER.warning("Could not publish background-load backtest status: %s", exc)
 
     async def _safe_publish_status(self, status: str, *, error: str | None = None) -> None:
         try:

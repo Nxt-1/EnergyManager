@@ -133,6 +133,32 @@ This model intentionally predicts only the current generic background signal. As
 heat pump are promoted to separate models later, they can be removed from the generic background signal without changing
 the planner-facing forecast concept.
 
+## Background-load backtesting
+
+Version 0.10.0 adds a runtime evaluation layer around the existing background-load predictor. The production predictor itself
+is unchanged. The purpose of the evaluator is to identify useful model structure and additional inputs without baking
+household-specific correction constants into the application at compile time.
+
+The evaluator performs rolling-origin backtests using only observations that existed before each simulated forecast issue
+time. It evaluates two issue times per day over the most recent 21-day evaluation window, after a minimum seven-day warm-up.
+The current EnergyManager model is compared with three intentionally simple baselines:
+
+- persistence: the recent three-hour median held constant;
+- yesterday: the observed load from the same 15-minute slot one day earlier;
+- last week: the observed load from the same slot seven days earlier.
+
+Metrics are calculated for 1 h, 3 h, 6 h, 12 h and 24 h horizons: mean absolute error, signed bias, p90 absolute error,
+energy MAE and available-point coverage. The current EnergyManager model is also broken down by daypart and weekday/weekend
+so recurring failure modes can be identified before adding a new predictor feature or separating a load into its own model.
+
+`sensor.energy_manager_background_load_backtest` exposes the latest result. Its state is the current model's 24-hour-horizon
+MAE in watts; detailed candidate-model and contextual metrics are available as attributes. When InfluxDB persistence is
+enabled, each model/horizon summary is also written to `background_load_backtest`. The backtest refreshes at most once every
+24 hours and never changes the production forecast automatically.
+
+The intended development loop is: inspect runtime backtest results, decide which general feature or separately-modelled load
+is justified, implement that runtime model behavior, then compare the new model against the same baselines.
+
 ## InfluxDB 3 persistence
 
 Version 0.8.0 adds an optional InfluxDB 3 backend for Energy Manager's own time-series history. Configure the database

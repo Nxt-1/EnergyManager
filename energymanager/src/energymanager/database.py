@@ -12,6 +12,7 @@ from typing import Any
 
 import aiohttp
 
+from .load_backtest import BACKTEST_VERSION, BackgroundLoadBacktest
 from .load_forecast import MODEL_VERSION, BackgroundLoadForecast, LoadSample
 from .open_meteo import FORECAST_MODEL
 from .pv_forecast import CALIBRATION_VERSION, PvForecast
@@ -396,6 +397,30 @@ class EnergyManagerStore:
                 f"background_load_forecast_revision,{tags} {fields} "
                 f"{_timestamp_ns(forecast.generated_at_utc)}"
             )
+        await self._client.write_lines(lines)
+
+    async def record_background_backtest(self, result: BackgroundLoadBacktest) -> None:
+        """Persist one runtime backtest summary per model and horizon."""
+        lines: list[str] = []
+        for metric in result.metrics:
+            tags = (
+                f"model={_escape_tag(metric.model)},horizon_h={metric.horizon_hours},"
+                f"model_version={_escape_tag(MODEL_VERSION)},"
+                f"backtest_version={_escape_tag(BACKTEST_VERSION)}"
+            )
+            fields = (
+                f"mae_w={metric.mae_w:.6f},"
+                f"bias_w={metric.bias_w:.6f},"
+                f"p90_abs_error_w={metric.p90_abs_error_w:.6f},"
+                f"points={metric.points}i,"
+                f"issue_count={metric.issue_count}i,"
+                f"coverage={metric.coverage:.6f},"
+                f'evaluation_start_local="{_escape_string(result.evaluation_start_local.isoformat())}",'
+                f'evaluation_end_local="{_escape_string(result.evaluation_end_local.isoformat())}"'
+            )
+            if metric.energy_mae_kwh is not None:
+                fields += f",energy_mae_kwh={metric.energy_mae_kwh:.6f}"
+            lines.append(f"background_load_backtest,{tags} {fields} {_timestamp_ns(result.generated_at_utc)}")
         await self._client.write_lines(lines)
 
     async def _migrate_legacy_pv_revisions(self) -> int:
