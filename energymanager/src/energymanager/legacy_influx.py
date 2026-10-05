@@ -15,7 +15,7 @@ from .config import LegacyInfluxSettings, Settings
 from .database import EnergyManagerStore
 
 _LOGGER = logging.getLogger(__name__)
-_DERIVATION_ID = "house_background_v3_stateful"
+_DERIVATION_ID = "house_background_v4_ev_idle_fallback"
 _SOURCE_NORMALIZATION_VERSION = "power_w_v1"
 _BUCKET = timedelta(minutes=5)
 _CHUNK = timedelta(days=14)
@@ -495,7 +495,14 @@ def _reconstruct_rows(
             if observed in values.get(key, {}):
                 states[key] = (observed, values[key][observed])
 
-        resolved = {key: _resolve_historical_state(states[key], observed) for key in keys}
+        resolved = {
+            key: _resolve_historical_state(
+                states[key],
+                observed,
+                stale_to_zero=key == "ev",
+            )
+            for key in keys
+        }
         if any(resolved[key] is None for key in required):
             skipped_rows += 1
             observed += _BUCKET
@@ -548,6 +555,8 @@ def _latest_before(
 def _resolve_historical_state(
     state: tuple[datetime, float] | None,
     observed_at_utc: datetime,
+    *,
+    stale_to_zero: bool = False,
 ) -> float | None:
     if state is None:
         return None
@@ -557,6 +566,8 @@ def _resolve_historical_state(
         return None
     if age <= _ACTIVE_SAMPLE_MAX_AGE:
         return value
+    if stale_to_zero:
+        return 0.0
     if abs(value) <= _STALE_NEAR_ZERO_THRESHOLD_W:
         return 0.0
     return None

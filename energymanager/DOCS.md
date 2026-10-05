@@ -1,6 +1,6 @@
 # Energy Manager
 
-Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.9.2 adds robust state-aware historical backfill from the legacy Home Assistant InfluxDB database on top of the rolling background-demand predictor and InfluxDB 3 persistence.
+Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.9.3 adds robust state-aware historical backfill from the legacy Home Assistant InfluxDB database on top of the rolling background-demand predictor and InfluxDB 3 persistence.
 
 ## Configuration
 
@@ -188,12 +188,14 @@ Current canonical load history is reconstructed from those selected source recor
 - `background_load = house_load - ev_charging_power`
 
 The legacy Home Assistant database behaves like sparse state history: an entity may not have a new row in every five-minute
-bucket when its state has not changed. Version 0.9.2 therefore carries recent source values forward for up to 15 minutes.
+bucket when its state has not changed. Version 0.9.3 therefore carries recent source values forward for up to 15 minutes.
+After that window, stale EV charging power resolves to 0 W because an idle/disconnected charger commonly stops reporting;
+grid, ESS and PV retain the stricter stale-value policy so material non-zero sensor outages are not silently extended.
 If a carried value is within ±50 W, it is treated as inactive and resolves to zero after that freshness period; this permits
 long legitimate zero periods such as no PV at night, no grid export, idle ESS or an idle EV. A material non-zero value older
 than 15 minutes is not trusted, so a sensor outage is not silently stretched across hours or days. Each reconstruction chunk
 is seeded from the latest archived source value before the chunk boundary. Reconstructed historical load is written to the
-separate `legacy_house_load` table. Live samples remain in `house_load`; the predictor merges both by timestamp and lets a
+separate `legacy_house_load_v2` table. Live samples remain in `house_load`; the predictor merges both by timestamp and lets a
 live sample win when both exist. This avoids relying on nondeterministic duplicate-point overwrites in InfluxDB 3.
 
 Derived-history coverage is tracked separately using a derivation recipe and a fingerprint of the participating source

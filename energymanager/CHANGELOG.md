@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.3
+
+- Treats stale EV charging-power history as 0 W after the existing 15-minute freshness window, instead of dropping the entire background-load sample.
+- Keeps the stricter stale-value rules for grid, ESS and PV sources so sensor outages are not silently stretched into fake historical power.
+- Uses a new derived-history recipe ID so the full archived source range is rebuilt automatically without re-importing the legacy source rows.
+- Writes the corrected reconstruction to `legacy_house_load_v2`; the predictor prefers v2 over the v0.9.2 legacy table and still prefers live `house_load` data over both.
+- No configuration schema changes and no actuator/control changes.
+
 ## 0.9.2
 
 - Rebuilds legacy house/background history on a complete five-minute timeline instead of requiring every source to have written in the same bucket.

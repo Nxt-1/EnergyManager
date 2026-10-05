@@ -122,7 +122,7 @@ class EnergyManagerStore:
         """Load the active training window from reconstructed legacy plus live history."""
         days = max(1, int(days))
         samples_by_time: dict[datetime, LoadSample] = {}
-        for table in ("legacy_house_load", "house_load"):
+        for table in ("legacy_house_load", "legacy_house_load_v2", "house_load"):
             if not await self._table_exists(table):
                 continue
             query = (
@@ -189,7 +189,7 @@ class EnergyManagerStore:
             if known_load is not None:
                 fields.append(f"known_controllable_load_power_w={max(0.0, known_load):.6f}")
             if fields:
-                lines.append(f"legacy_house_load {','.join(fields)} {_timestamp_ns(observed_at_utc)}")
+                lines.append(f"legacy_house_load_v2 {','.join(fields)} {_timestamp_ns(observed_at_utc)}")
         await _write_in_batches(self._client, lines)
 
     async def load_legacy_source_state(
