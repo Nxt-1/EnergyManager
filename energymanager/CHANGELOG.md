@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.1
+
+- Added optional username/password authentication for the legacy InfluxDB 1.x backfill source.
+- Uses HTTP Basic authentication when legacy credentials are configured.
+- Keeps unauthenticated legacy sources supported by leaving both credential fields empty.
+- No changes to EnergyManager InfluxDB 3 persistence or backfill data semantics.
+
 ## 0.9.0
 
 - Added incremental historical backfill from the legacy Home Assistant InfluxDB 1.x database into EnergyManager's InfluxDB 3 database.

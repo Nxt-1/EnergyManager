@@ -226,6 +226,8 @@ def test_legacy_influx_backfill_settings_are_loaded(tmp_path: Path) -> None:
                     "url": "http://192.168.178.103:8086/",
                     "database": "home_assistant",
                     "retention_policy": "autogen",
+                    "username": "energy_manager",
+                    "password": "legacy-secret",
                 },
             }
         ),
@@ -238,6 +240,26 @@ def test_legacy_influx_backfill_settings_are_loaded(tmp_path: Path) -> None:
     assert settings.legacy_influx.url == "http://192.168.178.103:8086"
     assert settings.legacy_influx.database == "home_assistant"
     assert settings.legacy_influx.retention_policy == "autogen"
+    assert settings.legacy_influx.username == "energy_manager"
+    assert settings.legacy_influx.password == "legacy-secret"
+
+
+def test_legacy_influx_credentials_must_be_configured_as_a_pair(tmp_path: Path) -> None:
+    path = tmp_path / "options.json"
+    path.write_text(
+        json.dumps(
+            {
+                "legacy_influx": {
+                    "backfill_enabled": False,
+                    "username": "energy_manager",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigurationError):
+        Settings.load(path)
 
 
 def test_legacy_backfill_requires_target_database_and_source_url(tmp_path: Path) -> None:

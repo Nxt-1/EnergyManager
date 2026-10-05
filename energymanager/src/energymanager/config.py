@@ -77,6 +77,8 @@ class LegacyInfluxSettings:
     url: str | None = None
     database: str = "home_assistant"
     retention_policy: str = "autogen"
+    username: str | None = None
+    password: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,6 +159,8 @@ class Settings:
                     "url": self.legacy_influx.url,
                     "database": self.legacy_influx.database,
                     "retention_policy": self.legacy_influx.retention_policy,
+                    "username": self.legacy_influx.username,
+                    "password": self.legacy_influx.password,
                 }
             ),
         }
@@ -230,6 +234,8 @@ class Settings:
         legacy_retention_policy = str(
             legacy_influx_raw.get("retention_policy", "autogen")
         ).strip() or "autogen"
+        legacy_username = _optional_string(legacy_influx_raw.get("username"))
+        legacy_password = _optional_string(legacy_influx_raw.get("password"))
         if not _DATABASE_RE.fullmatch(legacy_influx_database):
             raise ConfigurationError(
                 "legacy_influx.database may only contain letters, numbers, underscores and hyphens"
@@ -238,6 +244,8 @@ class Settings:
             raise ConfigurationError(
                 "legacy_influx.retention_policy may only contain letters, numbers, underscores and hyphens"
             )
+        if (legacy_username is None) != (legacy_password is None):
+            raise ConfigurationError("legacy_influx.username and legacy_influx.password must be set together")
         if legacy_backfill_enabled:
             if not database_enabled:
                 raise ConfigurationError("legacy_influx backfill requires database.enabled")
@@ -289,6 +297,8 @@ class Settings:
                 url=legacy_influx_url.rstrip("/") if legacy_influx_url else None,
                 database=legacy_influx_database,
                 retention_policy=legacy_retention_policy,
+                username=legacy_username,
+                password=legacy_password,
             ),
             legacy_options_detected=legacy_options_detected,
         )

@@ -70,10 +70,18 @@ class LegacyInfluxClient:
         self._url = settings.url.rstrip("/")
         self._database = settings.database
         self._retention_policy = settings.retention_policy
+        self._username = settings.username
+        self._password = settings.password
         self._session: aiohttp.ClientSession | None = None
 
     async def __aenter__(self) -> LegacyInfluxClient:
-        self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60))
+        auth = None
+        if self._username is not None and self._password is not None:
+            auth = aiohttp.BasicAuth(self._username, self._password)
+        self._session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=60),
+            auth=auth,
+        )
         return self
 
     async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:

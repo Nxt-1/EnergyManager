@@ -168,9 +168,9 @@ or any other Home Assistant device.
 
 ## Legacy Home Assistant InfluxDB backfill
 
-Version 0.9.0 can seed EnergyManager with selected historical Home Assistant data from the old InfluxDB 1.x instance.
-The source URL, database and retention policy are runtime configuration; configured Home Assistant entity IDs are reused and
-never hardcoded.
+Version 0.9.1 can seed EnergyManager with selected historical Home Assistant data from the old InfluxDB 1.x instance.
+The source URL, database, retention policy and optional read-only username/password are runtime configuration; configured
+Home Assistant entity IDs are reused and never hardcoded.
 
 Backfill is deliberately **selective and incremental**. The old Home Assistant database remains the broad historical archive;
 the `energy_manager` database receives only signals that EnergyManager actually uses. Each imported source is tracked by its
@@ -197,5 +197,7 @@ eventually removed, keep a complete archival backup of that database so a curren
 if a future EnergyManager model needs it.
 
 `sensor.energy_manager_database_status` reports backfill status plus source rows, sources updated, derived house/background
-rows, skipped rows and the current overlapping source range. Backfill errors are non-fatal.
+rows, skipped rows and the current overlapping source range. Backfill errors are non-fatal. If the legacy InfluxDB has
+authentication enabled, configure a dedicated read-only user for `home_assistant`; EnergyManager sends those credentials with
+HTTP Basic authentication.
 

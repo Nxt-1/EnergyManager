@@ -84,3 +84,9 @@ configuration:
       retention_policy:
         name: Legacy retention policy
         description: Retention policy containing the Home Assistant measurements. Usually autogen.
+      username:
+        name: Legacy InfluxDB username
+        description: Read-only InfluxDB 1.x username used to query the old Home Assistant history.
+      password:
+        name: Legacy InfluxDB password
+        description: Password for the configured legacy InfluxDB 1.x user.
