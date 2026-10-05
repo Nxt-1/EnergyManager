@@ -155,6 +155,15 @@ class DiagnosticsPublisher:
         migrated_pv_rows: int | None = None,
         migrated_load_rows: int | None = None,
         migrated_load_forecast_rows: int | None = None,
+        legacy_backfill_status: str | None = None,
+        legacy_backfill_source_rows: int | None = None,
+        legacy_backfill_sources_updated: int | None = None,
+        legacy_backfill_house_rows: int | None = None,
+        legacy_backfill_background_rows: int | None = None,
+        legacy_backfill_skipped_rows: int | None = None,
+        legacy_backfill_start_utc: str | None = None,
+        legacy_backfill_end_utc: str | None = None,
+        legacy_backfill_error: str | None = None,
     ) -> None:
         """Publish health for optional InfluxDB 3 persistence without exposing credentials."""
         attributes: dict[str, Any] = {
@@ -172,6 +181,24 @@ class DiagnosticsPublisher:
             attributes["migrated_background_load_rows"] = migrated_load_rows
         if migrated_load_forecast_rows is not None:
             attributes["migrated_background_forecast_rows"] = migrated_load_forecast_rows
+        if legacy_backfill_status is not None:
+            attributes["legacy_backfill_status"] = legacy_backfill_status
+        if legacy_backfill_source_rows is not None:
+            attributes["legacy_backfill_source_rows"] = legacy_backfill_source_rows
+        if legacy_backfill_sources_updated is not None:
+            attributes["legacy_backfill_sources_updated"] = legacy_backfill_sources_updated
+        if legacy_backfill_house_rows is not None:
+            attributes["legacy_backfill_house_rows"] = legacy_backfill_house_rows
+        if legacy_backfill_background_rows is not None:
+            attributes["legacy_backfill_background_rows"] = legacy_backfill_background_rows
+        if legacy_backfill_skipped_rows is not None:
+            attributes["legacy_backfill_skipped_rows"] = legacy_backfill_skipped_rows
+        if legacy_backfill_start_utc is not None:
+            attributes["legacy_backfill_start_utc"] = legacy_backfill_start_utc
+        if legacy_backfill_end_utc is not None:
+            attributes["legacy_backfill_end_utc"] = legacy_backfill_end_utc
+        if legacy_backfill_error is not None:
+            attributes["legacy_backfill_error"] = legacy_backfill_error
         if error:
             attributes["error"] = error
         await self._client.set_state(DATABASE_STATUS_ENTITY, status, attributes)

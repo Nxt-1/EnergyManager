@@ -1,11 +1,11 @@
 # Energy Manager
 
-Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.7.0 adds the first rolling background-demand predictor on top of the canonical load signals.
+Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.9.0 adds historical backfill from the legacy Home Assistant InfluxDB database on top of the rolling background-demand predictor and InfluxDB 3 persistence.
 
 ## Configuration
 
 Entity IDs remain runtime configuration and are not hardcoded. Existing Grid, ESS, PV and EV configuration is preserved.
-There are no configuration-schema changes from v0.5.1.
+Version 0.9 adds an optional legacy InfluxDB backfill group; existing entity mappings remain unchanged.
 
 ### Grid
 
@@ -165,3 +165,37 @@ configured measurement inputs degrade `sensor.energy_manager_input_health`. PV f
 
 This release still contains no actuator and no command path. It cannot alter the ESS, EV charger, heat pump, ventilation,
 or any other Home Assistant device.
+
+## Legacy Home Assistant InfluxDB backfill
+
+Version 0.9.0 can seed EnergyManager with selected historical Home Assistant data from the old InfluxDB 1.x instance.
+The source URL, database and retention policy are runtime configuration; configured Home Assistant entity IDs are reused and
+never hardcoded.
+
+Backfill is deliberately **selective and incremental**. The old Home Assistant database remains the broad historical archive;
+the `energy_manager` database receives only signals that EnergyManager actually uses. Each imported source is tracked by its
+logical role, configured entity ID, normalization version and covered time range. There is no global "migration completed"
+flag. If a later EnergyManager version adds a separately modelled signal such as heat-pump power or outside temperature, that
+new source can be imported then without copying unrelated Home Assistant sensors or re-importing sources already covered.
+
+For the current load model, v0.9 selects grid import/export, ESS AC power, Solax AC PV and EV charging power. Five-minute
+normalized source history is archived in `legacy_power_source`. ESS power is stored using EnergyManager's canonical sign
+(positive discharge, negative charge), and small negative EV zero-offset readings are normalized the same way as live data.
+
+Current canonical load history is reconstructed from those selected source records:
+
+- `house_load = grid_import - grid_export + solax_ac_pv + normalized_ess_ac_power`
+- `background_load = house_load - ev_charging_power`
+
+Derived-history coverage is tracked separately using a derivation recipe and a fingerprint of the participating source
+mappings. If source coverage extends, only the missing prefix/tail is derived. A future model that changes which separately
+modelled loads are subtracted can use a new derivation recipe and rebuild the relevant historical background signal from the
+selected archived sources.
+
+This design intentionally does not migrate the complete Home Assistant database. Before the deprecated InfluxDB 1.x app is
+eventually removed, keep a complete archival backup of that database so a currently-unused HA signal can still be recovered
+if a future EnergyManager model needs it.
+
+`sensor.energy_manager_database_status` reports backfill status plus source rows, sources updated, derived house/background
+rows, skipped rows and the current overlapping source range. Backfill errors are non-fatal.
+

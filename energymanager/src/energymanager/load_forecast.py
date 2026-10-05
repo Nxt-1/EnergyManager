@@ -12,7 +12,7 @@ LOCAL_TIMEZONE = ZoneInfo("Europe/Brussels")
 MODEL_VERSION = "2026-10-04-baseline"
 FORECAST_INTERVAL_MINUTES = 15
 FORECAST_DAYS = 7
-_HISTORY_DAYS = 28
+_HISTORY_DAYS = 35
 
 
 @dataclass(frozen=True, slots=True)

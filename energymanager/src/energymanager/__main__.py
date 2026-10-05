@@ -13,6 +13,7 @@ from .config import ConfigurationError, Settings
 from .database import EnergyManagerStore, InfluxDatabaseClient, InfluxDatabaseError
 from .diagnostics import DiagnosticsPublisher
 from .ha_client import HomeAssistantClient
+from .legacy_influx import LegacyInfluxBackfill, LegacyInfluxClient, LegacyInfluxError
 from .load_service import BackgroundLoadHistory, BackgroundLoadService
 from .open_meteo import OpenMeteoClient
 from .pv_service import PvForecastService
@@ -75,8 +76,13 @@ async def _run_with_database(
     logger = logging.getLogger("energymanager")
     diagnostics = DiagnosticsPublisher(client)
     store = EnergyManagerStore(database_client)
+    backfill_result = None
+    backfill_error = None
     try:
         migrated_pv, migrated_load, migrated_load_forecast = await store.initialize()
+        if settings.legacy_influx.backfill_enabled:
+            async with LegacyInfluxClient(settings.legacy_influx) as legacy_client:
+                backfill_result = await LegacyInfluxBackfill(settings, legacy_client, store).run()
         samples = await store.load_background_samples(days=35)
     except InfluxDatabaseError as exc:
         logger.error("InfluxDB persistence unavailable; continuing with local JSONL fallback: %s", exc)
@@ -88,6 +94,10 @@ async def _run_with_database(
         )
         await _run_app(settings, client, stop_event, store=None, history=None)
         return
+    except LegacyInfluxError as exc:
+        backfill_error = str(exc)
+        logger.warning("Legacy InfluxDB backfill failed; continuing with existing EnergyManager history: %s", exc)
+        samples = await store.load_background_samples(days=35)
 
     logger.info(
         "InfluxDB persistence connected: database=%s, history_samples=%d",
@@ -101,6 +111,23 @@ async def _run_with_database(
         migrated_pv_rows=migrated_pv,
         migrated_load_rows=migrated_load,
         migrated_load_forecast_rows=migrated_load_forecast,
+        legacy_backfill_status=backfill_result.status if backfill_result else ("error" if backfill_error else None),
+        legacy_backfill_source_rows=backfill_result.source_rows if backfill_result else None,
+        legacy_backfill_sources_updated=backfill_result.sources_updated if backfill_result else None,
+        legacy_backfill_house_rows=backfill_result.house_rows if backfill_result else None,
+        legacy_backfill_background_rows=backfill_result.background_rows if backfill_result else None,
+        legacy_backfill_skipped_rows=backfill_result.skipped_rows if backfill_result else None,
+        legacy_backfill_start_utc=(
+            backfill_result.source_start_utc.isoformat()
+            if backfill_result and backfill_result.source_start_utc
+            else None
+        ),
+        legacy_backfill_end_utc=(
+            backfill_result.source_end_utc.isoformat()
+            if backfill_result and backfill_result.source_end_utc
+            else None
+        ),
+        legacy_backfill_error=backfill_error,
     )
     history = BackgroundLoadHistory(path=None, samples=samples)
     await _run_app(settings, client, stop_event, store=store, history=history)

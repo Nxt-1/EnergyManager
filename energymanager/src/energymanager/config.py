@@ -70,6 +70,16 @@ class DatabaseSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class LegacyInfluxSettings:
+    """Optional incremental backfill source using the legacy HA InfluxDB 1.x database."""
+
+    backfill_enabled: bool = False
+    url: str | None = None
+    database: str = "home_assistant"
+    retention_policy: str = "autogen"
+
+
+@dataclass(frozen=True, slots=True)
 class Settings:
     """Runtime settings exposed by the Home Assistant app configuration."""
 
@@ -79,6 +89,7 @@ class Settings:
     pv: PvSettings = PvSettings()
     ev: EvSettings = EvSettings()
     database: DatabaseSettings = DatabaseSettings()
+    legacy_influx: LegacyInfluxSettings = LegacyInfluxSettings()
     legacy_options_detected: bool = False
 
     @property
@@ -140,6 +151,14 @@ class Settings:
                     "token": self.database.token,
                 }
             ),
+            "legacy_influx": _without_none(
+                {
+                    "backfill_enabled": self.legacy_influx.backfill_enabled,
+                    "url": self.legacy_influx.url,
+                    "database": self.legacy_influx.database,
+                    "retention_policy": self.legacy_influx.retention_policy,
+                }
+            ),
         }
 
     @classmethod
@@ -166,6 +185,7 @@ class Settings:
         pv_raw = _mapping(raw.get("pv"), "pv")
         ev_raw = _mapping(raw.get("ev"), "ev")
         database_raw = _mapping(raw.get("database"), "database")
+        legacy_influx_raw = _mapping(raw.get("legacy_influx"), "legacy_influx")
 
         legacy_options_detected = any(
             key in raw for key in ("grid_import_power_entity", "grid_export_power_entity")
@@ -198,6 +218,33 @@ class Settings:
                 raise ConfigurationError("database.url must be an http:// or https:// URL when database is enabled")
             if database_token is None:
                 raise ConfigurationError("database.token is required when database is enabled")
+
+        legacy_backfill_enabled = _bool_option(
+            legacy_influx_raw.get("backfill_enabled", False),
+            "legacy_influx.backfill_enabled",
+        )
+        legacy_influx_url = _optional_string(legacy_influx_raw.get("url"))
+        legacy_influx_database = str(
+            legacy_influx_raw.get("database", "home_assistant")
+        ).strip() or "home_assistant"
+        legacy_retention_policy = str(
+            legacy_influx_raw.get("retention_policy", "autogen")
+        ).strip() or "autogen"
+        if not _DATABASE_RE.fullmatch(legacy_influx_database):
+            raise ConfigurationError(
+                "legacy_influx.database may only contain letters, numbers, underscores and hyphens"
+            )
+        if not _DATABASE_RE.fullmatch(legacy_retention_policy):
+            raise ConfigurationError(
+                "legacy_influx.retention_policy may only contain letters, numbers, underscores and hyphens"
+            )
+        if legacy_backfill_enabled:
+            if not database_enabled:
+                raise ConfigurationError("legacy_influx backfill requires database.enabled")
+            if legacy_influx_url is None or not legacy_influx_url.startswith(("http://", "https://")):
+                raise ConfigurationError(
+                    "legacy_influx.url must be an http:// or https:// URL when backfill is enabled"
+                )
 
         return cls(
             log_level=log_level,
@@ -236,6 +283,12 @@ class Settings:
                 url=database_url.rstrip("/") if database_url else None,
                 database=database_name,
                 token=database_token,
+            ),
+            legacy_influx=LegacyInfluxSettings(
+                backfill_enabled=legacy_backfill_enabled,
+                url=legacy_influx_url.rstrip("/") if legacy_influx_url else None,
+                database=legacy_influx_database,
+                retention_policy=legacy_retention_policy,
             ),
             legacy_options_detected=legacy_options_detected,
         )

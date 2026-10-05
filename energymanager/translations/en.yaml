@@ -68,3 +68,19 @@ configuration:
       token:
         name: Database token
         description: Restricted InfluxDB 3 token with read and write access to the configured database.
+  legacy_influx:
+    name: Legacy HA InfluxDB backfill
+    description: Incrementally import only historical Home Assistant signals used by EnergyManager.
+    fields:
+      backfill_enabled:
+        name: Enable legacy history backfill
+        description: Reconstruct historical house/background load once from the configured legacy InfluxDB source.
+      url:
+        name: Legacy InfluxDB URL
+        description: Base URL of the old Home Assistant InfluxDB 1.x server, for example http://192.168.178.103:8086.
+      database:
+        name: Legacy database name
+        description: Home Assistant database in the old InfluxDB instance. Usually home_assistant.
+      retention_policy:
+        name: Legacy retention policy
+        description: Retention policy containing the Home Assistant measurements. Usually autogen.

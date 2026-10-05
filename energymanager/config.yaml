@@ -1,5 +1,5 @@
 name: Energy Manager
-version: "0.8.0"
+version: "0.9.0"
 slug: energy_manager
 description: Predictive home energy manager for Home Assistant
 url: https://github.com/Nxt-1/EnergyManager
@@ -20,6 +20,10 @@ options:
   database:
     enabled: false
     database: energy_manager
+  legacy_influx:
+    backfill_enabled: false
+    database: home_assistant
+    retention_policy: autogen
 schema:
   log_level: list(debug|info|warning|error)
   grid:
@@ -42,3 +46,8 @@ schema:
     url: url?
     database: str
     token: password?
+  legacy_influx:
+    backfill_enabled: bool
+    url: url?
+    database: str
+    retention_policy: str

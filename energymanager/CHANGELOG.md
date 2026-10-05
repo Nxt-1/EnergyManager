@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.0
+
+- Added incremental historical backfill from the legacy Home Assistant InfluxDB 1.x database into EnergyManager's InfluxDB 3 database.
+- Reuses configured Grid, ESS, Solax PV and EV charging entity mappings; source entity IDs are never hardcoded.
+- Archives only signals EnergyManager currently uses, as normalized five-minute source history in `legacy_power_source`.
+- Tracks imported coverage per logical signal + entity mapping instead of using one global migration-complete flag.
+- New configured/modelled signals can therefore be backfilled later without re-importing the whole Home Assistant database.
+- If the old source database gains newer data, only the missing tail is imported on the next synchronization.
+- Derived house/background history has its own recipe/source fingerprint and coverage state, so future model changes can rebuild only the relevant derived history.
+- Reports source and derived backfill progress through `sensor.energy_manager_database_status`.
+- Corrected the baseline predictor's active history window to the documented 35 days; database retention remains indefinite.
+- Backfill failure is non-fatal; normal InfluxDB 3 persistence and EnergyManager operation continue with existing history.
+- Remains shadow mode; no device control is present.
+
 ## 0.8.0
 
 - Added optional InfluxDB 3 persistence using a restricted database read/write token.

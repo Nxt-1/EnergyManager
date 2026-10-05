@@ -145,13 +145,163 @@ class EnergyManagerStore:
         background_load_power_w: float,
     ) -> None:
         """Persist the canonical derived load signals at the predictor's five-minute sample cadence."""
-        fields = [f"background_load_power_w={max(0.0, background_load_power_w):.6f}"]
-        if house_load_power_w is not None:
-            fields.append(f"house_load_power_w={house_load_power_w:.6f}")
-        if known_controllable_load_power_w is not None:
-            fields.append(f"known_controllable_load_power_w={known_controllable_load_power_w:.6f}")
-        line = f"house_load {','.join(fields)} {_timestamp_ns(observed_at_utc)}"
+        await self.record_house_load_batch(
+            [(observed_at_utc, house_load_power_w, known_controllable_load_power_w, background_load_power_w)]
+        )
+
+    async def record_house_load_batch(
+        self,
+        rows: list[tuple[datetime, float | None, float | None, float | None]],
+    ) -> None:
+        """Persist canonical house-load rows, including historical backfill batches."""
+        lines: list[str] = []
+        for observed_at_utc, house_load, known_load, background_load in rows:
+            fields: list[str] = []
+            if background_load is not None:
+                fields.append(f"background_load_power_w={max(0.0, background_load):.6f}")
+            if house_load is not None:
+                fields.append(f"house_load_power_w={max(0.0, house_load):.6f}")
+            if known_load is not None:
+                fields.append(f"known_controllable_load_power_w={max(0.0, known_load):.6f}")
+            if fields:
+                lines.append(f"house_load {','.join(fields)} {_timestamp_ns(observed_at_utc)}")
+        await _write_in_batches(self._client, lines)
+
+    async def load_legacy_source_state(
+        self,
+        *,
+        signal: str,
+        entity_id: str,
+        normalization_version: str,
+    ) -> dict[str, str] | None:
+        """Return the latest coverage marker for one logical legacy source mapping."""
+        if not await self._table_exists("legacy_source_state"):
+            return None
+        signal_sql = _escape_sql_string(signal)
+        entity_sql = _escape_sql_string(entity_id)
+        version_sql = _escape_sql_string(normalization_version)
+        query = (
+            'SELECT source_start_utc, source_end_utc, rows FROM "legacy_source_state" '
+            f"WHERE signal = '{signal_sql}' AND entity_id = '{entity_sql}' "
+            f"AND normalization_version = '{version_sql}' ORDER BY time DESC LIMIT 1"
+        )
+        rows = await self._client.query_sql(query)
+        return rows[0] if rows else None
+
+    async def record_legacy_source_state(
+        self,
+        *,
+        signal: str,
+        entity_id: str,
+        normalization_version: str,
+        source_start_utc: datetime,
+        source_end_utc: datetime,
+        rows: int,
+    ) -> None:
+        """Persist imported coverage for one selected legacy Home Assistant source."""
+        tags = (
+            f"signal={_escape_tag(signal)},entity_id={_escape_tag(entity_id)},"
+            f"normalization_version={_escape_tag(normalization_version)}"
+        )
+        fields = (
+            f'source_start_utc="{_escape_string(source_start_utc.isoformat())}",'
+            f'source_end_utc="{_escape_string(source_end_utc.isoformat())}",'
+            f"rows={rows}i"
+        )
+        line = f"legacy_source_state,{tags} {fields} {_timestamp_ns(datetime.now(UTC))}"
         await self._client.write_lines([line])
+
+    async def record_legacy_power_source_batch(
+        self,
+        *,
+        signal: str,
+        entity_id: str,
+        rows: list[tuple[datetime, float]],
+    ) -> None:
+        """Archive normalized five-minute history for a selected legacy power source."""
+        tags = f"signal={_escape_tag(signal)},entity_id={_escape_tag(entity_id)}"
+        lines = [
+            f"legacy_power_source,{tags} power_w={value:.6f} {_timestamp_ns(observed)}"
+            for observed, value in rows
+        ]
+        await _write_in_batches(self._client, lines)
+
+    async def load_legacy_power_source(
+        self,
+        *,
+        signal: str,
+        entity_id: str,
+        start_utc: datetime,
+        end_utc: datetime,
+    ) -> dict[datetime, float]:
+        """Load archived normalized source power for a UTC range."""
+        if not await self._table_exists("legacy_power_source"):
+            return {}
+        signal_sql = _escape_sql_string(signal)
+        entity_sql = _escape_sql_string(entity_id)
+        start_sql = _escape_sql_string(start_utc.astimezone(UTC).isoformat())
+        end_sql = _escape_sql_string(end_utc.astimezone(UTC).isoformat())
+        query = (
+            'SELECT time, power_w FROM "legacy_power_source" '
+            f"WHERE signal = '{signal_sql}' AND entity_id = '{entity_sql}' "
+            f"AND time >= '{start_sql}' AND time < '{end_sql}' ORDER BY time ASC"
+        )
+        rows = await self._client.query_sql(query)
+        values: dict[datetime, float] = {}
+        for row in rows:
+            try:
+                values[_parse_timestamp(row["time"])] = float(row["power_w"])
+            except (KeyError, TypeError, ValueError):
+                _LOGGER.warning("Ignoring invalid archived legacy power-source row")
+        return values
+
+    async def load_legacy_derivation_state(
+        self,
+        derivation_id: str,
+        fingerprint: str,
+    ) -> dict[str, str] | None:
+        """Return coverage for one derived-history recipe and configured source set."""
+        if not await self._table_exists("legacy_derivation_state"):
+            return None
+        derivation_sql = _escape_sql_string(derivation_id)
+        fingerprint_sql = _escape_sql_string(fingerprint)
+        query = (
+            'SELECT source_start_utc, source_end_utc, house_rows, background_rows, skipped_rows '
+            'FROM "legacy_derivation_state" '
+            f"WHERE derivation_id = '{derivation_sql}' AND fingerprint = '{fingerprint_sql}' "
+            "ORDER BY time DESC LIMIT 1"
+        )
+        rows = await self._client.query_sql(query)
+        return rows[0] if rows else None
+
+    async def record_legacy_derivation_state(
+        self,
+        *,
+        derivation_id: str,
+        fingerprint: str,
+        source_start_utc: datetime,
+        source_end_utc: datetime,
+        house_rows: int,
+        background_rows: int,
+        skipped_rows: int,
+    ) -> None:
+        """Persist coverage for derived history without globally closing future backfill."""
+        tags = f"derivation_id={_escape_tag(derivation_id)},fingerprint={_escape_tag(fingerprint)}"
+        fields = (
+            f'source_start_utc="{_escape_string(source_start_utc.isoformat())}",'
+            f'source_end_utc="{_escape_string(source_end_utc.isoformat())}",'
+            f"house_rows={house_rows}i,background_rows={background_rows}i,skipped_rows={skipped_rows}i"
+        )
+        line = f"legacy_derivation_state,{tags} {fields} {_timestamp_ns(datetime.now(UTC))}"
+        await self._client.write_lines([line])
+
+    async def _table_exists(self, table_name: str) -> bool:
+        table_sql = _escape_sql_string(table_name)
+        rows = await self._client.query_sql(
+            "SELECT table_name FROM information_schema.tables "
+            f"WHERE table_name = '{table_sql}' LIMIT 1"
+        )
+        return bool(rows)
 
     async def record_pv_forecast(self, forecast: PvForecast, now_local: datetime) -> None:
         """Persist one row per forecast target day for a rolling PV forecast revision."""
@@ -326,6 +476,10 @@ def _escape_tag(value: str) -> str:
 
 def _escape_string(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _escape_sql_string(value: str) -> str:
+    return value.replace("'", "''")
 
 
 def _short_error(value: str, limit: int = 300) -> str:

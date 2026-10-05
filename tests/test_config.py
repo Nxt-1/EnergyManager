@@ -208,3 +208,41 @@ def test_enabled_database_requires_url_and_token(tmp_path: Path) -> None:
 
     with pytest.raises(ConfigurationError):
         Settings.load(path)
+
+
+def test_legacy_influx_backfill_settings_are_loaded(tmp_path: Path) -> None:
+    path = tmp_path / "options.json"
+    path.write_text(
+        json.dumps(
+            {
+                "database": {
+                    "enabled": True,
+                    "url": "http://192.168.178.103:8181",
+                    "database": "energy_manager",
+                    "token": "apiv3_secret",
+                },
+                "legacy_influx": {
+                    "backfill_enabled": True,
+                    "url": "http://192.168.178.103:8086/",
+                    "database": "home_assistant",
+                    "retention_policy": "autogen",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    settings = Settings.load(path)
+
+    assert settings.legacy_influx.backfill_enabled is True
+    assert settings.legacy_influx.url == "http://192.168.178.103:8086"
+    assert settings.legacy_influx.database == "home_assistant"
+    assert settings.legacy_influx.retention_policy == "autogen"
+
+
+def test_legacy_backfill_requires_target_database_and_source_url(tmp_path: Path) -> None:
+    path = tmp_path / "options.json"
+    path.write_text(json.dumps({"legacy_influx": {"backfill_enabled": True}}), encoding="utf-8")
+
+    with pytest.raises(ConfigurationError):
+        Settings.load(path)
