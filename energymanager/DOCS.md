@@ -107,13 +107,17 @@ unconfigured EV charging-power input contributes zero to known controllable load
 
 ## Background-load predictor
 
-Version 0.7.0 samples `sensor.energy_manager_background_load_power` internally every five minutes and keeps a local
-35-day history in `/data/background_load_history.jsonl`. Forecasts are recalculated every 30 minutes at 15-minute
-resolution and retained in Python for the future planner.
+Version 0.7.0 introduced five-minute sampling of `sensor.energy_manager_background_load_power` and a 15-minute-resolution
+rolling forecast recalculated every 30 minutes. Version 0.8.0 keeps that predictor but moves long-term persistence to
+InfluxDB 3 when database persistence is enabled.
 
 The initial model is deliberately simple and robust. It first learns time-of-day behavior, then distinguishes weekday from
 weekend behavior, and uses the same weekday from previous weeks once enough history exists. During the first week the
 status remains `learning`; this is expected and does not degrade the main Energy Manager input-health status.
+
+The current baseline model still uses the most recent 35 days as its active in-memory training window. That is a model
+choice, not a retention limit. InfluxDB retains the underlying history indefinitely so later models can use seasonal and
+multi-year information without having to start collecting data again.
 
 Home Assistant receives compact summaries:
 
@@ -122,13 +126,31 @@ Home Assistant receives compact summaries:
 - `sensor.energy_manager_background_load_forecast_next_24_hours_energy`
 - `sensor.energy_manager_background_load_forecast_next_7_days_energy`
 
-The seven-day sensor contains seven complete future calendar days in its `days` attribute. Each 30-minute forecast revision
-is also appended to `/data/background_load_forecast_revisions.jsonl` so prediction accuracy can be evaluated later without
-freezing the live operational forecast.
+The seven-day sensor contains seven complete future calendar days in its `days` attribute. Forecast revisions are persisted
+in InfluxDB when enabled. If the database is disabled or unavailable, the existing JSONL files remain as a fallback.
 
 This model intentionally predicts only the current generic background signal. As individually measured loads such as the
 heat pump are promoted to separate models later, they can be removed from the generic background signal without changing
 the planner-facing forecast concept.
+
+## InfluxDB 3 persistence
+
+Version 0.8.0 adds an optional InfluxDB 3 backend for Energy Manager's own time-series history. Configure the database
+section with the URL that is reachable from the Energy Manager app, the `energy_manager` database name, and the restricted
+read/write database token created in InfluxDB Explorer. For the separate InfluxDB app on the same HAOS VM, the HA VM's
+direct LAN address and exposed port 8181 can be used.
+
+When enabled, Energy Manager stores:
+
+- five-minute canonical house/background/known-controllable load samples;
+- each rolling PV forecast revision as per-day front/rear/shed/total energy;
+- each rolling background-load forecast revision as per-day energy plus model/history metadata.
+
+The database itself has indefinite retention. Energy Manager does not delete old InfluxDB data. Existing JSONL files from
+v0.5/v0.7 are imported once on the first successful database connection and then renamed with a `.migrated` suffix.
+
+`sensor.energy_manager_database_status` reports `connected`, `disabled`, or `error`. A database outage does not stop the
+controller: Energy Manager falls back to local JSONL persistence so measurement and forecasting can continue.
 
 ## Input validity and freshness
 

@@ -37,6 +37,7 @@ PV_FORECAST_TODAY_ENTITY = "sensor.energy_manager_pv_forecast_today_energy"
 PV_FORECAST_TOMORROW_ENTITY = "sensor.energy_manager_pv_forecast_tomorrow_energy"
 PV_FORECAST_NEXT_HOUR_ENTITY = "sensor.energy_manager_pv_forecast_next_hour_power"
 PV_FORECAST_NEXT_7_DAYS_ENTITY = "sensor.energy_manager_pv_forecast_next_7_days_energy"
+DATABASE_STATUS_ENTITY = "sensor.energy_manager_database_status"
 
 LEGACY_ENTITIES = (
     "sensor.energy_manager_observed_grid_power",
@@ -142,6 +143,38 @@ class DiagnosticsPublisher:
             "last_update_utc": datetime.now(UTC).isoformat(),
         }
         await self._client.set_state(INPUT_HEALTH_ENTITY, health, attributes)
+
+
+    async def publish_database_status(
+        self,
+        status: str,
+        *,
+        database: str | None = None,
+        url: str | None = None,
+        error: str | None = None,
+        migrated_pv_rows: int | None = None,
+        migrated_load_rows: int | None = None,
+        migrated_load_forecast_rows: int | None = None,
+    ) -> None:
+        """Publish health for optional InfluxDB 3 persistence without exposing credentials."""
+        attributes: dict[str, Any] = {
+            "friendly_name": "Energy Manager Database Status",
+            "backend": "InfluxDB 3",
+            "last_update_utc": datetime.now(UTC).isoformat(),
+        }
+        if database is not None:
+            attributes["database"] = database
+        if url is not None:
+            attributes["url"] = url
+        if migrated_pv_rows is not None:
+            attributes["migrated_pv_forecast_rows"] = migrated_pv_rows
+        if migrated_load_rows is not None:
+            attributes["migrated_background_load_rows"] = migrated_load_rows
+        if migrated_load_forecast_rows is not None:
+            attributes["migrated_background_forecast_rows"] = migrated_load_forecast_rows
+        if error:
+            attributes["error"] = error
+        await self._client.set_state(DATABASE_STATUS_ENTITY, status, attributes)
 
 
     async def publish_background_load_forecast_status(

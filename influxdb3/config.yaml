@@ -1,5 +1,5 @@
 name: "InfluxDB 3 Enterprise"
-version: "0.1.0"
+version: "0.1.1"
 slug: "influxdb3_enterprise"
 description: "InfluxDB 3 Enterprise with integrated Explorer UI for EnergyManager"
 url: "https://docs.influxdata.com/influxdb3/enterprise/"

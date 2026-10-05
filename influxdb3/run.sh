@@ -45,6 +45,7 @@ export INFLUXDB3_LOG_FILTER="info"
 echo "Starting InfluxDB 3 Enterprise 3.12.0"
 echo "Storage: persistent Home Assistant /data volume"
 echo "CPU limit: 2 cores (At-Home license)"
+echo "Memory tuning: 512 MB query pool/cache, 1 GB compactor budget"
 echo "Explorer UI: enabled on port 8181"
 echo "Authentication: username/password setup enabled"
 
@@ -59,4 +60,11 @@ exec gosu influxdb3:influxdb3 \
     --webui-session-secret="${WEBUI_SESSION_SECRET}" \
     --user-auth-type="basic" \
     --jwt-key-id="ha-influxdb3" \
-    --jwt-private-key="${JWT_PRIVATE_KEY}"
+    --jwt-private-key="${JWT_PRIVATE_KEY}" \
+    --exec-mem-pool-size="512mb" \
+    --file-cache-size="512mb" \
+    --replica-max-buffer-size="512mb" \
+    --compactor-input-size-budget="1gb" \
+    --force-snapshot-mem-size="512mb" \
+    --wal-buffer-size="5mb" \
+    --snapshot-size="100mb"

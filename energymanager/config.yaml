@@ -1,5 +1,5 @@
 name: Energy Manager
-version: "0.7.0"
+version: "0.8.0"
 slug: energy_manager
 description: Predictive home energy manager for Home Assistant
 url: https://github.com/Nxt-1/EnergyManager
@@ -17,6 +17,9 @@ options:
     power_positive_means: discharge
   pv: {}
   ev: {}
+  database:
+    enabled: false
+    database: energy_manager
 schema:
   log_level: list(debug|info|warning|error)
   grid:
@@ -34,3 +37,8 @@ schema:
     soc_entity: str?
     connected_entity: str?
     charging_power_entity: str?
+  database:
+    enabled: bool
+    url: url?
+    database: str
+    token: password?

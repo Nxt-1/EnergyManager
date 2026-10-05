@@ -169,3 +169,42 @@ def test_invalid_pv_forecast_flag_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(ConfigurationError):
         Settings.load(path)
+
+
+def test_database_persistence_is_disabled_by_default(tmp_path: Path) -> None:
+    settings = Settings.load(tmp_path / "missing.json")
+
+    assert settings.database.enabled is False
+    assert settings.database.database == "energy_manager"
+
+
+def test_database_settings_are_loaded(tmp_path: Path) -> None:
+    path = tmp_path / "options.json"
+    path.write_text(
+        json.dumps(
+            {
+                "database": {
+                    "enabled": True,
+                    "url": "http://192.168.178.103:8181/",
+                    "database": "energy_manager",
+                    "token": "apiv3_secret",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    settings = Settings.load(path)
+
+    assert settings.database.enabled is True
+    assert settings.database.url == "http://192.168.178.103:8181"
+    assert settings.database.database == "energy_manager"
+    assert settings.database.token == "apiv3_secret"
+
+
+def test_enabled_database_requires_url_and_token(tmp_path: Path) -> None:
+    path = tmp_path / "options.json"
+    path.write_text(json.dumps({"database": {"enabled": True}}), encoding="utf-8")
+
+    with pytest.raises(ConfigurationError):
+        Settings.load(path)

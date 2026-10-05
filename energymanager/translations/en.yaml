@@ -51,3 +51,20 @@ configuration:
       charging_power_entity:
         name: EV charging power entity
         description: Home Assistant entity ID for present EV charging power in W or kW.
+
+  database:
+    name: Database
+    description: Optional InfluxDB 3 long-term persistence for Energy Manager history and forecast revisions.
+    fields:
+      enabled:
+        name: Enable database persistence
+        description: Store Energy Manager time-series history in InfluxDB 3 instead of relying on local JSONL files.
+      url:
+        name: InfluxDB URL
+        description: Base URL of the InfluxDB 3 server, for example http://192.168.178.103:8181.
+      database:
+        name: Database name
+        description: InfluxDB 3 database used by Energy Manager.
+      token:
+        name: Database token
+        description: Restricted InfluxDB 3 token with read and write access to the configured database.

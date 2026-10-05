@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.0
+
+- Added optional InfluxDB 3 persistence using a restricted database read/write token.
+- Added `sensor.energy_manager_database_status` for connection and migration health.
+- Background-load samples now persist indefinitely in InfluxDB while the current baseline model keeps a 35-day active training window.
+- PV rolling forecast revisions and background-load forecast revisions are stored in InfluxDB instead of JSONL when enabled.
+- Existing v0.5/v0.7 JSONL persistence files are imported once and renamed with a `.migrated` suffix after successful migration.
+- Database failure is non-fatal: Energy Manager reports the database error and falls back to the existing local JSONL persistence.
+- Includes the complete v0.7 background-load predictor for users upgrading directly from v0.6.
+- Remains shadow mode; no device control is present.
+
 ## 0.7.0
 
 - Added persistent sampling of canonical background-load power every five minutes.

@@ -10,8 +10,10 @@ import signal
 from . import __version__
 from .app import EnergyManagerApp
 from .config import ConfigurationError, Settings
+from .database import EnergyManagerStore, InfluxDatabaseClient, InfluxDatabaseError
+from .diagnostics import DiagnosticsPublisher
 from .ha_client import HomeAssistantClient
-from .load_service import BackgroundLoadService
+from .load_service import BackgroundLoadHistory, BackgroundLoadService
 from .open_meteo import OpenMeteoClient
 from .pv_service import PvForecastService
 
@@ -46,23 +48,87 @@ async def async_main() -> int:
             pass
 
     async with HomeAssistantClient(supervisor_token) as client:
-        load_service = BackgroundLoadService(client)
-        if settings.pv.forecast_enabled:
-            async with OpenMeteoClient() as meteo_client:
-                pv_service = PvForecastService(client, meteo_client)
-                app = EnergyManagerApp(
-                    settings,
-                    client,
-                    pv_forecast_service=pv_service,
-                    background_load_service=load_service,
-                )
-                await app.run(stop_event)
+        if settings.database.enabled:
+            assert settings.database.url is not None
+            assert settings.database.token is not None
+            async with InfluxDatabaseClient(
+                settings.database.url,
+                settings.database.database,
+                settings.database.token,
+            ) as database_client:
+                await _run_with_database(settings, client, database_client, stop_event)
         else:
-            app = EnergyManagerApp(settings, client, background_load_service=load_service)
-            await app.run(stop_event)
+            diagnostics = DiagnosticsPublisher(client)
+            await diagnostics.publish_database_status("disabled", database=settings.database.database)
+            await _run_app(settings, client, stop_event, store=None, history=None)
 
     logger.info("Energy Manager stopped")
     return 0
+
+
+async def _run_with_database(
+    settings: Settings,
+    client: HomeAssistantClient,
+    database_client: InfluxDatabaseClient,
+    stop_event: asyncio.Event,
+) -> None:
+    logger = logging.getLogger("energymanager")
+    diagnostics = DiagnosticsPublisher(client)
+    store = EnergyManagerStore(database_client)
+    try:
+        migrated_pv, migrated_load, migrated_load_forecast = await store.initialize()
+        samples = await store.load_background_samples(days=35)
+    except InfluxDatabaseError as exc:
+        logger.error("InfluxDB persistence unavailable; continuing with local JSONL fallback: %s", exc)
+        await diagnostics.publish_database_status(
+            "error",
+            database=settings.database.database,
+            url=settings.database.url,
+            error=str(exc),
+        )
+        await _run_app(settings, client, stop_event, store=None, history=None)
+        return
+
+    logger.info(
+        "InfluxDB persistence connected: database=%s, history_samples=%d",
+        store.database,
+        len(samples),
+    )
+    await diagnostics.publish_database_status(
+        "connected",
+        database=store.database,
+        url=settings.database.url,
+        migrated_pv_rows=migrated_pv,
+        migrated_load_rows=migrated_load,
+        migrated_load_forecast_rows=migrated_load_forecast,
+    )
+    history = BackgroundLoadHistory(path=None, samples=samples)
+    await _run_app(settings, client, stop_event, store=store, history=history)
+
+
+async def _run_app(
+    settings: Settings,
+    client: HomeAssistantClient,
+    stop_event: asyncio.Event,
+    *,
+    store: EnergyManagerStore | None,
+    history: BackgroundLoadHistory | None,
+) -> None:
+    load_service = BackgroundLoadService(client, history=history, store=store)
+    if settings.pv.forecast_enabled:
+        async with OpenMeteoClient() as meteo_client:
+            pv_service = PvForecastService(client, meteo_client, store=store)
+            app = EnergyManagerApp(
+                settings,
+                client,
+                pv_forecast_service=pv_service,
+                background_load_service=load_service,
+            )
+            await app.run(stop_event)
+        return
+
+    app = EnergyManagerApp(settings, client, background_load_service=load_service)
+    await app.run(stop_event)
 
 
 def main() -> None:

@@ -12,6 +12,7 @@ _OPTIONS_PATH = Path("/data/options.json")
 _ENTITY_ID_RE = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
 _VALID_LOG_LEVELS = {"debug", "info", "warning", "error"}
 _VALID_ESS_POWER_SIGNS = {"discharge", "charge"}
+_DATABASE_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 class ConfigurationError(ValueError):
@@ -59,6 +60,16 @@ class EvSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class DatabaseSettings:
+    """InfluxDB 3 persistence settings."""
+
+    enabled: bool = False
+    url: str | None = None
+    database: str = "energy_manager"
+    token: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Settings:
     """Runtime settings exposed by the Home Assistant app configuration."""
 
@@ -67,6 +78,7 @@ class Settings:
     ess: EssSettings = EssSettings()
     pv: PvSettings = PvSettings()
     ev: EvSettings = EvSettings()
+    database: DatabaseSettings = DatabaseSettings()
     legacy_options_detected: bool = False
 
     @property
@@ -120,6 +132,14 @@ class Settings:
                     "charging_power_entity": self.ev.charging_power_entity,
                 }
             ),
+            "database": _without_none(
+                {
+                    "enabled": self.database.enabled,
+                    "url": self.database.url,
+                    "database": self.database.database,
+                    "token": self.database.token,
+                }
+            ),
         }
 
     @classmethod
@@ -145,6 +165,7 @@ class Settings:
         ess_raw = _mapping(raw.get("ess"), "ess")
         pv_raw = _mapping(raw.get("pv"), "pv")
         ev_raw = _mapping(raw.get("ev"), "ev")
+        database_raw = _mapping(raw.get("database"), "database")
 
         legacy_options_detected = any(
             key in raw for key in ("grid_import_power_entity", "grid_export_power_entity")
@@ -165,6 +186,18 @@ class Settings:
         if ess_power_sign not in _VALID_ESS_POWER_SIGNS:
             allowed = ", ".join(sorted(_VALID_ESS_POWER_SIGNS))
             raise ConfigurationError(f"ess.power_positive_means must be one of: {allowed}")
+
+        database_enabled = _bool_option(database_raw.get("enabled", False), "database.enabled")
+        database_url = _optional_string(database_raw.get("url"))
+        database_name = str(database_raw.get("database", "energy_manager")).strip() or "energy_manager"
+        database_token = _optional_string(database_raw.get("token"))
+        if not _DATABASE_RE.fullmatch(database_name):
+            raise ConfigurationError("database.database may only contain letters, numbers, underscores and hyphens")
+        if database_enabled:
+            if database_url is None or not database_url.startswith(("http://", "https://")):
+                raise ConfigurationError("database.url must be an http:// or https:// URL when database is enabled")
+            if database_token is None:
+                raise ConfigurationError("database.token is required when database is enabled")
 
         return cls(
             log_level=log_level,
@@ -197,6 +230,12 @@ class Settings:
                 charging_power_entity=_optional_entity_id(
                     ev_raw.get("charging_power_entity"), "ev.charging_power_entity"
                 ),
+            ),
+            database=DatabaseSettings(
+                enabled=database_enabled,
+                url=database_url.rstrip("/") if database_url else None,
+                database=database_name,
+                token=database_token,
             ),
             legacy_options_detected=legacy_options_detected,
         )
@@ -231,3 +270,10 @@ def _bool_option(value: object, option_name: str) -> bool:
     if isinstance(value, bool):
         return value
     raise ConfigurationError(f"{option_name} must be true or false")
+
+
+def _optional_string(value: object) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None

@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 import aiohttp
 
+from .database import EnergyManagerStore, InfluxDatabaseError
 from .diagnostics import DiagnosticsPublisher
 from .ha_client import HomeAssistantClient, HomeAssistantError
 from .open_meteo import FORECAST_MODEL, OpenMeteoClient, OpenMeteoError
@@ -66,11 +67,13 @@ class PvForecastService:
         meteo_client: OpenMeteoClient,
         *,
         archive: PvForecastArchive | None = None,
+        store: EnergyManagerStore | None = None,
     ) -> None:
         self._ha = ha_client
         self._meteo = meteo_client
         self._diagnostics = DiagnosticsPublisher(ha_client)
         self._archive = archive or PvForecastArchive()
+        self._store = store
         self._forecast: PvForecast | None = None
 
     @property
@@ -112,8 +115,11 @@ class PvForecastService:
 
         local_now = now_local or datetime.now(_LOCAL_TZ)
         try:
-            self._archive.record(forecast, local_now)
-        except OSError as exc:
+            if self._store is not None:
+                await self._store.record_pv_forecast(forecast, local_now)
+            else:
+                self._archive.record(forecast, local_now)
+        except (InfluxDatabaseError, OSError) as exc:
             _LOGGER.warning("Could not archive PV forecast revision: %s", exc)
 
         await self._diagnostics.publish_pv_forecast(forecast, now_local=local_now)

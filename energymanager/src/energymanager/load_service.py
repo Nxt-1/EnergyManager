@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from .database import EnergyManagerStore, InfluxDatabaseError
 from .diagnostics import DiagnosticsPublisher
 from .ha_client import HomeAssistantClient, HomeAssistantError
 from .house_state import HouseState
@@ -17,17 +18,23 @@ _LOGGER = logging.getLogger(__name__)
 _LOCAL_TZ = ZoneInfo("Europe/Brussels")
 _SAMPLE_INTERVAL = timedelta(minutes=5)
 _FORECAST_INTERVAL = timedelta(minutes=30)
-_HISTORY_RETENTION = timedelta(days=35)
+_MEMORY_RETENTION = timedelta(days=35)
 _DEFAULT_HISTORY_PATH = Path("/data/background_load_history.jsonl")
 _DEFAULT_ARCHIVE_PATH = Path("/data/background_load_forecast_revisions.jsonl")
 
 
 class BackgroundLoadHistory:
-    """Small persistent history store for canonical background-load observations."""
+    """Active in-memory predictor window with an optional legacy JSONL fallback."""
 
-    def __init__(self, path: Path = _DEFAULT_HISTORY_PATH) -> None:
+    def __init__(
+        self,
+        path: Path | None = _DEFAULT_HISTORY_PATH,
+        *,
+        samples: tuple[LoadSample, ...] = (),
+    ) -> None:
         self._path = path
-        self._samples = self._load()
+        self._samples = list(samples) if samples else self._load()
+        self._samples.sort(key=lambda item: item.observed_at_utc)
 
     @property
     def samples(self) -> tuple[LoadSample, ...]:
@@ -38,19 +45,23 @@ class BackgroundLoadHistory:
         return self._samples[-1].observed_at_utc if self._samples else None
 
     def record(self, sample: LoadSample) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "observed_at_utc": sample.observed_at_utc.isoformat(),
-            "power_w": round(sample.power_w, 3),
-        }
-        with self._path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(payload, separators=(",", ":")))
-            handle.write("\n")
+        if self._path is not None:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "observed_at_utc": sample.observed_at_utc.isoformat(),
+                "power_w": round(sample.power_w, 3),
+            }
+            with self._path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(payload, separators=(",", ":")))
+                handle.write("\n")
         self._samples.append(sample)
 
     def compact(self, now_utc: datetime) -> None:
-        cutoff = now_utc - _HISTORY_RETENTION
+        """Trim only the active in-memory window; InfluxDB retention is unlimited."""
+        cutoff = now_utc - _MEMORY_RETENTION
         self._samples = [sample for sample in self._samples if sample.observed_at_utc >= cutoff]
+        if self._path is None:
+            return
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with self._path.open("w", encoding="utf-8") as handle:
             for sample in self._samples:
@@ -62,7 +73,7 @@ class BackgroundLoadHistory:
                 handle.write("\n")
 
     def _load(self) -> list[LoadSample]:
-        if not self._path.exists():
+        if self._path is None or not self._path.exists():
             return []
         samples: list[LoadSample] = []
         try:
@@ -125,11 +136,13 @@ class BackgroundLoadService:
         history: BackgroundLoadHistory | None = None,
         archive: BackgroundLoadForecastArchive | None = None,
         model: BackgroundLoadModel | None = None,
+        store: EnergyManagerStore | None = None,
     ) -> None:
         self._diagnostics = DiagnosticsPublisher(ha_client)
         self._history = history or BackgroundLoadHistory()
         self._archive = archive or BackgroundLoadForecastArchive()
         self._model = model or BackgroundLoadModel()
+        self._store = store
         self._forecast: BackgroundLoadForecast | None = None
         self._last_forecast_at_utc: datetime | None = None
         self._last_compact_at_utc: datetime | None = None
@@ -154,13 +167,21 @@ class BackgroundLoadService:
 
         try:
             if self._sample_due(now):
-                self._history.record(LoadSample(now, max(0.0, value)))
+                sample = LoadSample(now, max(0.0, value))
+                if self._store is not None:
+                    await self._store.record_house_load(
+                        observed_at_utc=now,
+                        house_load_power_w=house_state.house_load_power_w,
+                        known_controllable_load_power_w=house_state.known_controllable_load_power_w,
+                        background_load_power_w=sample.power_w,
+                    )
+                self._history.record(sample)
             if self._compact_due(now):
                 self._history.compact(now)
                 self._last_compact_at_utc = now
             if self._forecast_due(now):
                 await self._refresh_forecast(now)
-        except (OSError, HomeAssistantError, ValueError) as exc:
+        except (OSError, HomeAssistantError, InfluxDatabaseError, ValueError) as exc:
             _LOGGER.warning("Background-load forecast update failed: %s", exc)
             await self._safe_publish_status("error", error=str(exc))
         except Exception as exc:  # noqa: BLE001 - predictor failure must not stop Energy Manager.
@@ -187,8 +208,11 @@ class BackgroundLoadService:
         self._forecast = forecast
         self._last_forecast_at_utc = now_utc
         try:
-            self._archive.record(forecast, now_local)
-        except OSError as exc:
+            if self._store is not None:
+                await self._store.record_background_forecast(forecast, now_local)
+            else:
+                self._archive.record(forecast, now_local)
+        except (InfluxDatabaseError, OSError) as exc:
             _LOGGER.warning("Could not archive background-load forecast revision: %s", exc)
         await self._diagnostics.publish_background_load_forecast(forecast, now_local=now_local)
         await self._diagnostics.publish_background_load_forecast_status(forecast.model_stage, forecast=forecast)
