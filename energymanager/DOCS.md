@@ -1,6 +1,6 @@
 # Energy Manager
 
-Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.9.0 adds historical backfill from the legacy Home Assistant InfluxDB database on top of the rolling background-demand predictor and InfluxDB 3 persistence.
+Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.9.2 adds robust state-aware historical backfill from the legacy Home Assistant InfluxDB database on top of the rolling background-demand predictor and InfluxDB 3 persistence.
 
 ## Configuration
 
@@ -168,7 +168,7 @@ or any other Home Assistant device.
 
 ## Legacy Home Assistant InfluxDB backfill
 
-Version 0.9.1 can seed EnergyManager with selected historical Home Assistant data from the old InfluxDB 1.x instance.
+Version 0.9.2 can seed EnergyManager with selected historical Home Assistant data from the old InfluxDB 1.x instance.
 The source URL, database, retention policy and optional read-only username/password are runtime configuration; configured
 Home Assistant entity IDs are reused and never hardcoded.
 
@@ -182,10 +182,19 @@ For the current load model, v0.9 selects grid import/export, ESS AC power, Solax
 normalized source history is archived in `legacy_power_source`. ESS power is stored using EnergyManager's canonical sign
 (positive discharge, negative charge), and small negative EV zero-offset readings are normalized the same way as live data.
 
-Current canonical load history is reconstructed from those selected source records:
+Current canonical load history is reconstructed from those selected source records on a regular five-minute timeline:
 
 - `house_load = grid_import - grid_export + solax_ac_pv + normalized_ess_ac_power`
 - `background_load = house_load - ev_charging_power`
+
+The legacy Home Assistant database behaves like sparse state history: an entity may not have a new row in every five-minute
+bucket when its state has not changed. Version 0.9.2 therefore carries recent source values forward for up to 15 minutes.
+If a carried value is within ±50 W, it is treated as inactive and resolves to zero after that freshness period; this permits
+long legitimate zero periods such as no PV at night, no grid export, idle ESS or an idle EV. A material non-zero value older
+than 15 minutes is not trusted, so a sensor outage is not silently stretched across hours or days. Each reconstruction chunk
+is seeded from the latest archived source value before the chunk boundary. Reconstructed historical load is written to the
+separate `legacy_house_load` table. Live samples remain in `house_load`; the predictor merges both by timestamp and lets a
+live sample win when both exist. This avoids relying on nondeterministic duplicate-point overwrites in InfluxDB 3.
 
 Derived-history coverage is tracked separately using a derivation recipe and a fingerprint of the participating source
 mappings. If source coverage extends, only the missing prefix/tail is derived. A future model that changes which separately

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.2
+
+- Rebuilds legacy house/background history on a complete five-minute timeline instead of requiring every source to have written in the same bucket.
+- Carries recent historical source values forward for up to 15 minutes to bridge normal sparse Home Assistant state updates.
+- Treats stale values within ±50 W as inactive and resolves them to 0 W, allowing long zero periods such as PV at night, no export, idle ESS and an unplugged/idle EV to remain reconstructable.
+- Refuses to carry stale material non-zero values beyond 15 minutes so historical sensor outages are not silently converted into fake load.
+- Seeds each 14-day reconstruction chunk with the latest prior archived source state, so chunk boundaries do not create artificial gaps.
+- Uses a new derived-history recipe ID and writes the rebuilt history to `legacy_house_load`, leaving live `house_load` data append-only and avoiding duplicate-point overwrites.
+- The predictor merges reconstructed legacy and live background history by timestamp, preferring live samples when both exist.
+- No configuration schema changes and no actuator/control changes.
+
 ## 0.9.1
 
 - Added optional username/password authentication for the legacy InfluxDB 1.x backfill source.

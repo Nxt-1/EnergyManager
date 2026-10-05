@@ -119,22 +119,28 @@ class EnergyManagerStore:
         return pv_count, load_count, forecast_count
 
     async def load_background_samples(self, *, days: int = 35) -> tuple[LoadSample, ...]:
-        """Load the active in-memory training window; database retention remains unlimited."""
+        """Load the active training window from reconstructed legacy plus live history."""
         days = max(1, int(days))
-        query = (
-            'SELECT time, background_load_power_w FROM "house_load" '
-            f"WHERE time >= now() - INTERVAL '{days} days' "
-            "AND background_load_power_w IS NOT NULL ORDER BY time ASC"
-        )
-        rows = await self._client.query_sql(query)
-        samples: list[LoadSample] = []
-        for row in rows:
-            try:
-                observed = _parse_timestamp(row["time"])
-                samples.append(LoadSample(observed, max(0.0, float(row["background_load_power_w"]))))
-            except (KeyError, TypeError, ValueError):
-                _LOGGER.warning("Ignoring invalid background-load row returned by InfluxDB")
-        return tuple(samples)
+        samples_by_time: dict[datetime, LoadSample] = {}
+        for table in ("legacy_house_load", "house_load"):
+            if not await self._table_exists(table):
+                continue
+            query = (
+                f'SELECT time, background_load_power_w FROM "{table}" '
+                f"WHERE time >= now() - INTERVAL '{days} days' "
+                "AND background_load_power_w IS NOT NULL ORDER BY time ASC"
+            )
+            rows = await self._client.query_sql(query)
+            for row in rows:
+                try:
+                    observed = _parse_timestamp(row["time"])
+                    samples_by_time[observed] = LoadSample(
+                        observed,
+                        max(0.0, float(row["background_load_power_w"])),
+                    )
+                except (KeyError, TypeError, ValueError):
+                    _LOGGER.warning("Ignoring invalid background-load row returned by InfluxDB")
+        return tuple(samples_by_time[key] for key in sorted(samples_by_time))
 
     async def record_house_load(
         self,
@@ -165,6 +171,25 @@ class EnergyManagerStore:
                 fields.append(f"known_controllable_load_power_w={max(0.0, known_load):.6f}")
             if fields:
                 lines.append(f"house_load {','.join(fields)} {_timestamp_ns(observed_at_utc)}")
+        await _write_in_batches(self._client, lines)
+
+
+    async def record_legacy_house_load_batch(
+        self,
+        rows: list[tuple[datetime, float | None, float | None, float | None]],
+    ) -> None:
+        """Persist reconstructed legacy load rows without overwriting live history."""
+        lines: list[str] = []
+        for observed_at_utc, house_load, known_load, background_load in rows:
+            fields: list[str] = []
+            if background_load is not None:
+                fields.append(f"background_load_power_w={max(0.0, background_load):.6f}")
+            if house_load is not None:
+                fields.append(f"house_load_power_w={max(0.0, house_load):.6f}")
+            if known_load is not None:
+                fields.append(f"known_controllable_load_power_w={max(0.0, known_load):.6f}")
+            if fields:
+                lines.append(f"legacy_house_load {','.join(fields)} {_timestamp_ns(observed_at_utc)}")
         await _write_in_batches(self._client, lines)
 
     async def load_legacy_source_state(
@@ -254,6 +279,34 @@ class EnergyManagerStore:
             except (KeyError, TypeError, ValueError):
                 _LOGGER.warning("Ignoring invalid archived legacy power-source row")
         return values
+
+
+    async def load_legacy_power_source_seed(
+        self,
+        *,
+        signal: str,
+        entity_id: str,
+        before_utc: datetime,
+    ) -> tuple[datetime, float] | None:
+        """Load the latest archived source state before a reconstruction range."""
+        if not await self._table_exists("legacy_power_source"):
+            return None
+        signal_sql = _escape_sql_string(signal)
+        entity_sql = _escape_sql_string(entity_id)
+        before_sql = _escape_sql_string(before_utc.astimezone(UTC).isoformat())
+        query = (
+            'SELECT time, power_w FROM "legacy_power_source" '
+            f"WHERE signal = '{signal_sql}' AND entity_id = '{entity_sql}' "
+            f"AND time < '{before_sql}' ORDER BY time DESC LIMIT 1"
+        )
+        rows = await self._client.query_sql(query)
+        if not rows:
+            return None
+        try:
+            return _parse_timestamp(rows[0]["time"]), float(rows[0]["power_w"])
+        except (KeyError, TypeError, ValueError):
+            _LOGGER.warning("Ignoring invalid archived legacy power-source seed row")
+            return None
 
     async def load_legacy_derivation_state(
         self,

@@ -15,11 +15,13 @@ from .config import LegacyInfluxSettings, Settings
 from .database import EnergyManagerStore
 
 _LOGGER = logging.getLogger(__name__)
-_DERIVATION_ID = "house_background_v2"
+_DERIVATION_ID = "house_background_v3_stateful"
 _SOURCE_NORMALIZATION_VERSION = "power_w_v1"
 _BUCKET = timedelta(minutes=5)
 _CHUNK = timedelta(days=14)
 _EV_NOISE_FLOOR_W = 100.0
+_ACTIVE_SAMPLE_MAX_AGE = timedelta(minutes=15)
+_STALE_NEAR_ZERO_THRESHOLD_W = 50.0
 
 
 class LegacyInfluxError(RuntimeError):
@@ -264,21 +266,31 @@ class LegacyInfluxBackfill:
             cursor = range_start
             while cursor < range_end:
                 chunk_end = min(cursor + _CHUNK, range_end)
-                values = {
-                    key: await self._target.load_legacy_power_source(
+                values: dict[str, dict[datetime, float]] = {}
+                for key, definition in definitions.items():
+                    source_values = await self._target.load_legacy_power_source(
                         signal=key,
                         entity_id=definition.entity_id,
                         start_utc=cursor,
                         end_utc=chunk_end,
                     )
-                    for key, definition in definitions.items()
-                }
+                    seed = await self._target.load_legacy_power_source_seed(
+                        signal=key,
+                        entity_id=definition.entity_id,
+                        before_utc=cursor,
+                    )
+                    if seed is not None:
+                        seed_time, seed_value = seed
+                        source_values.setdefault(seed_time, seed_value)
+                    values[key] = source_values
+
                 rows, chunk_house, chunk_background, chunk_skipped = _reconstruct_rows(
                     values,
-                    ess_positive_means="discharge",
+                    start_utc=cursor,
+                    end_utc=chunk_end,
                     ev_configured="ev" in definitions,
                 )
-                await self._target.record_house_load_batch(rows)
+                await self._target.record_legacy_house_load_batch(rows)
                 house_rows += chunk_house
                 background_rows += chunk_background
                 skipped_rows += chunk_skipped
@@ -455,48 +467,99 @@ def _missing_coverage_ranges(
 def _reconstruct_rows(
     values: dict[str, dict[datetime, float]],
     *,
-    ess_positive_means: str,
+    start_utc: datetime,
+    end_utc: datetime,
     ev_configured: bool,
 ) -> tuple[list[tuple[datetime, float, float | None, float | None]], int, int, int]:
+    """Rebuild a regular five-minute load timeline from sparse historical state updates.
+
+    Home Assistant's legacy InfluxDB history may omit buckets when an entity value did not
+    change. Recent non-zero values are therefore carried forward briefly, while stale values
+    close to zero decay to zero and may be held indefinitely. Stale material non-zero values
+    are rejected so a sensor outage is not silently stretched across history.
+    """
     required = ("grid_import", "grid_export", "ess", "solax")
-    timestamps = sorted(set().union(*(values[key] for key in required)))
+    keys = (*required, "ev") if ev_configured else required
+    states: dict[str, tuple[datetime, float] | None] = {
+        key: _latest_before(values.get(key, {}), start_utc) for key in keys
+    }
+
     rows: list[tuple[datetime, float, float | None, float | None]] = []
     house_rows = 0
     background_rows = 0
     skipped_rows = 0
-    ess_sign = -1.0 if ess_positive_means == "charge" else 1.0
 
-    for observed in timestamps:
-        if any(observed not in values[key] for key in required):
+    observed = start_utc
+    while observed < end_utc:
+        for key in keys:
+            if observed in values.get(key, {}):
+                states[key] = (observed, values[key][observed])
+
+        resolved = {key: _resolve_historical_state(states[key], observed) for key in keys}
+        if any(resolved[key] is None for key in required):
             skipped_rows += 1
+            observed += _BUCKET
             continue
-        grid_import = values["grid_import"][observed]
-        grid_export = values["grid_export"][observed]
-        solax = values["solax"][observed]
-        ess = values["ess"][observed] * ess_sign
+
+        grid_import = resolved["grid_import"]
+        grid_export = resolved["grid_export"]
+        ess = resolved["ess"]
+        solax = resolved["solax"]
+        assert grid_import is not None
+        assert grid_export is not None
+        assert ess is not None
+        assert solax is not None
+
         if min(grid_import, grid_export, solax) < 0:
             skipped_rows += 1
+            observed += _BUCKET
             continue
 
         house = max(0.0, grid_import - grid_export + solax + ess)
         house_rows += 1
+
         known: float | None = None
         background: float | None = None
         if not ev_configured:
             known = 0.0
             background = house
-        elif observed in values.get("ev", {}):
-            ev = values["ev"][observed]
-            if -_EV_NOISE_FLOOR_W <= ev < 0:
-                ev = 0.0
-            if ev >= 0:
+        else:
+            ev = resolved.get("ev")
+            if ev is not None and ev >= 0:
                 known = ev
                 background = max(0.0, house - ev)
 
         if background is not None:
             background_rows += 1
         rows.append((observed, house, known, background))
+        observed += _BUCKET
+
     return rows, house_rows, background_rows, skipped_rows
+
+
+def _latest_before(
+    values: dict[datetime, float],
+    before_utc: datetime,
+) -> tuple[datetime, float] | None:
+    candidates = ((observed, value) for observed, value in values.items() if observed < before_utc)
+    return max(candidates, default=None, key=lambda item: item[0])
+
+
+def _resolve_historical_state(
+    state: tuple[datetime, float] | None,
+    observed_at_utc: datetime,
+) -> float | None:
+    if state is None:
+        return None
+    state_time, value = state
+    age = observed_at_utc - state_time
+    if age < timedelta(0):
+        return None
+    if age <= _ACTIVE_SAMPLE_MAX_AGE:
+        return value
+    if abs(value) <= _STALE_NEAR_ZERO_THRESHOLD_W:
+        return 0.0
+    return None
 
 
 def _series_rows(payload: dict[str, Any]) -> list[tuple[list[str], list[list[Any]]]]:
