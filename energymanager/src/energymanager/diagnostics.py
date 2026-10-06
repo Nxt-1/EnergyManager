@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from . import __version__
+from .actuators import ACTUATOR_VERSION, ActuatorSnapshot, EssActuatorSnapshot, EvActuatorSnapshot
 from .ha_client import HomeAssistantClient
 from .house_state import HouseState, InputReading
 from .load_backtest import BACKTEST_VERSION, BackgroundLoadBacktest
@@ -44,6 +45,7 @@ DATABASE_STATUS_ENTITY = "sensor.energy_manager_database_status"
 SHADOW_PLAN_STATUS_ENTITY = "sensor.energy_manager_shadow_plan_status"
 SHADOW_PLAN_NET_DEFICIT_ENTITY = "sensor.energy_manager_shadow_plan_next_24_hours_net_deficit_energy"
 SHADOW_PLAN_GRID_IMPORT_ENTITY = "sensor.energy_manager_shadow_plan_next_24_hours_grid_import_energy"
+ACTUATOR_STATUS_ENTITY = "sensor.energy_manager_actuator_status"
 
 LEGACY_ENTITIES = (
     "sensor.energy_manager_observed_grid_power",
@@ -446,6 +448,23 @@ class DiagnosticsPublisher:
         await self._publish_pv_next_hour(forecast, now_local)
 
 
+    async def publish_actuator_status(self, actuators: tuple[ActuatorSnapshot, ...]) -> None:
+        """Publish the read-only actuator catalog used by the planner."""
+        configured = [item for item in actuators if item.configured]
+        available = [item for item in configured if item.planning_available]
+        attributes: dict[str, Any] = {
+            "friendly_name": "Energy Manager Actuator Status",
+            "actuator_version": ACTUATOR_VERSION,
+            "shadow_mode": True,
+            "control_enabled": False,
+            "configured_count": len(configured),
+            "planning_available_count": len(available),
+            "actuators": [_actuator_attributes(item) for item in actuators],
+            "last_update_utc": datetime.now(UTC).isoformat(),
+        }
+        state = "ready" if configured else "not_configured"
+        await self._client.set_state(ACTUATOR_STATUS_ENTITY, state, attributes)
+
     async def publish_shadow_plan_status(self, status: str, *, error: str | None = None) -> None:
         """Publish planner readiness without implying that any control is active."""
         attributes: dict[str, Any] = {
@@ -468,10 +487,11 @@ class DiagnosticsPublisher:
             "planner_version": PLANNER_VERSION,
             "shadow_mode": True,
             "control_enabled": False,
-            "mode": "forecast_balance_with_ess_projection",
+            "mode": "forecast_balance_with_actuator_projection",
             "horizon_hours": PLANNER_HORIZON_HOURS,
             "generated_at_utc": plan.generated_at_utc.isoformat(),
             "ess_projection_status": plan.ess_projection_status,
+            "actuator_ids": [item.actuator_id for item in plan.actuator_snapshots],
             "next_24_hours": _rounded_summary(summary_24h),
             "next_48_hours": _rounded_summary(summary_48h),
             "next_intervals": [
@@ -771,6 +791,56 @@ def _rounded_summary(
         else:
             rounded[key] = value
     return rounded
+
+
+def _actuator_attributes(item: ActuatorSnapshot) -> dict[str, Any]:
+    base: dict[str, Any] = {
+        "id": item.actuator_id,
+        "kind": item.kind,
+        "configured": item.configured,
+        "planning_available": item.planning_available,
+        "status": item.status,
+        "control_enabled": item.control_enabled,
+    }
+    if isinstance(item, EssActuatorSnapshot):
+        base.update(
+            {
+                "soc_percent": _round_optional(item.soc_percent, 2),
+                "current_power_w": _round_optional(item.current_power_w, 1),
+                "capacity_kwh": round(item.capabilities.capacity_kwh, 3),
+                "min_soc_percent": round(item.capabilities.min_soc_percent, 2),
+                "max_soc_percent": round(item.capabilities.max_soc_percent, 2),
+                "max_charge_power_w": round(item.capabilities.max_charge_power_w, 1),
+                "max_discharge_power_w": round(item.capabilities.max_discharge_power_w, 1),
+            }
+        )
+        return base
+    if isinstance(item, EvActuatorSnapshot):
+        base.update(
+            {
+                "connected": item.connected,
+                "soc_percent": _round_optional(item.soc_percent, 2),
+                "current_power_w": _round_optional(item.current_power_w, 1),
+                "min_charge_current_a": round(item.capabilities.min_charge_current_a, 2),
+                "max_charge_current_a": round(item.capabilities.max_charge_current_a, 2),
+                "nominal_voltage_v": round(item.capabilities.nominal_voltage_v, 1),
+                "supports_single_phase": item.capabilities.supports_single_phase,
+                "supports_three_phase": item.capabilities.supports_three_phase,
+                "minimum_single_phase_power_w": _round_optional(
+                    item.capabilities.minimum_single_phase_power_w, 1
+                ),
+                "maximum_single_phase_power_w": _round_optional(
+                    item.capabilities.maximum_single_phase_power_w, 1
+                ),
+                "minimum_three_phase_power_w": _round_optional(
+                    item.capabilities.minimum_three_phase_power_w, 1
+                ),
+                "maximum_three_phase_power_w": _round_optional(
+                    item.capabilities.maximum_three_phase_power_w, 1
+                ),
+            }
+        )
+    return base
 
 
 def _round_optional(value: float | None, digits: int) -> float | None:

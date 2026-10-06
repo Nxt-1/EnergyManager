@@ -5,11 +5,11 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 
-from .config import EssSettings
+from .actuators import ActuatorRegistry
 from .diagnostics import DiagnosticsPublisher
 from .house_state import HouseState
 from .load_service import BackgroundLoadService
-from .planner import EssResource, ShadowPlan, ShadowPlanner
+from .planner import ShadowPlan, ShadowPlanner
 from .pv_service import PvForecastService
 
 _LOGGER = logging.getLogger(__name__)
@@ -25,19 +25,14 @@ class ShadowPlannerService:
         load_service: BackgroundLoadService,
         pv_service: PvForecastService | None,
         *,
-        ess_settings: EssSettings | None = None,
+        actuator_registry: ActuatorRegistry,
         planner: ShadowPlanner | None = None,
     ) -> None:
         self._diagnostics = DiagnosticsPublisher(ha_client)
         self._load_service = load_service
         self._pv_service = pv_service
         self._planner = planner or ShadowPlanner()
-        self._ess_settings = ess_settings or EssSettings()
-        self._ess_resource = (
-            EssResource.from_settings(self._ess_settings)
-            if self._ess_settings.soc_entity is not None
-            else None
-        )
+        self._actuator_registry = actuator_registry
         self._plan: ShadowPlan | None = None
         self._last_plan_at_utc: datetime | None = None
 
@@ -51,10 +46,13 @@ class ShadowPlannerService:
         *,
         now_utc: datetime | None = None,
     ) -> None:
-        """Refresh the read-only plan from current forecasts and ESS SoC."""
+        """Refresh the read-only plan from current forecasts and actuator snapshots."""
         now = (now_utc or datetime.now(UTC)).astimezone(UTC)
         if self._last_plan_at_utc is not None and now - self._last_plan_at_utc < _REFRESH_INTERVAL:
             return
+
+        actuators = self._actuator_registry.snapshots(house_state)
+        await self._diagnostics.publish_actuator_status(actuators)
 
         load_forecast = self._load_service.forecast
         pv_forecast = self._pv_service.forecast if self._pv_service is not None else None
@@ -65,29 +63,23 @@ class ShadowPlannerService:
             await self._diagnostics.publish_shadow_plan_status("waiting_for_pv_forecast")
             return
 
-        ess_soc = house_state.value("ess.soc")
-        ess_soc_percent = (
-            float(ess_soc)
-            if isinstance(ess_soc, (int, float)) and not isinstance(ess_soc, bool)
-            else None
-        )
         plan = self._planner.build(
             load_forecast,
             pv_forecast,
             now_utc=now,
-            ess_resource=self._ess_resource,
-            ess_soc_percent=ess_soc_percent,
+            actuators=actuators,
         )
         self._plan = plan
         self._last_plan_at_utc = now
         await self._diagnostics.publish_shadow_plan(plan)
 
         summary = plan.summary(24)
+        actuator_status = ", ".join(f"{item.actuator_id}:{item.status}" for item in actuators)
         if plan.ess_projection_status == "projected":
             _LOGGER.info(
                 "Shadow plan updated: next 24 h background %.2f kWh, PV potential %.2f kWh, "
                 "raw deficit %.2f kWh, projected grid import %.2f kWh, ESS SoC %.1f -> %.1f%%, "
-                "curtailed DC PV %.2f kWh",
+                "curtailed DC PV %.2f kWh, actuators [%s]",
                 summary["background_load_kwh"],
                 summary["pv_potential_kwh"],
                 summary["net_deficit_kwh"],
@@ -95,15 +87,17 @@ class ShadowPlannerService:
                 plan.ess_initial_soc_percent,
                 summary["end_soc_percent"],
                 summary["curtailed_dc_pv_kwh"],
+                actuator_status,
             )
             return
 
         _LOGGER.info(
             "Shadow plan updated: next 24 h background %.2f kWh, PV potential %.2f kWh, "
-            "net deficit %.2f kWh, net surplus %.2f kWh, ESS projection %s",
+            "net deficit %.2f kWh, net surplus %.2f kWh, ESS projection %s, actuators [%s]",
             summary["background_load_kwh"],
             summary["pv_potential_kwh"],
             summary["net_deficit_kwh"],
             summary["net_surplus_kwh"],
             plan.ess_projection_status,
+            actuator_status,
         )

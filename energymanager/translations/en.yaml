@@ -72,6 +72,21 @@ configuration:
       charging_power_entity:
         name: EV charging power entity
         description: Home Assistant entity ID for present EV charging power in W or kW.
+      min_charge_current_a:
+        name: Minimum EV charge current
+        description: Minimum controllable charging current in A. Defaults to 6 A when omitted.
+      max_charge_current_a:
+        name: Maximum EV charge current
+        description: Maximum vehicle/EVSE charging current per phase in A. Defaults to 16 A when omitted.
+      nominal_voltage_v:
+        name: EV nominal phase voltage
+        description: Nominal phase-to-neutral voltage used for planning power limits. Defaults to 230 V when omitted.
+      supports_single_phase:
+        name: EV supports single-phase charging
+        description: Allow the EV actuator to expose single-phase charging as a planner capability.
+      supports_three_phase:
+        name: EV supports three-phase charging
+        description: Allow the EV actuator to expose three-phase charging as a planner capability.
 
   database:
     name: Database

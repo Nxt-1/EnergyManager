@@ -59,11 +59,16 @@ class PvSettings:
 
 @dataclass(frozen=True, slots=True)
 class EvSettings:
-    """EV input mapping."""
+    """EV input mapping plus the planning envelope exposed by the EV actuator."""
 
     soc_entity: str | None = None
     connected_entity: str | None = None
     charging_power_entity: str | None = None
+    min_charge_current_a: float = 6.0
+    max_charge_current_a: float = 16.0
+    nominal_voltage_v: float = 230.0
+    supports_single_phase: bool = True
+    supports_three_phase: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,6 +162,11 @@ class Settings:
                     "soc_entity": self.ev.soc_entity,
                     "connected_entity": self.ev.connected_entity,
                     "charging_power_entity": self.ev.charging_power_entity,
+                    "min_charge_current_a": self.ev.min_charge_current_a,
+                    "max_charge_current_a": self.ev.max_charge_current_a,
+                    "nominal_voltage_v": self.ev.nominal_voltage_v,
+                    "supports_single_phase": self.ev.supports_single_phase,
+                    "supports_three_phase": self.ev.supports_three_phase,
                 }
             ),
             "database": _without_none(
@@ -247,6 +257,33 @@ class Settings:
             "ess.discharge_efficiency",
         )
 
+        ev_min_charge_current = _positive_float(
+            ev_raw.get("min_charge_current_a", 6.0),
+            "ev.min_charge_current_a",
+        )
+        ev_max_charge_current = _positive_float(
+            ev_raw.get("max_charge_current_a", 16.0),
+            "ev.max_charge_current_a",
+        )
+        if ev_max_charge_current < ev_min_charge_current:
+            raise ConfigurationError(
+                "ev.max_charge_current_a must be greater than or equal to ev.min_charge_current_a"
+            )
+        ev_nominal_voltage = _positive_float(
+            ev_raw.get("nominal_voltage_v", 230.0),
+            "ev.nominal_voltage_v",
+        )
+        ev_supports_single_phase = _bool_option(
+            ev_raw.get("supports_single_phase", True),
+            "ev.supports_single_phase",
+        )
+        ev_supports_three_phase = _bool_option(
+            ev_raw.get("supports_three_phase", True),
+            "ev.supports_three_phase",
+        )
+        if not ev_supports_single_phase and not ev_supports_three_phase:
+            raise ConfigurationError("EV actuator must support at least one phase mode")
+
         database_enabled = _bool_option(database_raw.get("enabled", False), "database.enabled")
         database_url = _optional_string(database_raw.get("url"))
         database_name = str(database_raw.get("database", "energy_manager")).strip() or "energy_manager"
@@ -328,6 +365,11 @@ class Settings:
                 charging_power_entity=_optional_entity_id(
                     ev_raw.get("charging_power_entity"), "ev.charging_power_entity"
                 ),
+                min_charge_current_a=ev_min_charge_current,
+                max_charge_current_a=ev_max_charge_current,
+                nominal_voltage_v=ev_nominal_voltage,
+                supports_single_phase=ev_supports_single_phase,
+                supports_three_phase=ev_supports_three_phase,
             ),
             database=DatabaseSettings(
                 enabled=database_enabled,

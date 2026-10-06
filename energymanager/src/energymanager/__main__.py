@@ -8,6 +8,7 @@ import os
 import signal
 
 from . import __version__
+from .actuators import ActuatorRegistry
 from .app import EnergyManagerApp
 from .config import ConfigurationError, Settings
 from .database import EnergyManagerStore, InfluxDatabaseClient, InfluxDatabaseError
@@ -146,7 +147,12 @@ async def _run_app(
     if settings.pv.forecast_enabled:
         async with OpenMeteoClient() as meteo_client:
             pv_service = PvForecastService(client, meteo_client, store=store)
-            planner_service = ShadowPlannerService(client, load_service, pv_service, ess_settings=settings.ess)
+            planner_service = ShadowPlannerService(
+                client,
+                load_service,
+                pv_service,
+                actuator_registry=ActuatorRegistry(settings),
+            )
             app = EnergyManagerApp(
                 settings,
                 client,
@@ -157,7 +163,12 @@ async def _run_app(
             await app.run(stop_event)
         return
 
-    planner_service = ShadowPlannerService(client, load_service, None, ess_settings=settings.ess)
+    planner_service = ShadowPlannerService(
+        client,
+        load_service,
+        None,
+        actuator_registry=ActuatorRegistry(settings),
+    )
     app = EnergyManagerApp(
         settings,
         client,

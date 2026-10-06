@@ -5,38 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from .config import EssSettings
+from .actuators import ActuatorSnapshot, EssActuatorSnapshot, EssCapabilities, find_ess_actuator
 from .load_forecast import FORECAST_INTERVAL_MINUTES, BackgroundLoadForecast
 from .pv_forecast import PvForecast
 
-PLANNER_VERSION = "2026-10-06-shadow-v2"
+PLANNER_VERSION = "2026-10-06-shadow-v3"
 PLANNER_HORIZON_HOURS = 48
 _INTERVAL_HOURS = FORECAST_INTERVAL_MINUTES / 60.0
-
-
-@dataclass(frozen=True, slots=True)
-class EssResource:
-    """Static ESS planning envelope; dynamic actuator limits can tighten this later."""
-
-    capacity_kwh: float
-    min_soc_percent: float
-    max_soc_percent: float
-    max_charge_power_w: float
-    max_discharge_power_w: float
-    charge_efficiency: float
-    discharge_efficiency: float
-
-    @classmethod
-    def from_settings(cls, settings: EssSettings) -> EssResource:
-        return cls(
-            capacity_kwh=settings.capacity_kwh,
-            min_soc_percent=settings.min_soc_percent,
-            max_soc_percent=settings.max_soc_percent,
-            max_charge_power_w=settings.max_charge_power_w,
-            max_discharge_power_w=settings.max_discharge_power_w,
-            charge_efficiency=settings.charge_efficiency,
-            discharge_efficiency=settings.discharge_efficiency,
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,7 +43,8 @@ class ShadowPlan:
     generated_at_utc: datetime
     intervals: tuple[ShadowPlanInterval, ...]
     ess_projection_status: str = "not_configured"
-    ess_resource: EssResource | None = None
+    actuator_snapshots: tuple[ActuatorSnapshot, ...] = ()
+    ess_resource: EssCapabilities | None = None
     ess_initial_soc_percent: float | None = None
 
     def summary(self, hours: int) -> dict[str, float | int | str | None]:
@@ -196,8 +172,7 @@ class ShadowPlanner:
         pv_forecast: PvForecast,
         *,
         now_utc: datetime,
-        ess_resource: EssResource | None = None,
-        ess_soc_percent: float | None = None,
+        actuators: tuple[ActuatorSnapshot, ...] = (),
     ) -> ShadowPlan:
         if now_utc.tzinfo is None:
             raise ValueError("now_utc must be timezone-aware")
@@ -229,37 +204,43 @@ class ShadowPlanner:
                 )
             )
 
-        if ess_resource is None:
+        ess_actuator = find_ess_actuator(actuators)
+        if ess_actuator is None or not ess_actuator.configured:
             return ShadowPlan(
                 generated_at_utc=now_utc.astimezone(UTC),
                 intervals=tuple(base_intervals),
                 ess_projection_status="not_configured",
+                actuator_snapshots=actuators,
             )
-        if ess_soc_percent is None:
+        if not ess_actuator.planning_available or ess_actuator.soc_percent is None:
             return ShadowPlan(
                 generated_at_utc=now_utc.astimezone(UTC),
                 intervals=tuple(base_intervals),
-                ess_projection_status="soc_unavailable",
-                ess_resource=ess_resource,
+                ess_projection_status=ess_actuator.status,
+                actuator_snapshots=actuators,
+                ess_resource=ess_actuator.capabilities,
             )
 
-        projected_intervals = _project_ess(base_intervals, ess_resource, ess_soc_percent)
+        projected_intervals = _project_ess(base_intervals, ess_actuator)
         return ShadowPlan(
             generated_at_utc=now_utc.astimezone(UTC),
             intervals=projected_intervals,
             ess_projection_status="projected",
-            ess_resource=ess_resource,
-            ess_initial_soc_percent=max(0.0, min(100.0, ess_soc_percent)),
+            actuator_snapshots=actuators,
+            ess_resource=ess_actuator.capabilities,
+            ess_initial_soc_percent=max(0.0, min(100.0, ess_actuator.soc_percent)),
         )
 
 
 def _project_ess(
     intervals: list[ShadowPlanInterval],
-    resource: EssResource,
-    initial_soc_percent: float,
+    actuator: EssActuatorSnapshot,
 ) -> tuple[ShadowPlanInterval, ...]:
-    """Project greedy self-consumption while respecting DC PV topology and ESS limits."""
-    soc = max(0.0, min(100.0, initial_soc_percent))
+    """Project greedy self-consumption through the ESS actuator capability envelope."""
+    if actuator.soc_percent is None:
+        raise ValueError("ESS actuator SoC is required for projection")
+    resource = actuator.capabilities
+    soc = max(0.0, min(100.0, actuator.soc_percent))
     stored_kwh = resource.capacity_kwh * soc / 100.0
     minimum_kwh = resource.capacity_kwh * resource.min_soc_percent / 100.0
     maximum_kwh = resource.capacity_kwh * resource.max_soc_percent / 100.0

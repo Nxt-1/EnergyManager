@@ -321,3 +321,50 @@ def test_invalid_ess_planning_envelope_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(ConfigurationError):
         Settings.load(path)
+
+
+def test_ev_actuator_planning_defaults_are_available_without_new_options(tmp_path: Path) -> None:
+    settings = Settings.load(tmp_path / "missing.json")
+
+    assert settings.ev.min_charge_current_a == pytest.approx(6.0)
+    assert settings.ev.max_charge_current_a == pytest.approx(16.0)
+    assert settings.ev.nominal_voltage_v == pytest.approx(230.0)
+    assert settings.ev.supports_single_phase is True
+    assert settings.ev.supports_three_phase is True
+
+
+def test_ev_actuator_planning_envelope_is_loaded(tmp_path: Path) -> None:
+    path = tmp_path / "options.json"
+    path.write_text(
+        json.dumps(
+            {
+                "ev": {
+                    "min_charge_current_a": 7,
+                    "max_charge_current_a": 15,
+                    "nominal_voltage_v": 231,
+                    "supports_single_phase": True,
+                    "supports_three_phase": False,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    settings = Settings.load(path)
+
+    assert settings.ev.min_charge_current_a == pytest.approx(7)
+    assert settings.ev.max_charge_current_a == pytest.approx(15)
+    assert settings.ev.nominal_voltage_v == pytest.approx(231)
+    assert settings.ev.supports_single_phase is True
+    assert settings.ev.supports_three_phase is False
+
+
+def test_invalid_ev_actuator_planning_envelope_is_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "options.json"
+    path.write_text(
+        json.dumps({"ev": {"min_charge_current_a": 16, "max_charge_current_a": 6}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigurationError):
+        Settings.load(path)

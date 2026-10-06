@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.13.0
+
+- Adds the first generic read-only actuator registry for planner-facing device capabilities.
+- Moves the ESS planning envelope behind an ESS actuator snapshot instead of passing ESS configuration directly into the planner.
+- Adds an EV actuator snapshot with connection state, SoC, present charging power and configurable 1-phase/3-phase charge limits.
+- Adds `sensor.energy_manager_actuator_status` with the actuator catalog, readiness and capability diagnostics.
+- The shadow planner now receives a list of actuator snapshots; no EV task is scheduled yet and no actuator can write to hardware.
+- Existing ESS projection behavior is retained, but its limits now come from the ESS actuator capability interface.
+- New EV capability options are optional; defaults are 6-16 A, 230 V and both 1-phase and 3-phase support.
+- Remains hard-coded shadow mode.
+
 ## 0.12.0
 
 - Adds the first read-only ESS resource projection to the shadow planner.

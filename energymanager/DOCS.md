@@ -139,13 +139,34 @@ This model intentionally predicts only the current generic background signal. As
 heat pump are promoted to separate models later, they can be removed from the generic background signal without changing
 the planner-facing forecast concept.
 
+## Actuator framework
+
+Version 0.13 introduces a read-only actuator registry between Home Assistant state and the planner. An actuator describes
+what a controllable device can do and what its current state is; it does not decide when the device should act. The planner
+receives the actuator snapshots as a collection and remains responsible for allocation and scheduling.
+
+The first two actuator types are:
+
+- ESS/storage: current SoC/power plus capacity, SoC boundaries, charge/discharge limits and efficiencies.
+- EV/flexible load: connection state, SoC/current charging power, charge-current range, nominal voltage and supported phase
+  modes.
+
+The EV capability defaults are 6-16 A, 230 V and support for both 1-phase and 3-phase charging. They are runtime
+configuration, not planner rules, and can be changed without recompiling the application. The planner does not yet create an
+EV energy task or choose charging intervals.
+
+`sensor.energy_manager_actuator_status` exposes the current catalog and whether each actuator is planning-ready. All
+actuators remain hard-coded read-only in v0.13; `control_enabled` is false and no Home Assistant service/entity writes are
+implemented.
+
 ## Shadow planner
 
 Version 0.11.0 adds the first planner foundation without scheduling or controlling devices yet. It aligns the existing
 15-minute background-load forecast with the hourly PV-potential forecast on one 15-minute timeline and retains 48 hours
 internally. `scheduled_load_w` is present but remains zero until flexible tasks such as EV charging are introduced.
 
-Version 0.12 adds a read-only ESS feasibility projection. Roof PV is treated as AC-coupled while shed PV is treated as
+Version 0.12 adds a read-only ESS feasibility projection. Version 0.13 supplies that projection through the ESS actuator
+capability interface instead of passing ESS settings directly into the planner. Roof PV is treated as AC-coupled while shed PV is treated as
 DC-coupled. Shed energy therefore has to pass through the configured ESS/inverter discharge envelope before serving AC
 loads; unused DC energy can charge the battery and any remaining energy is reported as curtailed potential. The simulation
 uses the current measured SoC and a conservative greedy self-consumption policy. It is not yet the cost optimizer.
