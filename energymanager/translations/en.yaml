@@ -25,6 +25,27 @@ configuration:
       power_positive_means:
         name: Positive ESS power means
         description: Select how positive values from the configured ESS power entity should be interpreted.
+      capacity_kwh:
+        name: ESS nominal capacity
+        description: Nominal battery capacity in kWh used by the shadow planner. Defaults to 15 kWh when omitted.
+      min_soc_percent:
+        name: Minimum planning SoC
+        description: Lower SoC reserve used by the shadow planner. Defaults to 10 percent when omitted.
+      max_soc_percent:
+        name: Maximum planning SoC
+        description: Upper SoC limit used by the shadow planner. Defaults to 100 percent when omitted.
+      max_charge_power_w:
+        name: Maximum planning charge power
+        description: Aggregate battery charging limit in W used by the shadow planner. Defaults to 2000 W when omitted.
+      max_discharge_power_w:
+        name: Maximum planning discharge power
+        description: ESS AC discharge/inverter limit in W used by the shadow planner. Defaults to 2000 W when omitted.
+      charge_efficiency:
+        name: Planning charge efficiency
+        description: Fraction from 0 to 1 retained while charging. Defaults to 0.95 when omitted.
+      discharge_efficiency:
+        name: Planning discharge efficiency
+        description: Fraction from 0 to 1 delivered while discharging. Defaults to 0.95 when omitted.
   pv:
     name: PV
     description: Separate PV production measurements. Total PV is derived from the configured inputs.

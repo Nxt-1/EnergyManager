@@ -16,6 +16,12 @@ Canonical grid power is `import - export`: positive means import, negative means
 
 ESS SoC is normalized to percent. ESS power is normalized so positive means discharge and negative means charge.
 
+Version 0.12 adds an optional planning envelope under `ess`: nominal capacity, minimum/maximum planning SoC, maximum
+charge/discharge power and charge/discharge efficiencies. Existing configurations remain valid when these fields are omitted.
+The runtime defaults are 15 kWh, 10-100% SoC, 2 kW charge/discharge and 95% efficiency in each direction. These are
+shadow-planning assumptions only and must be confirmed before any later control release. Dynamic BMS/thermal limits will
+eventually be allowed to tighten the configured envelope at runtime.
+
 ### PV measurements
 
 The Solax and shed/Victron PV power entities remain optional measurement inputs. Total measured PV is the sum of configured
@@ -139,14 +145,20 @@ Version 0.11.0 adds the first planner foundation without scheduling or controlli
 15-minute background-load forecast with the hourly PV-potential forecast on one 15-minute timeline and retains 48 hours
 internally. `scheduled_load_w` is present but remains zero until flexible tasks such as EV charging are introduced.
 
-The current plan reports the energy balance before ESS or flexible-load control: background demand, PV potential, net
-deficit and net surplus. Net surplus is deliberately not labelled grid export because the shed PV is DC-coupled and can
-be curtailed when storage and inverter paths are constrained. ESS capability/SoC scheduling is the next resource step.
+Version 0.12 adds a read-only ESS feasibility projection. Roof PV is treated as AC-coupled while shed PV is treated as
+DC-coupled. Shed energy therefore has to pass through the configured ESS/inverter discharge envelope before serving AC
+loads; unused DC energy can charge the battery and any remaining energy is reported as curtailed potential. The simulation
+uses the current measured SoC and a conservative greedy self-consumption policy. It is not yet the cost optimizer.
+
+The plan now reports both the raw pre-control balance and the projected post-ESS grid import/export, battery SoC trajectory,
+ESS AC power and DC-PV curtailment. This prevents the planner from assuming that all DC-coupled shed PV can directly serve
+AC load simply because total PV energy exceeds demand.
 
 Home Assistant diagnostics:
 
 - `sensor.energy_manager_shadow_plan_status`
 - `sensor.energy_manager_shadow_plan_next_24_hours_net_deficit_energy`
+- `sensor.energy_manager_shadow_plan_next_24_hours_grid_import_energy`
 
 The status attributes include compact 24-hour and 48-hour summaries plus the next three hours of 15-minute intervals.
 The planner remains hard-coded shadow mode and cannot write to the ESS, EVSE or any other device.

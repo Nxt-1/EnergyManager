@@ -43,6 +43,7 @@ PV_FORECAST_NEXT_7_DAYS_ENTITY = "sensor.energy_manager_pv_forecast_next_7_days_
 DATABASE_STATUS_ENTITY = "sensor.energy_manager_database_status"
 SHADOW_PLAN_STATUS_ENTITY = "sensor.energy_manager_shadow_plan_status"
 SHADOW_PLAN_NET_DEFICIT_ENTITY = "sensor.energy_manager_shadow_plan_next_24_hours_net_deficit_energy"
+SHADOW_PLAN_GRID_IMPORT_ENTITY = "sensor.energy_manager_shadow_plan_next_24_hours_grid_import_energy"
 
 LEGACY_ENTITIES = (
     "sensor.energy_manager_observed_grid_power",
@@ -467,9 +468,10 @@ class DiagnosticsPublisher:
             "planner_version": PLANNER_VERSION,
             "shadow_mode": True,
             "control_enabled": False,
-            "mode": "forecast_balance",
+            "mode": "forecast_balance_with_ess_projection",
             "horizon_hours": PLANNER_HORIZON_HOURS,
             "generated_at_utc": plan.generated_at_utc.isoformat(),
+            "ess_projection_status": plan.ess_projection_status,
             "next_24_hours": _rounded_summary(summary_24h),
             "next_48_hours": _rounded_summary(summary_48h),
             "next_intervals": [
@@ -477,13 +479,30 @@ class DiagnosticsPublisher:
                     "start": item.period_start_local.isoformat(),
                     "background_w": round(item.background_load_w, 1),
                     "scheduled_w": round(item.scheduled_load_w, 1),
+                    "pv_ac_w": round(item.pv_ac_power_w, 1),
+                    "pv_dc_w": round(item.pv_dc_power_w, 1),
                     "pv_potential_w": round(item.pv_power_w, 1),
                     "net_before_control_w": round(item.net_power_before_control_w, 1),
+                    "ess_ac_w": _round_optional(item.ess_ac_power_w, 1),
+                    "projected_soc_percent": _round_optional(item.projected_soc_percent, 2),
+                    "grid_after_ess_w": _round_optional(item.grid_power_after_ess_w, 1),
+                    "curtailed_dc_pv_w": _round_optional(item.curtailed_dc_pv_w, 1),
                 }
                 for item in plan.intervals[:12]
             ],
             "last_update_utc": datetime.now(UTC).isoformat(),
         }
+        if plan.ess_resource is not None:
+            status_attributes["ess_resource"] = {
+                "initial_soc_percent": _round_optional(plan.ess_initial_soc_percent, 2),
+                "capacity_kwh": round(plan.ess_resource.capacity_kwh, 3),
+                "min_soc_percent": round(plan.ess_resource.min_soc_percent, 2),
+                "max_soc_percent": round(plan.ess_resource.max_soc_percent, 2),
+                "max_charge_power_w": round(plan.ess_resource.max_charge_power_w, 1),
+                "max_discharge_power_w": round(plan.ess_resource.max_discharge_power_w, 1),
+                "charge_efficiency": round(plan.ess_resource.charge_efficiency, 4),
+                "discharge_efficiency": round(plan.ess_resource.discharge_efficiency, 4),
+            }
         await self._client.set_state(SHADOW_PLAN_STATUS_ENTITY, "ready", status_attributes)
 
         energy_attributes = _energy_attributes("Energy Manager Shadow Plan Next 24 Hours Net Deficit")
@@ -495,7 +514,7 @@ class DiagnosticsPublisher:
                 "pv_potential_kwh": round(float(summary_24h["pv_potential_kwh"]), 3),
                 "net_surplus_kwh": round(float(summary_24h["net_surplus_kwh"]), 3),
                 "max_net_deficit_w": round(float(summary_24h["max_net_deficit_w"]), 1),
-                "meaning": "forecast deficit before ESS, EV or other flexible-load scheduling",
+                "meaning": "raw forecast deficit before ESS, EV or other flexible-load scheduling",
             }
         )
         await self._client.set_state(
@@ -503,6 +522,38 @@ class DiagnosticsPublisher:
             round(float(summary_24h["net_deficit_kwh"]), 3),
             energy_attributes,
         )
+
+        grid_import_attributes = _energy_attributes("Energy Manager Shadow Plan Next 24 Hours Grid Import")
+        grid_import_attributes.update(
+            {
+                "planner_version": PLANNER_VERSION,
+                "ess_projection_status": plan.ess_projection_status,
+                "meaning": "projected grid import after the read-only ESS self-consumption baseline",
+            }
+        )
+        grid_import = summary_24h["grid_import_after_ess_kwh"]
+        if isinstance(grid_import, (int, float)):
+            grid_import_attributes.update(
+                {
+                    "grid_export_after_ess_kwh": _round_optional(
+                        _optional_number(summary_24h["grid_export_after_ess_kwh"]), 3
+                    ),
+                    "curtailed_dc_pv_kwh": _round_optional(
+                        _optional_number(summary_24h["curtailed_dc_pv_kwh"]), 3
+                    ),
+                    "end_soc_percent": _round_optional(_optional_number(summary_24h["end_soc_percent"]), 2),
+                    "max_grid_import_after_ess_w": _round_optional(
+                        _optional_number(summary_24h["max_grid_import_after_ess_w"]), 1
+                    ),
+                }
+            )
+            await self._client.set_state(
+                SHADOW_PLAN_GRID_IMPORT_ENTITY,
+                round(float(grid_import), 3),
+                grid_import_attributes,
+            )
+        else:
+            await self._client.set_state(SHADOW_PLAN_GRID_IMPORT_ENTITY, "unavailable", grid_import_attributes)
 
     async def cleanup_legacy_entities(self) -> None:
         """Remove diagnostics created by older Energy Manager releases."""
@@ -710,14 +761,26 @@ def _group_energy_attributes(daily: PvDailyEnergy) -> dict[str, Any]:
 
 
 
-def _rounded_summary(summary: dict[str, float | int | None]) -> dict[str, float | int | None]:
-    rounded: dict[str, float | int | None] = {}
+def _rounded_summary(
+    summary: dict[str, float | int | str | None],
+) -> dict[str, float | int | str | None]:
+    rounded: dict[str, float | int | str | None] = {}
     for key, value in summary.items():
         if isinstance(value, float):
             rounded[key] = round(value, 3)
         else:
             rounded[key] = value
     return rounded
+
+
+def _round_optional(value: float | None, digits: int) -> float | None:
+    return round(value, digits) if value is not None else None
+
+
+def _optional_number(value: float | int | str | None) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
 
 
 def _iso(value: datetime | None) -> str | None:

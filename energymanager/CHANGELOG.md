@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.0
+
+- Adds the first read-only ESS resource projection to the shadow planner.
+- Uses current ESS SoC plus configurable capacity, SoC limits, charge/discharge power limits and efficiencies.
+- Separates AC-coupled roof PV from DC-coupled shed PV so shed energy must pass through the ESS/inverter path before serving AC loads.
+- Projects 15-minute ESS AC power, battery SoC, post-ESS grid power and DC-PV curtailment without sending any commands.
+- Adds `sensor.energy_manager_shadow_plan_next_24_hours_grid_import_energy` and extends the shadow-plan status attributes.
+- Keeps the existing raw pre-control deficit sensor for comparison.
+- New ESS planning parameters are optional; existing saved configuration remains valid and runtime defaults are used when omitted.
+- Remains hard-coded shadow mode; dynamic thermal/BMS capability feedback and cost optimization are not yet applied.
+
 ## 0.11.0
 
 - Adds the first read-only shadow planner foundation.

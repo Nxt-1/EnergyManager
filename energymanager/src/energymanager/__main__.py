@@ -146,7 +146,7 @@ async def _run_app(
     if settings.pv.forecast_enabled:
         async with OpenMeteoClient() as meteo_client:
             pv_service = PvForecastService(client, meteo_client, store=store)
-            planner_service = ShadowPlannerService(client, load_service, pv_service)
+            planner_service = ShadowPlannerService(client, load_service, pv_service, ess_settings=settings.ess)
             app = EnergyManagerApp(
                 settings,
                 client,
@@ -157,7 +157,7 @@ async def _run_app(
             await app.run(stop_event)
         return
 
-    planner_service = ShadowPlannerService(client, load_service, None)
+    planner_service = ShadowPlannerService(client, load_service, None, ess_settings=settings.ess)
     app = EnergyManagerApp(
         settings,
         client,

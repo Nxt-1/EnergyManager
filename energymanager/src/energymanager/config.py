@@ -34,11 +34,18 @@ class GridSettings:
 
 @dataclass(frozen=True, slots=True)
 class EssSettings:
-    """ESS input mapping and source sign convention."""
+    """ESS input mapping plus the planning envelope used by shadow simulation."""
 
     soc_entity: str | None = None
     power_entity: str | None = None
     power_positive_means: str = "discharge"
+    capacity_kwh: float = 15.0
+    min_soc_percent: float = 10.0
+    max_soc_percent: float = 100.0
+    max_charge_power_w: float = 2000.0
+    max_discharge_power_w: float = 2000.0
+    charge_efficiency: float = 0.95
+    discharge_efficiency: float = 0.95
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,6 +136,13 @@ class Settings:
                     "soc_entity": self.ess.soc_entity,
                     "power_entity": self.ess.power_entity,
                     "power_positive_means": self.ess.power_positive_means,
+                    "capacity_kwh": self.ess.capacity_kwh,
+                    "min_soc_percent": self.ess.min_soc_percent,
+                    "max_soc_percent": self.ess.max_soc_percent,
+                    "max_charge_power_w": self.ess.max_charge_power_w,
+                    "max_discharge_power_w": self.ess.max_discharge_power_w,
+                    "charge_efficiency": self.ess.charge_efficiency,
+                    "discharge_efficiency": self.ess.discharge_efficiency,
                 }
             ),
             "pv": _without_none(
@@ -211,6 +225,28 @@ class Settings:
             allowed = ", ".join(sorted(_VALID_ESS_POWER_SIGNS))
             raise ConfigurationError(f"ess.power_positive_means must be one of: {allowed}")
 
+        ess_capacity_kwh = _positive_float(ess_raw.get("capacity_kwh", 15.0), "ess.capacity_kwh")
+        ess_min_soc = _percentage(ess_raw.get("min_soc_percent", 10.0), "ess.min_soc_percent")
+        ess_max_soc = _percentage(ess_raw.get("max_soc_percent", 100.0), "ess.max_soc_percent")
+        if ess_max_soc <= ess_min_soc:
+            raise ConfigurationError("ess.max_soc_percent must be greater than ess.min_soc_percent")
+        ess_max_charge_power = _positive_float(
+            ess_raw.get("max_charge_power_w", 2000.0),
+            "ess.max_charge_power_w",
+        )
+        ess_max_discharge_power = _positive_float(
+            ess_raw.get("max_discharge_power_w", 2000.0),
+            "ess.max_discharge_power_w",
+        )
+        ess_charge_efficiency = _efficiency(
+            ess_raw.get("charge_efficiency", 0.95),
+            "ess.charge_efficiency",
+        )
+        ess_discharge_efficiency = _efficiency(
+            ess_raw.get("discharge_efficiency", 0.95),
+            "ess.discharge_efficiency",
+        )
+
         database_enabled = _bool_option(database_raw.get("enabled", False), "database.enabled")
         database_url = _optional_string(database_raw.get("url"))
         database_name = str(database_raw.get("database", "energy_manager")).strip() or "energy_manager"
@@ -264,6 +300,13 @@ class Settings:
                 soc_entity=_optional_entity_id(ess_raw.get("soc_entity"), "ess.soc_entity"),
                 power_entity=_optional_entity_id(ess_raw.get("power_entity"), "ess.power_entity"),
                 power_positive_means=ess_power_sign,
+                capacity_kwh=ess_capacity_kwh,
+                min_soc_percent=ess_min_soc,
+                max_soc_percent=ess_max_soc,
+                max_charge_power_w=ess_max_charge_power,
+                max_discharge_power_w=ess_max_discharge_power,
+                charge_efficiency=ess_charge_efficiency,
+                discharge_efficiency=ess_discharge_efficiency,
             ),
             pv=PvSettings(
                 solax_power_entity=_optional_entity_id(
@@ -340,3 +383,33 @@ def _optional_string(value: object) -> str | None:
         return None
     normalized = str(value).strip()
     return normalized or None
+
+
+def _positive_float(value: object, option_name: str) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ConfigurationError(f"{option_name} must be a number") from exc
+    if number <= 0:
+        raise ConfigurationError(f"{option_name} must be greater than zero")
+    return number
+
+
+def _percentage(value: object, option_name: str) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ConfigurationError(f"{option_name} must be a number") from exc
+    if not 0 <= number <= 100:
+        raise ConfigurationError(f"{option_name} must be between 0 and 100")
+    return number
+
+
+def _efficiency(value: object, option_name: str) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ConfigurationError(f"{option_name} must be a number") from exc
+    if not 0 < number <= 1:
+        raise ConfigurationError(f"{option_name} must be greater than 0 and at most 1")
+    return number

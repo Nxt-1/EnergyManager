@@ -268,3 +268,56 @@ def test_legacy_backfill_requires_target_database_and_source_url(tmp_path: Path)
 
     with pytest.raises(ConfigurationError):
         Settings.load(path)
+
+
+def test_ess_planning_defaults_are_available_without_new_options(tmp_path: Path) -> None:
+    settings = Settings.load(tmp_path / "missing.json")
+
+    assert settings.ess.capacity_kwh == pytest.approx(15.0)
+    assert settings.ess.min_soc_percent == pytest.approx(10.0)
+    assert settings.ess.max_soc_percent == pytest.approx(100.0)
+    assert settings.ess.max_charge_power_w == pytest.approx(2000.0)
+    assert settings.ess.max_discharge_power_w == pytest.approx(2000.0)
+    assert settings.ess.charge_efficiency == pytest.approx(0.95)
+    assert settings.ess.discharge_efficiency == pytest.approx(0.95)
+
+
+def test_ess_planning_envelope_is_loaded(tmp_path: Path) -> None:
+    path = tmp_path / "options.json"
+    path.write_text(
+        json.dumps(
+            {
+                "ess": {
+                    "capacity_kwh": 15.36,
+                    "min_soc_percent": 15,
+                    "max_soc_percent": 95,
+                    "max_charge_power_w": 1800,
+                    "max_discharge_power_w": 2100,
+                    "charge_efficiency": 0.96,
+                    "discharge_efficiency": 0.94,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    settings = Settings.load(path)
+
+    assert settings.ess.capacity_kwh == pytest.approx(15.36)
+    assert settings.ess.min_soc_percent == pytest.approx(15)
+    assert settings.ess.max_soc_percent == pytest.approx(95)
+    assert settings.ess.max_charge_power_w == pytest.approx(1800)
+    assert settings.ess.max_discharge_power_w == pytest.approx(2100)
+    assert settings.ess.charge_efficiency == pytest.approx(0.96)
+    assert settings.ess.discharge_efficiency == pytest.approx(0.94)
+
+
+def test_invalid_ess_planning_envelope_is_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "options.json"
+    path.write_text(
+        json.dumps({"ess": {"min_soc_percent": 90, "max_soc_percent": 80}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigurationError):
+        Settings.load(path)
