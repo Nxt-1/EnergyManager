@@ -11,6 +11,7 @@ from .house_state import HouseState, InputReading
 from .load_backtest import BACKTEST_VERSION, BackgroundLoadBacktest
 from .load_forecast import MODEL_VERSION, BackgroundLoadForecast
 from .open_meteo import FORECAST_DAYS, FORECAST_MODEL
+from .planner import PLANNER_HORIZON_HOURS, PLANNER_VERSION, ShadowPlan
 from .pv_forecast import CALIBRATION_VERSION, PvDailyEnergy, PvForecast
 
 STATUS_ENTITY = "sensor.energy_manager_status"
@@ -40,6 +41,8 @@ PV_FORECAST_TOMORROW_ENTITY = "sensor.energy_manager_pv_forecast_tomorrow_energy
 PV_FORECAST_NEXT_HOUR_ENTITY = "sensor.energy_manager_pv_forecast_next_hour_power"
 PV_FORECAST_NEXT_7_DAYS_ENTITY = "sensor.energy_manager_pv_forecast_next_7_days_energy"
 DATABASE_STATUS_ENTITY = "sensor.energy_manager_database_status"
+SHADOW_PLAN_STATUS_ENTITY = "sensor.energy_manager_shadow_plan_status"
+SHADOW_PLAN_NET_DEFICIT_ENTITY = "sensor.energy_manager_shadow_plan_next_24_hours_net_deficit_energy"
 
 LEGACY_ENTITIES = (
     "sensor.energy_manager_observed_grid_power",
@@ -441,6 +444,66 @@ class DiagnosticsPublisher:
         await self._publish_pv_next_7_days(forecast, now_local)
         await self._publish_pv_next_hour(forecast, now_local)
 
+
+    async def publish_shadow_plan_status(self, status: str, *, error: str | None = None) -> None:
+        """Publish planner readiness without implying that any control is active."""
+        attributes: dict[str, Any] = {
+            "friendly_name": "Energy Manager Shadow Plan Status",
+            "planner_version": PLANNER_VERSION,
+            "shadow_mode": True,
+            "control_enabled": False,
+            "last_update_utc": datetime.now(UTC).isoformat(),
+        }
+        if error:
+            attributes["error"] = error
+        await self._client.set_state(SHADOW_PLAN_STATUS_ENTITY, status, attributes)
+
+    async def publish_shadow_plan(self, plan: ShadowPlan) -> None:
+        """Publish compact summaries for the current read-only shadow plan."""
+        summary_24h = plan.summary(24)
+        summary_48h = plan.summary(48)
+        status_attributes: dict[str, Any] = {
+            "friendly_name": "Energy Manager Shadow Plan Status",
+            "planner_version": PLANNER_VERSION,
+            "shadow_mode": True,
+            "control_enabled": False,
+            "mode": "forecast_balance",
+            "horizon_hours": PLANNER_HORIZON_HOURS,
+            "generated_at_utc": plan.generated_at_utc.isoformat(),
+            "next_24_hours": _rounded_summary(summary_24h),
+            "next_48_hours": _rounded_summary(summary_48h),
+            "next_intervals": [
+                {
+                    "start": item.period_start_local.isoformat(),
+                    "background_w": round(item.background_load_w, 1),
+                    "scheduled_w": round(item.scheduled_load_w, 1),
+                    "pv_potential_w": round(item.pv_power_w, 1),
+                    "net_before_control_w": round(item.net_power_before_control_w, 1),
+                }
+                for item in plan.intervals[:12]
+            ],
+            "last_update_utc": datetime.now(UTC).isoformat(),
+        }
+        await self._client.set_state(SHADOW_PLAN_STATUS_ENTITY, "ready", status_attributes)
+
+        energy_attributes = _energy_attributes("Energy Manager Shadow Plan Next 24 Hours Net Deficit")
+        energy_attributes.update(
+            {
+                "planner_version": PLANNER_VERSION,
+                "background_load_kwh": round(float(summary_24h["background_load_kwh"]), 3),
+                "scheduled_load_kwh": round(float(summary_24h["scheduled_load_kwh"]), 3),
+                "pv_potential_kwh": round(float(summary_24h["pv_potential_kwh"]), 3),
+                "net_surplus_kwh": round(float(summary_24h["net_surplus_kwh"]), 3),
+                "max_net_deficit_w": round(float(summary_24h["max_net_deficit_w"]), 1),
+                "meaning": "forecast deficit before ESS, EV or other flexible-load scheduling",
+            }
+        )
+        await self._client.set_state(
+            SHADOW_PLAN_NET_DEFICIT_ENTITY,
+            round(float(summary_24h["net_deficit_kwh"]), 3),
+            energy_attributes,
+        )
+
     async def cleanup_legacy_entities(self) -> None:
         """Remove diagnostics created by older Energy Manager releases."""
         for entity_id in LEGACY_ENTITIES:
@@ -644,6 +707,17 @@ def _group_energy_attributes(daily: PvDailyEnergy) -> dict[str, Any]:
         "rear_kwh": round(daily.rear_kwh, 3),
         "shed_kwh": round(daily.shed_kwh, 3),
     }
+
+
+
+def _rounded_summary(summary: dict[str, float | int | None]) -> dict[str, float | int | None]:
+    rounded: dict[str, float | int | None] = {}
+    for key, value in summary.items():
+        if isinstance(value, float):
+            rounded[key] = round(value, 3)
+        else:
+            rounded[key] = value
+    return rounded
 
 
 def _iso(value: datetime | None) -> str | None:

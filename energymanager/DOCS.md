@@ -1,6 +1,6 @@
 # Energy Manager
 
-Energy Manager is currently a read-only shadow-mode Home Assistant app. Version 0.9.3 adds robust state-aware historical backfill from the legacy Home Assistant InfluxDB database on top of the rolling background-demand predictor and InfluxDB 3 persistence.
+Energy Manager is currently a read-only shadow-mode Home Assistant app. It now combines the rolling PV and background-load forecasts in a first planner timeline while keeping all device control disabled.
 
 ## Configuration
 
@@ -132,6 +132,24 @@ in InfluxDB when enabled. If the database is disabled or unavailable, the existi
 This model intentionally predicts only the current generic background signal. As individually measured loads such as the
 heat pump are promoted to separate models later, they can be removed from the generic background signal without changing
 the planner-facing forecast concept.
+
+## Shadow planner
+
+Version 0.11.0 adds the first planner foundation without scheduling or controlling devices yet. It aligns the existing
+15-minute background-load forecast with the hourly PV-potential forecast on one 15-minute timeline and retains 48 hours
+internally. `scheduled_load_w` is present but remains zero until flexible tasks such as EV charging are introduced.
+
+The current plan reports the energy balance before ESS or flexible-load control: background demand, PV potential, net
+deficit and net surplus. Net surplus is deliberately not labelled grid export because the shed PV is DC-coupled and can
+be curtailed when storage and inverter paths are constrained. ESS capability/SoC scheduling is the next resource step.
+
+Home Assistant diagnostics:
+
+- `sensor.energy_manager_shadow_plan_status`
+- `sensor.energy_manager_shadow_plan_next_24_hours_net_deficit_energy`
+
+The status attributes include compact 24-hour and 48-hour summaries plus the next three hours of 15-minute intervals.
+The planner remains hard-coded shadow mode and cannot write to the ESS, EVSE or any other device.
 
 ## Background-load backtesting
 

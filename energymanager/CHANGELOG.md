@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.11.0
+
+- Adds the first read-only shadow planner foundation.
+- Aligns the rolling background-load forecast and PV-potential forecast onto one 15-minute timeline.
+- Keeps a 48-hour internal horizon and publishes compact 24/48-hour summaries plus the next three hours of intervals.
+- Reports background energy, PV potential, pre-control net deficit/surplus and peak net deficit.
+- Adds `sensor.energy_manager_shadow_plan_status` and
+  `sensor.energy_manager_shadow_plan_next_24_hours_net_deficit_energy`.
+- Leaves `scheduled_load_w` at zero for now so EV/laundry/task scheduling can be added without changing the plan shape.
+- Does not yet schedule the ESS or EV and does not claim grid export from DC-coupled shed surplus; surplus is reported as
+  available energy before storage/control.
+- No configuration schema changes and no device control.
+
 ## 0.10.2
 
 - Scores all candidate load models on the same common set of valid forecast intervals for each horizon.

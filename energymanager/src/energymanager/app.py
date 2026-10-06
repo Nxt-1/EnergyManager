@@ -19,6 +19,7 @@ from .power import PowerStateError
 
 if TYPE_CHECKING:
     from .load_service import BackgroundLoadService
+    from .planner_service import ShadowPlannerService
     from .pv_service import PvForecastService
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,11 +36,13 @@ class EnergyManagerApp:
         client: HomeAssistantClient,
         pv_forecast_service: PvForecastService | None = None,
         background_load_service: BackgroundLoadService | None = None,
+        shadow_planner_service: ShadowPlannerService | None = None,
     ) -> None:
         self._settings = settings
         self._client = client
         self._pv_forecast_service = pv_forecast_service
         self._background_load_service = background_load_service
+        self._shadow_planner_service = shadow_planner_service
         self._diagnostics = DiagnosticsPublisher(client)
         self._house_state = HouseState()
         self._specs = build_input_specs(settings)
@@ -210,6 +213,8 @@ class EnergyManagerApp:
         await self._diagnostics.publish_derived(self._house_state)
         if self._background_load_service is not None:
             await self._background_load_service.update_from_house_state(self._house_state)
+        if self._shadow_planner_service is not None:
+            await self._shadow_planner_service.update_from_house_state(self._house_state)
 
         status, error = self._current_health()
         health = "healthy" if status == "connected" else status

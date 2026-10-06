@@ -16,6 +16,7 @@ from .ha_client import HomeAssistantClient
 from .legacy_influx import LegacyInfluxBackfill, LegacyInfluxClient, LegacyInfluxError
 from .load_service import BackgroundLoadHistory, BackgroundLoadService
 from .open_meteo import OpenMeteoClient
+from .planner_service import ShadowPlannerService
 from .pv_service import PvForecastService
 
 
@@ -145,16 +146,24 @@ async def _run_app(
     if settings.pv.forecast_enabled:
         async with OpenMeteoClient() as meteo_client:
             pv_service = PvForecastService(client, meteo_client, store=store)
+            planner_service = ShadowPlannerService(client, load_service, pv_service)
             app = EnergyManagerApp(
                 settings,
                 client,
                 pv_forecast_service=pv_service,
                 background_load_service=load_service,
+                shadow_planner_service=planner_service,
             )
             await app.run(stop_event)
         return
 
-    app = EnergyManagerApp(settings, client, background_load_service=load_service)
+    planner_service = ShadowPlannerService(client, load_service, None)
+    app = EnergyManagerApp(
+        settings,
+        client,
+        background_load_service=load_service,
+        shadow_planner_service=planner_service,
+    )
     await app.run(stop_event)
 
 
