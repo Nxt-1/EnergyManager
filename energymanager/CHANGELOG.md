@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.10.1
+
+- Makes horizon energy accuracy the primary background-load backtest criterion instead of pointwise wattage MAE.
+- Adds mean absolute total-energy error, signed energy bias and integrated absolute timing mismatch in kWh.
+- Adds mean and p90 15-minute peak-load underprediction diagnostics for capacity-tariff risk.
+- Keeps wattage MAE, bias and p90 error as secondary shape diagnostics and reports the best power model separately.
+- Changes `sensor.energy_manager_background_load_backtest` to expose the current model's 24-hour total-energy MAE in kWh.
+- Stores the new runtime evaluation metrics in InfluxDB under the existing `background_load_backtest` measurement.
+- Leaves the production background-load predictor unchanged and does not add any compile-time household-specific corrections.
+- No configuration schema changes and no actuator/control changes.
+
 ## 0.10.0
 
 - Added a runtime rolling-origin backtest for the background-load predictor; no household-specific correction constants are compiled into the application.

@@ -328,18 +328,39 @@ class DiagnosticsPublisher:
                 if metric.horizon_hours != horizon:
                     continue
                 models[metric.model] = {
+                    "total_energy_mae_kwh": (
+                        None
+                        if metric.total_energy_mae_kwh is None
+                        else round(metric.total_energy_mae_kwh, 3)
+                    ),
+                    "energy_bias_kwh": (
+                        None if metric.energy_bias_kwh is None else round(metric.energy_bias_kwh, 3)
+                    ),
+                    "timing_mismatch_kwh": (
+                        None if metric.timing_mismatch_kwh is None else round(metric.timing_mismatch_kwh, 3)
+                    ),
+                    "peak_underprediction_w": (
+                        None
+                        if metric.peak_underprediction_w is None
+                        else round(metric.peak_underprediction_w, 1)
+                    ),
+                    "p90_peak_underprediction_w": (
+                        None
+                        if metric.p90_peak_underprediction_w is None
+                        else round(metric.p90_peak_underprediction_w, 1)
+                    ),
                     "mae_w": round(metric.mae_w, 1),
                     "bias_w": round(metric.bias_w, 1),
                     "p90_abs_error_w": round(metric.p90_abs_error_w, 1),
-                    "energy_mae_kwh": (
-                        None if metric.energy_mae_kwh is None else round(metric.energy_mae_kwh, 3)
-                    ),
                     "points": metric.points,
                     "issue_count": metric.issue_count,
                     "coverage": round(metric.coverage, 3),
+                    "issue_coverage": round(metric.issue_coverage, 3),
                 }
             horizons[f"{horizon}h"] = {
                 "best_model": result.best_by_horizon.get(horizon),
+                "best_model_basis": "total_energy_mae_kwh",
+                "best_power_model": result.best_power_by_horizon.get(horizon),
                 "models": models,
             }
 
@@ -371,9 +392,11 @@ class DiagnosticsPublisher:
             }
         )
         current_24h = result.metric("energy_manager", 24)
-        state: str | float = "unavailable" if current_24h is None else round(current_24h.mae_w, 1)
-        attributes["unit_of_measurement"] = "W"
-        attributes["state_class"] = "measurement"
+        state: str | float = "unavailable"
+        if current_24h is not None and current_24h.total_energy_mae_kwh is not None:
+            state = round(current_24h.total_energy_mae_kwh, 3)
+        attributes["primary_metric"] = "24h total-energy MAE"
+        attributes["unit_of_measurement"] = "kWh"
         await self._client.set_state(BACKGROUND_LOAD_BACKTEST_ENTITY, state, attributes)
 
     async def publish_pv_forecast_status(

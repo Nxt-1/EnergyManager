@@ -249,10 +249,18 @@ class BackgroundLoadService:
             current_1h = result.metric("energy_manager", 1)
             current_24h = result.metric("energy_manager", 24)
             _LOGGER.info(
-                "Background-load backtest updated: issues=%d, current MAE 1h=%.0f W, 24h=%.0f W, best 24h=%s",
+                "Background-load backtest updated: issues=%d, current energy MAE 1h=%.3f kWh, "
+                "24h=%.3f kWh, timing mismatch 24h=%.3f kWh, best 24h=%s",
                 result.issue_count,
-                current_1h.mae_w if current_1h is not None else 0.0,
-                current_24h.mae_w if current_24h is not None else 0.0,
+                current_1h.total_energy_mae_kwh
+                if current_1h is not None and current_1h.total_energy_mae_kwh is not None
+                else 0.0,
+                current_24h.total_energy_mae_kwh
+                if current_24h is not None and current_24h.total_energy_mae_kwh is not None
+                else 0.0,
+                current_24h.timing_mismatch_kwh
+                if current_24h is not None and current_24h.timing_mismatch_kwh is not None
+                else 0.0,
                 result.best_by_horizon.get(24, "n/a"),
             )
         except (InfluxDatabaseError, HomeAssistantError, OSError, ValueError) as exc:

@@ -415,11 +415,20 @@ class EnergyManagerStore:
                 f"points={metric.points}i,"
                 f"issue_count={metric.issue_count}i,"
                 f"coverage={metric.coverage:.6f},"
+                f"issue_coverage={metric.issue_coverage:.6f},"
                 f'evaluation_start_local="{_escape_string(result.evaluation_start_local.isoformat())}",'
                 f'evaluation_end_local="{_escape_string(result.evaluation_end_local.isoformat())}"'
             )
-            if metric.energy_mae_kwh is not None:
-                fields += f",energy_mae_kwh={metric.energy_mae_kwh:.6f}"
+            optional_fields = (
+                ("total_energy_mae_kwh", metric.total_energy_mae_kwh),
+                ("energy_bias_kwh", metric.energy_bias_kwh),
+                ("timing_mismatch_kwh", metric.timing_mismatch_kwh),
+                ("peak_underprediction_w", metric.peak_underprediction_w),
+                ("p90_peak_underprediction_w", metric.p90_peak_underprediction_w),
+            )
+            for field_name, value in optional_fields:
+                if value is not None:
+                    fields += f",{field_name}={value:.6f}"
             lines.append(f"background_load_backtest,{tags} {fields} {_timestamp_ns(result.generated_at_utc)}")
         await self._client.write_lines(lines)
 

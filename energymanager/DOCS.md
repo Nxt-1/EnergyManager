@@ -147,14 +147,22 @@ The current EnergyManager model is compared with three intentionally simple base
 - yesterday: the observed load from the same 15-minute slot one day earlier;
 - last week: the observed load from the same slot seven days earlier.
 
-Metrics are calculated for 1 h, 3 h, 6 h, 12 h and 24 h horizons: mean absolute error, signed bias, p90 absolute error,
-energy MAE and available-point coverage. The current EnergyManager model is also broken down by daypart and weekday/weekend
-so recurring failure modes can be identified before adding a new predictor feature or separating a load into its own model.
+Metrics are calculated for 1 h, 3 h, 6 h, 12 h and 24 h horizons. The primary comparison is mean absolute total-energy
+error in kWh: the absolute difference between predicted and observed energy over the horizon. The evaluator also reports
+signed energy bias, integrated absolute timing mismatch in kWh, and 15-minute peak-load underprediction. The latter compares
+the observed peak interval with the prediction for that same interval and is retained because peak timing can matter for the
+capacity tariff and ESS reserve decisions.
 
-`sensor.energy_manager_background_load_backtest` exposes the latest result. Its state is the current model's 24-hour-horizon
-MAE in watts; detailed candidate-model and contextual metrics are available as attributes. When InfluxDB persistence is
-enabled, each model/horizon summary is also written to `background_load_backtest`. The backtest refreshes at most once every
-24 hours and never changes the production forecast automatically.
+Pointwise wattage MAE, signed bias and p90 absolute error remain available as secondary shape diagnostics. The evaluator
+reports both the best energy model and the best power-shape model for each horizon. Available-point and valid-issue coverage
+remain visible because incomplete historical data can otherwise make one baseline look artificially better than another.
+The current EnergyManager model is also broken down by daypart and weekday/weekend to identify recurring failure modes.
+
+`sensor.energy_manager_background_load_backtest` exposes the latest result. Its state is the current model's 24-hour mean
+absolute total-energy error in kWh; detailed candidate-model and contextual metrics are available as attributes. When
+InfluxDB persistence is enabled, each model/horizon summary is also written to `background_load_backtest`. The backtest
+refreshes at most once every 24 hours and never changes the production forecast automatically. A true economic-regret metric
+in euros is intentionally deferred until the planner can replay tariff, battery, PV and peak-management decisions.
 
 The intended development loop is: inspect runtime backtest results, decide which general feature or separately-modelled load
 is justified, implement that runtime model behavior, then compare the new model against the same baselines.

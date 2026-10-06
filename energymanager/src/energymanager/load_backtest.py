@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from math import ceil
 from statistics import median
 
 from .load_forecast import (
@@ -14,7 +15,7 @@ from .load_forecast import (
     LoadSample,
 )
 
-BACKTEST_VERSION = "2026-10-05-evaluator-v1"
+BACKTEST_VERSION = "2026-10-05-evaluator-v2"
 HORIZON_HOURS = (1, 3, 6, 12, 24)
 MODEL_NAMES = ("energy_manager", "persistence", "yesterday", "last_week")
 _EVALUATION_DAYS = 21
@@ -29,18 +30,23 @@ class BacktestMetric:
 
     model: str
     horizon_hours: int
+    total_energy_mae_kwh: float | None
+    energy_bias_kwh: float | None
+    timing_mismatch_kwh: float | None
+    peak_underprediction_w: float | None
+    p90_peak_underprediction_w: float | None
     mae_w: float
     bias_w: float
     p90_abs_error_w: float
-    energy_mae_kwh: float | None
     points: int
     issue_count: int
     coverage: float
+    issue_coverage: float
 
 
 @dataclass(frozen=True, slots=True)
 class ErrorBreakdown:
-    """Current-model error summary for one contextual subset."""
+    """Current-model power-error summary for one contextual subset."""
 
     mae_w: float
     bias_w: float
@@ -58,6 +64,7 @@ class BackgroundLoadBacktest:
     issue_count: int
     metrics: tuple[BacktestMetric, ...]
     best_by_horizon: dict[int, str]
+    best_power_by_horizon: dict[int, str]
     daypart_breakdown: dict[str, ErrorBreakdown]
     daytype_breakdown: dict[str, ErrorBreakdown]
 
@@ -77,14 +84,26 @@ class BackgroundLoadBacktest:
 class _Accumulator:
     errors_w: list[float]
     energy_errors_kwh: list[float]
+    timing_mismatches_kwh: list[float]
+    peak_underpredictions_w: list[float]
     possible_points: int = 0
+    possible_issue_count: int = 0
     issue_count: int = 0
 
     def add_point(self, predicted_w: float, actual_w: float) -> None:
         self.errors_w.append(predicted_w - actual_w)
 
-    def add_energy_error(self, predicted_kwh: float, actual_kwh: float) -> None:
+    def add_issue(
+        self,
+        *,
+        predicted_kwh: float,
+        actual_kwh: float,
+        timing_mismatch_kwh: float,
+        peak_underprediction_w: float,
+    ) -> None:
         self.energy_errors_kwh.append(predicted_kwh - actual_kwh)
+        self.timing_mismatches_kwh.append(timing_mismatch_kwh)
+        self.peak_underpredictions_w.append(peak_underprediction_w)
         self.issue_count += 1
 
 
@@ -123,7 +142,7 @@ class BackgroundLoadBacktester:
             return None
 
         metrics: dict[tuple[str, int], _Accumulator] = {
-            (model, horizon): _Accumulator([], [])
+            (model, horizon): _Accumulator([], [], [], [])
             for model in MODEL_NAMES
             for horizon in HORIZON_HOURS
         }
@@ -166,8 +185,12 @@ class BackgroundLoadBacktester:
                 for model_name, model_predictions in predictions.items():
                     accumulator = metrics[(model_name, horizon)]
                     accumulator.possible_points += len(target_points)
+                    accumulator.possible_issue_count += 1
                     predicted_energy_wh = 0.0
                     actual_energy_wh = 0.0
+                    timing_mismatch_wh = 0.0
+                    actual_peak_w: float | None = None
+                    predicted_at_actual_peak_w: float | None = None
                     energy_points = 0
 
                     for point in target_points:
@@ -177,9 +200,15 @@ class BackgroundLoadBacktester:
                         if actual_w is None or predicted_w is None:
                             continue
                         accumulator.add_point(predicted_w, actual_w)
-                        predicted_energy_wh += predicted_w * FORECAST_INTERVAL_MINUTES / 60.0
-                        actual_energy_wh += actual_w * FORECAST_INTERVAL_MINUTES / 60.0
+                        interval_hours = FORECAST_INTERVAL_MINUTES / 60.0
+                        predicted_energy_wh += predicted_w * interval_hours
+                        actual_energy_wh += actual_w * interval_hours
+                        timing_mismatch_wh += abs(predicted_w - actual_w) * interval_hours
                         energy_points += 1
+
+                        if actual_peak_w is None or actual_w > actual_peak_w:
+                            actual_peak_w = actual_w
+                            predicted_at_actual_peak_w = predicted_w
 
                         if model_name == "energy_manager" and horizon == 24:
                             error = predicted_w - actual_w
@@ -187,11 +216,17 @@ class BackgroundLoadBacktester:
                             daytype_errors[_daytype(point.period_start_local)].append(error)
                             issue_used = True
 
-                    minimum_points = max(1, int(len(target_points) * _MIN_ENERGY_COVERAGE))
-                    if energy_points >= minimum_points:
-                        accumulator.add_energy_error(
-                            predicted_energy_wh / 1000.0,
-                            actual_energy_wh / 1000.0,
+                    minimum_points = max(1, ceil(len(target_points) * _MIN_ENERGY_COVERAGE))
+                    if (
+                        energy_points >= minimum_points
+                        and actual_peak_w is not None
+                        and predicted_at_actual_peak_w is not None
+                    ):
+                        accumulator.add_issue(
+                            predicted_kwh=predicted_energy_wh / 1000.0,
+                            actual_kwh=actual_energy_wh / 1000.0,
+                            timing_mismatch_kwh=timing_mismatch_wh / 1000.0,
+                            peak_underprediction_w=max(0.0, actual_peak_w - predicted_at_actual_peak_w),
                         )
             if issue_used:
                 evaluated_issues += 1
@@ -205,6 +240,7 @@ class BackgroundLoadBacktester:
             return None
 
         best_by_horizon: dict[int, str] = {}
+        best_power_by_horizon: dict[int, str] = {}
         for horizon in HORIZON_HOURS:
             candidates = [
                 metric
@@ -213,8 +249,18 @@ class BackgroundLoadBacktester:
                 and metric.coverage >= 0.50
                 and metric.points >= horizon * 4
             ]
+            energy_candidates = [
+                metric
+                for metric in candidates
+                if metric.total_energy_mae_kwh is not None and metric.issue_count > 0
+            ]
+            if energy_candidates:
+                best_by_horizon[horizon] = min(
+                    energy_candidates,
+                    key=lambda item: item.total_energy_mae_kwh or 0.0,
+                ).model
             if candidates:
-                best_by_horizon[horizon] = min(candidates, key=lambda item: item.mae_w).model
+                best_power_by_horizon[horizon] = min(candidates, key=lambda item: item.mae_w).model
 
         return BackgroundLoadBacktest(
             generated_at_utc=generated_at_utc or datetime.now(UTC),
@@ -223,6 +269,7 @@ class BackgroundLoadBacktester:
             issue_count=evaluated_issues,
             metrics=metric_rows,
             best_by_horizon=best_by_horizon,
+            best_power_by_horizon=best_power_by_horizon,
             daypart_breakdown={
                 name: _breakdown(errors)
                 for name, errors in sorted(daypart_errors.items())
@@ -288,18 +335,41 @@ def _recent_baseline(samples: tuple[LoadSample, ...]) -> float:
 def _metric_from_accumulator(model: str, horizon: int, accumulator: _Accumulator) -> BacktestMetric:
     errors = accumulator.errors_w
     absolute = [abs(error) for error in errors]
-    energy_absolute = [abs(error) for error in accumulator.energy_errors_kwh]
+    energy_errors = accumulator.energy_errors_kwh
+    energy_absolute = [abs(error) for error in energy_errors]
     coverage = len(errors) / accumulator.possible_points if accumulator.possible_points else 0.0
+    issue_coverage = (
+        accumulator.issue_count / accumulator.possible_issue_count
+        if accumulator.possible_issue_count
+        else 0.0
+    )
     return BacktestMetric(
         model=model,
         horizon_hours=horizon,
+        total_energy_mae_kwh=(sum(energy_absolute) / len(energy_absolute)) if energy_absolute else None,
+        energy_bias_kwh=(sum(energy_errors) / len(energy_errors)) if energy_errors else None,
+        timing_mismatch_kwh=(
+            sum(accumulator.timing_mismatches_kwh) / len(accumulator.timing_mismatches_kwh)
+            if accumulator.timing_mismatches_kwh
+            else None
+        ),
+        peak_underprediction_w=(
+            sum(accumulator.peak_underpredictions_w) / len(accumulator.peak_underpredictions_w)
+            if accumulator.peak_underpredictions_w
+            else None
+        ),
+        p90_peak_underprediction_w=(
+            _percentile(accumulator.peak_underpredictions_w, 0.90)
+            if accumulator.peak_underpredictions_w
+            else None
+        ),
         mae_w=sum(absolute) / len(absolute),
         bias_w=sum(errors) / len(errors),
         p90_abs_error_w=_percentile(absolute, 0.90),
-        energy_mae_kwh=(sum(energy_absolute) / len(energy_absolute)) if energy_absolute else None,
         points=len(errors),
         issue_count=accumulator.issue_count,
         coverage=coverage,
+        issue_coverage=issue_coverage,
     )
 
 
