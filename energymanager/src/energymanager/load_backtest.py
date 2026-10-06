@@ -15,7 +15,7 @@ from .load_forecast import (
     LoadSample,
 )
 
-BACKTEST_VERSION = "2026-10-05-evaluator-v2"
+BACKTEST_VERSION = "2026-10-06-evaluator-v3"
 HORIZON_HOURS = (1, 3, 6, 12, 24)
 MODEL_NAMES = ("energy_manager", "persistence", "yesterday", "last_week")
 _EVALUATION_DAYS = 21
@@ -87,7 +87,9 @@ class _Accumulator:
     timing_mismatches_kwh: list[float]
     peak_underpredictions_w: list[float]
     possible_points: int = 0
+    available_points: int = 0
     possible_issue_count: int = 0
+    available_issue_count: int = 0
     issue_count: int = 0
 
     def add_point(self, predicted_w: float, actual_w: float) -> None:
@@ -181,53 +183,71 @@ class BackgroundLoadBacktester:
                     "yesterday": _offset_predictions(target_points, actual, days=1),
                     "last_week": _offset_predictions(target_points, actual, days=7),
                 }
+                minimum_points = max(1, ceil(len(target_points) * _MIN_ENERGY_COVERAGE))
 
-                for model_name, model_predictions in predictions.items():
+                # Availability remains model-specific, but accuracy is scored only on
+                # intervals shared by every model so model rankings are apples-to-apples.
+                available_counts = {model_name: 0 for model_name in MODEL_NAMES}
+                common_rows: list[tuple[datetime, float, dict[str, float]]] = []
+
+                for point in target_points:
+                    key = _bucket_key(point.period_start_local)
+                    actual_w = actual.get(key)
+                    if actual_w is None:
+                        continue
+
+                    row_predictions: dict[str, float] = {}
+                    for model_name, model_predictions in predictions.items():
+                        predicted_w = model_predictions.get(key)
+                        if predicted_w is None:
+                            continue
+                        available_counts[model_name] += 1
+                        row_predictions[model_name] = predicted_w
+
+                    if len(row_predictions) == len(MODEL_NAMES):
+                        common_rows.append((point.period_start_local, actual_w, row_predictions))
+
+                    if horizon == 24 and "energy_manager" in row_predictions:
+                        error = row_predictions["energy_manager"] - actual_w
+                        daypart_errors[_daypart(point.period_start_local)].append(error)
+                        daytype_errors[_daytype(point.period_start_local)].append(error)
+                        issue_used = True
+
+                for model_name in MODEL_NAMES:
                     accumulator = metrics[(model_name, horizon)]
                     accumulator.possible_points += len(target_points)
+                    accumulator.available_points += available_counts[model_name]
                     accumulator.possible_issue_count += 1
+                    if available_counts[model_name] >= minimum_points:
+                        accumulator.available_issue_count += 1
+
+                if len(common_rows) < minimum_points:
+                    continue
+
+                interval_hours = FORECAST_INTERVAL_MINUTES / 60.0
+                actual_peak_index = max(range(len(common_rows)), key=lambda index: common_rows[index][1])
+
+                for model_name in MODEL_NAMES:
+                    accumulator = metrics[(model_name, horizon)]
                     predicted_energy_wh = 0.0
                     actual_energy_wh = 0.0
                     timing_mismatch_wh = 0.0
-                    actual_peak_w: float | None = None
-                    predicted_at_actual_peak_w: float | None = None
-                    energy_points = 0
 
-                    for point in target_points:
-                        key = _bucket_key(point.period_start_local)
-                        actual_w = actual.get(key)
-                        predicted_w = model_predictions.get(key)
-                        if actual_w is None or predicted_w is None:
-                            continue
+                    for _, actual_w, row_predictions in common_rows:
+                        predicted_w = row_predictions[model_name]
                         accumulator.add_point(predicted_w, actual_w)
-                        interval_hours = FORECAST_INTERVAL_MINUTES / 60.0
                         predicted_energy_wh += predicted_w * interval_hours
                         actual_energy_wh += actual_w * interval_hours
                         timing_mismatch_wh += abs(predicted_w - actual_w) * interval_hours
-                        energy_points += 1
 
-                        if actual_peak_w is None or actual_w > actual_peak_w:
-                            actual_peak_w = actual_w
-                            predicted_at_actual_peak_w = predicted_w
-
-                        if model_name == "energy_manager" and horizon == 24:
-                            error = predicted_w - actual_w
-                            daypart_errors[_daypart(point.period_start_local)].append(error)
-                            daytype_errors[_daytype(point.period_start_local)].append(error)
-                            issue_used = True
-
-                    minimum_points = max(1, ceil(len(target_points) * _MIN_ENERGY_COVERAGE))
-                    if (
-                        energy_points >= minimum_points
-                        and actual_peak_w is not None
-                        and predicted_at_actual_peak_w is not None
-                    ):
-                        accumulator.add_issue(
-                            predicted_kwh=predicted_energy_wh / 1000.0,
-                            actual_kwh=actual_energy_wh / 1000.0,
-                            timing_mismatch_kwh=timing_mismatch_wh / 1000.0,
-                            peak_underprediction_w=max(0.0, actual_peak_w - predicted_at_actual_peak_w),
-                        )
+                    _, actual_peak_w, peak_predictions = common_rows[actual_peak_index]
+                    predicted_at_actual_peak_w = peak_predictions[model_name]
+                    accumulator.add_issue(
+                        predicted_kwh=predicted_energy_wh / 1000.0,
+                        actual_kwh=actual_energy_wh / 1000.0,
+                        timing_mismatch_kwh=timing_mismatch_wh / 1000.0,
+                        peak_underprediction_w=max(0.0, actual_peak_w - predicted_at_actual_peak_w),
+                    )
             if issue_used:
                 evaluated_issues += 1
 
@@ -337,9 +357,13 @@ def _metric_from_accumulator(model: str, horizon: int, accumulator: _Accumulator
     absolute = [abs(error) for error in errors]
     energy_errors = accumulator.energy_errors_kwh
     energy_absolute = [abs(error) for error in energy_errors]
-    coverage = len(errors) / accumulator.possible_points if accumulator.possible_points else 0.0
+    coverage = (
+        accumulator.available_points / accumulator.possible_points
+        if accumulator.possible_points
+        else 0.0
+    )
     issue_coverage = (
-        accumulator.issue_count / accumulator.possible_issue_count
+        accumulator.available_issue_count / accumulator.possible_issue_count
         if accumulator.possible_issue_count
         else 0.0
     )

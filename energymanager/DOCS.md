@@ -246,3 +246,8 @@ rows, skipped rows and the current overlapping source range. Backfill errors are
 authentication enabled, configure a dedicated read-only user for `home_assistant`; EnergyManager sends those credentials with
 HTTP Basic authentication.
 
+
+
+### Backtest comparison fairness
+
+Load-model accuracy is scored only on forecast intervals shared by all candidate models. Coverage remains a separate availability diagnostic.

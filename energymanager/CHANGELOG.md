@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.2
+
+- Scores all candidate load models on the same common set of valid forecast intervals for each horizon.
+- Keeps one accuracy score set; no duplicate native/common model scores are exposed.
+- Keeps `coverage` and `issue_coverage` as separate availability diagnostics for each model.
+- Leaves the production background-load predictor unchanged.
+- No configuration schema changes and no actuator/control changes.
+
 ## 0.10.1
 
 - Makes horizon energy accuracy the primary background-load backtest criterion instead of pointwise wattage MAE.

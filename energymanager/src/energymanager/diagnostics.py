@@ -370,6 +370,7 @@ class DiagnosticsPublisher:
                 "evaluation_start_local": result.evaluation_start_local.isoformat(),
                 "evaluation_end_local": result.evaluation_end_local.isoformat(),
                 "issue_count": result.issue_count,
+                "comparison_basis": "common_valid_intervals",
                 "horizons": horizons,
                 "current_model_dayparts": {
                     name: {
