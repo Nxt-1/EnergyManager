@@ -2,14 +2,23 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from energymanager.config import EconomicsSettings
-from energymanager.economics import EconomicsService, TariffProfileHistory
+from energymanager.economics import (
+    CapacityPeakState,
+    CapacityPeakTracker,
+    EconomicsService,
+    TariffProfile,
+    TariffProfileHistory,
+    evaluate_plan_cost,
+)
 
 
 class FakeHomeAssistantClient:
@@ -136,16 +145,6 @@ def test_economics_service_publishes_versioned_profile(tmp_path: Path) -> None:
     assert state["state"] == "ready"
     assert state["attributes"]["profile_id"] == profile.profile_id
     assert state["attributes"]["history_backend"] == "local_jsonl"
-
-from dataclasses import dataclass
-from zoneinfo import ZoneInfo
-
-from energymanager.economics import (
-    CapacityPeakState,
-    CapacityPeakTracker,
-    TariffProfile,
-    evaluate_plan_cost,
-)
 
 _LOCAL = ZoneInfo("Europe/Brussels")
 

@@ -1,4 +1,8 @@
 # Changelog
+## 0.18.1
+- Fixes CI lint failures in the v0.18 economic-accounting test suite by keeping module imports at the top of the test module.
+- No runtime, planning, configuration, or hardware-control behavior changes.
+
 ## 0.18.0
 - Adds read-only economic accounting for the existing shadow plan without changing task or ESS scheduling behavior.
 - Tracks the current billing month's 15-minute grid-import peak using legacy five-minute history as an estimate and
