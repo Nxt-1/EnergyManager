@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.14.0
+
+- Adds the first generic actuator power-command contract while keeping all hardware writes disabled.
+- Planner requests use actuator IDs plus requested power; actuator-specific code translates them into feasible dry-run commands.
+- ESS dry-run commands enforce configured charge/discharge power limits and SoC boundaries.
+- EV dry-run commands translate requested charging power into feasible whole-ampere 1-phase/3-phase charger states and never exceed the requested power.
+- Adds `sensor.energy_manager_actuator_command_status` with requested versus accepted power, limiting reason and EV phase/current details.
+- The first shadow-plan interval now passes its ESS request through the actuator command translator as an end-to-end dry-run plumbing check.
+- `sensor.energy_manager_actuator_status` now documents the supported command interface for each actuator.
+- No Home Assistant service calls or device writes are performed; `control_enabled` and `hardware_writes` remain false.
+- No configuration schema changes.
+
 ## 0.13.0
 
 - Adds the first generic read-only actuator registry for planner-facing device capabilities.

@@ -6,7 +6,14 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from . import __version__
-from .actuators import ACTUATOR_VERSION, ActuatorSnapshot, EssActuatorSnapshot, EvActuatorSnapshot
+from .actuators import (
+    ACTUATOR_COMMAND_VERSION,
+    ACTUATOR_VERSION,
+    ActuatorCommandResult,
+    ActuatorSnapshot,
+    EssActuatorSnapshot,
+    EvActuatorSnapshot,
+)
 from .ha_client import HomeAssistantClient
 from .house_state import HouseState, InputReading
 from .load_backtest import BACKTEST_VERSION, BackgroundLoadBacktest
@@ -46,6 +53,7 @@ SHADOW_PLAN_STATUS_ENTITY = "sensor.energy_manager_shadow_plan_status"
 SHADOW_PLAN_NET_DEFICIT_ENTITY = "sensor.energy_manager_shadow_plan_next_24_hours_net_deficit_energy"
 SHADOW_PLAN_GRID_IMPORT_ENTITY = "sensor.energy_manager_shadow_plan_next_24_hours_grid_import_energy"
 ACTUATOR_STATUS_ENTITY = "sensor.energy_manager_actuator_status"
+ACTUATOR_COMMAND_STATUS_ENTITY = "sensor.energy_manager_actuator_command_status"
 
 LEGACY_ENTITIES = (
     "sensor.energy_manager_observed_grid_power",
@@ -465,6 +473,31 @@ class DiagnosticsPublisher:
         state = "ready" if configured else "not_configured"
         await self._client.set_state(ACTUATOR_STATUS_ENTITY, state, attributes)
 
+    async def publish_actuator_command_status(
+        self,
+        results: tuple[ActuatorCommandResult, ...],
+    ) -> None:
+        """Publish planner-requested actuator commands after dry-run device translation."""
+        attributes: dict[str, Any] = {
+            "friendly_name": "Energy Manager Actuator Command Status",
+            "command_version": ACTUATOR_COMMAND_VERSION,
+            "shadow_mode": True,
+            "control_enabled": False,
+            "hardware_writes": False,
+            "command_count": len(results),
+            "commands": [_actuator_command_attributes(item) for item in results],
+            "last_update_utc": datetime.now(UTC).isoformat(),
+        }
+        if not results:
+            state = "idle"
+        elif any(item.status == "rejected" for item in results):
+            state = "rejected"
+        elif any(item.status == "limited" for item in results):
+            state = "limited"
+        else:
+            state = "accepted"
+        await self._client.set_state(ACTUATOR_COMMAND_STATUS_ENTITY, state, attributes)
+
     async def publish_shadow_plan_status(self, status: str, *, error: str | None = None) -> None:
         """Publish planner readiness without implying that any control is active."""
         attributes: dict[str, Any] = {
@@ -812,6 +845,11 @@ def _actuator_attributes(item: ActuatorSnapshot) -> dict[str, Any]:
                 "max_soc_percent": round(item.capabilities.max_soc_percent, 2),
                 "max_charge_power_w": round(item.capabilities.max_charge_power_w, 1),
                 "max_discharge_power_w": round(item.capabilities.max_discharge_power_w, 1),
+                "command_interface": {
+                    "command": "target_ac_power_w",
+                    "positive_means": "supply_ac_bus",
+                    "negative_means": "absorb_from_ac_bus",
+                },
             }
         )
         return base
@@ -838,9 +876,31 @@ def _actuator_attributes(item: ActuatorSnapshot) -> dict[str, Any]:
                 "maximum_three_phase_power_w": _round_optional(
                     item.capabilities.maximum_three_phase_power_w, 1
                 ),
+                "command_interface": {
+                    "command": "target_charge_power_w",
+                    "current_step_a": 1,
+                    "selection_policy": "highest_feasible_power_not_exceeding_request",
+                },
             }
         )
     return base
+
+
+def _actuator_command_attributes(item: ActuatorCommandResult) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "id": item.actuator_id,
+        "kind": item.kind,
+        "requested_power_w": round(item.requested_power_w, 1),
+        "accepted_power_w": round(item.accepted_power_w, 1),
+        "status": item.status,
+        "limited": item.limited,
+        "reason": item.reason,
+    }
+    if item.phase_count is not None:
+        result["phase_count"] = item.phase_count
+    if item.current_a is not None:
+        result["current_a"] = round(item.current_a, 2)
+    return result
 
 
 def _round_optional(value: float | None, digits: int) -> float | None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 
-from .actuators import ActuatorRegistry
+from .actuators import ActuatorCommandResult, ActuatorPowerRequest, ActuatorRegistry
 from .diagnostics import DiagnosticsPublisher
 from .house_state import HouseState
 from .load_service import BackgroundLoadService
@@ -73,13 +73,17 @@ class ShadowPlannerService:
         self._last_plan_at_utc = now
         await self._diagnostics.publish_shadow_plan(plan)
 
+        requests = _next_interval_requests(plan)
+        command_results = self._actuator_registry.evaluate_commands(requests, house_state)
+        await self._diagnostics.publish_actuator_command_status(command_results)
+
         summary = plan.summary(24)
         actuator_status = ", ".join(f"{item.actuator_id}:{item.status}" for item in actuators)
         if plan.ess_projection_status == "projected":
             _LOGGER.info(
                 "Shadow plan updated: next 24 h background %.2f kWh, PV potential %.2f kWh, "
                 "raw deficit %.2f kWh, projected grid import %.2f kWh, ESS SoC %.1f -> %.1f%%, "
-                "curtailed DC PV %.2f kWh, actuators [%s]",
+                "curtailed DC PV %.2f kWh, actuators [%s], dry-run commands [%s]",
                 summary["background_load_kwh"],
                 summary["pv_potential_kwh"],
                 summary["net_deficit_kwh"],
@@ -88,16 +92,38 @@ class ShadowPlannerService:
                 summary["end_soc_percent"],
                 summary["curtailed_dc_pv_kwh"],
                 actuator_status,
+                _command_log(command_results),
             )
             return
 
         _LOGGER.info(
             "Shadow plan updated: next 24 h background %.2f kWh, PV potential %.2f kWh, "
-            "net deficit %.2f kWh, net surplus %.2f kWh, ESS projection %s, actuators [%s]",
+            "net deficit %.2f kWh, net surplus %.2f kWh, ESS projection %s, actuators [%s], "
+            "dry-run commands [%s]",
             summary["background_load_kwh"],
             summary["pv_potential_kwh"],
             summary["net_deficit_kwh"],
             summary["net_surplus_kwh"],
             plan.ess_projection_status,
             actuator_status,
+            _command_log(command_results),
         )
+
+
+def _next_interval_requests(plan: ShadowPlan) -> tuple[ActuatorPowerRequest, ...]:
+    """Convert the next planner interval into generic actuator requests for dry-run translation."""
+    if not plan.intervals:
+        return ()
+    next_interval = plan.intervals[0]
+    if next_interval.ess_ac_power_w is None:
+        return ()
+    return (ActuatorPowerRequest(actuator_id="ess", requested_power_w=next_interval.ess_ac_power_w),)
+
+
+def _command_log(results: tuple[ActuatorCommandResult, ...]) -> str:
+    if not results:
+        return "none"
+    return ", ".join(
+        f"{item.actuator_id}:{item.requested_power_w:.0f}->{item.accepted_power_w:.0f}W/{item.status}"
+        for item in results
+    )

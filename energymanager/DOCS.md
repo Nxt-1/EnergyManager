@@ -155,9 +155,17 @@ The EV capability defaults are 6-16 A, 230 V and support for both 1-phase and 3-
 configuration, not planner rules, and can be changed without recompiling the application. The planner does not yet create an
 EV energy task or choose charging intervals.
 
-`sensor.energy_manager_actuator_status` exposes the current catalog and whether each actuator is planning-ready. All
-actuators remain hard-coded read-only in v0.13; `control_enabled` is false and no Home Assistant service/entity writes are
-implemented.
+`sensor.energy_manager_actuator_status` exposes the current catalog and whether each actuator is planning-ready.
+
+Version 0.14 adds a command contract on top of that catalog. The planner requests power from an actuator by ID; the
+actuator translates that request into a device-feasible dry-run result. ESS commands enforce configured charge/discharge
+power and SoC boundaries. EV commands map requested charging power to whole-ampere 1-phase/3-phase operating points,
+choosing the highest feasible point that does not exceed the request.
+
+`sensor.energy_manager_actuator_command_status` exposes requested and accepted dry-run commands. The current shadow
+planner sends the next ESS interval through this interface to verify the end-to-end command path. EV command translation
+is implemented and tested, but the planner does not request EV charging until an EV task exists. `control_enabled` and
+`hardware_writes` remain false: v0.14 cannot change Victron or go-e state.
 
 ## Shadow planner
 
