@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 from .actuators import ActuatorCommandResult, ActuatorPowerRequest, ActuatorRegistry
 from .diagnostics import DiagnosticsPublisher
+from .economics import EconomicsService, PlanCostEvaluation
 from .house_state import HouseState
 from .load_service import BackgroundLoadService
 from .planner import ShadowPlan, ShadowPlanner
@@ -28,6 +29,7 @@ class ShadowPlannerService:
         *,
         actuator_registry: ActuatorRegistry,
         task_registry: TaskRegistry,
+        economics_service: EconomicsService | None = None,
         planner: ShadowPlanner | None = None,
     ) -> None:
         self._diagnostics = DiagnosticsPublisher(ha_client)
@@ -36,6 +38,7 @@ class ShadowPlannerService:
         self._planner = planner or ShadowPlanner()
         self._actuator_registry = actuator_registry
         self._task_registry = task_registry
+        self._economics_service = economics_service
         self._plan: ShadowPlan | None = None
         self._last_plan_at_utc: datetime | None = None
 
@@ -49,25 +52,28 @@ class ShadowPlannerService:
         *,
         now_utc: datetime | None = None,
     ) -> None:
-        """Refresh the read-only plan from current forecasts and actuator snapshots."""
+        """Refresh capacity accounting and, at most once per minute, the shadow plan."""
         now = (now_utc or datetime.now(UTC)).astimezone(UTC)
+        load_forecast = self._load_service.forecast
+        local_tz = None
+        if load_forecast is not None and load_forecast.points:
+            local_tz = load_forecast.points[0].period_start_local.tzinfo
+        if local_tz is not None and self._economics_service is not None:
+            await self._economics_service.observe_house_state(house_state, now_utc=now, local_tz=local_tz)
+
         if self._last_plan_at_utc is not None and now - self._last_plan_at_utc < _REFRESH_INTERVAL:
             return
         actuators = self._actuator_registry.snapshots(house_state)
         await self._diagnostics.publish_actuator_status(actuators)
-
-        load_forecast = self._load_service.forecast
         pv_forecast = self._pv_service.forecast if self._pv_service is not None else None
         if load_forecast is None:
             await self._diagnostics.publish_shadow_plan_status("waiting_for_load_forecast")
             return
-        local_tz = load_forecast.points[0].period_start_local.tzinfo if load_forecast.points else None
         if local_tz is None:
             local_tz = now.astimezone().tzinfo
         assert local_tz is not None
         tasks = self._task_registry.snapshots(actuators, now_utc=now, local_tz=local_tz)
         await self._diagnostics.publish_task_status(tasks)
-
         if pv_forecast is None:
             await self._diagnostics.publish_shadow_plan_status("waiting_for_pv_forecast")
             return
@@ -81,17 +87,21 @@ class ShadowPlannerService:
         self._plan = plan
         self._last_plan_at_utc = now
         await self._diagnostics.publish_shadow_plan(plan)
+        cost_evaluation = None
+        if self._economics_service is not None:
+            cost_evaluation = await self._economics_service.publish_plan_cost(plan, local_tz=local_tz)
         requests = _next_interval_requests(plan)
         command_results = self._actuator_registry.evaluate_commands(requests, house_state)
         await self._diagnostics.publish_actuator_command_status(command_results)
         summary = plan.summary(24)
         actuator_status = ", ".join(f"{item.actuator_id}:{item.status}" for item in actuators)
         task_status = ", ".join(f"{item.task_id}:{item.status}" for item in tasks)
+        cost_status = _cost_log(cost_evaluation)
         if plan.ess_projection_status == "projected":
             _LOGGER.info(
                 "Shadow plan updated: next 24 h background %.2f kWh, scheduled %.2f kWh, PV potential %.2f kWh, "
                 "pre-control deficit %.2f kWh, projected grid import %.2f kWh, ESS SoC %.1f -> %.1f%%, "
-                "curtailed DC PV %.2f kWh, actuators [%s], tasks [%s], dry-run commands [%s]",
+                "curtailed DC PV %.2f kWh, economics %s, actuators [%s], tasks [%s], dry-run commands [%s]",
                 summary["background_load_kwh"],
                 summary["scheduled_load_kwh"],
                 summary["pv_potential_kwh"],
@@ -100,6 +110,7 @@ class ShadowPlannerService:
                 plan.ess_initial_soc_percent,
                 summary["end_soc_percent"],
                 summary["curtailed_dc_pv_kwh"],
+                cost_status,
                 actuator_status,
                 task_status,
                 _command_log(command_results),
@@ -107,7 +118,7 @@ class ShadowPlannerService:
             return
         _LOGGER.info(
             "Shadow plan updated: next 24 h background %.2f kWh, scheduled %.2f kWh, PV potential %.2f kWh, "
-            "net deficit %.2f kWh, net surplus %.2f kWh, ESS projection %s, actuators [%s], "
+            "net deficit %.2f kWh, net surplus %.2f kWh, ESS projection %s, economics %s, actuators [%s], "
             "tasks [%s], dry-run commands [%s]",
             summary["background_load_kwh"],
             summary["scheduled_load_kwh"],
@@ -115,6 +126,7 @@ class ShadowPlannerService:
             summary["net_deficit_kwh"],
             summary["net_surplus_kwh"],
             plan.ess_projection_status,
+            cost_status,
             actuator_status,
             task_status,
             _command_log(command_results),
@@ -129,6 +141,14 @@ def _next_interval_requests(plan: ShadowPlan) -> tuple[ActuatorPowerRequest, ...
     if next_interval.ess_ac_power_w is None:
         return ()
     return (ActuatorPowerRequest(actuator_id="ess", requested_power_w=next_interval.ess_ac_power_w),)
+
+
+def _cost_log(evaluation: PlanCostEvaluation | None) -> str:
+    if evaluation is None:
+        return "unavailable"
+    if evaluation.total_marginal_cost_eur is None:
+        return f"energy-only EUR {evaluation.net_energy_cost_eur:.2f}"
+    return f"marginal EUR {evaluation.total_marginal_cost_eur:.2f}"
 
 
 def _command_log(results: tuple[ActuatorCommandResult, ...]) -> str:

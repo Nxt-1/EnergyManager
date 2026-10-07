@@ -62,8 +62,20 @@ async def async_main() -> int:
         else:
             diagnostics = DiagnosticsPublisher(client)
             await diagnostics.publish_database_status("disabled", database=settings.database.database)
-            await EconomicsService(settings.economics, client).initialize()
-            await _run_app(settings, client, stop_event, store=None, history=None)
+            economics_service = EconomicsService(
+                settings.economics,
+                client,
+                grid_import_entity_id=settings.grid.import_power_entity,
+            )
+            await economics_service.initialize()
+            await _run_app(
+                settings,
+                client,
+                stop_event,
+                store=None,
+                history=None,
+                economics_service=economics_service,
+            )
     logger.info("Energy Manager stopped")
     return 0
 
@@ -93,8 +105,20 @@ async def _run_with_database(
             url=settings.database.url,
             error=str(exc),
         )
-        await EconomicsService(settings.economics, client).initialize()
-        await _run_app(settings, client, stop_event, store=None, history=None)
+        economics_service = EconomicsService(
+            settings.economics,
+            client,
+            grid_import_entity_id=settings.grid.import_power_entity,
+        )
+        await economics_service.initialize()
+        await _run_app(
+            settings,
+            client,
+            stop_event,
+            store=None,
+            history=None,
+            economics_service=economics_service,
+        )
         return
     except LegacyInfluxError as exc:
         backfill_error = str(exc)
@@ -130,9 +154,22 @@ async def _run_with_database(
         ),
         legacy_backfill_error=backfill_error,
     )
-    await EconomicsService(settings.economics, client, influx_client=database_client).initialize()
+    economics_service = EconomicsService(
+        settings.economics,
+        client,
+        grid_import_entity_id=settings.grid.import_power_entity,
+        influx_client=database_client,
+    )
+    await economics_service.initialize()
     history = BackgroundLoadHistory(path=None, samples=samples)
-    await _run_app(settings, client, stop_event, store=store, history=history)
+    await _run_app(
+        settings,
+        client,
+        stop_event,
+        store=store,
+        history=history,
+        economics_service=economics_service,
+    )
 
 
 async def _run_app(
@@ -142,6 +179,7 @@ async def _run_app(
     *,
     store: EnergyManagerStore | None,
     history: BackgroundLoadHistory | None,
+    economics_service: EconomicsService,
 ) -> None:
     load_service = BackgroundLoadService(client, history=history, store=store)
     if settings.pv.forecast_enabled:
@@ -153,6 +191,7 @@ async def _run_app(
                 pv_service,
                 actuator_registry=ActuatorRegistry(settings),
                 task_registry=TaskRegistry(settings.ev),
+                economics_service=economics_service,
             )
             app = EnergyManagerApp(
                 settings,
@@ -169,6 +208,7 @@ async def _run_app(
         None,
         actuator_registry=ActuatorRegistry(settings),
         task_registry=TaskRegistry(settings.ev),
+        economics_service=economics_service,
     )
     app = EnergyManagerApp(
         settings,

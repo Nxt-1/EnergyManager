@@ -1,4 +1,17 @@
 # Changelog
+## 0.18.0
+- Adds read-only economic accounting for the existing shadow plan without changing task or ESS scheduling behavior.
+- Tracks the current billing month's 15-minute grid-import peak using legacy five-minute history as an estimate and
+  higher-resolution live observations for newly completed quarter-hour windows.
+- Persists completed live capacity windows in InfluxDB so later restarts can retain the higher-resolution result.
+- Adds `sensor.energy_manager_capacity_tariff_status` with observed peak, billing floor, peak source and history quality.
+- Adds `sensor.energy_manager_plan_cost_status` with projected import cost, export revenue and incremental capacity-tariff
+  exposure for the next 24 and 48 hours.
+- Capacity cost is evaluated as the incremental cost above the already-incurred monthly peak/floor, not as a forced peak
+  minimization priority.
+- Marks plan economics as accounting-only and not yet optimizer-ready because terminal ESS energy value is not modelled.
+- No configuration schema changes and no hardware writes. Shadow mode remains mandatory.
+
 ## 0.17.1
 - Adds an explicit `valid_from_utc` setting to tariff profiles so historical economics use the tariff's real effective date
   instead of merely the time Energy Manager first observed the configuration.
