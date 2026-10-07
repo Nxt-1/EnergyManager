@@ -64,19 +64,20 @@ class TariffProfileHistory:
         if not self._settings.configured:
             return None
         observed = (now_utc or datetime.now(UTC)).astimezone(UTC)
+        valid_from = self._settings.valid_from_utc or observed
         profile_id = _profile_id(self._settings)
         if self._influx_client is not None:
             try:
                 latest = await self._latest_influx_profile()
                 if latest is not None and latest.profile_id == profile_id:
                     return latest
-                profile = _profile_from_settings(self._settings, profile_id, observed)
+                profile = _profile_from_settings(self._settings, profile_id, valid_from)
                 await self._write_influx_profile(profile)
                 return profile
             except Exception as exc:  # noqa: BLE001 - economics history must not stop the controller.
                 _LOGGER.warning("Tariff history InfluxDB persistence failed; using local fallback: %s", exc)
                 self.backend = "local_jsonl"
-        return self._activate_local(profile_id, observed)
+        return self._activate_local(profile_id, valid_from)
 
     async def _latest_influx_profile(self) -> TariffProfile | None:
         assert self._influx_client is not None
@@ -205,6 +206,7 @@ def _profile_id(settings: EconomicsSettings) -> str:
         "capacity_tariff_floor_kw": settings.capacity_tariff_floor_kw,
         "export_energy_eur_per_kwh": settings.export_energy_eur_per_kwh,
         "import_energy_eur_per_kwh": settings.import_energy_eur_per_kwh,
+        "valid_from_utc": settings.valid_from_utc.isoformat() if settings.valid_from_utc is not None else None,
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]

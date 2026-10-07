@@ -1,9 +1,17 @@
 # Changelog
+## 0.17.1
+- Adds an explicit `valid_from_utc` setting to tariff profiles so historical economics use the tariff's real effective date
+  instead of merely the time Energy Manager first observed the configuration.
+- Includes the effective timestamp in the tariff-profile fingerprint, so changing a tariff's effective date creates a distinct
+  immutable historical revision.
+- Keeps first activation as a fallback only when no explicit effective timestamp is configured.
+- No scheduling or hardware-control behavior changes.
+
 ## 0.17.0
 - Adds the first planner economics foundation without changing the v0.16.1 shadow scheduling behavior.
 - Adds configurable marginal import energy cost, export revenue, capacity-tariff rate and capacity-tariff billing floor.
 - Keeps economics disabled until all planner-relevant tariff values are configured; no placeholder prices affect planning.
-- Versions each distinct tariff configuration as an immutable profile with a fingerprint and first-active UTC timestamp.
+- Versions each distinct tariff configuration as an immutable profile with a fingerprint and first-activation timestamp.
 - Stores tariff revisions in InfluxDB when available and falls back to `/data/tariff_profile_history.jsonl` otherwise.
 - Reusing the same tariff across restarts does not create a new revision; changing a tariff value creates a new revision.
 - Adds `sensor.energy_manager_economics_status` exposing the active tariff profile and its historical revision ID.

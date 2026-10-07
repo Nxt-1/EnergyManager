@@ -36,13 +36,14 @@ class FakeInfluxClient:
         self.lines.extend(lines)
 
 
-def _settings(import_price: float = 0.25) -> EconomicsSettings:
+def _settings(import_price: float = 0.25, valid_from_utc: datetime | None = None) -> EconomicsSettings:
     return EconomicsSettings(
         enabled=True,
         import_energy_eur_per_kwh=import_price,
         export_energy_eur_per_kwh=0.03,
         capacity_tariff_eur_per_kw_month=4.50,
         capacity_tariff_floor_kw=2.5,
+        valid_from_utc=valid_from_utc,
     )
 
 
@@ -89,6 +90,30 @@ def test_influx_history_writes_profile_with_activation_timestamp(tmp_path: Path)
     assert f" {int(observed.timestamp()) * 1_000_000_000}" in client.lines[0]
     assert "import_energy_eur_per_kwh=0.250000000" in client.lines[0]
 
+
+
+def test_explicit_valid_from_is_used_instead_of_activation_time(tmp_path: Path) -> None:
+    effective = datetime(2026, 9, 30, 22, 0, tzinfo=UTC)
+    observed = datetime(2026, 10, 7, 20, 0, tzinfo=UTC)
+    history = TariffProfileHistory(_settings(valid_from_utc=effective), local_path=tmp_path / "tariffs.jsonl")
+
+    profile = asyncio.run(history.activate(now_utc=observed))
+
+    assert profile is not None
+    assert profile.valid_from_utc == effective
+
+
+def test_effective_timestamp_is_part_of_profile_identity(tmp_path: Path) -> None:
+    path = tmp_path / "tariffs.jsonl"
+    first = datetime(2026, 9, 30, 22, 0, tzinfo=UTC)
+    second = datetime(2027, 1, 1, 0, 0, tzinfo=UTC)
+
+    profile_a = asyncio.run(TariffProfileHistory(_settings(valid_from_utc=first), local_path=path).activate())
+    profile_b = asyncio.run(TariffProfileHistory(_settings(valid_from_utc=second), local_path=path).activate())
+
+    assert profile_a is not None and profile_b is not None
+    assert profile_a.profile_id != profile_b.profile_id
+    assert len(path.read_text(encoding="utf-8").splitlines()) == 2
 
 def test_energy_cost_treats_export_as_revenue(tmp_path: Path) -> None:
     profile = asyncio.run(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -84,6 +85,7 @@ class EconomicsSettings:
     export_energy_eur_per_kwh: float | None = None
     capacity_tariff_eur_per_kw_month: float | None = None
     capacity_tariff_floor_kw: float = 2.5
+    valid_from_utc: datetime | None = None
 
     @property
     def configured(self) -> bool:
@@ -208,6 +210,9 @@ class Settings:
                     "export_energy_eur_per_kwh": self.economics.export_energy_eur_per_kwh,
                     "capacity_tariff_eur_per_kw_month": self.economics.capacity_tariff_eur_per_kw_month,
                     "capacity_tariff_floor_kw": self.economics.capacity_tariff_floor_kw,
+                    "valid_from_utc": (
+                        self.economics.valid_from_utc.isoformat() if self.economics.valid_from_utc is not None else None
+                    ),
                 }
             ),
             "database": _without_none(
@@ -313,6 +318,9 @@ class Settings:
         capacity_floor = _positive_float(
             economics_raw.get("capacity_tariff_floor_kw", 2.5), "economics.capacity_tariff_floor_kw"
         )
+        economics_valid_from = _optional_datetime_utc(
+            economics_raw.get("valid_from_utc"), "economics.valid_from_utc"
+        )
         if economics_enabled and None in (import_energy_price, export_energy_price, capacity_tariff):
             raise ConfigurationError(
                 "economics requires import/export energy prices and capacity tariff when enabled"
@@ -398,6 +406,7 @@ class Settings:
                 export_energy_eur_per_kwh=export_energy_price,
                 capacity_tariff_eur_per_kw_month=capacity_tariff,
                 capacity_tariff_floor_kw=capacity_floor,
+                valid_from_utc=economics_valid_from,
             ),
             database=DatabaseSettings(
                 enabled=database_enabled,
@@ -416,6 +425,19 @@ class Settings:
             legacy_options_detected=legacy_options_detected,
         )
 
+
+
+def _optional_datetime_utc(value: object, option_name: str) -> datetime | None:
+    """Parse an optional timezone-aware ISO-8601 timestamp and normalize it to UTC."""
+    if value is None or str(value).strip() == "":
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ConfigurationError(f"{option_name} must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        raise ConfigurationError(f"{option_name} must include a timezone offset")
+    return parsed.astimezone(UTC)
 
 def _mapping(value: object, option_name: str) -> dict[str, Any]:
     if value is None:

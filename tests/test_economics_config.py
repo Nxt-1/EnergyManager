@@ -26,6 +26,7 @@ def test_economics_settings_are_loaded_and_exported(tmp_path: Path) -> None:
                     "export_energy_eur_per_kwh": 0.03,
                     "capacity_tariff_eur_per_kw_month": 4.5,
                     "capacity_tariff_floor_kw": 2.5,
+                    "valid_from_utc": "2026-09-30T22:00:00+00:00",
                 }
             }
         ),
@@ -36,7 +37,10 @@ def test_economics_settings_are_loaded_and_exported(tmp_path: Path) -> None:
 
     assert settings.economics.configured is True
     assert settings.economics.import_energy_eur_per_kwh == pytest.approx(0.2528)
+    assert settings.economics.valid_from_utc is not None
+    assert settings.economics.valid_from_utc.isoformat() == "2026-09-30T22:00:00+00:00"
     assert settings.as_options()["economics"]["capacity_tariff_eur_per_kw_month"] == pytest.approx(4.5)
+    assert settings.as_options()["economics"]["valid_from_utc"] == "2026-09-30T22:00:00+00:00"
 
 
 def test_enabled_economics_requires_all_marginal_prices(tmp_path: Path) -> None:
@@ -51,6 +55,17 @@ def test_negative_economics_price_is_rejected(tmp_path: Path) -> None:
     path = tmp_path / "options.json"
     path.write_text(
         json.dumps({"economics": {"export_energy_eur_per_kwh": -0.01}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigurationError):
+        Settings.load(path)
+
+
+def test_economics_valid_from_requires_timezone(tmp_path: Path) -> None:
+    path = tmp_path / "options.json"
+    path.write_text(
+        json.dumps({"economics": {"valid_from_utc": "2026-10-01T00:00:00"}}),
         encoding="utf-8",
     )
 
