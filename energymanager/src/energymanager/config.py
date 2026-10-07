@@ -59,7 +59,7 @@ class PvSettings:
 
 @dataclass(frozen=True, slots=True)
 class EvSettings:
-    """EV input mapping plus the planning envelope exposed by the EV actuator."""
+    """EV input mapping, actuator envelope and target-by-departure task policy."""
 
     soc_entity: str | None = None
     connected_entity: str | None = None
@@ -69,6 +69,10 @@ class EvSettings:
     nominal_voltage_v: float = 230.0
     supports_single_phase: bool = True
     supports_three_phase: bool = True
+    battery_capacity_kwh: float | None = None
+    charge_efficiency: float = 0.90
+    target_soc_percent: float = 80.0
+    departure_time_local: str = "07:00"
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +171,10 @@ class Settings:
                     "nominal_voltage_v": self.ev.nominal_voltage_v,
                     "supports_single_phase": self.ev.supports_single_phase,
                     "supports_three_phase": self.ev.supports_three_phase,
+                    "battery_capacity_kwh": self.ev.battery_capacity_kwh,
+                    "charge_efficiency": self.ev.charge_efficiency,
+                    "target_soc_percent": self.ev.target_soc_percent,
+                    "departure_time_local": self.ev.departure_time_local,
                 }
             ),
             "database": _without_none(
@@ -283,6 +291,22 @@ class Settings:
         )
         if not ev_supports_single_phase and not ev_supports_three_phase:
             raise ConfigurationError("EV actuator must support at least one phase mode")
+        ev_battery_capacity = _optional_positive_float(
+            ev_raw.get("battery_capacity_kwh"),
+            "ev.battery_capacity_kwh",
+        )
+        ev_charge_efficiency = _efficiency(
+            ev_raw.get("charge_efficiency", 0.90),
+            "ev.charge_efficiency",
+        )
+        ev_target_soc = _percentage(
+            ev_raw.get("target_soc_percent", 80.0),
+            "ev.target_soc_percent",
+        )
+        ev_departure_time = _local_time_option(
+            ev_raw.get("departure_time_local", "07:00"),
+            "ev.departure_time_local",
+        )
 
         database_enabled = _bool_option(database_raw.get("enabled", False), "database.enabled")
         database_url = _optional_string(database_raw.get("url"))
@@ -370,6 +394,10 @@ class Settings:
                 nominal_voltage_v=ev_nominal_voltage,
                 supports_single_phase=ev_supports_single_phase,
                 supports_three_phase=ev_supports_three_phase,
+                battery_capacity_kwh=ev_battery_capacity,
+                charge_efficiency=ev_charge_efficiency,
+                target_soc_percent=ev_target_soc,
+                departure_time_local=ev_departure_time,
             ),
             database=DatabaseSettings(
                 enabled=database_enabled,
@@ -455,3 +483,17 @@ def _efficiency(value: object, option_name: str) -> float:
     if not 0 < number <= 1:
         raise ConfigurationError(f"{option_name} must be greater than 0 and at most 1")
     return number
+
+
+def _optional_positive_float(value: object, option_name: str) -> float | None:
+    if value is None:
+        return None
+    return _positive_float(value, option_name)
+
+
+def _local_time_option(value: object, option_name: str) -> str:
+    normalized = str(value).strip()
+    match = re.fullmatch(r"([01]\d|2[0-3]):([0-5]\d)", normalized)
+    if match is None:
+        raise ConfigurationError(f"{option_name} must use 24-hour HH:MM format")
+    return normalized

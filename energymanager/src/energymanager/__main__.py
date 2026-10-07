@@ -19,6 +19,7 @@ from .load_service import BackgroundLoadHistory, BackgroundLoadService
 from .open_meteo import OpenMeteoClient
 from .planner_service import ShadowPlannerService
 from .pv_service import PvForecastService
+from .tasks import TaskRegistry
 
 
 async def async_main() -> int:
@@ -152,6 +153,7 @@ async def _run_app(
                 load_service,
                 pv_service,
                 actuator_registry=ActuatorRegistry(settings),
+                task_registry=TaskRegistry(settings.ev),
             )
             app = EnergyManagerApp(
                 settings,
@@ -168,6 +170,7 @@ async def _run_app(
         load_service,
         None,
         actuator_registry=ActuatorRegistry(settings),
+        task_registry=TaskRegistry(settings.ev),
     )
     app = EnergyManagerApp(
         settings,

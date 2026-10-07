@@ -331,6 +331,10 @@ def test_ev_actuator_planning_defaults_are_available_without_new_options(tmp_pat
     assert settings.ev.nominal_voltage_v == pytest.approx(230.0)
     assert settings.ev.supports_single_phase is True
     assert settings.ev.supports_three_phase is True
+    assert settings.ev.battery_capacity_kwh is None
+    assert settings.ev.charge_efficiency == pytest.approx(0.90)
+    assert settings.ev.target_soc_percent == pytest.approx(80.0)
+    assert settings.ev.departure_time_local == "07:00"
 
 
 def test_ev_actuator_planning_envelope_is_loaded(tmp_path: Path) -> None:
@@ -344,6 +348,10 @@ def test_ev_actuator_planning_envelope_is_loaded(tmp_path: Path) -> None:
                     "nominal_voltage_v": 231,
                     "supports_single_phase": True,
                     "supports_three_phase": False,
+                    "battery_capacity_kwh": 72.5,
+                    "charge_efficiency": 0.92,
+                    "target_soc_percent": 85,
+                    "departure_time_local": "06:45",
                 }
             }
         ),
@@ -357,6 +365,10 @@ def test_ev_actuator_planning_envelope_is_loaded(tmp_path: Path) -> None:
     assert settings.ev.nominal_voltage_v == pytest.approx(231)
     assert settings.ev.supports_single_phase is True
     assert settings.ev.supports_three_phase is False
+    assert settings.ev.battery_capacity_kwh == pytest.approx(72.5)
+    assert settings.ev.charge_efficiency == pytest.approx(0.92)
+    assert settings.ev.target_soc_percent == pytest.approx(85)
+    assert settings.ev.departure_time_local == "06:45"
 
 
 def test_invalid_ev_actuator_planning_envelope_is_rejected(tmp_path: Path) -> None:
@@ -365,6 +377,14 @@ def test_invalid_ev_actuator_planning_envelope_is_rejected(tmp_path: Path) -> No
         json.dumps({"ev": {"min_charge_current_a": 16, "max_charge_current_a": 6}}),
         encoding="utf-8",
     )
+
+    with pytest.raises(ConfigurationError):
+        Settings.load(path)
+
+
+def test_invalid_ev_departure_time_is_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "options.json"
+    path.write_text(json.dumps({"ev": {"departure_time_local": "7am"}}), encoding="utf-8")
 
     with pytest.raises(ConfigurationError):
         Settings.load(path)

@@ -87,6 +87,18 @@ configuration:
       supports_three_phase:
         name: EV supports three-phase charging
         description: Allow the EV actuator to expose three-phase charging as a planner capability.
+      battery_capacity_kwh:
+        name: EV usable battery capacity
+        description: Usable vehicle battery capacity in kWh used to convert SoC targets into charging energy.
+      charge_efficiency:
+        name: EV charging efficiency
+        description: Fraction from 0 to 1 of AC charging energy stored in the vehicle battery. Defaults to 0.90.
+      target_soc_percent:
+        name: EV target SoC
+        description: Target state of charge used by the target-by-departure task. Defaults to 80 percent.
+      departure_time_local:
+        name: EV departure time
+        description: Local target-by-departure time in 24-hour HH:MM format. Defaults to 07:00.
 
   database:
     name: Database

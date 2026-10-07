@@ -152,8 +152,9 @@ The first two actuator types are:
   modes.
 
 The EV capability defaults are 6-16 A, 230 V and support for both 1-phase and 3-phase charging. They are runtime
-configuration, not planner rules, and can be changed without recompiling the application. The planner does not yet create an
-EV energy task or choose charging intervals.
+configuration, not planner rules, and can be changed without recompiling the application. Version 0.15 adds optional usable
+battery capacity and AC-to-battery charging efficiency to the EV capability model so SoC requirements can be converted into
+energy requirements.
 
 `sensor.energy_manager_actuator_status` exposes the current catalog and whether each actuator is planning-ready.
 
@@ -166,6 +167,21 @@ choosing the highest feasible point that does not exceed the request.
 planner sends the next ESS interval through this interface to verify the end-to-end command path. EV command translation
 is implemented and tested, but the planner does not request EV charging until an EV task exists. `control_enabled` and
 `hardware_writes` remain false: v0.14 cannot change Victron or go-e state.
+
+
+## Planner tasks
+
+Version 0.15 adds the first generic task catalog. A task describes what must be achieved and by when; it does not contain
+device-specific charging commands. The first task is EV target-by-departure. When the EV is connected and SoC is available,
+it combines the live EV state with runtime target/departure policy and the EV actuator capabilities.
+
+The EV task exposes current/target SoC, earliest start, latest end, battery-side energy requirement, estimated AC energy
+requirement, interruptibility and a simple feasibility check against the actuator's maximum charging power. Usable EV battery
+capacity must be configured before an energy requirement can be calculated. Charging efficiency defaults to 0.90, target SoC
+to 80%, and local departure time to 07:00 when omitted.
+
+`sensor.energy_manager_task_status` exposes the current task catalog. Version 0.15 only gives tasks to the planner; it does not
+yet place EV charging into intervals or request EV actuator power. This keeps task generation separate from optimization.
 
 ## Shadow planner
 
@@ -256,8 +272,9 @@ configured measurement inputs degrade `sensor.energy_manager_input_health`. PV f
 
 ## Safety
 
-This release still contains no actuator and no command path. It cannot alter the ESS, EV charger, heat pump, ventilation,
-or any other Home Assistant device.
+Actuator capability models and a dry-run command path exist, but hardware writes remain disabled. The planner can evaluate
+ESS/EV commands and tasks without calling Home Assistant services or changing Victron, go-e, heat-pump, ventilation or other
+device state.
 
 ## Legacy Home Assistant InfluxDB backfill
 

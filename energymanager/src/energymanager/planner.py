@@ -8,8 +8,9 @@ from datetime import UTC, datetime, timedelta
 from .actuators import ActuatorSnapshot, EssActuatorSnapshot, EssCapabilities, find_ess_actuator
 from .load_forecast import FORECAST_INTERVAL_MINUTES, BackgroundLoadForecast
 from .pv_forecast import PvForecast
+from .tasks import PlanningTask
 
-PLANNER_VERSION = "2026-10-06-shadow-v3"
+PLANNER_VERSION = "2026-10-07-shadow-v4"
 PLANNER_HORIZON_HOURS = 48
 _INTERVAL_HOURS = FORECAST_INTERVAL_MINUTES / 60.0
 
@@ -44,6 +45,7 @@ class ShadowPlan:
     intervals: tuple[ShadowPlanInterval, ...]
     ess_projection_status: str = "not_configured"
     actuator_snapshots: tuple[ActuatorSnapshot, ...] = ()
+    tasks: tuple[PlanningTask, ...] = ()
     ess_resource: EssCapabilities | None = None
     ess_initial_soc_percent: float | None = None
 
@@ -173,6 +175,7 @@ class ShadowPlanner:
         *,
         now_utc: datetime,
         actuators: tuple[ActuatorSnapshot, ...] = (),
+        tasks: tuple[PlanningTask, ...] = (),
     ) -> ShadowPlan:
         if now_utc.tzinfo is None:
             raise ValueError("now_utc must be timezone-aware")
@@ -211,6 +214,7 @@ class ShadowPlanner:
                 intervals=tuple(base_intervals),
                 ess_projection_status="not_configured",
                 actuator_snapshots=actuators,
+                tasks=tasks,
             )
         if not ess_actuator.planning_available or ess_actuator.soc_percent is None:
             return ShadowPlan(
@@ -218,6 +222,7 @@ class ShadowPlanner:
                 intervals=tuple(base_intervals),
                 ess_projection_status=ess_actuator.status,
                 actuator_snapshots=actuators,
+                tasks=tasks,
                 ess_resource=ess_actuator.capabilities,
             )
 
@@ -227,6 +232,7 @@ class ShadowPlanner:
             intervals=projected_intervals,
             ess_projection_status="projected",
             actuator_snapshots=actuators,
+            tasks=tasks,
             ess_resource=ess_actuator.capabilities,
             ess_initial_soc_percent=max(0.0, min(100.0, ess_actuator.soc_percent)),
         )

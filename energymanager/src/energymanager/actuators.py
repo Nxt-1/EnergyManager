@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from .config import EssSettings, EvSettings, Settings
 from .house_state import HouseState
 
-ACTUATOR_VERSION = "2026-10-06-actuator-v2"
+ACTUATOR_VERSION = "2026-10-07-actuator-v3"
 ACTUATOR_COMMAND_VERSION = "2026-10-06-command-v1"
 
 
@@ -49,6 +49,8 @@ class EvCapabilities:
     nominal_voltage_v: float
     supports_single_phase: bool
     supports_three_phase: bool
+    battery_capacity_kwh: float | None
+    charge_efficiency: float
 
     @property
     def minimum_single_phase_power_w(self) -> float | None:
@@ -207,6 +209,8 @@ def _ev_snapshot(settings: EvSettings, house_state: HouseState) -> EvActuatorSna
         nominal_voltage_v=settings.nominal_voltage_v,
         supports_single_phase=settings.supports_single_phase,
         supports_three_phase=settings.supports_three_phase,
+        battery_capacity_kwh=settings.battery_capacity_kwh,
+        charge_efficiency=settings.charge_efficiency,
     )
     configured = settings.connected_entity is not None
     connected_value = house_state.value("ev.connected")
@@ -370,6 +374,11 @@ def _rejected(
 def find_ess_actuator(actuators: tuple[ActuatorSnapshot, ...]) -> EssActuatorSnapshot | None:
     """Return the ESS actuator snapshot from a planner actuator collection."""
     return next((item for item in actuators if isinstance(item, EssActuatorSnapshot)), None)
+
+
+def find_ev_actuator(actuators: tuple[ActuatorSnapshot, ...]) -> EvActuatorSnapshot | None:
+    """Return the EV actuator snapshot from a planner actuator collection."""
+    return next((item for item in actuators if isinstance(item, EvActuatorSnapshot)), None)
 
 
 def _number(value: object) -> float | None:

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.15.0
+
+- Adds the first generic planner task model while keeping scheduling and hardware control disabled.
+- Adds an EV target-by-departure task generated from live connection/SoC state and runtime policy settings.
+- The EV task exposes earliest start, departure deadline, target SoC, required battery/AC energy, interruptibility and
+  simple max-power feasibility.
+- Adds `sensor.energy_manager_task_status` and includes task IDs/status in the shadow planner diagnostics/logs.
+- Adds optional EV usable-battery-capacity and charging-efficiency settings; battery capacity must be configured before
+  the task can derive an energy requirement.
+- Target SoC and local departure time default to 80% and 07:00 and remain runtime configuration rather than planner code.
+- The planner receives the task catalog but does not schedule EV charging yet; actuator commands remain dry-run only.
+
 ## 0.14.0
 
 - Adds the first generic actuator power-command contract while keeping all hardware writes disabled.

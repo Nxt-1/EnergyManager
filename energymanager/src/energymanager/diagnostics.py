@@ -21,6 +21,7 @@ from .load_forecast import MODEL_VERSION, BackgroundLoadForecast
 from .open_meteo import FORECAST_DAYS, FORECAST_MODEL
 from .planner import PLANNER_HORIZON_HOURS, PLANNER_VERSION, ShadowPlan
 from .pv_forecast import CALIBRATION_VERSION, PvDailyEnergy, PvForecast
+from .tasks import TASK_VERSION, PlanningTask
 
 STATUS_ENTITY = "sensor.energy_manager_status"
 INPUT_HEALTH_ENTITY = "sensor.energy_manager_input_health"
@@ -54,6 +55,7 @@ SHADOW_PLAN_NET_DEFICIT_ENTITY = "sensor.energy_manager_shadow_plan_next_24_hour
 SHADOW_PLAN_GRID_IMPORT_ENTITY = "sensor.energy_manager_shadow_plan_next_24_hours_grid_import_energy"
 ACTUATOR_STATUS_ENTITY = "sensor.energy_manager_actuator_status"
 ACTUATOR_COMMAND_STATUS_ENTITY = "sensor.energy_manager_actuator_command_status"
+TASK_STATUS_ENTITY = "sensor.energy_manager_task_status"
 
 LEGACY_ENTITIES = (
     "sensor.energy_manager_observed_grid_power",
@@ -498,6 +500,33 @@ class DiagnosticsPublisher:
             state = "accepted"
         await self._client.set_state(ACTUATOR_COMMAND_STATUS_ENTITY, state, attributes)
 
+    async def publish_task_status(self, tasks: tuple[PlanningTask, ...]) -> None:
+        """Publish the current planner task catalog without scheduling or control."""
+        ready_count = sum(item.planning_available for item in tasks)
+        attributes: dict[str, Any] = {
+            "friendly_name": "Energy Manager Task Status",
+            "task_version": TASK_VERSION,
+            "shadow_mode": True,
+            "control_enabled": False,
+            "task_count": len(tasks),
+            "planning_available_count": ready_count,
+            "tasks": [_task_attributes(item) for item in tasks],
+            "last_update_utc": datetime.now(UTC).isoformat(),
+        }
+        if not tasks:
+            state = "none"
+        elif any(item.status == "deadline_infeasible" for item in tasks):
+            state = "deadline_infeasible"
+        elif any(item.status == "configuration_required" for item in tasks):
+            state = "configuration_required"
+        elif any(item.status == "ready" for item in tasks):
+            state = "ready"
+        elif all(item.status == "satisfied" for item in tasks):
+            state = "satisfied"
+        else:
+            state = tasks[0].status
+        await self._client.set_state(TASK_STATUS_ENTITY, state, attributes)
+
     async def publish_shadow_plan_status(self, status: str, *, error: str | None = None) -> None:
         """Publish planner readiness without implying that any control is active."""
         attributes: dict[str, Any] = {
@@ -525,6 +554,7 @@ class DiagnosticsPublisher:
             "generated_at_utc": plan.generated_at_utc.isoformat(),
             "ess_projection_status": plan.ess_projection_status,
             "actuator_ids": [item.actuator_id for item in plan.actuator_snapshots],
+            "task_ids": [item.task_id for item in plan.tasks],
             "next_24_hours": _rounded_summary(summary_24h),
             "next_48_hours": _rounded_summary(summary_48h),
             "next_intervals": [
@@ -864,6 +894,8 @@ def _actuator_attributes(item: ActuatorSnapshot) -> dict[str, Any]:
                 "nominal_voltage_v": round(item.capabilities.nominal_voltage_v, 1),
                 "supports_single_phase": item.capabilities.supports_single_phase,
                 "supports_three_phase": item.capabilities.supports_three_phase,
+                "battery_capacity_kwh": _round_optional(item.capabilities.battery_capacity_kwh, 3),
+                "charge_efficiency": round(item.capabilities.charge_efficiency, 4),
                 "minimum_single_phase_power_w": _round_optional(
                     item.capabilities.minimum_single_phase_power_w, 1
                 ),
@@ -885,6 +917,27 @@ def _actuator_attributes(item: ActuatorSnapshot) -> dict[str, Any]:
         )
     return base
 
+
+
+
+def _task_attributes(item: PlanningTask) -> dict[str, Any]:
+    return {
+        "id": item.task_id,
+        "kind": item.kind,
+        "source": item.source,
+        "actuator_id": item.actuator_id,
+        "status": item.status,
+        "planning_available": item.planning_available,
+        "earliest_start": _iso(item.earliest_start_local),
+        "latest_end": _iso(item.latest_end_local),
+        "required_energy_kwh": _round_optional(item.required_energy_kwh, 3),
+        "battery_energy_required_kwh": _round_optional(item.battery_energy_required_kwh, 3),
+        "interruptible": item.interruptible,
+        "current_soc_percent": _round_optional(item.current_soc_percent, 2),
+        "target_soc_percent": _round_optional(item.target_soc_percent, 2),
+        "feasible_at_max_power": item.feasible_at_max_power,
+        "minimum_runtime_hours": _round_optional(item.minimum_runtime_hours, 3),
+    }
 
 def _actuator_command_attributes(item: ActuatorCommandResult) -> dict[str, Any]:
     result: dict[str, Any] = {
