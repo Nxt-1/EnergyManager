@@ -8,8 +8,8 @@ from typing import Any
 
 from energymanager.diagnostics import (
     BACKGROUND_LOAD_BACKTEST_ENTITY,
-    BACKGROUND_LOAD_FORECAST_NEXT_24_HOURS_ENTITY,
     BACKGROUND_LOAD_FORECAST_NEXT_7_DAYS_ENTITY,
+    BACKGROUND_LOAD_FORECAST_NEXT_24_HOURS_ENTITY,
     BACKGROUND_LOAD_FORECAST_NEXT_HOUR_ENTITY,
     BACKGROUND_LOAD_FORECAST_STATUS_ENTITY,
 )
@@ -78,7 +78,6 @@ def test_service_samples_only_every_five_minutes_and_publishes_forecast(tmp_path
         await service.update_from_house_state(state, now_utc=start + timedelta(minutes=5))
 
     asyncio.run(run())
-
     assert len(history.samples) == 2
     assert client.states[BACKGROUND_LOAD_FORECAST_STATUS_ENTITY]["state"] == "learning"
     assert client.states[BACKGROUND_LOAD_BACKTEST_ENTITY]["state"] == "unavailable"
@@ -87,7 +86,6 @@ def test_service_samples_only_every_five_minutes_and_publishes_forecast(tmp_path
     week = client.states[BACKGROUND_LOAD_FORECAST_NEXT_7_DAYS_ENTITY]
     assert week["attributes"]["days_available"] == 7
     assert len(week["attributes"]["days"]) == 7
-
     records = [json.loads(line) for line in archive_path.read_text(encoding="utf-8").splitlines()]
     assert len(records) == 1
     assert records[0]["model_version"] == "2026-10-04-baseline"

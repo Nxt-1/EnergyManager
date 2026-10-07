@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, time, timedelta, tzinfo
+from datetime import datetime, time, timedelta, tzinfo
 
 from .actuators import ActuatorSnapshot, EvActuatorSnapshot, find_ev_actuator
 from .config import EvSettings
@@ -14,7 +14,6 @@ TASK_VERSION = "2026-10-07-task-v1"
 @dataclass(frozen=True, slots=True)
 class PlanningTask:
     """A planner requirement independent of the device-specific command interface."""
-
     task_id: str
     kind: str
     source: str
@@ -71,7 +70,6 @@ def _ev_charge_task(
         "interruptible": True,
         "target_soc_percent": settings.target_soc_percent,
     }
-
     if actuator is None or not actuator.configured:
         return PlanningTask(
             **common,
@@ -106,7 +104,6 @@ def _ev_charge_task(
             battery_energy_required_kwh=None,
             current_soc_percent=actuator.soc_percent,
         )
-
     current_soc = max(0.0, min(100.0, actuator.soc_percent))
     delta_soc = max(0.0, settings.target_soc_percent - current_soc)
     battery_energy = actuator.capabilities.battery_capacity_kwh * delta_soc / 100.0
@@ -115,7 +112,6 @@ def _ev_charge_task(
     minimum_runtime = ac_energy * 1000.0 / maximum_power_w if ac_energy > 0.0 and maximum_power_w > 0.0 else 0.0
     available_hours = max(0.0, (deadline - now_local).total_seconds() / 3600.0)
     feasible = minimum_runtime <= available_hours + 1e-9
-
     if delta_soc <= 0.0:
         status = "satisfied"
         planning_available = False
@@ -128,7 +124,6 @@ def _ev_charge_task(
     else:
         status = "ready"
         planning_available = True
-
     return PlanningTask(
         **common,
         status=status,

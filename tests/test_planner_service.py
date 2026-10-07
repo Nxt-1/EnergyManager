@@ -6,6 +6,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from energymanager.actuators import ActuatorRegistry
+from energymanager.config import EssSettings, Settings
 from energymanager.diagnostics import (
     ACTUATOR_COMMAND_STATUS_ENTITY,
     ACTUATOR_STATUS_ENTITY,
@@ -13,12 +14,11 @@ from energymanager.diagnostics import (
     SHADOW_PLAN_STATUS_ENTITY,
     TASK_STATUS_ENTITY,
 )
-from energymanager.config import EssSettings, Settings
 from energymanager.house_state import HouseState
 from energymanager.load_forecast import BackgroundLoadForecast, BackgroundLoadForecastPoint
 from energymanager.planner_service import ShadowPlannerService
-from energymanager.tasks import TaskRegistry
 from energymanager.pv_forecast import PvForecast, PvForecastPoint
+from energymanager.tasks import TaskRegistry
 
 _LOCAL = ZoneInfo("Europe/Brussels")
 
@@ -85,7 +85,6 @@ def test_planner_service_waits_for_pv_forecast() -> None:
         actuator_registry=ActuatorRegistry(Settings()),
         task_registry=TaskRegistry(Settings().ev),
     )
-
     asyncio.run(service.update_from_house_state(HouseState(), now_utc=start.astimezone(UTC)))
 
     assert client.states[SHADOW_PLAN_STATUS_ENTITY]["state"] == "waiting_for_pv_forecast"
@@ -102,7 +101,6 @@ def test_planner_service_publishes_ready_plan() -> None:
         actuator_registry=ActuatorRegistry(Settings()),
         task_registry=TaskRegistry(Settings().ev),
     )
-
     asyncio.run(service.update_from_house_state(HouseState(), now_utc=start.astimezone(UTC)))
 
     assert client.states[SHADOW_PLAN_STATUS_ENTITY]["state"] == "ready"
@@ -144,7 +142,6 @@ def test_planner_service_projects_ess_when_soc_is_valid() -> None:
         actuator_registry=ActuatorRegistry(Settings(ess=settings)),
         task_registry=TaskRegistry(Settings().ev),
     )
-
     asyncio.run(service.update_from_house_state(house_state, now_utc=start.astimezone(UTC)))
 
     assert client.states[SHADOW_PLAN_STATUS_ENTITY]["attributes"]["ess_projection_status"] == "projected"
