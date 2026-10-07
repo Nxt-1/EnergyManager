@@ -1,4 +1,14 @@
 # Changelog
+## 0.17.0
+- Adds the first planner economics foundation without changing the v0.16.1 shadow scheduling behavior.
+- Adds configurable marginal import energy cost, export revenue, capacity-tariff rate and capacity-tariff billing floor.
+- Keeps economics disabled until all planner-relevant tariff values are configured; no placeholder prices affect planning.
+- Versions each distinct tariff configuration as an immutable profile with a fingerprint and first-active UTC timestamp.
+- Stores tariff revisions in InfluxDB when available and falls back to `/data/tariff_profile_history.jsonl` otherwise.
+- Reusing the same tariff across restarts does not create a new revision; changing a tariff value creates a new revision.
+- Adds `sensor.energy_manager_economics_status` exposing the active tariff profile and its historical revision ID.
+- Does not yet use monetary cost to alter EV/ESS scheduling; this release establishes reproducible historical cost inputs first.
+- Remains hard-coded shadow mode with no hardware writes.
 ## 0.16.1
 - Fixes pre-control net-power diagnostics so scheduled task load is included in interval net power, deficit energy and peak deficit.
 - Keeps the ESS/grid projection behavior unchanged; it already included scheduled load correctly.
@@ -63,7 +73,6 @@
   available energy before storage/control.
 - No configuration schema changes and no device control.
 ## 0.10.2
-
 - Scores all candidate load models on the same common set of valid forecast intervals for each horizon.
 - Keeps one accuracy score set; no duplicate native/common model scores are exposed.
 - Keeps `coverage` and `issue_coverage` as separate availability diagnostics for each model.
@@ -104,7 +113,6 @@
 - The predictor merges reconstructed legacy and live background history by timestamp, preferring live samples when both exist.
 - No configuration schema changes and no actuator/control changes.
 ## 0.9.1
-
 - Added optional username/password authentication for the legacy InfluxDB 1.x backfill source.
 - Uses HTTP Basic authentication when legacy credentials are configured.
 - Keeps unauthenticated legacy sources supported by leaving both credential fields empty.
@@ -148,7 +156,6 @@
 - No configuration schema changes; existing v0.5.1 entity mappings are reused.
 - Remains shadow mode; no device control is present.
 ## 0.5.1
-
 - Clamp small negative EV charging-power readings between -100 W and 0 W to zero.
 - Keep larger negative EV charging-power readings invalid so a real sign/configuration problem is still visible.
 - No configuration schema changes.
@@ -164,7 +171,6 @@
 - No configuration schema changes; existing v0.4.1 options remain valid.
 - Remains shadow mode; no device control is present.
 ## 0.4.1
-
 - Fixed Python 3.13/Ruff import placement for `Mapping`.
 - Re-published the v0.4 predictor release under 0.4.1 after the 0.4.0 CI failure.
 - No intended functional changes from v0.4.0.
@@ -180,7 +186,6 @@
 - Added Docker build-time imports for core/predictor modules to catch missing source files before publication.
 - Remains shadow mode; no device control is present.
 ## 0.3.1
-
 - Re-published the v0.3 house-state release after missing source files were added to the repository.
 - No intended functional changes from v0.3.0.
 ## 0.3.0
@@ -203,7 +208,6 @@
 - Updated GitHub Actions to current Node 24/ESM action generations.
 - Remains read-only; no device control is present.
 ## 0.1.0
-
 - Initial Home Assistant app skeleton.
 - Internal Home Assistant REST API access through the Supervisor proxy.
 - Home Assistant WebSocket state subscription for one configured grid-power entity.

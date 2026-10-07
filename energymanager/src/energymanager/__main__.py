@@ -13,6 +13,7 @@ from .app import EnergyManagerApp
 from .config import ConfigurationError, Settings
 from .database import EnergyManagerStore, InfluxDatabaseClient, InfluxDatabaseError
 from .diagnostics import DiagnosticsPublisher
+from .economics import EconomicsService
 from .ha_client import HomeAssistantClient
 from .legacy_influx import LegacyInfluxBackfill, LegacyInfluxClient, LegacyInfluxError
 from .load_service import BackgroundLoadHistory, BackgroundLoadService
@@ -30,7 +31,6 @@ async def async_main() -> int:
         logging.basicConfig(level=logging.ERROR, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
         logging.error("Invalid Energy Manager configuration: %s", exc)
         return 2
-
     logging.basicConfig(
         level=getattr(logging, settings.log_level.upper()),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -42,7 +42,6 @@ async def async_main() -> int:
     if not supervisor_token:
         logger.error("SUPERVISOR_TOKEN is missing; Home Assistant API access is unavailable")
         return 2
-
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -50,7 +49,6 @@ async def async_main() -> int:
             loop.add_signal_handler(sig, stop_event.set)
         except NotImplementedError:
             pass
-
     async with HomeAssistantClient(supervisor_token) as client:
         if settings.database.enabled:
             assert settings.database.url is not None
@@ -64,8 +62,8 @@ async def async_main() -> int:
         else:
             diagnostics = DiagnosticsPublisher(client)
             await diagnostics.publish_database_status("disabled", database=settings.database.database)
+            await EconomicsService(settings.economics, client).initialize()
             await _run_app(settings, client, stop_event, store=None, history=None)
-
     logger.info("Energy Manager stopped")
     return 0
 
@@ -95,13 +93,13 @@ async def _run_with_database(
             url=settings.database.url,
             error=str(exc),
         )
+        await EconomicsService(settings.economics, client).initialize()
         await _run_app(settings, client, stop_event, store=None, history=None)
         return
     except LegacyInfluxError as exc:
         backfill_error = str(exc)
         logger.warning("Legacy InfluxDB backfill failed; continuing with existing EnergyManager history: %s", exc)
         samples = await store.load_background_samples(days=35)
-
     logger.info(
         "InfluxDB persistence connected: database=%s, history_samples=%d",
         store.database,
@@ -132,6 +130,7 @@ async def _run_with_database(
         ),
         legacy_backfill_error=backfill_error,
     )
+    await EconomicsService(settings.economics, client, influx_client=database_client).initialize()
     history = BackgroundLoadHistory(path=None, samples=samples)
     await _run_app(settings, client, stop_event, store=store, history=history)
 
@@ -164,7 +163,6 @@ async def _run_app(
             )
             await app.run(stop_event)
         return
-
     planner_service = ShadowPlannerService(
         client,
         load_service,

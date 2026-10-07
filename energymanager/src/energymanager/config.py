@@ -76,6 +76,29 @@ class EvSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class EconomicsSettings:
+    """Marginal costs that can influence planning decisions."""
+
+    enabled: bool = False
+    import_energy_eur_per_kwh: float | None = None
+    export_energy_eur_per_kwh: float | None = None
+    capacity_tariff_eur_per_kw_month: float | None = None
+    capacity_tariff_floor_kw: float = 2.5
+
+    @property
+    def configured(self) -> bool:
+        """Return whether all planner-relevant tariff inputs are available."""
+        return self.enabled and all(
+            value is not None
+            for value in (
+                self.import_energy_eur_per_kwh,
+                self.export_energy_eur_per_kwh,
+                self.capacity_tariff_eur_per_kw_month,
+            )
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class DatabaseSettings:
     """InfluxDB 3 persistence settings."""
 
@@ -106,6 +129,7 @@ class Settings:
     ess: EssSettings = EssSettings()
     pv: PvSettings = PvSettings()
     ev: EvSettings = EvSettings()
+    economics: EconomicsSettings = EconomicsSettings()
     database: DatabaseSettings = DatabaseSettings()
     legacy_influx: LegacyInfluxSettings = LegacyInfluxSettings()
     legacy_options_detected: bool = False
@@ -177,6 +201,15 @@ class Settings:
                     "departure_time_local": self.ev.departure_time_local,
                 }
             ),
+            "economics": _without_none(
+                {
+                    "enabled": self.economics.enabled,
+                    "import_energy_eur_per_kwh": self.economics.import_energy_eur_per_kwh,
+                    "export_energy_eur_per_kwh": self.economics.export_energy_eur_per_kwh,
+                    "capacity_tariff_eur_per_kw_month": self.economics.capacity_tariff_eur_per_kw_month,
+                    "capacity_tariff_floor_kw": self.economics.capacity_tariff_floor_kw,
+                }
+            ),
             "database": _without_none(
                 {
                     "enabled": self.database.enabled,
@@ -207,7 +240,6 @@ class Settings:
             raw = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ConfigurationError(f"Unable to read {path}: {exc}") from exc
-
         if not isinstance(raw, dict):
             raise ConfigurationError(f"Expected a JSON object in {path}")
 
@@ -215,18 +247,15 @@ class Settings:
         if log_level not in _VALID_LOG_LEVELS:
             allowed = ", ".join(sorted(_VALID_LOG_LEVELS))
             raise ConfigurationError(f"log_level must be one of: {allowed}")
-
         grid_raw = _mapping(raw.get("grid"), "grid")
         ess_raw = _mapping(raw.get("ess"), "ess")
         pv_raw = _mapping(raw.get("pv"), "pv")
         ev_raw = _mapping(raw.get("ev"), "ev")
+        economics_raw = _mapping(raw.get("economics"), "economics")
         database_raw = _mapping(raw.get("database"), "database")
         legacy_influx_raw = _mapping(raw.get("legacy_influx"), "legacy_influx")
 
-        legacy_options_detected = any(
-            key in raw for key in ("grid_import_power_entity", "grid_export_power_entity")
-        )
-
+        legacy_options_detected = any(key in raw for key in ("grid_import_power_entity", "grid_export_power_entity"))
         grid_import = _optional_entity_id(
             grid_raw.get("import_power_entity", raw.get("grid_import_power_entity")),
             "grid.import_power_entity",
@@ -242,71 +271,52 @@ class Settings:
         if ess_power_sign not in _VALID_ESS_POWER_SIGNS:
             allowed = ", ".join(sorted(_VALID_ESS_POWER_SIGNS))
             raise ConfigurationError(f"ess.power_positive_means must be one of: {allowed}")
-
         ess_capacity_kwh = _positive_float(ess_raw.get("capacity_kwh", 15.0), "ess.capacity_kwh")
         ess_min_soc = _percentage(ess_raw.get("min_soc_percent", 10.0), "ess.min_soc_percent")
         ess_max_soc = _percentage(ess_raw.get("max_soc_percent", 100.0), "ess.max_soc_percent")
         if ess_max_soc <= ess_min_soc:
             raise ConfigurationError("ess.max_soc_percent must be greater than ess.min_soc_percent")
-        ess_max_charge_power = _positive_float(
-            ess_raw.get("max_charge_power_w", 2000.0),
-            "ess.max_charge_power_w",
-        )
+        ess_max_charge_power = _positive_float(ess_raw.get("max_charge_power_w", 2000.0), "ess.max_charge_power_w")
         ess_max_discharge_power = _positive_float(
-            ess_raw.get("max_discharge_power_w", 2000.0),
-            "ess.max_discharge_power_w",
+            ess_raw.get("max_discharge_power_w", 2000.0), "ess.max_discharge_power_w"
         )
-        ess_charge_efficiency = _efficiency(
-            ess_raw.get("charge_efficiency", 0.95),
-            "ess.charge_efficiency",
-        )
+        ess_charge_efficiency = _efficiency(ess_raw.get("charge_efficiency", 0.95), "ess.charge_efficiency")
         ess_discharge_efficiency = _efficiency(
-            ess_raw.get("discharge_efficiency", 0.95),
-            "ess.discharge_efficiency",
+            ess_raw.get("discharge_efficiency", 0.95), "ess.discharge_efficiency"
         )
 
-        ev_min_charge_current = _positive_float(
-            ev_raw.get("min_charge_current_a", 6.0),
-            "ev.min_charge_current_a",
-        )
-        ev_max_charge_current = _positive_float(
-            ev_raw.get("max_charge_current_a", 16.0),
-            "ev.max_charge_current_a",
-        )
+        ev_min_charge_current = _positive_float(ev_raw.get("min_charge_current_a", 6.0), "ev.min_charge_current_a")
+        ev_max_charge_current = _positive_float(ev_raw.get("max_charge_current_a", 16.0), "ev.max_charge_current_a")
         if ev_max_charge_current < ev_min_charge_current:
-            raise ConfigurationError(
-                "ev.max_charge_current_a must be greater than or equal to ev.min_charge_current_a"
-            )
-        ev_nominal_voltage = _positive_float(
-            ev_raw.get("nominal_voltage_v", 230.0),
-            "ev.nominal_voltage_v",
-        )
-        ev_supports_single_phase = _bool_option(
-            ev_raw.get("supports_single_phase", True),
-            "ev.supports_single_phase",
-        )
-        ev_supports_three_phase = _bool_option(
-            ev_raw.get("supports_three_phase", True),
-            "ev.supports_three_phase",
-        )
+            raise ConfigurationError("ev.max_charge_current_a must be greater than or equal to ev.min_charge_current_a")
+        ev_nominal_voltage = _positive_float(ev_raw.get("nominal_voltage_v", 230.0), "ev.nominal_voltage_v")
+        ev_supports_single_phase = _bool_option(ev_raw.get("supports_single_phase", True), "ev.supports_single_phase")
+        ev_supports_three_phase = _bool_option(ev_raw.get("supports_three_phase", True), "ev.supports_three_phase")
         if not ev_supports_single_phase and not ev_supports_three_phase:
             raise ConfigurationError("EV actuator must support at least one phase mode")
-        ev_battery_capacity = _optional_positive_float(
-            ev_raw.get("battery_capacity_kwh"),
-            "ev.battery_capacity_kwh",
+        ev_battery_capacity = _optional_positive_float(ev_raw.get("battery_capacity_kwh"), "ev.battery_capacity_kwh")
+        ev_charge_efficiency = _efficiency(ev_raw.get("charge_efficiency", 0.90), "ev.charge_efficiency")
+        ev_target_soc = _percentage(ev_raw.get("target_soc_percent", 80.0), "ev.target_soc_percent")
+        ev_departure_time = _local_time_option(ev_raw.get("departure_time_local", "07:00"), "ev.departure_time_local")
+
+        economics_enabled = _bool_option(economics_raw.get("enabled", False), "economics.enabled")
+        import_energy_price = _optional_nonnegative_float(
+            economics_raw.get("import_energy_eur_per_kwh"), "economics.import_energy_eur_per_kwh"
         )
-        ev_charge_efficiency = _efficiency(
-            ev_raw.get("charge_efficiency", 0.90),
-            "ev.charge_efficiency",
+        export_energy_price = _optional_nonnegative_float(
+            economics_raw.get("export_energy_eur_per_kwh"), "economics.export_energy_eur_per_kwh"
         )
-        ev_target_soc = _percentage(
-            ev_raw.get("target_soc_percent", 80.0),
-            "ev.target_soc_percent",
+        capacity_tariff = _optional_nonnegative_float(
+            economics_raw.get("capacity_tariff_eur_per_kw_month"),
+            "economics.capacity_tariff_eur_per_kw_month",
         )
-        ev_departure_time = _local_time_option(
-            ev_raw.get("departure_time_local", "07:00"),
-            "ev.departure_time_local",
+        capacity_floor = _positive_float(
+            economics_raw.get("capacity_tariff_floor_kw", 2.5), "economics.capacity_tariff_floor_kw"
         )
+        if economics_enabled and None in (import_energy_price, export_energy_price, capacity_tariff):
+            raise ConfigurationError(
+                "economics requires import/export energy prices and capacity tariff when enabled"
+            )
 
         database_enabled = _bool_option(database_raw.get("enabled", False), "database.enabled")
         database_url = _optional_string(database_raw.get("url"))
@@ -321,16 +331,11 @@ class Settings:
                 raise ConfigurationError("database.token is required when database is enabled")
 
         legacy_backfill_enabled = _bool_option(
-            legacy_influx_raw.get("backfill_enabled", False),
-            "legacy_influx.backfill_enabled",
+            legacy_influx_raw.get("backfill_enabled", False), "legacy_influx.backfill_enabled"
         )
         legacy_influx_url = _optional_string(legacy_influx_raw.get("url"))
-        legacy_influx_database = str(
-            legacy_influx_raw.get("database", "home_assistant")
-        ).strip() or "home_assistant"
-        legacy_retention_policy = str(
-            legacy_influx_raw.get("retention_policy", "autogen")
-        ).strip() or "autogen"
+        legacy_influx_database = str(legacy_influx_raw.get("database", "home_assistant")).strip() or "home_assistant"
+        legacy_retention_policy = str(legacy_influx_raw.get("retention_policy", "autogen")).strip() or "autogen"
         legacy_username = _optional_string(legacy_influx_raw.get("username"))
         legacy_password = _optional_string(legacy_influx_raw.get("password"))
         if not _DATABASE_RE.fullmatch(legacy_influx_database):
@@ -353,10 +358,7 @@ class Settings:
 
         return cls(
             log_level=log_level,
-            grid=GridSettings(
-                import_power_entity=grid_import,
-                export_power_entity=grid_export,
-            ),
+            grid=GridSettings(import_power_entity=grid_import, export_power_entity=grid_export),
             ess=EssSettings(
                 soc_entity=_optional_entity_id(ess_raw.get("soc_entity"), "ess.soc_entity"),
                 power_entity=_optional_entity_id(ess_raw.get("power_entity"), "ess.power_entity"),
@@ -370,22 +372,13 @@ class Settings:
                 discharge_efficiency=ess_discharge_efficiency,
             ),
             pv=PvSettings(
-                solax_power_entity=_optional_entity_id(
-                    pv_raw.get("solax_power_entity"), "pv.solax_power_entity"
-                ),
-                shed_power_entity=_optional_entity_id(
-                    pv_raw.get("shed_power_entity"), "pv.shed_power_entity"
-                ),
-                forecast_enabled=_bool_option(
-                    pv_raw.get("forecast_enabled", True),
-                    "pv.forecast_enabled",
-                ),
+                solax_power_entity=_optional_entity_id(pv_raw.get("solax_power_entity"), "pv.solax_power_entity"),
+                shed_power_entity=_optional_entity_id(pv_raw.get("shed_power_entity"), "pv.shed_power_entity"),
+                forecast_enabled=_bool_option(pv_raw.get("forecast_enabled", True), "pv.forecast_enabled"),
             ),
             ev=EvSettings(
                 soc_entity=_optional_entity_id(ev_raw.get("soc_entity"), "ev.soc_entity"),
-                connected_entity=_optional_entity_id(
-                    ev_raw.get("connected_entity"), "ev.connected_entity"
-                ),
+                connected_entity=_optional_entity_id(ev_raw.get("connected_entity"), "ev.connected_entity"),
                 charging_power_entity=_optional_entity_id(
                     ev_raw.get("charging_power_entity"), "ev.charging_power_entity"
                 ),
@@ -398,6 +391,13 @@ class Settings:
                 charge_efficiency=ev_charge_efficiency,
                 target_soc_percent=ev_target_soc,
                 departure_time_local=ev_departure_time,
+            ),
+            economics=EconomicsSettings(
+                enabled=economics_enabled,
+                import_energy_eur_per_kwh=import_energy_price,
+                export_energy_eur_per_kwh=export_energy_price,
+                capacity_tariff_eur_per_kw_month=capacity_tariff,
+                capacity_tariff_floor_kw=capacity_floor,
             ),
             database=DatabaseSettings(
                 enabled=database_enabled,
@@ -429,7 +429,6 @@ def _optional_entity_id(value: object, option_name: str) -> str | None:
     """Normalize and validate an optional Home Assistant entity ID."""
     if value is None:
         return None
-
     entity_id = str(value).strip()
     if not entity_id:
         return None
@@ -463,6 +462,22 @@ def _positive_float(value: object, option_name: str) -> float:
     if number <= 0:
         raise ConfigurationError(f"{option_name} must be greater than zero")
     return number
+
+
+def _nonnegative_float(value: object, option_name: str) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ConfigurationError(f"{option_name} must be a number") from exc
+    if number < 0:
+        raise ConfigurationError(f"{option_name} must be zero or greater")
+    return number
+
+
+def _optional_nonnegative_float(value: object, option_name: str) -> float | None:
+    if value is None:
+        return None
+    return _nonnegative_float(value, option_name)
 
 
 def _percentage(value: object, option_name: str) -> float:
