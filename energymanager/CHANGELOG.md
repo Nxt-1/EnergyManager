@@ -1,4 +1,10 @@
 # Changelog
+## 0.16.1
+- Fixes pre-control net-power diagnostics so scheduled task load is included in interval net power, deficit energy and peak deficit.
+- Keeps the ESS/grid projection behavior unchanged; it already included scheduled load correctly.
+- Adds regression coverage that a feasible EV task is never under-allocated after discrete charger-step quantization, including at 226 V.
+- Renames the planner log wording from raw deficit to pre-control deficit to match the corrected metric.
+- No configuration schema changes and no hardware writes. Shadow mode remains mandatory.
 ## 0.16.0
 - Adds the first shadow task scheduler: planner tasks can now contribute scheduled load to the 15-minute planning horizon.
 - Schedules the current EV energy-by-deadline task from its earliest start using physically feasible whole-ampere 1P/3P

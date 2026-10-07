@@ -18,7 +18,7 @@ from .load_forecast import FORECAST_INTERVAL_MINUTES, BackgroundLoadForecast
 from .pv_forecast import PvForecast
 from .tasks import PlanningTask
 
-PLANNER_VERSION = "2026-10-07-shadow-v5"
+PLANNER_VERSION = "2026-10-07-shadow-v6"
 PLANNER_HORIZON_HOURS = 48
 _INTERVAL_HOURS = FORECAST_INTERVAL_MINUTES / 60.0
 _INTERVAL_DELTA = timedelta(minutes=FORECAST_INTERVAL_MINUTES)
@@ -295,9 +295,13 @@ def _schedule_ev_energy_task(
                 (power_w for power_w in power_steps if power_w >= required_power_w - 1e-9),
                 maximum_power_w,
             )
+        scheduled_load_w = scheduled[index].scheduled_load_w + selected_power_w
         scheduled[index] = replace(
             scheduled[index],
-            scheduled_load_w=scheduled[index].scheduled_load_w + selected_power_w,
+            scheduled_load_w=scheduled_load_w,
+            net_power_before_control_w=(
+                scheduled[index].background_load_w + scheduled_load_w - scheduled[index].pv_power_w
+            ),
         )
         remaining_kwh -= selected_power_w * _INTERVAL_HOURS / 1000.0
     return scheduled

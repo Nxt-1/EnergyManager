@@ -90,7 +90,7 @@ class ShadowPlannerService:
         if plan.ess_projection_status == "projected":
             _LOGGER.info(
                 "Shadow plan updated: next 24 h background %.2f kWh, scheduled %.2f kWh, PV potential %.2f kWh, "
-                "raw deficit %.2f kWh, projected grid import %.2f kWh, ESS SoC %.1f -> %.1f%%, "
+                "pre-control deficit %.2f kWh, projected grid import %.2f kWh, ESS SoC %.1f -> %.1f%%, "
                 "curtailed DC PV %.2f kWh, actuators [%s], tasks [%s], dry-run commands [%s]",
                 summary["background_load_kwh"],
                 summary["scheduled_load_kwh"],

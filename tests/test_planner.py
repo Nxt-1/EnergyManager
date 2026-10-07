@@ -82,7 +82,7 @@ def _ess_actuator(*, soc_percent: float = 50.0, **overrides: float) -> EssActuat
     )
 
 
-def _ev_actuator() -> EvActuatorSnapshot:
+def _ev_actuator(*, nominal_voltage_v: float = 230.0) -> EvActuatorSnapshot:
     return EvActuatorSnapshot(
         actuator_id="ev",
         kind="flexible_load",
@@ -96,7 +96,7 @@ def _ev_actuator() -> EvActuatorSnapshot:
         capabilities=EvCapabilities(
             min_charge_current_a=6.0,
             max_charge_current_a=16.0,
-            nominal_voltage_v=230.0,
+            nominal_voltage_v=nominal_voltage_v,
             supports_single_phase=True,
             supports_three_phase=True,
             battery_capacity_kwh=46.8,
@@ -194,7 +194,7 @@ def test_ev_task_is_scheduled_into_feasible_discrete_charge_steps() -> None:
     assert scheduled_energy - 3.0 < 1.38 * 0.25
 
 
-def test_ev_task_does_not_change_raw_background_pv_deficit_metric() -> None:
+def test_ev_task_is_included_in_pre_control_net_deficit_metric() -> None:
     start = datetime(2026, 10, 6, 12, 0, tzinfo=_LOCAL)
     task = _ev_task(start, required_energy_kwh=3.0, end=start + timedelta(hours=2))
     plan = ShadowPlanner().build(
@@ -206,8 +206,25 @@ def test_ev_task_does_not_change_raw_background_pv_deficit_metric() -> None:
     )
     summary = plan.summary(2)
 
-    assert summary["net_deficit_kwh"] == pytest.approx(2.0)
-    assert float(summary["scheduled_load_kwh"]) >= 3.0
+    assert summary["scheduled_load_kwh"] == pytest.approx(3.105)
+    assert summary["net_deficit_kwh"] == pytest.approx(5.105)
+    assert plan.intervals[0].net_power_before_control_w == pytest.approx(12040.0)
+
+
+def test_ev_scheduler_never_underallocates_feasible_energy_with_226_v_nominal_voltage() -> None:
+    start = datetime(2026, 10, 6, 12, 0, tzinfo=_LOCAL)
+    task = _ev_task(start, required_energy_kwh=10.4, end=start + timedelta(hours=4))
+    plan = ShadowPlanner().build(
+        _load_forecast(start, [500.0] * 16),
+        _pv_forecast(start, [0.0] * 4),
+        now_utc=start.astimezone(UTC),
+        actuators=(_ev_actuator(nominal_voltage_v=226.0),),
+        tasks=(task,),
+    )
+    scheduled_kwh = float(plan.summary(4)["scheduled_load_kwh"])
+
+    assert scheduled_kwh >= 10.4
+    assert scheduled_kwh - 10.4 < 6.0 * 226.0 * 0.25 / 1000.0
 
 
 def test_ev_scheduled_load_is_included_in_ess_projection() -> None:
