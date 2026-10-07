@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import math
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 
-from .actuators import ActuatorSnapshot, EssActuatorSnapshot, EssCapabilities, find_ess_actuator
+from .actuators import (
+    ActuatorSnapshot,
+    EssActuatorSnapshot,
+    EssCapabilities,
+    EvActuatorSnapshot,
+    find_ess_actuator,
+    find_ev_actuator,
+)
 from .load_forecast import FORECAST_INTERVAL_MINUTES, BackgroundLoadForecast
 from .pv_forecast import PvForecast
 from .tasks import PlanningTask
 
-PLANNER_VERSION = "2026-10-07-shadow-v4"
+PLANNER_VERSION = "2026-10-07-shadow-v5"
 PLANNER_HORIZON_HOURS = 48
 _INTERVAL_HOURS = FORECAST_INTERVAL_MINUTES / 60.0
+_INTERVAL_DELTA = timedelta(minutes=FORECAST_INTERVAL_MINUTES)
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +87,6 @@ class ShadowPlan:
                 "max_soc_percent": None,
                 "max_grid_import_after_ess_w": None,
             }
-
         background = sum(item.background_load_w for item in intervals) * _INTERVAL_HOURS / 1000.0
         scheduled = sum(item.scheduled_load_w for item in intervals) * _INTERVAL_HOURS / 1000.0
         pv_ac = sum(item.pv_ac_power_w for item in intervals) * _INTERVAL_HOURS / 1000.0
@@ -113,14 +121,12 @@ class ShadowPlan:
             "max_soc_percent": None,
             "max_grid_import_after_ess_w": None,
         }
-
         if self.ess_projection_status != "projected":
             return result
 
         projected = [item for item in intervals if item.grid_power_after_ess_w is not None]
         if len(projected) != len(intervals):
             return result
-
         grid_values = [float(item.grid_power_after_ess_w) for item in projected]
         ess_ac_values = [float(item.ess_ac_power_w) for item in projected if item.ess_ac_power_w is not None]
         battery_deltas = [
@@ -138,7 +144,6 @@ class ShadowPlan:
             for item in projected
             if item.curtailed_dc_pv_w is not None
         ]
-
         result.update(
             {
                 "grid_import_after_ess_kwh": (
@@ -166,7 +171,7 @@ class ShadowPlan:
 
 
 class ShadowPlanner:
-    """Merge independent forecasts and project a conservative ESS self-consumption baseline."""
+    """Merge independent forecasts, schedule deadline tasks and project the ESS baseline."""
 
     def build(
         self,
@@ -179,7 +184,6 @@ class ShadowPlanner:
     ) -> ShadowPlan:
         if now_utc.tzinfo is None:
             raise ValueError("now_utc must be timezone-aware")
-
         horizon_end_utc = now_utc.astimezone(UTC) + timedelta(hours=PLANNER_HORIZON_HOURS)
         load_points = [
             point
@@ -188,30 +192,29 @@ class ShadowPlanner:
         ]
         if not load_points:
             raise ValueError("Background-load forecast has no future intervals in the planning horizon")
-
         base_intervals: list[ShadowPlanInterval] = []
         for load_point in load_points:
             pv_ac_w, pv_dc_w = _pv_powers_for_interval(pv_forecast, load_point.period_start_local)
             background_w = max(0.0, load_point.power_w)
-            scheduled_w = 0.0
             pv_total_w = pv_ac_w + pv_dc_w
             base_intervals.append(
                 ShadowPlanInterval(
                     period_start_local=load_point.period_start_local,
                     background_load_w=background_w,
-                    scheduled_load_w=scheduled_w,
+                    scheduled_load_w=0.0,
                     pv_ac_power_w=pv_ac_w,
                     pv_dc_power_w=pv_dc_w,
                     pv_power_w=pv_total_w,
-                    net_power_before_control_w=background_w + scheduled_w - pv_total_w,
+                    net_power_before_control_w=background_w - pv_total_w,
                 )
             )
 
+        scheduled_intervals = _schedule_tasks(base_intervals, actuators, tasks)
         ess_actuator = find_ess_actuator(actuators)
         if ess_actuator is None or not ess_actuator.configured:
             return ShadowPlan(
                 generated_at_utc=now_utc.astimezone(UTC),
-                intervals=tuple(base_intervals),
+                intervals=tuple(scheduled_intervals),
                 ess_projection_status="not_configured",
                 actuator_snapshots=actuators,
                 tasks=tasks,
@@ -219,14 +222,13 @@ class ShadowPlanner:
         if not ess_actuator.planning_available or ess_actuator.soc_percent is None:
             return ShadowPlan(
                 generated_at_utc=now_utc.astimezone(UTC),
-                intervals=tuple(base_intervals),
+                intervals=tuple(scheduled_intervals),
                 ess_projection_status=ess_actuator.status,
                 actuator_snapshots=actuators,
                 tasks=tasks,
                 ess_resource=ess_actuator.capabilities,
             )
-
-        projected_intervals = _project_ess(base_intervals, ess_actuator)
+        projected_intervals = _project_ess(scheduled_intervals, ess_actuator)
         return ShadowPlan(
             generated_at_utc=now_utc.astimezone(UTC),
             intervals=projected_intervals,
@@ -236,6 +238,87 @@ class ShadowPlanner:
             ess_resource=ess_actuator.capabilities,
             ess_initial_soc_percent=max(0.0, min(100.0, ess_actuator.soc_percent)),
         )
+
+
+def _schedule_tasks(
+    intervals: list[ShadowPlanInterval],
+    actuators: tuple[ActuatorSnapshot, ...],
+    tasks: tuple[PlanningTask, ...],
+) -> list[ShadowPlanInterval]:
+    """Apply the first deadline-only shadow task scheduler without an economic objective."""
+    scheduled = list(intervals)
+    ev_actuator = find_ev_actuator(actuators)
+    if ev_actuator is None or not ev_actuator.planning_available:
+        return scheduled
+    for task in tasks:
+        if task.kind != "energy_by_deadline" or task.actuator_id != ev_actuator.actuator_id:
+            continue
+        if not task.planning_available or task.required_energy_kwh is None or task.required_energy_kwh <= 0.0:
+            continue
+        scheduled = _schedule_ev_energy_task(scheduled, task, ev_actuator)
+    return scheduled
+
+
+def _schedule_ev_energy_task(
+    intervals: list[ShadowPlanInterval],
+    task: PlanningTask,
+    actuator: EvActuatorSnapshot,
+) -> list[ShadowPlanInterval]:
+    """Place EV energy in the earliest eligible slots using feasible charger power steps."""
+    if task.earliest_start_local is None or task.latest_end_local is None or task.required_energy_kwh is None:
+        return intervals
+    power_steps = _ev_charge_power_steps_w(actuator)
+    if not power_steps:
+        return intervals
+
+    earliest_utc = task.earliest_start_local.astimezone(UTC)
+    latest_end_utc = task.latest_end_local.astimezone(UTC)
+    eligible_indexes = [
+        index
+        for index, item in enumerate(intervals)
+        if item.period_start_local.astimezone(UTC) >= earliest_utc
+        and (item.period_start_local + _INTERVAL_DELTA).astimezone(UTC) <= latest_end_utc
+    ]
+    remaining_kwh = task.required_energy_kwh
+    scheduled = list(intervals)
+    maximum_power_w = power_steps[-1]
+    maximum_interval_kwh = maximum_power_w * _INTERVAL_HOURS / 1000.0
+
+    for index in eligible_indexes:
+        if remaining_kwh <= 1e-9:
+            break
+        if remaining_kwh >= maximum_interval_kwh - 1e-9:
+            selected_power_w = maximum_power_w
+        else:
+            required_power_w = remaining_kwh * 1000.0 / _INTERVAL_HOURS
+            selected_power_w = next(
+                (power_w for power_w in power_steps if power_w >= required_power_w - 1e-9),
+                maximum_power_w,
+            )
+        scheduled[index] = replace(
+            scheduled[index],
+            scheduled_load_w=scheduled[index].scheduled_load_w + selected_power_w,
+        )
+        remaining_kwh -= selected_power_w * _INTERVAL_HOURS / 1000.0
+    return scheduled
+
+
+def _ev_charge_power_steps_w(actuator: EvActuatorSnapshot) -> tuple[float, ...]:
+    """Return the EV actuator's feasible whole-ampere AC charging powers."""
+    capabilities = actuator.capabilities
+    minimum_current = math.ceil(capabilities.min_charge_current_a)
+    maximum_current = math.floor(capabilities.max_charge_current_a)
+    phase_counts: list[int] = []
+    if capabilities.supports_single_phase:
+        phase_counts.append(1)
+    if capabilities.supports_three_phase:
+        phase_counts.append(3)
+    powers = {
+        phase_count * capabilities.nominal_voltage_v * float(current_a)
+        for phase_count in phase_counts
+        for current_a in range(minimum_current, maximum_current + 1)
+    }
+    return tuple(sorted(powers))
 
 
 def _project_ess(
@@ -251,13 +334,11 @@ def _project_ess(
     minimum_kwh = resource.capacity_kwh * resource.min_soc_percent / 100.0
     maximum_kwh = resource.capacity_kwh * resource.max_soc_percent / 100.0
     projected: list[ShadowPlanInterval] = []
-
     for item in intervals:
         ac_balance_w = item.total_load_w - item.pv_ac_power_w
         ess_ac_power_w = 0.0
         battery_delta_kwh = 0.0
         curtailed_dc_w = 0.0
-
         if ac_balance_w >= 0.0:
             dc_to_ac_w = min(
                 ac_balance_w,
@@ -268,7 +349,6 @@ def _project_ess(
             ess_ac_power_w += dc_to_ac_w
             remaining_deficit_w = ac_balance_w - dc_to_ac_w
             inverter_headroom_w = max(0.0, resource.max_discharge_power_w - dc_to_ac_w)
-
             available_stored_kwh = max(0.0, stored_kwh - minimum_kwh)
             battery_ac_limit_w = (
                 available_stored_kwh * resource.discharge_efficiency / _INTERVAL_HOURS * 1000.0
@@ -279,7 +359,6 @@ def _project_ess(
             battery_delta_kwh -= battery_used_kwh
             ess_ac_power_w += battery_to_ac_w
             remaining_deficit_w -= battery_to_ac_w
-
             unused_dc_w = max(0.0, item.pv_dc_power_w - dc_used_w)
             room_kwh = max(0.0, maximum_kwh - stored_kwh)
             charge_by_room_w = room_kwh / resource.charge_efficiency / _INTERVAL_HOURS * 1000.0
@@ -298,7 +377,6 @@ def _project_ess(
             stored_kwh += stored_added_dc_kwh
             battery_delta_kwh += stored_added_dc_kwh
             curtailed_dc_w = max(0.0, item.pv_dc_power_w - dc_charge_w)
-
             charge_headroom_w = max(0.0, resource.max_charge_power_w - dc_charge_w)
             room_kwh = max(0.0, maximum_kwh - stored_kwh)
             charge_by_room_w = room_kwh / resource.charge_efficiency / _INTERVAL_HOURS * 1000.0
@@ -308,7 +386,6 @@ def _project_ess(
             battery_delta_kwh += stored_added_ac_kwh
             ess_ac_power_w -= ac_charge_w
             grid_after_ess_w = -(ac_surplus_w - ac_charge_w)
-
         stored_kwh = max(0.0, min(resource.capacity_kwh, stored_kwh))
         projected_soc = 100.0 * stored_kwh / resource.capacity_kwh
         projected.append(
@@ -327,7 +404,6 @@ def _project_ess(
                 curtailed_dc_pv_w=curtailed_dc_w,
             )
         )
-
     return tuple(projected)
 
 

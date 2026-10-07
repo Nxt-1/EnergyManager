@@ -53,7 +53,6 @@ class ShadowPlannerService:
         now = (now_utc or datetime.now(UTC)).astimezone(UTC)
         if self._last_plan_at_utc is not None and now - self._last_plan_at_utc < _REFRESH_INTERVAL:
             return
-
         actuators = self._actuator_registry.snapshots(house_state)
         await self._diagnostics.publish_actuator_status(actuators)
 
@@ -62,7 +61,6 @@ class ShadowPlannerService:
         if load_forecast is None:
             await self._diagnostics.publish_shadow_plan_status("waiting_for_load_forecast")
             return
-
         local_tz = load_forecast.points[0].period_start_local.tzinfo if load_forecast.points else None
         if local_tz is None:
             local_tz = now.astimezone().tzinfo
@@ -73,7 +71,6 @@ class ShadowPlannerService:
         if pv_forecast is None:
             await self._diagnostics.publish_shadow_plan_status("waiting_for_pv_forecast")
             return
-
         plan = self._planner.build(
             load_forecast,
             pv_forecast,
@@ -84,20 +81,19 @@ class ShadowPlannerService:
         self._plan = plan
         self._last_plan_at_utc = now
         await self._diagnostics.publish_shadow_plan(plan)
-
         requests = _next_interval_requests(plan)
         command_results = self._actuator_registry.evaluate_commands(requests, house_state)
         await self._diagnostics.publish_actuator_command_status(command_results)
-
         summary = plan.summary(24)
         actuator_status = ", ".join(f"{item.actuator_id}:{item.status}" for item in actuators)
         task_status = ", ".join(f"{item.task_id}:{item.status}" for item in tasks)
         if plan.ess_projection_status == "projected":
             _LOGGER.info(
-                "Shadow plan updated: next 24 h background %.2f kWh, PV potential %.2f kWh, "
+                "Shadow plan updated: next 24 h background %.2f kWh, scheduled %.2f kWh, PV potential %.2f kWh, "
                 "raw deficit %.2f kWh, projected grid import %.2f kWh, ESS SoC %.1f -> %.1f%%, "
                 "curtailed DC PV %.2f kWh, actuators [%s], tasks [%s], dry-run commands [%s]",
                 summary["background_load_kwh"],
+                summary["scheduled_load_kwh"],
                 summary["pv_potential_kwh"],
                 summary["net_deficit_kwh"],
                 summary["grid_import_after_ess_kwh"],
@@ -109,12 +105,12 @@ class ShadowPlannerService:
                 _command_log(command_results),
             )
             return
-
         _LOGGER.info(
-            "Shadow plan updated: next 24 h background %.2f kWh, PV potential %.2f kWh, "
+            "Shadow plan updated: next 24 h background %.2f kWh, scheduled %.2f kWh, PV potential %.2f kWh, "
             "net deficit %.2f kWh, net surplus %.2f kWh, ESS projection %s, actuators [%s], "
             "tasks [%s], dry-run commands [%s]",
             summary["background_load_kwh"],
+            summary["scheduled_load_kwh"],
             summary["pv_potential_kwh"],
             summary["net_deficit_kwh"],
             summary["net_surplus_kwh"],
