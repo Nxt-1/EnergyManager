@@ -206,6 +206,9 @@ def test_milp_status_publisher_marks_result_non_authoritative() -> None:
         economic_solve_time_seconds=0.08,
         tie_break_solve_time_seconds=0.043,
         tie_break_status="optimal",
+        tie_break_warm_start_applied=True,
+        tie_break_warm_start_status="kOk",
+        selected_solution_stage="tie_break",
         first_stage_objective_eur=9.995,
         validation_status="passed",
         adoption_ready=True,
@@ -225,6 +228,9 @@ def test_milp_status_publisher_marks_result_non_authoritative() -> None:
     assert entity["attributes"]["fallback_to_reference"] is False
     assert entity["attributes"]["economic_tolerance_eur"] == MILP_ECONOMIC_TOLERANCE_EUR
     assert entity["attributes"]["early_value_half_life_days"] == MILP_EARLY_VALUE_HALF_LIFE_DAYS
+    assert entity["attributes"]["tie_break_warm_start_applied"] is True
+    assert entity["attributes"]["tie_break_warm_start_status"] == "kOk"
+    assert entity["attributes"]["selected_solution_stage"] == "tie_break"
 
 
 def test_highs_milp_solves_discrete_ev_and_ess_model_when_dependency_is_available() -> None:
@@ -245,6 +251,8 @@ def test_highs_milp_solves_discrete_ev_and_ess_model_when_dependency_is_availabl
     assert result.first_stage_objective_eur is not None
     assert result.milp_objective_eur <= result.first_stage_objective_eur + MILP_ECONOMIC_TOLERANCE_EUR + 1e-5
     assert result.tie_break_status in {"optimal", "feasible", "feasible_time_limit"}
+    assert result.tie_break_warm_start_applied is True
+    assert result.selected_solution_stage == "tie_break"
     assert result.economic_solve_time_seconds is not None
     assert result.tie_break_solve_time_seconds is not None
     assert result.validation_status == "passed"

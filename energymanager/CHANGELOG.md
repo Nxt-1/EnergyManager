@@ -1,4 +1,11 @@
 # Changelog
+## 0.22.1
+- Warm-starts the second-stage early-value MILP from the complete feasible first-stage economic solution.
+- Adds diagnostics showing whether the warm start was accepted and whether the published result came from the economic stage or
+  the early-value tie-break stage.
+- Keeps the economic objective, EUR 0.01 tolerance, three-day time-preference half-life, validation rules and planner authority
+  unchanged.
+
 ## 0.22.0
 - Adds independent post-solve validation for MILP interval timing, AC balance, ESS SoC/power limits, DC curtailment,
   discrete EV charging states and energy-by-deadline task fulfilment.

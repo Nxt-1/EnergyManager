@@ -8,13 +8,15 @@ from datetime import UTC, timedelta
 from time import perf_counter
 from typing import Any
 
+import numpy as np
+
 from .actuators import EssActuatorSnapshot, EvActuatorSnapshot, find_ess_actuator, find_ev_actuator
 from .economics import CapacityPeakState, TariffProfile, evaluate_plan_cost, evaluate_plan_objective
 from .ha_client import HomeAssistantClient
 from .planner import ShadowPlan, ShadowPlanInterval
 from .tasks import PlanningTask
 
-MILP_EVALUATION_VERSION = "2026-10-08-milp-v2"
+MILP_EVALUATION_VERSION = "2026-10-08-milp-v3"
 MILP_STATUS_ENTITY = "sensor.energy_manager_milp_status"
 MILP_TIME_LIMIT_SECONDS = 5.0
 MILP_RELATIVE_GAP = 0.01
@@ -77,6 +79,9 @@ class MilpEvaluation:
     economic_solve_time_seconds: float | None = None
     tie_break_solve_time_seconds: float | None = None
     tie_break_status: str | None = None
+    tie_break_warm_start_applied: bool = False
+    tie_break_warm_start_status: str | None = None
+    selected_solution_stage: str | None = None
     first_stage_objective_eur: float | None = None
     economic_tolerance_eur: float = MILP_ECONOMIC_TOLERANCE_EUR
     early_value_half_life_days: float = MILP_EARLY_VALUE_HALF_LIFE_DAYS
@@ -206,6 +211,9 @@ def _replace_solver_version(result: MilpEvaluation, version: str) -> MilpEvaluat
         economic_solve_time_seconds=result.economic_solve_time_seconds,
         tie_break_solve_time_seconds=result.tie_break_solve_time_seconds,
         tie_break_status=result.tie_break_status,
+        tie_break_warm_start_applied=result.tie_break_warm_start_applied,
+        tie_break_warm_start_status=result.tie_break_warm_start_status,
+        selected_solution_stage=result.selected_solution_stage,
         first_stage_objective_eur=result.first_stage_objective_eur,
         economic_tolerance_eur=result.economic_tolerance_eur,
         early_value_half_life_days=result.early_value_half_life_days,
@@ -327,6 +335,7 @@ def _solve_model(
     model.addConstr(economic_expression <= stage1_internal_objective + MILP_ECONOMIC_TOLERANCE_EUR)
     tie_break_expression = _time_weighted_grid_import_expression(reference_plan, variables)
     model.setObjective(tie_break_expression, sense=highspy.ObjSense.kMinimize)
+    warm_start_applied, warm_start_status = _set_primal_warm_start(model, highspy, stage1_values)
 
     tie_break_started = perf_counter()
     model.run()
@@ -341,10 +350,12 @@ def _solve_model(
         values = list(stage2_solution.col_value)
         selected_model_status = stage2_model_status
         selected_info = stage2_info
+        selected_solution_stage = "tie_break"
     else:
         values = stage1_values
         selected_model_status = stage1_model_status
         selected_info = stage1_info
+        selected_solution_stage = "economic_fallback"
 
     milp_plan = _solution_plan(reference_plan, ess, ev, variables, values)
     milp_objective = _objective(milp_plan, profile, capacity_state)
@@ -384,6 +395,9 @@ def _solve_model(
         economic_solve_time_seconds=economic_solve_time,
         tie_break_solve_time_seconds=tie_break_solve_time,
         tie_break_status=tie_break_status,
+        tie_break_warm_start_applied=warm_start_applied,
+        tie_break_warm_start_status=warm_start_status,
+        selected_solution_stage=selected_solution_stage,
         first_stage_objective_eur=stage1_objective,
         time_weighted_grid_import_score=_time_weighted_grid_import_value(variables, values),
         validation_status=validation_status,
@@ -396,6 +410,18 @@ def _solve_model(
         plan=milp_plan,
         reason=reason,
     )
+
+
+def _set_primal_warm_start(model: Any, highspy: Any, values: list[float]) -> tuple[bool, str]:
+    """Seed the second-stage MIP with the complete feasible first-stage primal solution."""
+    try:
+        indexes = np.arange(len(values), dtype=np.int32)
+        primal_values = np.asarray(values, dtype=np.float64)
+        status = model.setSolution(len(values), indexes, primal_values)
+    except Exception as exc:  # pragma: no cover - defensive around the optional solver API
+        return False, f"error:{type(exc).__name__}:{exc}"
+    name = getattr(status, "name", str(status))
+    return status == highspy.HighsStatus.kOk, str(name)
 
 
 def _build_variables(
@@ -977,6 +1003,9 @@ async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpE
         "estimated_improvement_eur": _round_optional(evaluation.estimated_improvement_eur, 4),
         "economic_tolerance_eur": evaluation.economic_tolerance_eur,
         "tie_break_status": evaluation.tie_break_status,
+        "tie_break_warm_start_applied": evaluation.tie_break_warm_start_applied,
+        "tie_break_warm_start_status": evaluation.tie_break_warm_start_status,
+        "selected_solution_stage": evaluation.selected_solution_stage,
         "tie_break_objective": "exponential_time_weighted_grid_import",
         "early_value_half_life_days": evaluation.early_value_half_life_days,
         "time_weighted_grid_import_score": _round_optional(evaluation.time_weighted_grid_import_score, 5),
