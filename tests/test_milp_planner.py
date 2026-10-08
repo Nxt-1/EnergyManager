@@ -10,7 +10,13 @@ import pytest
 from energymanager.actuators import EssActuatorSnapshot, EssCapabilities, EvActuatorSnapshot, EvCapabilities
 from energymanager.economics import CapacityPeakState, TariffProfile
 from energymanager.load_forecast import BackgroundLoadForecast, BackgroundLoadForecastPoint
-from energymanager.milp_planner import MilpEvaluation, evaluate_shadow_plan_milp, publish_milp_evaluation
+from energymanager.milp_planner import (
+    MILP_EARLY_VALUE_HALF_LIFE_DAYS,
+    MILP_ECONOMIC_TOLERANCE_EUR,
+    MilpEvaluation,
+    evaluate_shadow_plan_milp,
+    publish_milp_evaluation,
+)
 from energymanager.planner import ShadowPlanner
 from energymanager.pv_forecast import PvForecast, PvForecastPoint
 from energymanager.tasks import PlanningTask
@@ -197,6 +203,13 @@ def test_milp_status_publisher_marks_result_non_authoritative() -> None:
         reference_objective_eur=12.0,
         milp_objective_eur=10.0,
         estimated_improvement_eur=2.0,
+        economic_solve_time_seconds=0.08,
+        tie_break_solve_time_seconds=0.043,
+        tie_break_status="optimal",
+        first_stage_objective_eur=9.995,
+        validation_status="passed",
+        adoption_ready=True,
+        fallback_to_reference=False,
     )
 
     asyncio.run(publish_milp_evaluation(client, result))
@@ -207,6 +220,11 @@ def test_milp_status_publisher_marks_result_non_authoritative() -> None:
     assert entity["attributes"]["hardware_writes"] is False
     assert entity["attributes"]["milp_objective_eur"] == 10.0
     assert entity["attributes"]["estimated_improvement_eur"] == 2.0
+    assert entity["attributes"]["validation_status"] == "passed"
+    assert entity["attributes"]["adoption_ready"] is True
+    assert entity["attributes"]["fallback_to_reference"] is False
+    assert entity["attributes"]["economic_tolerance_eur"] == MILP_ECONOMIC_TOLERANCE_EUR
+    assert entity["attributes"]["early_value_half_life_days"] == MILP_EARLY_VALUE_HALF_LIFE_DAYS
 
 
 def test_highs_milp_solves_discrete_ev_and_ess_model_when_dependency_is_available() -> None:
@@ -224,6 +242,23 @@ def test_highs_milp_solves_discrete_ev_and_ess_model_when_dependency_is_availabl
     assert result.integer_variable_count > 0
     assert result.constraint_count > 0
     assert result.milp_objective_eur is not None
+    assert result.first_stage_objective_eur is not None
+    assert result.milp_objective_eur <= result.first_stage_objective_eur + MILP_ECONOMIC_TOLERANCE_EUR + 1e-5
+    assert result.tie_break_status in {"optimal", "feasible", "feasible_time_limit"}
+    assert result.economic_solve_time_seconds is not None
+    assert result.tie_break_solve_time_seconds is not None
+    assert result.validation_status == "passed"
+    assert result.validation_errors == ()
+    assert result.adoption_ready is True
+    assert result.fallback_to_reference is False
+    assert len(result.task_validation) == 1
+    assert result.task_validation[0].deadline_met is True
+    assert result.task_validation[0].power_steps_valid is True
+    assert result.task_validation[0].valid is True
+    assert result.reference_cost is not None
+    assert result.milp_cost is not None
+    assert result.plan.intervals[0].ess_ac_power_w is not None
+    assert result.plan.intervals[0].ess_ac_power_w > 0.0
     scheduled_kwh = float(result.plan.summary(2)["scheduled_load_kwh"])
     assert scheduled_kwh >= 3.0
     assert scheduled_kwh - 3.0 < 6.0 * 230.0 * 0.25 / 1000.0

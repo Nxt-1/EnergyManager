@@ -1,4 +1,15 @@
 # Changelog
+## 0.22.0
+- Adds independent post-solve validation for MILP interval timing, AC balance, ESS SoC/power limits, DC curtailment,
+  discrete EV charging states and energy-by-deadline task fulfilment.
+- Adds a second MILP pass that keeps the economic objective within EUR 0.01 of the first-stage economic result and then prefers
+  earlier realized energy savings using an exponential three-day time-preference half-life.
+- Publishes separate first-stage/tie-break solve times, validation results, task fulfilment checks and seven-day cost breakdowns
+  for both the existing v0.20 reference plan and the MILP result.
+- Marks whether a solved MILP plan is structurally ready for future adoption and whether the existing reference planner would
+  need to remain the fallback. The MILP is still non-authoritative in this release.
+- Keeps the seven-day horizon, existing tariff model, current task policy and all hardware writes unchanged.
+
 ## 0.21.0
 - Adds a non-authoritative seven-day MILP evaluation using HiGHS/highspy alongside the existing v0.20 scheduler.
 - Jointly models the current EV deadline task, ESS charge/discharge, grid import/export, AC/DC PV allocation, ESS SoC and

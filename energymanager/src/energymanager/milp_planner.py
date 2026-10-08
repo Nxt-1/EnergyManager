@@ -5,21 +5,54 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import UTC, timedelta
+from time import perf_counter
 from typing import Any
 
 from .actuators import EssActuatorSnapshot, EvActuatorSnapshot, find_ess_actuator, find_ev_actuator
-from .economics import CapacityPeakState, TariffProfile, evaluate_plan_objective
+from .economics import CapacityPeakState, TariffProfile, evaluate_plan_cost, evaluate_plan_objective
 from .ha_client import HomeAssistantClient
 from .planner import ShadowPlan, ShadowPlanInterval
 from .tasks import PlanningTask
 
-MILP_EVALUATION_VERSION = "2026-10-08-milp-v1"
+MILP_EVALUATION_VERSION = "2026-10-08-milp-v2"
 MILP_STATUS_ENTITY = "sensor.energy_manager_milp_status"
 MILP_TIME_LIMIT_SECONDS = 5.0
 MILP_RELATIVE_GAP = 0.01
 MILP_REFRESH_MINUTES = 5
+MILP_ECONOMIC_TOLERANCE_EUR = 0.01
+MILP_EARLY_VALUE_HALF_LIFE_DAYS = 3.0
+_VALIDATION_POWER_TOLERANCE_W = 5.0
 _INTERVAL_HOURS = 0.25
 _INTERVAL_DELTA = timedelta(minutes=15)
+
+
+@dataclass(frozen=True, slots=True)
+class MilpTaskValidation:
+    """Independent post-solve check of one hard planner task."""
+
+    task_id: str
+    required_energy_kwh: float
+    scheduled_energy_kwh: float
+    outside_window_energy_kwh: float
+    deadline_met: bool
+    power_steps_valid: bool
+    valid: bool
+
+
+@dataclass(frozen=True, slots=True)
+class MilpCostBreakdown:
+    """Seven-day accounting used to compare the reference and MILP plans."""
+
+    import_kwh: float
+    export_kwh: float
+    net_energy_cost_eur: float
+    incremental_capacity_cost_eur: float | None
+    total_marginal_cost_eur: float | None
+    terminal_usable_ac_kwh: float
+    terminal_ess_value_eur: float
+    objective_eur: float
+    max_grid_import_kw: float
+    end_soc_percent: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +74,20 @@ class MilpEvaluation:
     reference_objective_eur: float | None
     milp_objective_eur: float | None
     estimated_improvement_eur: float | None
+    economic_solve_time_seconds: float | None = None
+    tie_break_solve_time_seconds: float | None = None
+    tie_break_status: str | None = None
+    first_stage_objective_eur: float | None = None
+    economic_tolerance_eur: float = MILP_ECONOMIC_TOLERANCE_EUR
+    early_value_half_life_days: float = MILP_EARLY_VALUE_HALF_LIFE_DAYS
+    time_weighted_grid_import_score: float | None = None
+    validation_status: str = "not_run"
+    validation_errors: tuple[str, ...] = ()
+    task_validation: tuple[MilpTaskValidation, ...] = ()
+    reference_cost: MilpCostBreakdown | None = None
+    milp_cost: MilpCostBreakdown | None = None
+    adoption_ready: bool = False
+    fallback_to_reference: bool = True
     plan: ShadowPlan | None = None
     reason: str | None = None
 
@@ -156,6 +203,20 @@ def _replace_solver_version(result: MilpEvaluation, version: str) -> MilpEvaluat
         reference_objective_eur=result.reference_objective_eur,
         milp_objective_eur=result.milp_objective_eur,
         estimated_improvement_eur=result.estimated_improvement_eur,
+        economic_solve_time_seconds=result.economic_solve_time_seconds,
+        tie_break_solve_time_seconds=result.tie_break_solve_time_seconds,
+        tie_break_status=result.tie_break_status,
+        first_stage_objective_eur=result.first_stage_objective_eur,
+        economic_tolerance_eur=result.economic_tolerance_eur,
+        early_value_half_life_days=result.early_value_half_life_days,
+        time_weighted_grid_import_score=result.time_weighted_grid_import_score,
+        validation_status=result.validation_status,
+        validation_errors=result.validation_errors,
+        task_validation=result.task_validation,
+        reference_cost=result.reference_cost,
+        milp_cost=result.milp_cost,
+        adoption_ready=result.adoption_ready,
+        fallback_to_reference=result.fallback_to_reference,
         plan=result.plan,
         reason=result.reason,
     )
@@ -220,62 +281,120 @@ def _solve_model(
         capacity_state,
     )
     _add_constraints(model, reference_plan, ess, ev, active_tasks, variables)
-    _set_objective(model, highspy, reference_plan, ess, profile, variables)
-    model.run()
+    economic_expression = _economic_objective_expression(reference_plan, ess, profile, variables)
+    model.setObjective(economic_expression, sense=highspy.ObjSense.kMinimize)
 
-    model_status = model.modelStatusToString(model.getModelStatus())
-    info = model.getInfo()
-    solution = model.getSolution()
-    has_solution = (
-        info.primal_solution_status == highspy.SolutionStatus.kSolutionStatusFeasible
-    )
-    solve_time = float(model.getRunTime())
-    variable_count = int(model.getNumCol())
-    constraint_count = int(model.getNumRow())
+    economic_started = perf_counter()
+    model.run()
+    economic_solve_time = perf_counter() - economic_started
+    stage1_model_status = model.modelStatusToString(model.getModelStatus())
+    stage1_info = model.getInfo()
+    stage1_solution = model.getSolution()
+    stage1_has_solution = _has_solution(highspy, stage1_info)
     reference_objective = _objective(reference_plan, profile, capacity_state)
-    if not has_solution:
+    reference_cost = _cost_breakdown(reference_plan, profile, capacity_state)
+
+    if not stage1_has_solution:
         return MilpEvaluation(
-            status=_status_from_model(model_status, has_solution=False),
-            model_status=model_status,
+            status=_status_from_model(stage1_model_status, has_solution=False),
+            model_status=stage1_model_status,
             solver_version=_solver_version(highspy),
-            solve_time_seconds=solve_time,
-            mip_gap=_finite_optional(getattr(info, "mip_gap", None)),
-            mip_node_count=_integer_optional(getattr(info, "mip_node_count", None)),
-            variable_count=variable_count,
+            solve_time_seconds=economic_solve_time,
+            mip_gap=_finite_optional(getattr(stage1_info, "mip_gap", None)),
+            mip_node_count=_integer_optional(getattr(stage1_info, "mip_node_count", None)),
+            variable_count=int(model.getNumCol()),
             integer_variable_count=integer_count,
-            constraint_count=constraint_count,
+            constraint_count=int(model.getNumRow()),
             horizon_intervals=len(reference_plan.intervals),
             active_task_count=len(active_tasks),
             reference_strategy=reference_plan.scheduling_strategy,
             reference_objective_eur=reference_objective,
             milp_objective_eur=None,
             estimated_improvement_eur=None,
+            economic_solve_time_seconds=economic_solve_time,
+            validation_status="not_run",
+            reference_cost=reference_cost,
+            adoption_ready=False,
+            fallback_to_reference=True,
             reason="solver_returned_no_primal_solution",
         )
 
-    values = list(solution.col_value)
+    stage1_values = list(stage1_solution.col_value)
+    stage1_plan = _solution_plan(reference_plan, ess, ev, variables, stage1_values)
+    stage1_objective = _objective(stage1_plan, profile, capacity_state)
+    stage1_internal_objective = _economic_objective_value(ess, profile, variables, stage1_values)
+
+    model.addConstr(economic_expression <= stage1_internal_objective + MILP_ECONOMIC_TOLERANCE_EUR)
+    tie_break_expression = _time_weighted_grid_import_expression(reference_plan, variables)
+    model.setObjective(tie_break_expression, sense=highspy.ObjSense.kMinimize)
+
+    tie_break_started = perf_counter()
+    model.run()
+    tie_break_solve_time = perf_counter() - tie_break_started
+    stage2_model_status = model.modelStatusToString(model.getModelStatus())
+    stage2_info = model.getInfo()
+    stage2_solution = model.getSolution()
+    stage2_has_solution = _has_solution(highspy, stage2_info)
+    tie_break_status = _status_from_model(stage2_model_status, has_solution=stage2_has_solution)
+
+    if stage2_has_solution:
+        values = list(stage2_solution.col_value)
+        selected_model_status = stage2_model_status
+        selected_info = stage2_info
+    else:
+        values = stage1_values
+        selected_model_status = stage1_model_status
+        selected_info = stage1_info
+
     milp_plan = _solution_plan(reference_plan, ess, ev, variables, values)
     milp_objective = _objective(milp_plan, profile, capacity_state)
     improvement = None
     if reference_objective is not None and milp_objective is not None:
         improvement = reference_objective - milp_objective
+
+    validation_errors, task_validation = _validate_solution_plan(
+        reference_plan,
+        milp_plan,
+        ess,
+        ev,
+        active_tasks,
+    )
+    validation_status = "passed" if not validation_errors else "failed"
+    selected_status = _status_from_model(selected_model_status, has_solution=True)
+    adoption_ready = not validation_errors and selected_status in {"optimal", "feasible", "feasible_time_limit"}
+    reason = None if not validation_errors else "; ".join(validation_errors[:4])
+    total_solve_time = economic_solve_time + tie_break_solve_time
+
     return MilpEvaluation(
-        status=_status_from_model(model_status, has_solution=True),
-        model_status=model_status,
+        status="invalid_solution" if validation_errors else selected_status,
+        model_status=selected_model_status,
         solver_version=_solver_version(highspy),
-        solve_time_seconds=solve_time,
-        mip_gap=_finite_optional(getattr(info, "mip_gap", None)),
-        mip_node_count=_integer_optional(getattr(info, "mip_node_count", None)),
-        variable_count=variable_count,
+        solve_time_seconds=total_solve_time,
+        mip_gap=_finite_optional(getattr(selected_info, "mip_gap", None)),
+        mip_node_count=_integer_optional(getattr(selected_info, "mip_node_count", None)),
+        variable_count=int(model.getNumCol()),
         integer_variable_count=integer_count,
-        constraint_count=constraint_count,
+        constraint_count=int(model.getNumRow()),
         horizon_intervals=len(reference_plan.intervals),
         active_task_count=len(active_tasks),
         reference_strategy=reference_plan.scheduling_strategy,
         reference_objective_eur=reference_objective,
         milp_objective_eur=milp_objective,
         estimated_improvement_eur=improvement,
+        economic_solve_time_seconds=economic_solve_time,
+        tie_break_solve_time_seconds=tie_break_solve_time,
+        tie_break_status=tie_break_status,
+        first_stage_objective_eur=stage1_objective,
+        time_weighted_grid_import_score=_time_weighted_grid_import_value(variables, values),
+        validation_status=validation_status,
+        validation_errors=validation_errors,
+        task_validation=task_validation,
+        reference_cost=reference_cost,
+        milp_cost=_cost_breakdown(milp_plan, profile, capacity_state),
+        adoption_ready=adoption_ready,
+        fallback_to_reference=not adoption_ready,
         plan=milp_plan,
+        reason=reason,
     )
 
 
@@ -468,27 +587,70 @@ def _add_constraints(
         model.addConstr(task_energy <= required_kwh + minimum_step_kwh - 1e-6)
 
 
-def _set_objective(
-    model: Any,
-    highspy: Any,
+def _economic_objective_expression(
     plan: ShadowPlan,
     ess: EssActuatorSnapshot,
     profile: TariffProfile,
     variables: _MilpVariables,
-) -> None:
-    objective = 0.0
+) -> Any:
+    objective: Any = 0.0
     for index in range(len(plan.intervals)):
         objective = objective + _INTERVAL_HOURS * profile.import_energy_eur_per_kwh * variables.grid_import_kw[index]
         objective = objective - _INTERVAL_HOURS * profile.export_energy_eur_per_kwh * variables.grid_export_kw[index]
     for peak in variables.capacity_peak_kw.values():
         objective = objective + profile.capacity_tariff_eur_per_kw_month * peak
-    objective = (
+    return (
         objective
         - profile.import_energy_eur_per_kwh
         * ess.capabilities.discharge_efficiency
         * variables.stored_energy_kwh[-1]
     )
-    model.setObjective(objective, sense=highspy.ObjSense.kMinimize)
+
+
+def _economic_objective_value(
+    ess: EssActuatorSnapshot,
+    profile: TariffProfile,
+    variables: _MilpVariables,
+    values: list[float],
+) -> float:
+    objective = 0.0
+    for grid_import, grid_export in zip(variables.grid_import_kw, variables.grid_export_kw, strict=True):
+        objective += _INTERVAL_HOURS * profile.import_energy_eur_per_kwh * _value(grid_import, values)
+        objective -= _INTERVAL_HOURS * profile.export_energy_eur_per_kwh * _value(grid_export, values)
+    objective += profile.capacity_tariff_eur_per_kw_month * sum(
+        _value(peak, values) for peak in variables.capacity_peak_kw.values()
+    )
+    objective -= (
+        profile.import_energy_eur_per_kwh
+        * ess.capabilities.discharge_efficiency
+        * _value(variables.stored_energy_kwh[-1], values)
+    )
+    return objective
+
+
+def _time_weighted_grid_import_expression(
+    plan: ShadowPlan,
+    variables: _MilpVariables,
+) -> Any:
+    objective: Any = 0.0
+    for index in range(len(plan.intervals)):
+        objective += _early_value_weight(index) * _INTERVAL_HOURS * variables.grid_import_kw[index]
+    return objective
+
+
+def _time_weighted_grid_import_value(
+    variables: _MilpVariables,
+    values: list[float],
+) -> float:
+    return sum(
+        _early_value_weight(index) * _INTERVAL_HOURS * _value(grid_import, values)
+        for index, grid_import in enumerate(variables.grid_import_kw)
+    )
+
+
+def _early_value_weight(index: int) -> float:
+    elapsed_days = index * _INTERVAL_HOURS / 24.0
+    return 2.0 ** (-elapsed_days / MILP_EARLY_VALUE_HALF_LIFE_DAYS)
 
 
 def _solution_plan(
@@ -596,6 +758,147 @@ def _objective(plan: ShadowPlan, profile: TariffProfile, state: CapacityPeakStat
     return evaluation.objective_eur if evaluation is not None else None
 
 
+def _has_solution(highspy: Any, info: Any) -> bool:
+    return info.primal_solution_status == highspy.SolutionStatus.kSolutionStatusFeasible
+
+
+def _validate_solution_plan(
+    reference_plan: ShadowPlan,
+    plan: ShadowPlan,
+    ess: EssActuatorSnapshot,
+    ev: EvActuatorSnapshot | None,
+    tasks: tuple[PlanningTask, ...],
+) -> tuple[tuple[str, ...], tuple[MilpTaskValidation, ...]]:
+    errors: list[str] = []
+    task_checks: list[MilpTaskValidation] = []
+    if len(plan.intervals) != len(reference_plan.intervals):
+        errors.append("interval_count_mismatch")
+        return tuple(errors), ()
+
+    resource = ess.capabilities
+    stored_before = resource.capacity_kwh * float(ess.soc_percent or 0.0) / 100.0
+    power_steps_valid = True
+    for index, (reference, item) in enumerate(zip(reference_plan.intervals, plan.intervals, strict=True)):
+        if item.period_start_local != reference.period_start_local:
+            errors.append(f"interval_{index}_timestamp_mismatch")
+        if item.projected_soc_percent is None or item.battery_energy_delta_kwh is None:
+            errors.append(f"interval_{index}_ess_projection_missing")
+        else:
+            soc = float(item.projected_soc_percent)
+            if soc < resource.min_soc_percent - 1e-4 or soc > resource.max_soc_percent + 1e-4:
+                errors.append(f"interval_{index}_soc_out_of_bounds")
+            stored_after = resource.capacity_kwh * soc / 100.0
+            if abs((stored_after - stored_before) - float(item.battery_energy_delta_kwh)) > 0.002:
+                errors.append(f"interval_{index}_stored_energy_mismatch")
+            stored_before = stored_after
+
+        ess_power = item.ess_ac_power_w
+        grid_power = item.grid_power_after_ess_w
+        if ess_power is None or grid_power is None:
+            errors.append(f"interval_{index}_power_projection_missing")
+            continue
+        if ess_power > resource.max_discharge_power_w + _VALIDATION_POWER_TOLERANCE_W:
+            errors.append(f"interval_{index}_ess_discharge_limit")
+        if ess_power < -resource.max_charge_power_w - _VALIDATION_POWER_TOLERANCE_W:
+            errors.append(f"interval_{index}_ess_charge_limit")
+        expected_grid_w = item.background_load_w + item.scheduled_load_w - item.pv_ac_power_w - ess_power
+        if abs(float(grid_power) - expected_grid_w) > _VALIDATION_POWER_TOLERANCE_W:
+            errors.append(f"interval_{index}_ac_balance_mismatch")
+        if item.curtailed_dc_pv_w is None or item.curtailed_dc_pv_w < -_VALIDATION_POWER_TOLERANCE_W:
+            errors.append(f"interval_{index}_dc_curtailment_invalid")
+        elif item.curtailed_dc_pv_w > item.pv_dc_power_w + _VALIDATION_POWER_TOLERANCE_W:
+            errors.append(f"interval_{index}_dc_curtailment_exceeds_pv")
+        if item.scheduled_load_w > _VALIDATION_POWER_TOLERANCE_W:
+            if ev is None or not _ev_power_step_valid(item.scheduled_load_w, ev):
+                power_steps_valid = False
+                errors.append(f"interval_{index}_ev_power_step_invalid")
+
+    if not tasks:
+        scheduled_kwh = sum(item.scheduled_load_w for item in plan.intervals) * _INTERVAL_HOURS / 1000.0
+        if scheduled_kwh > 0.001:
+            errors.append("scheduled_load_without_active_task")
+        return tuple(dict.fromkeys(errors)), ()
+
+    assert ev is not None
+    for task in tasks:
+        required_kwh = float(task.required_energy_kwh or 0.0)
+        eligible = set(_eligible_indexes(plan, task))
+        scheduled_kwh = sum(
+            item.scheduled_load_w for index, item in enumerate(plan.intervals) if index in eligible
+        ) * _INTERVAL_HOURS / 1000.0
+        outside_kwh = sum(
+            item.scheduled_load_w for index, item in enumerate(plan.intervals) if index not in eligible
+        ) * _INTERVAL_HOURS / 1000.0
+        minimum_step_kwh = _minimum_ev_interval_energy_kwh(ev)
+        deadline_met = scheduled_kwh + 1e-6 >= required_kwh
+        over_allocated = scheduled_kwh > required_kwh + minimum_step_kwh + 1e-5
+        task_valid = deadline_met and not over_allocated and outside_kwh <= 1e-6 and power_steps_valid
+        if not deadline_met:
+            errors.append(f"task_{task.task_id}_energy_shortfall")
+        if over_allocated:
+            errors.append(f"task_{task.task_id}_energy_overallocation")
+        if outside_kwh > 1e-6:
+            errors.append(f"task_{task.task_id}_outside_window")
+        task_checks.append(
+            MilpTaskValidation(
+                task_id=task.task_id,
+                required_energy_kwh=required_kwh,
+                scheduled_energy_kwh=scheduled_kwh,
+                outside_window_energy_kwh=outside_kwh,
+                deadline_met=deadline_met,
+                power_steps_valid=power_steps_valid,
+                valid=task_valid,
+            )
+        )
+    return tuple(dict.fromkeys(errors)), tuple(task_checks)
+
+
+def _ev_power_step_valid(power_w: float, ev: EvActuatorSnapshot) -> bool:
+    if power_w <= _VALIDATION_POWER_TOLERANCE_W:
+        return True
+    minimum_current = math.ceil(ev.capabilities.min_charge_current_a)
+    maximum_current = math.floor(ev.capabilities.max_charge_current_a)
+    voltage = ev.capabilities.nominal_voltage_v
+    phase_counts = []
+    if ev.capabilities.supports_single_phase:
+        phase_counts.append(1)
+    if ev.capabilities.supports_three_phase:
+        phase_counts.append(3)
+    return any(
+        abs(power_w - phases * voltage * current) <= _VALIDATION_POWER_TOLERANCE_W
+        for phases in phase_counts
+        for current in range(minimum_current, maximum_current + 1)
+    )
+
+
+def _cost_breakdown(
+    plan: ShadowPlan,
+    profile: TariffProfile,
+    capacity_state: CapacityPeakState,
+) -> MilpCostBreakdown | None:
+    accounting = evaluate_plan_cost(plan, profile, capacity_state, hours=168)
+    objective = evaluate_plan_objective(plan, profile, capacity_state, hours=168)
+    if accounting is None or objective is None:
+        return None
+    summary = plan.summary(168)
+    end_soc = summary.get("end_soc_percent")
+    max_grid_w = summary.get("max_grid_import_after_ess_w")
+    if not isinstance(end_soc, (int, float)) or not isinstance(max_grid_w, (int, float)):
+        return None
+    return MilpCostBreakdown(
+        import_kwh=accounting.import_kwh,
+        export_kwh=accounting.export_kwh,
+        net_energy_cost_eur=accounting.net_energy_cost_eur,
+        incremental_capacity_cost_eur=accounting.incremental_capacity_cost_eur,
+        total_marginal_cost_eur=accounting.total_marginal_cost_eur,
+        terminal_usable_ac_kwh=objective.terminal_usable_ac_kwh,
+        terminal_ess_value_eur=objective.terminal_ess_value_eur,
+        objective_eur=objective.objective_eur,
+        max_grid_import_kw=float(max_grid_w) / 1000.0,
+        end_soc_percent=float(end_soc),
+    )
+
+
 def _value(variable: Any, values: list[float]) -> float:
     return float(values[variable.index])
 
@@ -640,7 +943,10 @@ def _integer_optional(value: object) -> int | None:
 
 
 async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpEvaluation) -> None:
-    """Publish the diagnostic solver comparison without changing the authoritative planner state."""
+    """Publish solver validation and the early-value tie-break without changing planner authority."""
+    objective_delta = None
+    if evaluation.first_stage_objective_eur is not None and evaluation.milp_objective_eur is not None:
+        objective_delta = evaluation.milp_objective_eur - evaluation.first_stage_objective_eur
     attributes: dict[str, Any] = {
         "friendly_name": "Energy Manager MILP Evaluation",
         "milp_version": MILP_EVALUATION_VERSION,
@@ -651,7 +957,10 @@ async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpE
         "solver_version": evaluation.solver_version,
         "model_status": evaluation.model_status,
         "solve_time_seconds": _round_optional(evaluation.solve_time_seconds, 3),
+        "economic_solve_time_seconds": _round_optional(evaluation.economic_solve_time_seconds, 3),
+        "tie_break_solve_time_seconds": _round_optional(evaluation.tie_break_solve_time_seconds, 3),
         "time_limit_seconds": MILP_TIME_LIMIT_SECONDS,
+        "time_limit_seconds_per_stage": MILP_TIME_LIMIT_SECONDS,
         "mip_relative_gap_target": MILP_RELATIVE_GAP,
         "mip_gap": _round_optional(evaluation.mip_gap, 5),
         "mip_node_count": evaluation.mip_node_count,
@@ -662,8 +971,33 @@ async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpE
         "active_task_count": evaluation.active_task_count,
         "reference_strategy": evaluation.reference_strategy,
         "reference_objective_eur": _round_optional(evaluation.reference_objective_eur, 4),
+        "first_stage_objective_eur": _round_optional(evaluation.first_stage_objective_eur, 4),
         "milp_objective_eur": _round_optional(evaluation.milp_objective_eur, 4),
+        "economic_objective_delta_eur": _round_optional(objective_delta, 4),
         "estimated_improvement_eur": _round_optional(evaluation.estimated_improvement_eur, 4),
+        "economic_tolerance_eur": evaluation.economic_tolerance_eur,
+        "tie_break_status": evaluation.tie_break_status,
+        "tie_break_objective": "exponential_time_weighted_grid_import",
+        "early_value_half_life_days": evaluation.early_value_half_life_days,
+        "time_weighted_grid_import_score": _round_optional(evaluation.time_weighted_grid_import_score, 5),
+        "validation_status": evaluation.validation_status,
+        "validation_errors": list(evaluation.validation_errors),
+        "adoption_ready": evaluation.adoption_ready,
+        "fallback_to_reference": evaluation.fallback_to_reference,
+        "task_validation": [
+            {
+                "id": item.task_id,
+                "required_energy_kwh": round(item.required_energy_kwh, 3),
+                "scheduled_energy_kwh": round(item.scheduled_energy_kwh, 3),
+                "outside_window_energy_kwh": round(item.outside_window_energy_kwh, 4),
+                "deadline_met": item.deadline_met,
+                "power_steps_valid": item.power_steps_valid,
+                "valid": item.valid,
+            }
+            for item in evaluation.task_validation
+        ],
+        "reference_cost_7_days": _breakdown_attributes(evaluation.reference_cost),
+        "milp_cost_7_days": _breakdown_attributes(evaluation.milp_cost),
         "reason": evaluation.reason,
     }
     if evaluation.plan is not None:
@@ -687,6 +1021,23 @@ async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpE
             for item in evaluation.plan.intervals[:12]
         ]
     await client.set_state(MILP_STATUS_ENTITY, evaluation.status, attributes)
+
+
+def _breakdown_attributes(value: MilpCostBreakdown | None) -> dict[str, float | None] | None:
+    if value is None:
+        return None
+    return {
+        "import_kwh": round(value.import_kwh, 3),
+        "export_kwh": round(value.export_kwh, 3),
+        "net_energy_cost_eur": round(value.net_energy_cost_eur, 3),
+        "incremental_capacity_cost_eur": _round_optional(value.incremental_capacity_cost_eur, 3),
+        "total_marginal_cost_eur": _round_optional(value.total_marginal_cost_eur, 3),
+        "terminal_usable_ac_kwh": round(value.terminal_usable_ac_kwh, 3),
+        "terminal_ess_value_eur": round(value.terminal_ess_value_eur, 3),
+        "objective_eur": round(value.objective_eur, 4),
+        "max_grid_import_kw": round(value.max_grid_import_kw, 3),
+        "end_soc_percent": round(value.end_soc_percent, 2),
+    }
 
 
 def _round_optional(value: object, digits: int) -> float | None:

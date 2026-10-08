@@ -205,11 +205,16 @@ def _optimizer_log(plan: ShadowPlan) -> str:
 
 
 def _milp_log(evaluation: MilpEvaluation) -> str:
-    details = [evaluation.status]
+    details = [evaluation.status, f"validation={evaluation.validation_status}"]
     if evaluation.solve_time_seconds is not None:
         details.append(f"{evaluation.solve_time_seconds:.3f}s")
+    if evaluation.tie_break_status is not None:
+        details.append(f"tie-break={evaluation.tie_break_status}")
     if evaluation.milp_objective_eur is not None:
         details.append(f"EUR {evaluation.milp_objective_eur:.2f}")
+    if evaluation.first_stage_objective_eur is not None and evaluation.milp_objective_eur is not None:
+        delta = evaluation.milp_objective_eur - evaluation.first_stage_objective_eur
+        details.append(f"tie-break delta EUR {delta:+.3f}")
     if evaluation.estimated_improvement_eur is not None:
         details.append(f"vs current {evaluation.estimated_improvement_eur:+.2f}")
     details.append(
