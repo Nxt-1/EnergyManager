@@ -32,14 +32,23 @@ class FakeHomeAssistantClient:
 class FakeInfluxClient:
     def __init__(self) -> None:
         self.lines: list[str] = []
-        self.profile_rows: list[dict[str, str]] = []
+        self.profile_rows: list[dict[str, str | None]] = []
 
-    async def query_sql(self, query: str) -> list[dict[str, str]]:
+    async def query_sql(self, query: str) -> list[dict[str, str | None]]:
         if "information_schema.tables" in query:
             return [{"table_name": "tariff_profile"}] if self.profile_rows else []
-        if 'FROM "tariff_profile"' in query:
-            return self.profile_rows[-1:] if self.profile_rows else []
-        return []
+        if 'FROM "tariff_profile"' not in query:
+            return []
+        rows = list(self.profile_rows)
+        if "WHERE profile_id = '" in query:
+            profile_id = query.split("WHERE profile_id = '", 1)[1].split("'", 1)[0]
+            rows = [row for row in rows if row.get("profile_id") == profile_id]
+        rows.sort(key=lambda row: str(row.get("time", "")))
+        if "ORDER BY time DESC" in query:
+            rows.reverse()
+        if "LIMIT 1" in query:
+            rows = rows[:1]
+        return rows
 
     async def write_lines(self, lines: list[str]) -> None:
         self.lines.extend(lines)
@@ -86,19 +95,25 @@ def test_local_history_appends_changed_tariff(tmp_path: Path) -> None:
     assert records[1]["import_energy_eur_per_kwh"] == pytest.approx(0.31)
 
 
-def test_influx_history_writes_profile_with_activation_timestamp(tmp_path: Path) -> None:
+def test_influx_history_records_activation_time_separately_from_effective_date(tmp_path: Path) -> None:
     client = FakeInfluxClient()
+    effective = datetime(2026, 9, 30, 22, 0, tzinfo=UTC)
     observed = datetime(2026, 10, 7, 19, 30, tzinfo=UTC)
-    history = TariffProfileHistory(_settings(), influx_client=client, local_path=tmp_path / "fallback.jsonl")
+    history = TariffProfileHistory(
+        _settings(valid_from_utc=effective),
+        influx_client=client,
+        local_path=tmp_path / "fallback.jsonl",
+    )
 
     profile = asyncio.run(history.activate(now_utc=observed))
 
     assert profile is not None
+    assert profile.valid_from_utc == effective
+    assert profile.recorded_at_utc == observed
     assert len(client.lines) == 1
     assert client.lines[0].startswith(f"tariff_profile,profile_id={profile.profile_id} ")
-    assert f" {int(observed.timestamp()) * 1_000_000_000}" in client.lines[0]
-    assert "import_energy_eur_per_kwh=0.250000000" in client.lines[0]
-
+    assert f'valid_from_utc="{effective.isoformat()}"' in client.lines[0]
+    assert client.lines[0].endswith(f" {int(observed.timestamp()) * 1_000_000_000}")
 
 
 def test_explicit_valid_from_is_used_instead_of_activation_time(tmp_path: Path) -> None:
@@ -124,6 +139,156 @@ def test_effective_timestamp_is_part_of_profile_identity(tmp_path: Path) -> None
     assert profile_a.profile_id != profile_b.profile_id
     assert len(path.read_text(encoding="utf-8").splitlines()) == 2
 
+
+
+
+class FakeLegacySchemaInfluxClient(FakeInfluxClient):
+    async def query_sql(self, query: str) -> list[dict[str, str | None]]:
+        if 'FROM "tariff_profile"' in query and ("valid_from_utc" in query or "supersedes_profile_id" in query):
+            raise RuntimeError("column not found")
+        return await super().query_sql(query)
+
+
+def test_backdated_profile_migrates_from_legacy_influx_schema(tmp_path: Path) -> None:
+    client = FakeLegacySchemaInfluxClient()
+    old_observed = datetime(2026, 10, 7, 20, 36, 57, tzinfo=UTC)
+    client.profile_rows.append(
+        {
+            "time": old_observed.isoformat(),
+            "profile_id": "legacy",
+            "import_energy_eur_per_kwh": "0.25",
+            "export_energy_eur_per_kwh": "0.03",
+            "capacity_tariff_eur_per_kw_month": "4.50",
+            "capacity_tariff_floor_kw": "2.5",
+        }
+    )
+    effective = datetime(2026, 9, 30, 22, 0, tzinfo=UTC)
+    history = TariffProfileHistory(
+        _settings(valid_from_utc=effective),
+        influx_client=client,
+        local_path=tmp_path / "fallback.jsonl",
+    )
+
+    profile = asyncio.run(history.activate(now_utc=datetime(2026, 10, 7, 21, 15, tzinfo=UTC)))
+
+    assert profile is not None
+    assert profile.valid_from_utc == effective
+    assert profile.supersedes_profile_id == "legacy"
+    assert history.backend == "influxdb"
+    assert len(client.lines) == 1
+
+def test_backdated_explicit_profile_supersedes_activation_fallback_in_influx(tmp_path: Path) -> None:
+    client = FakeInfluxClient()
+    old_observed = datetime(2026, 10, 7, 20, 36, 57, tzinfo=UTC)
+    old_history = TariffProfileHistory(
+        _settings(),
+        influx_client=client,
+        local_path=tmp_path / "fallback.jsonl",
+    )
+    old_profile = asyncio.run(old_history.activate(now_utc=old_observed))
+    assert old_profile is not None
+    client.profile_rows.append(
+        {
+            "time": old_observed.isoformat(),
+            "profile_id": old_profile.profile_id,
+            "valid_from_utc": None,
+            "supersedes_profile_id": None,
+            "import_energy_eur_per_kwh": "0.25",
+            "export_energy_eur_per_kwh": "0.03",
+            "capacity_tariff_eur_per_kw_month": "4.50",
+            "capacity_tariff_floor_kw": "2.5",
+        }
+    )
+
+    effective = datetime(2026, 9, 30, 22, 0, tzinfo=UTC)
+    corrected_at = datetime(2026, 10, 7, 21, 15, tzinfo=UTC)
+    corrected_history = TariffProfileHistory(
+        _settings(valid_from_utc=effective),
+        influx_client=client,
+        local_path=tmp_path / "fallback.jsonl",
+    )
+    corrected = asyncio.run(corrected_history.activate(now_utc=corrected_at))
+
+    assert corrected is not None
+    assert corrected.valid_from_utc == effective
+    assert corrected.supersedes_profile_id == old_profile.profile_id
+    assert f'supersedes_profile_id="{old_profile.profile_id}"' in client.lines[-1]
+
+
+def test_profile_at_ignores_superseded_activation_fallback(tmp_path: Path) -> None:
+    client = FakeInfluxClient()
+    old_id = "oldactivation"
+    corrected_id = "corrected"
+    client.profile_rows.extend(
+        [
+            {
+                "time": "2026-10-07T20:36:57+00:00",
+                "profile_id": old_id,
+                "valid_from_utc": None,
+                "supersedes_profile_id": None,
+                "import_energy_eur_per_kwh": "0.25",
+                "export_energy_eur_per_kwh": "0.03",
+                "capacity_tariff_eur_per_kw_month": "4.50",
+                "capacity_tariff_floor_kw": "2.5",
+            },
+            {
+                "time": "2026-10-07T21:15:00+00:00",
+                "profile_id": corrected_id,
+                "valid_from_utc": "2026-09-30T22:00:00+00:00",
+                "supersedes_profile_id": old_id,
+                "import_energy_eur_per_kwh": "0.25",
+                "export_energy_eur_per_kwh": "0.03",
+                "capacity_tariff_eur_per_kw_month": "4.50",
+                "capacity_tariff_floor_kw": "2.5",
+            },
+        ]
+    )
+    history = TariffProfileHistory(
+        _settings(valid_from_utc=datetime(2026, 9, 30, 22, 0, tzinfo=UTC)),
+        influx_client=client,
+        local_path=tmp_path / "fallback.jsonl",
+    )
+
+    profile = asyncio.run(history.profile_at(datetime(2026, 10, 8, 12, 0, tzinfo=UTC)))
+
+    assert profile is not None
+    assert profile.profile_id == corrected_id
+    assert profile.valid_from_utc == datetime(2026, 9, 30, 22, 0, tzinfo=UTC)
+
+
+def test_profile_at_keeps_later_real_tariff_change_after_corrected_history(tmp_path: Path) -> None:
+    path = tmp_path / "tariffs.jsonl"
+    records = [
+        {
+            "profile_id": "corrected_october",
+            "valid_from_utc": "2026-09-30T22:00:00+00:00",
+            "recorded_at_utc": "2026-10-07T21:15:00+00:00",
+            "supersedes_profile_id": "oldactivation",
+            "import_energy_eur_per_kwh": 0.25,
+            "export_energy_eur_per_kwh": 0.03,
+            "capacity_tariff_eur_per_kw_month": 4.50,
+            "capacity_tariff_floor_kw": 2.5,
+        },
+        {
+            "profile_id": "january",
+            "valid_from_utc": "2027-01-01T00:00:00+00:00",
+            "recorded_at_utc": "2026-12-20T12:00:00+00:00",
+            "supersedes_profile_id": None,
+            "import_energy_eur_per_kwh": 0.31,
+            "export_energy_eur_per_kwh": 0.04,
+            "capacity_tariff_eur_per_kw_month": 4.70,
+            "capacity_tariff_floor_kw": 2.5,
+        },
+    ]
+    path.write_text("\n".join(json.dumps(record) for record in records) + "\n", encoding="utf-8")
+    history = TariffProfileHistory(_settings(), local_path=path)
+
+    october = asyncio.run(history.profile_at(datetime(2026, 10, 15, tzinfo=UTC)))
+    january = asyncio.run(history.profile_at(datetime(2027, 1, 15, tzinfo=UTC)))
+
+    assert october is not None and october.profile_id == "corrected_october"
+    assert january is not None and january.profile_id == "january"
+
 def test_energy_cost_treats_export_as_revenue(tmp_path: Path) -> None:
     profile = asyncio.run(
         TariffProfileHistory(_settings(), local_path=tmp_path / "tariffs.jsonl").activate(
@@ -145,6 +310,7 @@ def test_economics_service_publishes_versioned_profile(tmp_path: Path) -> None:
     assert state["state"] == "ready"
     assert state["attributes"]["profile_id"] == profile.profile_id
     assert state["attributes"]["history_backend"] == "local_jsonl"
+
 
 _LOCAL = ZoneInfo("Europe/Brussels")
 
@@ -299,7 +465,9 @@ def test_plan_cost_is_partial_when_current_month_peak_history_is_incomplete() ->
     start = datetime(2026, 10, 7, 22, 0, tzinfo=_LOCAL)
     plan = FakePlan(tuple(FakePlanInterval(start + timedelta(minutes=15 * index), 3000.0) for index in range(4)))
 
-    evaluation = evaluate_plan_cost(plan, _profile(), _capacity_state(complete=False), hours=1)  # type: ignore[arg-type]
+    evaluation = evaluate_plan_cost(
+        plan, _profile(), _capacity_state(complete=False), hours=1
+    )  # type: ignore[arg-type]
 
     assert evaluation is not None
     assert evaluation.net_energy_cost_eur == pytest.approx(0.9)

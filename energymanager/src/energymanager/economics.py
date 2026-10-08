@@ -47,6 +47,8 @@ class TariffProfile:
     export_energy_eur_per_kwh: float
     capacity_tariff_eur_per_kw_month: float
     capacity_tariff_floor_kw: float
+    recorded_at_utc: datetime | None = None
+    supersedes_profile_id: str | None = None
 
     def energy_cost_eur(self, import_kwh: float, export_kwh: float) -> float:
         """Return marginal energy cost excluding the capacity-tariff contribution."""
@@ -99,7 +101,7 @@ class PlanCostEvaluation:
 
 
 class TariffProfileHistory:
-    """Activate immutable tariff snapshots without rewriting prior history."""
+    """Activate immutable tariff snapshots while preserving effective and recording times."""
 
     def __init__(
         self,
@@ -114,7 +116,7 @@ class TariffProfileHistory:
         self.backend = "influxdb" if influx_client is not None else "local_jsonl"
 
     async def activate(self, *, now_utc: datetime | None = None) -> TariffProfile | None:
-        """Return the active profile and append a revision only when the configured tariff changed."""
+        """Return the configured profile and append it only when that immutable profile is new."""
         if not self._settings.configured:
             return None
         observed = (now_utc or datetime.now(UTC)).astimezone(UTC)
@@ -122,55 +124,112 @@ class TariffProfileHistory:
         profile_id = _profile_id(self._settings)
         if self._influx_client is not None:
             try:
-                latest = await self._latest_influx_profile()
-                if latest is not None and latest.profile_id == profile_id:
-                    return latest
-                profile = _profile_from_settings(self._settings, profile_id, valid_from)
+                existing = await self._influx_profile_by_id(profile_id)
+                if existing is not None:
+                    return existing
+                profiles = await self._all_influx_profiles()
+                supersedes = _fallback_profile_to_supersede(profiles, self._settings)
+                profile = _profile_from_settings(
+                    self._settings,
+                    profile_id,
+                    valid_from,
+                    recorded_at_utc=observed,
+                    supersedes_profile_id=supersedes.profile_id if supersedes is not None else None,
+                )
                 await self._write_influx_profile(profile)
                 return profile
             except Exception as exc:  # noqa: BLE001 - economics history must not stop the controller.
                 _LOGGER.warning("Tariff history InfluxDB persistence failed; using local fallback: %s", exc)
                 self.backend = "local_jsonl"
-        return self._activate_local(profile_id, valid_from)
+        return self._activate_local(profile_id, valid_from, observed)
 
-    async def _latest_influx_profile(self) -> TariffProfile | None:
+    async def profile_at(self, at_utc: datetime) -> TariffProfile | None:
+        """Return the authoritative tariff profile effective at the requested UTC instant."""
+        if at_utc.tzinfo is None:
+            raise ValueError("at_utc must be timezone-aware")
+        instant = at_utc.astimezone(UTC)
+        if self._influx_client is not None:
+            try:
+                return _select_effective_profile(await self._all_influx_profiles(), instant)
+            except Exception as exc:  # noqa: BLE001 - historical lookup may fall back to local history.
+                _LOGGER.warning("Tariff history InfluxDB lookup failed; using local fallback: %s", exc)
+                self.backend = "local_jsonl"
+        return _select_effective_profile(_local_profiles(self._local_path), instant)
+
+    async def _influx_profile_by_id(self, profile_id: str) -> TariffProfile | None:
         assert self._influx_client is not None
-        tables = await self._influx_client.query_sql(
-            "SELECT table_name FROM information_schema.tables WHERE table_name = 'tariff_profile' LIMIT 1"
-        )
-        if not tables:
+        if not await _table_exists(self._influx_client, "tariff_profile"):
             return None
-        rows = await self._influx_client.query_sql(
-            'SELECT time, profile_id, import_energy_eur_per_kwh, export_energy_eur_per_kwh, '
-            'capacity_tariff_eur_per_kw_month, capacity_tariff_floor_kw FROM "tariff_profile" '
-            "ORDER BY time DESC LIMIT 1"
-        )
-        if not rows:
-            return None
-        return _profile_from_record(rows[0])
+        profile = _escape_sql_string(profile_id)
+        try:
+            rows = await self._influx_client.query_sql(
+                'SELECT time, profile_id, valid_from_utc, supersedes_profile_id, import_energy_eur_per_kwh, '
+                'export_energy_eur_per_kwh, capacity_tariff_eur_per_kw_month, capacity_tariff_floor_kw '
+                f"FROM \"tariff_profile\" WHERE profile_id = '{profile}' ORDER BY time DESC LIMIT 1"
+            )
+        except Exception:  # noqa: BLE001 - v0.17/v0.18 rows predate revision metadata columns.
+            rows = await self._influx_client.query_sql(
+                'SELECT time, profile_id, import_energy_eur_per_kwh, export_energy_eur_per_kwh, '
+                'capacity_tariff_eur_per_kw_month, capacity_tariff_floor_kw FROM "tariff_profile" '
+                f"WHERE profile_id = '{profile}' ORDER BY time DESC LIMIT 1"
+            )
+        return _profile_from_record(rows[0]) if rows else None
+
+    async def _all_influx_profiles(self) -> tuple[TariffProfile, ...]:
+        assert self._influx_client is not None
+        if not await _table_exists(self._influx_client, "tariff_profile"):
+            return ()
+        try:
+            rows = await self._influx_client.query_sql(
+                'SELECT time, profile_id, valid_from_utc, supersedes_profile_id, import_energy_eur_per_kwh, '
+                'export_energy_eur_per_kwh, capacity_tariff_eur_per_kw_month, capacity_tariff_floor_kw '
+                'FROM "tariff_profile" ORDER BY time ASC'
+            )
+        except Exception:  # noqa: BLE001 - v0.17/v0.18 rows predate revision metadata columns.
+            rows = await self._influx_client.query_sql(
+                'SELECT time, profile_id, import_energy_eur_per_kwh, export_energy_eur_per_kwh, '
+                'capacity_tariff_eur_per_kw_month, capacity_tariff_floor_kw '
+                'FROM "tariff_profile" ORDER BY time ASC'
+            )
+        profiles: list[TariffProfile] = []
+        for row in rows:
+            try:
+                profiles.append(_profile_from_record(row))
+            except (KeyError, TypeError, ValueError):
+                _LOGGER.warning("Ignoring invalid tariff profile history row from InfluxDB")
+        return tuple(profiles)
 
     async def _write_influx_profile(self, profile: TariffProfile) -> None:
         assert self._influx_client is not None
+        recorded_at = profile.recorded_at_utc or datetime.now(UTC)
+        valid_from = _escape_line_string(profile.valid_from_utc.isoformat())
         fields = (
             f'import_energy_eur_per_kwh={profile.import_energy_eur_per_kwh:.9f},'
             f'export_energy_eur_per_kwh={profile.export_energy_eur_per_kwh:.9f},'
             f'capacity_tariff_eur_per_kw_month={profile.capacity_tariff_eur_per_kw_month:.9f},'
             f'capacity_tariff_floor_kw={profile.capacity_tariff_floor_kw:.6f},'
+            f'valid_from_utc="{valid_from}",'
             f'cost_model_version="{COST_MODEL_VERSION}"'
         )
-        line = f"tariff_profile,profile_id={profile.profile_id} {fields} {_timestamp_ns(profile.valid_from_utc)}"
+        if profile.supersedes_profile_id is not None:
+            supersedes = _escape_line_string(profile.supersedes_profile_id)
+            fields += f',supersedes_profile_id="{supersedes}"'
+        line = f"tariff_profile,profile_id={profile.profile_id} {fields} {_timestamp_ns(recorded_at)}"
         await self._influx_client.write_lines([line])
 
-    def _activate_local(self, profile_id: str, observed: datetime) -> TariffProfile:
-        records = _read_local_records(self._local_path)
-        if records:
-            try:
-                latest = _profile_from_record(records[-1])
-            except (KeyError, TypeError, ValueError):
-                latest = None
-            if latest is not None and latest.profile_id == profile_id:
-                return latest
-        profile = _profile_from_settings(self._settings, profile_id, observed)
+    def _activate_local(self, profile_id: str, valid_from: datetime, observed: datetime) -> TariffProfile:
+        profiles = _local_profiles(self._local_path)
+        matches = [profile for profile in profiles if profile.profile_id == profile_id]
+        if matches:
+            return max(matches, key=_profile_recording_sort_key)
+        supersedes = _fallback_profile_to_supersede(profiles, self._settings)
+        profile = _profile_from_settings(
+            self._settings,
+            profile_id,
+            valid_from,
+            recorded_at_utc=observed,
+            supersedes_profile_id=supersedes.profile_id if supersedes is not None else None,
+        )
         self._local_path.parent.mkdir(parents=True, exist_ok=True)
         with self._local_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(_profile_record(profile), sort_keys=True) + "\n")
@@ -495,6 +554,9 @@ class EconomicsService:
                 "cost_model_version": COST_MODEL_VERSION,
                 "profile_id": profile.profile_id,
                 "valid_from_utc": profile.valid_from_utc.isoformat(),
+                "recorded_at_utc": (
+                    profile.recorded_at_utc.isoformat() if profile.recorded_at_utc is not None else None
+                ),
                 "history_backend": self._history.backend,
                 "import_energy_eur_per_kwh": profile.import_energy_eur_per_kwh,
                 "export_energy_eur_per_kwh": profile.export_energy_eur_per_kwh,
@@ -690,7 +752,14 @@ def _profile_id(settings: EconomicsSettings) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
 
-def _profile_from_settings(settings: EconomicsSettings, profile_id: str, valid_from: datetime) -> TariffProfile:
+def _profile_from_settings(
+    settings: EconomicsSettings,
+    profile_id: str,
+    valid_from: datetime,
+    *,
+    recorded_at_utc: datetime,
+    supersedes_profile_id: str | None = None,
+) -> TariffProfile:
     assert settings.import_energy_eur_per_kwh is not None
     assert settings.export_energy_eur_per_kwh is not None
     assert settings.capacity_tariff_eur_per_kw_month is not None
@@ -701,10 +770,12 @@ def _profile_from_settings(settings: EconomicsSettings, profile_id: str, valid_f
         export_energy_eur_per_kwh=settings.export_energy_eur_per_kwh,
         capacity_tariff_eur_per_kw_month=settings.capacity_tariff_eur_per_kw_month,
         capacity_tariff_floor_kw=settings.capacity_tariff_floor_kw,
+        recorded_at_utc=recorded_at_utc.astimezone(UTC),
+        supersedes_profile_id=supersedes_profile_id,
     )
 
 
-def _profile_record(profile: TariffProfile) -> dict[str, str | float]:
+def _profile_record(profile: TariffProfile) -> dict[str, str | float | None]:
     return {
         "profile_id": profile.profile_id,
         "valid_from_utc": profile.valid_from_utc.isoformat(),
@@ -713,13 +784,21 @@ def _profile_record(profile: TariffProfile) -> dict[str, str | float]:
         "capacity_tariff_eur_per_kw_month": profile.capacity_tariff_eur_per_kw_month,
         "capacity_tariff_floor_kw": profile.capacity_tariff_floor_kw,
         "cost_model_version": COST_MODEL_VERSION,
+        "recorded_at_utc": (
+            profile.recorded_at_utc.isoformat() if profile.recorded_at_utc is not None else None
+        ),
+        "supersedes_profile_id": profile.supersedes_profile_id,
     }
 
 
-def _profile_from_record(record: dict[str, str | float]) -> TariffProfile:
-    valid_from = record.get("valid_from_utc", record.get("time"))
+def _profile_from_record(record: dict[str, str | float | None]) -> TariffProfile:
+    raw_time = record.get("time")
+    raw_valid_from = record.get("valid_from_utc")
+    valid_from = raw_valid_from if raw_valid_from not in (None, "") else raw_time
     if valid_from is None:
         raise KeyError("valid_from_utc")
+    raw_recorded_at = record.get("recorded_at_utc")
+    recorded_at = raw_recorded_at if raw_recorded_at not in (None, "") else raw_time
     return TariffProfile(
         profile_id=str(record["profile_id"]),
         valid_from_utc=_parse_timestamp(str(valid_from)),
@@ -727,13 +806,19 @@ def _profile_from_record(record: dict[str, str | float]) -> TariffProfile:
         export_energy_eur_per_kwh=float(record["export_energy_eur_per_kwh"]),
         capacity_tariff_eur_per_kw_month=float(record["capacity_tariff_eur_per_kw_month"]),
         capacity_tariff_floor_kw=float(record["capacity_tariff_floor_kw"]),
+        recorded_at_utc=_parse_timestamp(str(recorded_at)) if recorded_at is not None else None,
+        supersedes_profile_id=(
+            str(record["supersedes_profile_id"])
+            if record.get("supersedes_profile_id") not in (None, "")
+            else None
+        ),
     )
 
 
-def _read_local_records(path: Path) -> list[dict[str, str | float]]:
+def _read_local_records(path: Path) -> list[dict[str, str | float | None]]:
     if not path.exists():
         return []
-    records: list[dict[str, str | float]] = []
+    records: list[dict[str, str | float | None]] = []
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError as exc:
@@ -748,6 +833,63 @@ def _read_local_records(path: Path) -> list[dict[str, str | float]]:
         if isinstance(value, dict):
             records.append(value)
     return records
+
+
+def _local_profiles(path: Path) -> tuple[TariffProfile, ...]:
+    profiles: list[TariffProfile] = []
+    for record in _read_local_records(path):
+        try:
+            profiles.append(_profile_from_record(record))
+        except (KeyError, TypeError, ValueError):
+            _LOGGER.warning("Ignoring invalid tariff profile history row")
+    return tuple(profiles)
+
+
+def _select_effective_profile(
+    profiles: tuple[TariffProfile, ...], at_utc: datetime
+) -> TariffProfile | None:
+    superseded = {
+        profile.supersedes_profile_id
+        for profile in profiles
+        if profile.supersedes_profile_id is not None
+    }
+    candidates = [
+        profile
+        for profile in profiles
+        if profile.profile_id not in superseded and profile.valid_from_utc <= at_utc
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda profile: (profile.valid_from_utc, _profile_recording_sort_key(profile)))
+
+
+def _fallback_profile_to_supersede(
+    profiles: tuple[TariffProfile, ...], settings: EconomicsSettings
+) -> TariffProfile | None:
+    if settings.valid_from_utc is None:
+        return None
+    candidates = [
+        profile
+        for profile in profiles
+        if _same_tariff_values(profile, settings)
+        and profile.recorded_at_utc is not None
+        and profile.recorded_at_utc == profile.valid_from_utc
+        and profile.supersedes_profile_id is None
+    ]
+    return max(candidates, key=_profile_recording_sort_key) if candidates else None
+
+
+def _same_tariff_values(profile: TariffProfile, settings: EconomicsSettings) -> bool:
+    return (
+        profile.import_energy_eur_per_kwh == settings.import_energy_eur_per_kwh
+        and profile.export_energy_eur_per_kwh == settings.export_energy_eur_per_kwh
+        and profile.capacity_tariff_eur_per_kw_month == settings.capacity_tariff_eur_per_kw_month
+        and profile.capacity_tariff_floor_kw == settings.capacity_tariff_floor_kw
+    )
+
+
+def _profile_recording_sort_key(profile: TariffProfile) -> datetime:
+    return profile.recorded_at_utc or profile.valid_from_utc
 
 
 async def _table_exists(client: _InfluxClient, table_name: str) -> bool:
@@ -790,6 +932,10 @@ def _timestamp_ns(value: datetime) -> int:
 
 def _escape_sql_string(value: str) -> str:
     return value.replace("'", "''")
+
+
+def _escape_line_string(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _round_optional(value: float | None, digits: int) -> float | None:

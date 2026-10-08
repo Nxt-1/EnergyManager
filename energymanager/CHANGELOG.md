@@ -1,4 +1,10 @@
 # Changelog
+## 0.18.2
+- Separates tariff effective time from the time a tariff revision is recorded, so backdated tariff profiles can be stored safely.
+- Reuses tariff revisions by profile ID instead of assuming the newest database timestamp is the configured profile.
+- Adds historical tariff lookup by effective time and preserves later genuine tariff changes.
+- Supersedes the earlier activation-time fallback when the same tariff values are corrected with an explicit effective date.
+- No planner scheduling, cost-formula, configuration-schema, or hardware-control behavior changes.
 ## 0.18.1
 - Fixes CI lint failures in the v0.18 economic-accounting test suite by keeping module imports at the top of the test module.
 - No runtime, planning, configuration, or hardware-control behavior changes.
