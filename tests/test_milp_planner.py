@@ -12,7 +12,9 @@ from energymanager.economics import CapacityPeakState, TariffProfile
 from energymanager.load_forecast import BackgroundLoadForecast, BackgroundLoadForecastPoint
 from energymanager.milp_planner import (
     MILP_EARLY_VALUE_HALF_LIFE_DAYS,
+    MILP_ECONOMIC_TIME_LIMIT_SECONDS,
     MILP_ECONOMIC_TOLERANCE_EUR,
+    MILP_TOTAL_TIME_BUDGET_SECONDS,
     MilpEvaluation,
     evaluate_shadow_plan_milp,
     publish_milp_evaluation,
@@ -171,7 +173,7 @@ def _reference_plan(start: datetime, *, tasks: tuple[PlanningTask, ...]) -> Any:
     )
 
 
-def test_milp_rejects_multiple_active_tasks_without_affecting_reference_plan() -> None:
+def test_milp_rejects_multiple_active_tasks_until_multi_task_model_is_added() -> None:
     start = datetime(2026, 10, 8, 12, 0, tzinfo=_LOCAL)
     tasks = (_task(start, task_id="ev_one"), _task(start, task_id="ev_two"))
     reference = _reference_plan(start, tasks=tasks)
@@ -181,11 +183,10 @@ def test_milp_rejects_multiple_active_tasks_without_affecting_reference_plan() -
     assert result.status == "unsupported"
     assert result.reason == "multiple_active_tasks_not_yet_supported"
     assert result.plan is None
-    assert result.reference_strategy == reference.scheduling_strategy
     assert result.active_task_count == 2
 
 
-def test_milp_status_publisher_marks_result_non_authoritative() -> None:
+def test_milp_status_publisher_marks_milp_authoritative() -> None:
     client = FakeHomeAssistantClient()
     result = MilpEvaluation(
         status="optimal",
@@ -199,12 +200,14 @@ def test_milp_status_publisher_marks_result_non_authoritative() -> None:
         constraint_count=80,
         horizon_intervals=672,
         active_task_count=1,
-        reference_strategy="economic_ev_portfolio:test",
-        reference_objective_eur=12.0,
+        reference_strategy="milp_input",
+        reference_objective_eur=None,
         milp_objective_eur=10.0,
-        estimated_improvement_eur=2.0,
+        estimated_improvement_eur=None,
         economic_solve_time_seconds=0.08,
+        economic_time_limit_seconds=MILP_ECONOMIC_TIME_LIMIT_SECONDS,
         tie_break_solve_time_seconds=0.043,
+        tie_break_time_limit_seconds=29.92,
         tie_break_status="optimal",
         tie_break_warm_start_applied=True,
         tie_break_warm_start_status="kOk",
@@ -219,14 +222,14 @@ def test_milp_status_publisher_marks_result_non_authoritative() -> None:
 
     entity = client.states["sensor.energy_manager_milp_status"]
     assert entity["state"] == "optimal"
-    assert entity["attributes"]["authoritative"] is False
+    assert entity["attributes"]["authoritative"] is True
     assert entity["attributes"]["hardware_writes"] is False
     assert entity["attributes"]["milp_objective_eur"] == 10.0
-    assert entity["attributes"]["estimated_improvement_eur"] == 2.0
     assert entity["attributes"]["validation_status"] == "passed"
     assert entity["attributes"]["adoption_ready"] is True
-    assert entity["attributes"]["fallback_to_reference"] is False
     assert entity["attributes"]["economic_tolerance_eur"] == MILP_ECONOMIC_TOLERANCE_EUR
+    assert entity["attributes"]["total_time_budget_seconds"] == MILP_TOTAL_TIME_BUDGET_SECONDS
+    assert entity["attributes"]["economic_time_limit_seconds"] == MILP_ECONOMIC_TIME_LIMIT_SECONDS
     assert entity["attributes"]["early_value_half_life_days"] == MILP_EARLY_VALUE_HALF_LIFE_DAYS
     assert entity["attributes"]["tie_break_warm_start_applied"] is True
     assert entity["attributes"]["tie_break_warm_start_status"] == "kOk"
@@ -258,13 +261,13 @@ def test_highs_milp_solves_discrete_ev_and_ess_model_when_dependency_is_availabl
     assert result.validation_status == "passed"
     assert result.validation_errors == ()
     assert result.adoption_ready is True
-    assert result.fallback_to_reference is False
     assert len(result.task_validation) == 1
     assert result.task_validation[0].deadline_met is True
     assert result.task_validation[0].power_steps_valid is True
     assert result.task_validation[0].valid is True
-    assert result.reference_cost is not None
     assert result.milp_cost is not None
+    assert result.plan.scheduling_strategy == "milp_joint_ev_ess"
+    assert result.plan.optimizer_status == "optimized"
     assert result.plan.intervals[0].ess_ac_power_w is not None
     assert result.plan.intervals[0].ess_ac_power_w > 0.0
     scheduled_kwh = float(result.plan.summary(2)["scheduled_load_kwh"])

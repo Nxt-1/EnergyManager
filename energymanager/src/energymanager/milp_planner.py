@@ -1,9 +1,9 @@
-"""Diagnostic MILP evaluation of the seven-day shadow energy plan."""
+"""Authoritative seven-day MILP shadow planner."""
 
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, timedelta
 from time import perf_counter
 from typing import Any
@@ -11,16 +11,24 @@ from typing import Any
 import numpy as np
 
 from .actuators import EssActuatorSnapshot, EvActuatorSnapshot, find_ess_actuator, find_ev_actuator
-from .economics import CapacityPeakState, TariffProfile, evaluate_plan_cost, evaluate_plan_objective
+from .economics import (
+    ECONOMIC_OBJECTIVE_VERSION,
+    CapacityPeakState,
+    TariffProfile,
+    evaluate_plan_cost,
+    evaluate_plan_objective,
+)
 from .ha_client import HomeAssistantClient
 from .planner import ShadowPlan, ShadowPlanInterval
 from .tasks import PlanningTask
 
-MILP_EVALUATION_VERSION = "2026-10-08-milp-v3"
+MILP_EVALUATION_VERSION = "2026-10-08-milp-v4"
 MILP_STATUS_ENTITY = "sensor.energy_manager_milp_status"
-MILP_TIME_LIMIT_SECONDS = 5.0
+MILP_TOTAL_TIME_BUDGET_SECONDS = 30.0
+MILP_ECONOMIC_TIME_LIMIT_SECONDS = MILP_TOTAL_TIME_BUDGET_SECONDS
+MILP_TIME_LIMIT_SECONDS = MILP_TOTAL_TIME_BUDGET_SECONDS
 MILP_RELATIVE_GAP = 0.01
-MILP_REFRESH_MINUTES = 5
+MILP_REFRESH_MINUTES = 10
 MILP_ECONOMIC_TOLERANCE_EUR = 0.01
 MILP_EARLY_VALUE_HALF_LIFE_DAYS = 3.0
 _VALIDATION_POWER_TOLERANCE_W = 5.0
@@ -59,7 +67,7 @@ class MilpCostBreakdown:
 
 @dataclass(frozen=True, slots=True)
 class MilpEvaluation:
-    """Result of a non-authoritative HiGHS planner evaluation."""
+    """Result of the authoritative HiGHS shadow planner solve."""
 
     status: str
     model_status: str | None
@@ -77,7 +85,9 @@ class MilpEvaluation:
     milp_objective_eur: float | None
     estimated_improvement_eur: float | None
     economic_solve_time_seconds: float | None = None
+    economic_time_limit_seconds: float = MILP_ECONOMIC_TIME_LIMIT_SECONDS
     tie_break_solve_time_seconds: float | None = None
+    tie_break_time_limit_seconds: float | None = None
     tie_break_status: str | None = None
     tie_break_warm_start_applied: bool = False
     tie_break_warm_start_status: str | None = None
@@ -119,7 +129,7 @@ def evaluate_shadow_plan_milp(
     profile: TariffProfile,
     capacity_state: CapacityPeakState,
 ) -> MilpEvaluation:
-    """Solve a parallel EV+ESS MILP without replacing the authoritative shadow schedule."""
+    """Solve the authoritative EV+ESS MILP shadow plan."""
     ess = find_ess_actuator(reference_plan.actuator_snapshots)
     ev = find_ev_actuator(reference_plan.actuator_snapshots)
     active_tasks = tuple(
@@ -209,7 +219,9 @@ def _replace_solver_version(result: MilpEvaluation, version: str) -> MilpEvaluat
         milp_objective_eur=result.milp_objective_eur,
         estimated_improvement_eur=result.estimated_improvement_eur,
         economic_solve_time_seconds=result.economic_solve_time_seconds,
+        economic_time_limit_seconds=result.economic_time_limit_seconds,
         tie_break_solve_time_seconds=result.tie_break_solve_time_seconds,
+        tie_break_time_limit_seconds=result.tie_break_time_limit_seconds,
         tie_break_status=result.tie_break_status,
         tie_break_warm_start_applied=result.tie_break_warm_start_applied,
         tie_break_warm_start_status=result.tie_break_warm_start_status,
@@ -275,7 +287,7 @@ def _solve_model(
     model = highspy.Highs()
     model.setOptionValue("output_flag", False)
     model.setOptionValue("threads", 1)
-    model.setOptionValue("time_limit", MILP_TIME_LIMIT_SECONDS)
+    model.setOptionValue("time_limit", MILP_ECONOMIC_TIME_LIMIT_SECONDS)
     model.setOptionValue("mip_rel_gap", MILP_RELATIVE_GAP)
 
     variables, integer_count = _build_variables(
@@ -320,10 +332,11 @@ def _solve_model(
             milp_objective_eur=None,
             estimated_improvement_eur=None,
             economic_solve_time_seconds=economic_solve_time,
+            economic_time_limit_seconds=MILP_ECONOMIC_TIME_LIMIT_SECONDS,
             validation_status="not_run",
             reference_cost=reference_cost,
             adoption_ready=False,
-            fallback_to_reference=True,
+            fallback_to_reference=False,
             reason="solver_returned_no_primal_solution",
         )
 
@@ -332,19 +345,31 @@ def _solve_model(
     stage1_objective = _objective(stage1_plan, profile, capacity_state)
     stage1_internal_objective = _economic_objective_value(ess, profile, variables, stage1_values)
 
-    model.addConstr(economic_expression <= stage1_internal_objective + MILP_ECONOMIC_TOLERANCE_EUR)
-    tie_break_expression = _time_weighted_grid_import_expression(reference_plan, variables)
-    model.setObjective(tie_break_expression, sense=highspy.ObjSense.kMinimize)
-    warm_start_applied, warm_start_status = _set_primal_warm_start(model, highspy, stage1_values)
+    tie_break_time_limit = max(0.0, MILP_TOTAL_TIME_BUDGET_SECONDS - economic_solve_time)
+    if tie_break_time_limit >= 0.5:
+        model.addConstr(economic_expression <= stage1_internal_objective + MILP_ECONOMIC_TOLERANCE_EUR)
+        tie_break_expression = _time_weighted_grid_import_expression(reference_plan, variables)
+        model.setObjective(tie_break_expression, sense=highspy.ObjSense.kMinimize)
+        warm_start_applied, warm_start_status = _set_primal_warm_start(model, highspy, stage1_values)
+        model.setOptionValue("time_limit", tie_break_time_limit)
 
-    tie_break_started = perf_counter()
-    model.run()
-    tie_break_solve_time = perf_counter() - tie_break_started
-    stage2_model_status = model.modelStatusToString(model.getModelStatus())
-    stage2_info = model.getInfo()
-    stage2_solution = model.getSolution()
-    stage2_has_solution = _has_solution(highspy, stage2_info)
-    tie_break_status = _status_from_model(stage2_model_status, has_solution=stage2_has_solution)
+        tie_break_started = perf_counter()
+        model.run()
+        tie_break_solve_time = perf_counter() - tie_break_started
+        stage2_model_status = model.modelStatusToString(model.getModelStatus())
+        stage2_info = model.getInfo()
+        stage2_solution = model.getSolution()
+        stage2_has_solution = _has_solution(highspy, stage2_info)
+        tie_break_status = _status_from_model(stage2_model_status, has_solution=stage2_has_solution)
+    else:
+        warm_start_applied = False
+        warm_start_status = "skipped_no_budget"
+        tie_break_solve_time = 0.0
+        stage2_model_status = stage1_model_status
+        stage2_info = stage1_info
+        stage2_solution = stage1_solution
+        stage2_has_solution = False
+        tie_break_status = "skipped_no_budget"
 
     if stage2_has_solution:
         values = list(stage2_solution.col_value)
@@ -355,10 +380,12 @@ def _solve_model(
         values = stage1_values
         selected_model_status = stage1_model_status
         selected_info = stage1_info
-        selected_solution_stage = "economic_fallback"
+        selected_solution_stage = "economic"
 
     milp_plan = _solution_plan(reference_plan, ess, ev, variables, values)
     milp_objective = _objective(milp_plan, profile, capacity_state)
+    if milp_objective is not None:
+        milp_plan = replace(milp_plan, optimizer_score_eur=milp_objective)
     improvement = None
     if reference_objective is not None and milp_objective is not None:
         improvement = reference_objective - milp_objective
@@ -393,7 +420,9 @@ def _solve_model(
         milp_objective_eur=milp_objective,
         estimated_improvement_eur=improvement,
         economic_solve_time_seconds=economic_solve_time,
+        economic_time_limit_seconds=MILP_ECONOMIC_TIME_LIMIT_SECONDS,
         tie_break_solve_time_seconds=tie_break_solve_time,
+        tie_break_time_limit_seconds=tie_break_time_limit,
         tie_break_status=tie_break_status,
         tie_break_warm_start_applied=warm_start_applied,
         tie_break_warm_start_status=warm_start_status,
@@ -406,7 +435,7 @@ def _solve_model(
         reference_cost=reference_cost,
         milp_cost=_cost_breakdown(milp_plan, profile, capacity_state),
         adoption_ready=adoption_ready,
-        fallback_to_reference=not adoption_ready,
+        fallback_to_reference=False,
         plan=milp_plan,
         reason=reason,
     )
@@ -723,9 +752,9 @@ def _solution_plan(
         tasks=reference_plan.tasks,
         ess_resource=resource,
         ess_initial_soc_percent=ess.soc_percent,
-        scheduling_strategy="milp_diagnostic_joint_ev_ess",
-        optimizer_status="diagnostic_only",
-        optimizer_objective=reference_plan.optimizer_objective,
+        scheduling_strategy="milp_joint_ev_ess",
+        optimizer_status="optimized",
+        optimizer_objective=ECONOMIC_OBJECTIVE_VERSION,
     )
 
 
@@ -969,14 +998,14 @@ def _integer_optional(value: object) -> int | None:
 
 
 async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpEvaluation) -> None:
-    """Publish solver validation and the early-value tie-break without changing planner authority."""
+    """Publish authoritative MILP solver status and validation diagnostics."""
     objective_delta = None
     if evaluation.first_stage_objective_eur is not None and evaluation.milp_objective_eur is not None:
         objective_delta = evaluation.milp_objective_eur - evaluation.first_stage_objective_eur
     attributes: dict[str, Any] = {
-        "friendly_name": "Energy Manager MILP Evaluation",
+        "friendly_name": "Energy Manager MILP Planner",
         "milp_version": MILP_EVALUATION_VERSION,
-        "authoritative": False,
+        "authoritative": True,
         "shadow_mode": True,
         "hardware_writes": False,
         "solver": "HiGHS/highspy",
@@ -985,8 +1014,9 @@ async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpE
         "solve_time_seconds": _round_optional(evaluation.solve_time_seconds, 3),
         "economic_solve_time_seconds": _round_optional(evaluation.economic_solve_time_seconds, 3),
         "tie_break_solve_time_seconds": _round_optional(evaluation.tie_break_solve_time_seconds, 3),
-        "time_limit_seconds": MILP_TIME_LIMIT_SECONDS,
-        "time_limit_seconds_per_stage": MILP_TIME_LIMIT_SECONDS,
+        "total_time_budget_seconds": MILP_TOTAL_TIME_BUDGET_SECONDS,
+        "economic_time_limit_seconds": evaluation.economic_time_limit_seconds,
+        "tie_break_time_limit_seconds": _round_optional(evaluation.tie_break_time_limit_seconds, 3),
         "mip_relative_gap_target": MILP_RELATIVE_GAP,
         "mip_gap": _round_optional(evaluation.mip_gap, 5),
         "mip_node_count": evaluation.mip_node_count,
@@ -995,12 +1025,9 @@ async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpE
         "integer_variable_count": evaluation.integer_variable_count,
         "constraint_count": evaluation.constraint_count,
         "active_task_count": evaluation.active_task_count,
-        "reference_strategy": evaluation.reference_strategy,
-        "reference_objective_eur": _round_optional(evaluation.reference_objective_eur, 4),
         "first_stage_objective_eur": _round_optional(evaluation.first_stage_objective_eur, 4),
         "milp_objective_eur": _round_optional(evaluation.milp_objective_eur, 4),
         "economic_objective_delta_eur": _round_optional(objective_delta, 4),
-        "estimated_improvement_eur": _round_optional(evaluation.estimated_improvement_eur, 4),
         "economic_tolerance_eur": evaluation.economic_tolerance_eur,
         "tie_break_status": evaluation.tie_break_status,
         "tie_break_warm_start_applied": evaluation.tie_break_warm_start_applied,
@@ -1012,7 +1039,6 @@ async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpE
         "validation_status": evaluation.validation_status,
         "validation_errors": list(evaluation.validation_errors),
         "adoption_ready": evaluation.adoption_ready,
-        "fallback_to_reference": evaluation.fallback_to_reference,
         "task_validation": [
             {
                 "id": item.task_id,
@@ -1025,7 +1051,6 @@ async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpE
             }
             for item in evaluation.task_validation
         ],
-        "reference_cost_7_days": _breakdown_attributes(evaluation.reference_cost),
         "milp_cost_7_days": _breakdown_attributes(evaluation.milp_cost),
         "reason": evaluation.reason,
     }

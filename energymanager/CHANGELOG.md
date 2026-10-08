@@ -1,4 +1,15 @@
 # Changelog
+## 0.23.0
+- Makes the HiGHS MILP the sole authoritative shadow planner and removes the portfolio/deadline scheduler from planning.
+- Uses a 10-minute normal replan cadence with immediate replans for forecast/task/actuator changes, material ESS SoC
+  deviation and significant unexpected background-load changes.
+- Gives MILP a 30-second total solve budget: the economic stage has first claim on the full budget and the early-value
+  tie-break receives whatever wall-clock budget remains.
+- Keeps the previous valid MILP plan for at most 30 minutes only after a periodic or forecast-triggered replan failure;
+  material task/actuator/state changes fail closed to planner-unavailable instead of invoking another scheduler.
+- Generates both ESS and EV generic dry-run requests from the current MILP interval while all hardware writes remain disabled.
+- Keeps the seven-day horizon, economic objective, EUR 0.01 tie-break tolerance and three-day early-value half-life.
+
 ## 0.22.1
 - Warm-starts the second-stage early-value MILP from the complete feasible first-stage economic solution.
 - Adds diagnostics showing whether the warm start was accepted and whether the published result came from the economic stage or
