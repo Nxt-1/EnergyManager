@@ -1,4 +1,8 @@
 # Changelog
+## 0.19.1
+- Fixes the v0.19 CI lint failure by importing `Callable` from `collections.abc` on Python 3.13.
+- No optimizer, economics, scheduling, configuration, or hardware-control behavior changes.
+
 ## 0.19.0
 - Makes the configured economics influence the shadow EV schedule for the first time.
 - Scores candidate EV charge allocations in EUR using projected import cost, export revenue and incremental capacity-tariff

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from typing import Callable
 
 from .actuators import (
     ActuatorSnapshot,
