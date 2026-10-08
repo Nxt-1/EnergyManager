@@ -1,4 +1,17 @@
 # Changelog
+## 0.19.0
+- Makes the configured economics influence the shadow EV schedule for the first time.
+- Scores candidate EV charge allocations in EUR using projected import cost, export revenue and incremental capacity-tariff
+  exposure while preserving the EV energy-by-deadline requirement as a hard constraint.
+- Adds terminal ESS value to the optimizer objective so a candidate is not rewarded for ending the 48-hour horizon with an
+  artificially depleted battery; usable terminal energy is valued at the import cost it can subsequently avoid.
+- Uses the existing greedy ESS self-consumption projection when comparing candidate EV schedules; joint ESS optimization is
+  intentionally deferred.
+- Retains the v0.16 earliest-deadline schedule whenever the economic search cannot improve its objective.
+- Extends plan-cost diagnostics with optimizer status, selected and baseline objective values, estimated improvement,
+  terminal ESS value and candidate count.
+- Remains hard-coded shadow mode: no real EV or ESS hardware writes are added.
+
 ## 0.18.2
 - Separates tariff effective time from the time a tariff revision is recorded, so backdated tariff profiles can be stored safely.
 - Reuses tariff revisions by profile ID instead of assuming the newest database timestamp is the configured profile.

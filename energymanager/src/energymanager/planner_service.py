@@ -77,12 +77,19 @@ class ShadowPlannerService:
         if pv_forecast is None:
             await self._diagnostics.publish_shadow_plan_status("waiting_for_pv_forecast")
             return
+        objective_scorer = None
+        objective_name = None
+        if self._economics_service is not None and self._economics_service.optimizer_ready:
+            objective_scorer = self._economics_service.optimizer_score
+            objective_name = self._economics_service.optimizer_objective_name
         plan = self._planner.build(
             load_forecast,
             pv_forecast,
             now_utc=now,
             actuators=actuators,
             tasks=tasks,
+            objective_scorer=objective_scorer,
+            objective_name=objective_name,
         )
         self._plan = plan
         self._last_plan_at_utc = now
@@ -101,7 +108,8 @@ class ShadowPlannerService:
             _LOGGER.info(
                 "Shadow plan updated: next 24 h background %.2f kWh, scheduled %.2f kWh, PV potential %.2f kWh, "
                 "pre-control deficit %.2f kWh, projected grid import %.2f kWh, ESS SoC %.1f -> %.1f%%, "
-                "curtailed DC PV %.2f kWh, economics %s, actuators [%s], tasks [%s], dry-run commands [%s]",
+                "curtailed DC PV %.2f kWh, economics %s, optimizer %s, actuators [%s], tasks [%s], "
+                "dry-run commands [%s]",
                 summary["background_load_kwh"],
                 summary["scheduled_load_kwh"],
                 summary["pv_potential_kwh"],
@@ -111,6 +119,7 @@ class ShadowPlannerService:
                 summary["end_soc_percent"],
                 summary["curtailed_dc_pv_kwh"],
                 cost_status,
+                _optimizer_log(plan),
                 actuator_status,
                 task_status,
                 _command_log(command_results),
@@ -118,8 +127,8 @@ class ShadowPlannerService:
             return
         _LOGGER.info(
             "Shadow plan updated: next 24 h background %.2f kWh, scheduled %.2f kWh, PV potential %.2f kWh, "
-            "net deficit %.2f kWh, net surplus %.2f kWh, ESS projection %s, economics %s, actuators [%s], "
-            "tasks [%s], dry-run commands [%s]",
+            "net deficit %.2f kWh, net surplus %.2f kWh, ESS projection %s, economics %s, optimizer %s, "
+            "actuators [%s], tasks [%s], dry-run commands [%s]",
             summary["background_load_kwh"],
             summary["scheduled_load_kwh"],
             summary["pv_potential_kwh"],
@@ -127,6 +136,7 @@ class ShadowPlannerService:
             summary["net_surplus_kwh"],
             plan.ess_projection_status,
             cost_status,
+            _optimizer_log(plan),
             actuator_status,
             task_status,
             _command_log(command_results),
@@ -149,6 +159,17 @@ def _cost_log(evaluation: PlanCostEvaluation | None) -> str:
     if evaluation.total_marginal_cost_eur is None:
         return f"energy-only EUR {evaluation.net_energy_cost_eur:.2f}"
     return f"marginal EUR {evaluation.total_marginal_cost_eur:.2f}"
+
+
+def _optimizer_log(plan: ShadowPlan) -> str:
+    if plan.optimizer_status == "optimized":
+        saving = None
+        if plan.optimizer_baseline_score_eur is not None and plan.optimizer_score_eur is not None:
+            saving = plan.optimizer_baseline_score_eur - plan.optimizer_score_eur
+        if saving is not None:
+            return f"optimized/saved EUR {saving:.2f}"
+        return "optimized"
+    return plan.optimizer_status
 
 
 def _command_log(results: tuple[ActuatorCommandResult, ...]) -> str:

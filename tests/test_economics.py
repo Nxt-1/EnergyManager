@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from energymanager.actuators import EssCapabilities
 from energymanager.config import EconomicsSettings
 from energymanager.economics import (
     CapacityPeakState,
@@ -18,7 +19,9 @@ from energymanager.economics import (
     TariffProfile,
     TariffProfileHistory,
     evaluate_plan_cost,
+    evaluate_plan_objective,
 )
+from energymanager.planner import ShadowPlan, ShadowPlanInterval
 
 
 class FakeHomeAssistantClient:
@@ -140,8 +143,6 @@ def test_effective_timestamp_is_part_of_profile_identity(tmp_path: Path) -> None
     assert len(path.read_text(encoding="utf-8").splitlines()) == 2
 
 
-
-
 class FakeLegacySchemaInfluxClient(FakeInfluxClient):
     async def query_sql(self, query: str) -> list[dict[str, str | None]]:
         if 'FROM "tariff_profile"' in query and ("valid_from_utc" in query or "supersedes_profile_id" in query):
@@ -176,6 +177,7 @@ def test_backdated_profile_migrates_from_legacy_influx_schema(tmp_path: Path) ->
     assert profile.supersedes_profile_id == "legacy"
     assert history.backend == "influxdb"
     assert len(client.lines) == 1
+
 
 def test_backdated_explicit_profile_supersedes_activation_fallback_in_influx(tmp_path: Path) -> None:
     client = FakeInfluxClient()
@@ -289,6 +291,7 @@ def test_profile_at_keeps_later_real_tariff_change_after_corrected_history(tmp_p
     assert october is not None and october.profile_id == "corrected_october"
     assert january is not None and january.profile_id == "january"
 
+
 def test_energy_cost_treats_export_as_revenue(tmp_path: Path) -> None:
     profile = asyncio.run(
         TariffProfileHistory(_settings(), local_path=tmp_path / "tariffs.jsonl").activate(
@@ -336,12 +339,16 @@ class FakeCapacityInfluxClient:
 
 
 @dataclass(frozen=True)
+
+
 class FakePlanInterval:
     period_start_local: datetime
     grid_power_after_ess_w: float | None
 
 
 @dataclass(frozen=True)
+
+
 class FakePlan:
     intervals: tuple[FakePlanInterval, ...]
 
@@ -473,3 +480,51 @@ def test_plan_cost_is_partial_when_current_month_peak_history_is_incomplete() ->
     assert evaluation.net_energy_cost_eur == pytest.approx(0.9)
     assert evaluation.incremental_capacity_cost_eur is None
     assert evaluation.total_marginal_cost_eur is None
+
+
+def test_economic_objective_values_terminal_ess_energy_at_avoidable_import_cost() -> None:
+    start = datetime(2026, 10, 8, 0, 0, tzinfo=_LOCAL)
+    resource = EssCapabilities(
+        capacity_kwh=10.0,
+        min_soc_percent=10.0,
+        max_soc_percent=100.0,
+        max_charge_power_w=2000.0,
+        max_discharge_power_w=2000.0,
+        charge_efficiency=0.95,
+        discharge_efficiency=0.90,
+    )
+
+    def plan(end_soc: float) -> ShadowPlan:
+        intervals = tuple(
+            ShadowPlanInterval(
+                period_start_local=start + timedelta(minutes=15 * index),
+                background_load_w=1000.0,
+                scheduled_load_w=0.0,
+                pv_ac_power_w=0.0,
+                pv_dc_power_w=0.0,
+                pv_power_w=0.0,
+                net_power_before_control_w=1000.0,
+                ess_ac_power_w=0.0,
+                battery_energy_delta_kwh=0.0,
+                projected_soc_percent=end_soc,
+                grid_power_after_ess_w=1000.0,
+                curtailed_dc_pv_w=0.0,
+            )
+            for index in range(4)
+        )
+        return ShadowPlan(
+            generated_at_utc=start.astimezone(UTC),
+            intervals=intervals,
+            ess_projection_status="projected",
+            ess_resource=resource,
+            ess_initial_soc_percent=end_soc,
+        )
+
+    high = evaluate_plan_objective(plan(50.0), _profile(), _capacity_state(peak_kw=6.0), hours=1)
+    low = evaluate_plan_objective(plan(20.0), _profile(), _capacity_state(peak_kw=6.0), hours=1)
+
+    assert high is not None and low is not None
+    assert high.terminal_usable_ac_kwh == pytest.approx(3.6)
+    assert low.terminal_usable_ac_kwh == pytest.approx(0.9)
+    assert high.objective_eur == pytest.approx(low.objective_eur - 0.81)
+

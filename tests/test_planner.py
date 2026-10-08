@@ -11,6 +11,7 @@ from energymanager.actuators import (
     EvActuatorSnapshot,
     EvCapabilities,
 )
+from energymanager.economics import CapacityPeakState, TariffProfile, evaluate_plan_objective
 from energymanager.load_forecast import BackgroundLoadForecast, BackgroundLoadForecastPoint
 from energymanager.planner import ShadowPlanner
 from energymanager.pv_forecast import PvForecast, PvForecastPoint
@@ -323,3 +324,53 @@ def test_ess_projection_charges_from_ac_surplus() -> None:
     assert summary["grid_export_after_ess_kwh"] == pytest.approx(0.0)
     assert summary["ess_ac_charge_kwh"] == pytest.approx(1.0)
     assert summary["end_soc_percent"] == pytest.approx(60.0)
+
+
+def test_economic_scheduler_reduces_capacity_cost_instead_of_charging_at_earliest_maximum() -> None:
+    start = datetime(2026, 10, 8, 0, 0, tzinfo=_LOCAL)
+    task = _ev_task(start, required_energy_kwh=3.0, end=start + timedelta(hours=2))
+    ess = _ess_actuator(soc_percent=10.0, min_soc_percent=10.0)
+    ev = _ev_actuator()
+    profile = TariffProfile(
+        profile_id="test",
+        valid_from_utc=datetime(2026, 9, 30, 22, 0, tzinfo=UTC),
+        import_energy_eur_per_kwh=0.30556,
+        export_energy_eur_per_kwh=0.0397,
+        capacity_tariff_eur_per_kw_month=4.36417,
+        capacity_tariff_floor_kw=2.5,
+    )
+    capacity = CapacityPeakState(
+        month_local="2026-10",
+        observed_peak_kw=2.5,
+        billing_peak_kw=2.5,
+        peak_window_start_local=start - timedelta(days=1),
+        peak_source="test",
+        history_complete=True,
+        estimated_window_count=1,
+        live_window_count=0,
+    )
+
+    def score(plan) -> float | None:
+        evaluation = evaluate_plan_objective(plan, profile, capacity, hours=2)
+        return evaluation.objective_eur if evaluation is not None else None
+
+    plan = ShadowPlanner().build(
+        _load_forecast(start, [500.0] * 8),
+        _pv_forecast(start, [0.0, 0.0]),
+        now_utc=start.astimezone(UTC),
+        actuators=(ess, ev),
+        tasks=(task,),
+        objective_scorer=score,
+        objective_name="test-economic-objective",
+    )
+
+    scheduled_kwh = float(plan.summary(2)["scheduled_load_kwh"])
+    assert plan.optimizer_status == "optimized"
+    assert plan.scheduling_strategy == "economic_ev_greedy"
+    assert scheduled_kwh >= 3.0
+    assert scheduled_kwh - 3.0 < 0.06
+    assert max(item.scheduled_load_w for item in plan.intervals) <= 1840.0
+    assert plan.optimizer_score_eur is not None
+    assert plan.optimizer_baseline_score_eur is not None
+    assert plan.optimizer_score_eur < plan.optimizer_baseline_score_eur
+

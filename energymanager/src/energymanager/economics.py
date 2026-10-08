@@ -19,7 +19,8 @@ if TYPE_CHECKING:
 
 COST_MODEL_VERSION = "2026-10-07-cost-v1"
 CAPACITY_PEAK_VERSION = "2026-10-07-capacity-v1"
-PLAN_COST_VERSION = "2026-10-07-plan-cost-v1"
+PLAN_COST_VERSION = "2026-10-08-plan-cost-v2"
+ECONOMIC_OBJECTIVE_VERSION = "2026-10-08-economic-objective-v1"
 ECONOMICS_STATUS_ENTITY = "sensor.energy_manager_economics_status"
 CAPACITY_STATUS_ENTITY = "sensor.energy_manager_capacity_tariff_status"
 PLAN_COST_STATUS_ENTITY = "sensor.energy_manager_plan_cost_status"
@@ -87,7 +88,7 @@ class CapacityMonthCost:
 
 @dataclass(frozen=True, slots=True)
 class PlanCostEvaluation:
-    """Accounting view of one projected plan horizon; not yet the optimizer objective."""
+    """Marginal cash-flow accounting for one projected plan horizon."""
 
     horizon_hours: int
     import_kwh: float
@@ -98,6 +99,17 @@ class PlanCostEvaluation:
     incremental_capacity_cost_eur: float | None
     total_marginal_cost_eur: float | None
     months: tuple[CapacityMonthCost, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class EconomicObjectiveEvaluation:
+    """Economic optimizer score including the value left in the ESS at the horizon boundary."""
+
+    horizon_hours: int
+    marginal_cost_eur: float
+    terminal_usable_ac_kwh: float
+    terminal_ess_value_eur: float
+    objective_eur: float
 
 
 class TariffProfileHistory:
@@ -512,6 +524,28 @@ class EconomicsService:
         """Expose current capacity state for diagnostics and plan evaluation."""
         return self._capacity_tracker.state if self._capacity_tracker is not None else None
 
+    @property
+    def optimizer_ready(self) -> bool:
+        """Return whether the full economic objective can currently rank candidate plans."""
+        state = self.capacity_state
+        return (
+            self.current_profile is not None
+            and state is not None
+            and state.history_complete
+            and state.observed_peak_kw is not None
+        )
+
+    @property
+    def optimizer_objective_name(self) -> str:
+        return ECONOMIC_OBJECTIVE_VERSION
+
+    def optimizer_score(self, plan: ShadowPlan) -> float | None:
+        """Return the scalar economic objective used to rank candidate shadow plans."""
+        if not self.optimizer_ready or self.current_profile is None:
+            return None
+        evaluation = evaluate_plan_objective(plan, self.current_profile, self.capacity_state, hours=48)
+        return evaluation.objective_eur if evaluation is not None else None
+
     async def initialize(self) -> TariffProfile | None:
         """Activate the configured tariff revision and publish its diagnostic state."""
         self.current_profile = await self._history.activate()
@@ -587,13 +621,14 @@ class EconomicsService:
         await self._capacity_tracker.observe(float(value), now_utc=now_utc, local_tz=local_tz)
 
     async def publish_plan_cost(self, plan: ShadowPlan, *, local_tz: tzinfo) -> PlanCostEvaluation | None:
-        """Evaluate and publish the current plan without changing any planner decision."""
+        """Evaluate and publish cash-flow accounting plus the active optimizer objective."""
         profile = self.current_profile
         capacity_state = self.capacity_state
         if profile is None:
             return None
         evaluation_24 = evaluate_plan_cost(plan, profile, capacity_state, hours=24)
         evaluation_48 = evaluate_plan_cost(plan, profile, capacity_state, hours=48)
+        objective = evaluate_plan_objective(plan, profile, capacity_state, hours=48)
         if evaluation_24 is None:
             await self._client.set_state(
                 PLAN_COST_STATUS_ENTITY,
@@ -607,19 +642,39 @@ class EconomicsService:
                 },
             )
             return None
+
+        optimizer_applied = plan.optimizer_status in {"optimized", "baseline_retained"}
+        objective_score = objective.objective_eur if objective is not None else None
+        improvement = None
+        if plan.optimizer_baseline_score_eur is not None and objective_score is not None:
+            improvement = plan.optimizer_baseline_score_eur - objective_score
         attributes = {
             "friendly_name": "Energy Manager Plan Cost Status",
             "plan_cost_version": PLAN_COST_VERSION,
             "cost_model_version": COST_MODEL_VERSION,
             "profile_id": profile.profile_id,
             "tariff_valid_from_utc": profile.valid_from_utc.isoformat(),
-            "accounting_only": True,
-            "optimizer_objective_ready": False,
-            "optimizer_blocker": "terminal_ess_value_not_modelled",
+            "accounting_only": not optimizer_applied,
+            "optimizer_objective_ready": self.optimizer_ready,
+            "optimizer_status": plan.optimizer_status,
+            "optimizer_objective": plan.optimizer_objective,
+            "scheduling_strategy": plan.scheduling_strategy,
+            "optimizer_candidate_evaluations": plan.optimizer_candidate_evaluations,
+            "selected_objective_eur": _round_optional(objective_score, 4),
+            "baseline_objective_eur": _round_optional(plan.optimizer_baseline_score_eur, 4),
+            "estimated_objective_improvement_eur": _round_optional(improvement, 4),
+            "terminal_usable_ac_kwh": (
+                round(objective.terminal_usable_ac_kwh, 3) if objective is not None else None
+            ),
+            "terminal_ess_value_eur": (
+                round(objective.terminal_ess_value_eur, 3) if objective is not None else None
+            ),
             "next_24_hours": _evaluation_attributes(evaluation_24),
             "next_48_hours": _evaluation_attributes(evaluation_48) if evaluation_48 is not None else None,
             "last_update_utc": datetime.now(UTC).isoformat(),
         }
+        if not self.optimizer_ready:
+            attributes["optimizer_blocker"] = _optimizer_blocker(profile, capacity_state)
         if capacity_state is not None:
             attributes["capacity_state"] = {
                 "month_local": capacity_state.month_local,
@@ -712,6 +767,58 @@ def evaluate_plan_cost(
         total_marginal_cost_eur=total,
         months=tuple(month_costs),
     )
+
+
+
+def evaluate_plan_objective(
+    plan: ShadowPlan,
+    profile: TariffProfile,
+    capacity_state: CapacityPeakState | None,
+    *,
+    hours: int = 48,
+) -> EconomicObjectiveEvaluation | None:
+    """Score a projected plan by marginal cash cost minus economically usable terminal ESS energy."""
+    accounting = evaluate_plan_cost(plan, profile, capacity_state, hours=hours)
+    if accounting is None or accounting.total_marginal_cost_eur is None:
+        return None
+    if plan.ess_resource is None:
+        return None
+    summary = plan.summary(hours)
+    raw_end_soc = summary["end_soc_percent"]
+    if not isinstance(raw_end_soc, (int, float)):
+        return None
+
+    end_soc = max(0.0, min(100.0, float(raw_end_soc)))
+    usable_stored_kwh = max(
+        0.0,
+        plan.ess_resource.capacity_kwh
+        * (end_soc - plan.ess_resource.min_soc_percent)
+        / 100.0,
+    )
+    terminal_usable_ac_kwh = usable_stored_kwh * plan.ess_resource.discharge_efficiency
+    terminal_value = terminal_usable_ac_kwh * profile.import_energy_eur_per_kwh
+    return EconomicObjectiveEvaluation(
+        horizon_hours=hours,
+        marginal_cost_eur=accounting.total_marginal_cost_eur,
+        terminal_usable_ac_kwh=terminal_usable_ac_kwh,
+        terminal_ess_value_eur=terminal_value,
+        objective_eur=accounting.total_marginal_cost_eur - terminal_value,
+    )
+
+
+def _optimizer_blocker(
+    profile: TariffProfile | None,
+    capacity_state: CapacityPeakState | None,
+) -> str | None:
+    if profile is None:
+        return "economics_not_configured"
+    if capacity_state is None:
+        return "capacity_state_unavailable"
+    if not capacity_state.history_complete:
+        return "capacity_history_incomplete"
+    if capacity_state.observed_peak_kw is None:
+        return "capacity_peak_unknown"
+    return None
 
 
 def _evaluation_attributes(evaluation: PlanCostEvaluation) -> dict[str, object]:

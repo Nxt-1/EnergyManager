@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from typing import Callable
 
 from .actuators import (
     ActuatorSnapshot,
@@ -18,7 +19,7 @@ from .load_forecast import FORECAST_INTERVAL_MINUTES, BackgroundLoadForecast
 from .pv_forecast import PvForecast
 from .tasks import PlanningTask
 
-PLANNER_VERSION = "2026-10-07-shadow-v6"
+PLANNER_VERSION = "2026-10-08-shadow-v7"
 PLANNER_HORIZON_HOURS = 48
 _INTERVAL_HOURS = FORECAST_INTERVAL_MINUTES / 60.0
 _INTERVAL_DELTA = timedelta(minutes=FORECAST_INTERVAL_MINUTES)
@@ -57,6 +58,12 @@ class ShadowPlan:
     tasks: tuple[PlanningTask, ...] = ()
     ess_resource: EssCapabilities | None = None
     ess_initial_soc_percent: float | None = None
+    scheduling_strategy: str = "deadline_earliest"
+    optimizer_status: str = "not_requested"
+    optimizer_objective: str | None = None
+    optimizer_score_eur: float | None = None
+    optimizer_baseline_score_eur: float | None = None
+    optimizer_candidate_evaluations: int = 0
 
     def summary(self, hours: int) -> dict[str, float | int | str | None]:
         """Return compact energy/peak statistics for the first requested hours."""
@@ -181,6 +188,8 @@ class ShadowPlanner:
         now_utc: datetime,
         actuators: tuple[ActuatorSnapshot, ...] = (),
         tasks: tuple[PlanningTask, ...] = (),
+        objective_scorer: Callable[[ShadowPlan], float | None] | None = None,
+        objective_name: str | None = None,
     ) -> ShadowPlan:
         if now_utc.tzinfo is None:
             raise ValueError("now_utc must be timezone-aware")
@@ -209,35 +218,318 @@ class ShadowPlanner:
                 )
             )
 
-        scheduled_intervals = _schedule_tasks(base_intervals, actuators, tasks)
         ess_actuator = find_ess_actuator(actuators)
+        scheduling = _SchedulingResult(intervals=_schedule_tasks(base_intervals, actuators, tasks))
+        if (
+            objective_scorer is not None
+            and objective_name is not None
+            and ess_actuator is not None
+            and ess_actuator.configured
+            and ess_actuator.planning_available
+            and ess_actuator.soc_percent is not None
+        ):
+            scheduling = _schedule_tasks_economically(
+                base_intervals,
+                actuators,
+                tasks,
+                ess_actuator,
+                now_utc=now_utc,
+                objective_scorer=objective_scorer,
+                objective_name=objective_name,
+            )
+
         if ess_actuator is None or not ess_actuator.configured:
-            return ShadowPlan(
-                generated_at_utc=now_utc.astimezone(UTC),
-                intervals=tuple(scheduled_intervals),
+            return _plan_from_scheduling(
+                now_utc,
+                scheduling,
+                actuators,
+                tasks,
                 ess_projection_status="not_configured",
-                actuator_snapshots=actuators,
-                tasks=tasks,
             )
         if not ess_actuator.planning_available or ess_actuator.soc_percent is None:
-            return ShadowPlan(
-                generated_at_utc=now_utc.astimezone(UTC),
-                intervals=tuple(scheduled_intervals),
+            return _plan_from_scheduling(
+                now_utc,
+                scheduling,
+                actuators,
+                tasks,
                 ess_projection_status=ess_actuator.status,
-                actuator_snapshots=actuators,
-                tasks=tasks,
                 ess_resource=ess_actuator.capabilities,
             )
-        projected_intervals = _project_ess(scheduled_intervals, ess_actuator)
-        return ShadowPlan(
-            generated_at_utc=now_utc.astimezone(UTC),
+
+        projected_intervals = _project_ess(scheduling.intervals, ess_actuator)
+        return _plan_from_scheduling(
+            now_utc,
+            scheduling,
+            actuators,
+            tasks,
             intervals=projected_intervals,
             ess_projection_status="projected",
-            actuator_snapshots=actuators,
-            tasks=tasks,
             ess_resource=ess_actuator.capabilities,
             ess_initial_soc_percent=max(0.0, min(100.0, ess_actuator.soc_percent)),
         )
+
+
+@dataclass(slots=True)
+class _SchedulingResult:
+    intervals: list[ShadowPlanInterval]
+    strategy: str = "deadline_earliest"
+    optimizer_status: str = "not_requested"
+    objective_name: str | None = None
+    score_eur: float | None = None
+    baseline_score_eur: float | None = None
+    candidate_evaluations: int = 0
+
+
+def _plan_from_scheduling(
+    now_utc: datetime,
+    scheduling: _SchedulingResult,
+    actuators: tuple[ActuatorSnapshot, ...],
+    tasks: tuple[PlanningTask, ...],
+    *,
+    intervals: tuple[ShadowPlanInterval, ...] | None = None,
+    ess_projection_status: str,
+    ess_resource: EssCapabilities | None = None,
+    ess_initial_soc_percent: float | None = None,
+) -> ShadowPlan:
+    return ShadowPlan(
+        generated_at_utc=now_utc.astimezone(UTC),
+        intervals=intervals if intervals is not None else tuple(scheduling.intervals),
+        ess_projection_status=ess_projection_status,
+        actuator_snapshots=actuators,
+        tasks=tasks,
+        ess_resource=ess_resource,
+        ess_initial_soc_percent=ess_initial_soc_percent,
+        scheduling_strategy=scheduling.strategy,
+        optimizer_status=scheduling.optimizer_status,
+        optimizer_objective=scheduling.objective_name,
+        optimizer_score_eur=scheduling.score_eur,
+        optimizer_baseline_score_eur=scheduling.baseline_score_eur,
+        optimizer_candidate_evaluations=scheduling.candidate_evaluations,
+    )
+
+
+def _schedule_tasks_economically(
+    intervals: list[ShadowPlanInterval],
+    actuators: tuple[ActuatorSnapshot, ...],
+    tasks: tuple[PlanningTask, ...],
+    ess_actuator: EssActuatorSnapshot,
+    *,
+    now_utc: datetime,
+    objective_scorer: Callable[[ShadowPlan], float | None],
+    objective_name: str,
+) -> _SchedulingResult:
+    """Economically schedule the current EV deadline task with discrete charger states."""
+    baseline_intervals = _schedule_tasks(intervals, actuators, tasks)
+    baseline_plan = _candidate_plan(baseline_intervals, now_utc, actuators, tasks, ess_actuator)
+    baseline_score = objective_scorer(baseline_plan)
+    if baseline_score is None:
+        return _SchedulingResult(
+            intervals=baseline_intervals,
+            optimizer_status="objective_unavailable",
+            objective_name=objective_name,
+        )
+
+    ev_actuator = find_ev_actuator(actuators)
+    active_tasks = [
+        task
+        for task in tasks
+        if task.planning_available and task.required_energy_kwh is not None and task.required_energy_kwh > 0.0
+    ]
+    supported = [
+        task
+        for task in active_tasks
+        if ev_actuator is not None
+        and task.kind == "energy_by_deadline"
+        and task.actuator_id == ev_actuator.actuator_id
+    ]
+    if ev_actuator is None or not ev_actuator.planning_available or len(active_tasks) != 1 or len(supported) != 1:
+        return _SchedulingResult(
+            intervals=baseline_intervals,
+            optimizer_status="unsupported_task_set",
+            objective_name=objective_name,
+            score_eur=baseline_score,
+            baseline_score_eur=baseline_score,
+            candidate_evaluations=1,
+        )
+
+    task = supported[0]
+    optimized = _optimize_ev_energy_task(
+        intervals,
+        task,
+        ev_actuator,
+        ess_actuator,
+        now_utc=now_utc,
+        actuators=actuators,
+        tasks=tasks,
+        objective_scorer=objective_scorer,
+    )
+    evaluations = optimized.candidate_evaluations + 1
+    if optimized.score_eur is None:
+        return _SchedulingResult(
+            intervals=baseline_intervals,
+            optimizer_status="objective_unavailable",
+            objective_name=objective_name,
+            score_eur=baseline_score,
+            baseline_score_eur=baseline_score,
+            candidate_evaluations=evaluations,
+        )
+    if optimized.score_eur >= baseline_score - 1e-9:
+        return _SchedulingResult(
+            intervals=baseline_intervals,
+            optimizer_status="baseline_retained",
+            objective_name=objective_name,
+            score_eur=baseline_score,
+            baseline_score_eur=baseline_score,
+            candidate_evaluations=evaluations,
+        )
+    return _SchedulingResult(
+        intervals=optimized.intervals,
+        strategy="economic_ev_greedy",
+        optimizer_status="optimized",
+        objective_name=objective_name,
+        score_eur=optimized.score_eur,
+        baseline_score_eur=baseline_score,
+        candidate_evaluations=evaluations,
+    )
+
+
+def _optimize_ev_energy_task(
+    intervals: list[ShadowPlanInterval],
+    task: PlanningTask,
+    actuator: EvActuatorSnapshot,
+    ess_actuator: EssActuatorSnapshot,
+    *,
+    now_utc: datetime,
+    actuators: tuple[ActuatorSnapshot, ...],
+    tasks: tuple[PlanningTask, ...],
+    objective_scorer: Callable[[ShadowPlan], float | None],
+) -> _SchedulingResult:
+    """Greedily add the lowest marginal-cost charger increment until the task is fulfilled."""
+    if task.earliest_start_local is None or task.latest_end_local is None or task.required_energy_kwh is None:
+        return _SchedulingResult(intervals=list(intervals), optimizer_status="invalid_task")
+    power_steps = _ev_charge_power_steps_w(actuator)
+    if not power_steps:
+        return _SchedulingResult(intervals=list(intervals), optimizer_status="no_charge_steps")
+
+    earliest_utc = task.earliest_start_local.astimezone(UTC)
+    latest_end_utc = task.latest_end_local.astimezone(UTC)
+    eligible_indexes = [
+        index
+        for index, item in enumerate(intervals)
+        if item.period_start_local.astimezone(UTC) >= earliest_utc
+        and (item.period_start_local + _INTERVAL_DELTA).astimezone(UTC) <= latest_end_utc
+    ]
+    if not eligible_indexes:
+        return _SchedulingResult(intervals=list(intervals), optimizer_status="no_eligible_intervals")
+
+    scheduled = list(intervals)
+    levels = {index: 0 for index in eligible_indexes}
+    allocated_kwh = 0.0
+    evaluations = 0
+    current_plan = _candidate_plan(scheduled, now_utc, actuators, tasks, ess_actuator)
+    current_score = objective_scorer(current_plan)
+    evaluations += 1
+    if current_score is None:
+        return _SchedulingResult(
+            intervals=scheduled,
+            optimizer_status="objective_unavailable",
+            candidate_evaluations=evaluations,
+        )
+
+    maximum_iterations = len(eligible_indexes) * len(power_steps)
+    for _ in range(maximum_iterations):
+        if allocated_kwh >= task.required_energy_kwh - 1e-9:
+            break
+        candidates: list[
+            tuple[float, float, float, int, int, list[ShadowPlanInterval], float]
+        ] = []
+        remaining_kwh = task.required_energy_kwh - allocated_kwh
+        for index in eligible_indexes:
+            level = levels[index]
+            if level >= len(power_steps):
+                continue
+            current_power_w = 0.0 if level == 0 else power_steps[level - 1]
+            next_power_w = power_steps[level]
+            added_power_w = next_power_w - current_power_w
+            added_kwh = added_power_w * _INTERVAL_HOURS / 1000.0
+            candidate_intervals = _add_scheduled_power(scheduled, index, added_power_w)
+            candidate_plan = _candidate_plan(candidate_intervals, now_utc, actuators, tasks, ess_actuator)
+            candidate_score = objective_scorer(candidate_plan)
+            evaluations += 1
+            if candidate_score is None:
+                continue
+            marginal_cost = (candidate_score - current_score) / added_kwh
+            overshoot_kwh = max(0.0, added_kwh - remaining_kwh)
+            candidates.append(
+                (
+                    overshoot_kwh,
+                    marginal_cost,
+                    candidate_score,
+                    index,
+                    level + 1,
+                    candidate_intervals,
+                    added_kwh,
+                )
+            )
+        if not candidates:
+            break
+        non_overshooting = [candidate for candidate in candidates if candidate[0] <= 1e-9]
+        if non_overshooting:
+            chosen = min(non_overshooting, key=lambda item: (item[1], item[2], item[3]))
+        else:
+            chosen = min(candidates, key=lambda item: (item[0], item[1], item[2], item[3]))
+        _, _, current_score, index, next_level, scheduled, added_kwh = chosen
+        levels[index] = next_level
+        allocated_kwh += added_kwh
+
+    if allocated_kwh < task.required_energy_kwh - 1e-9:
+        return _SchedulingResult(
+            intervals=scheduled,
+            optimizer_status="deadline_infeasible",
+            score_eur=current_score,
+            candidate_evaluations=evaluations,
+        )
+    return _SchedulingResult(
+        intervals=scheduled,
+        optimizer_status="candidate_ready",
+        score_eur=current_score,
+        candidate_evaluations=evaluations,
+    )
+
+
+def _candidate_plan(
+    intervals: list[ShadowPlanInterval],
+    now_utc: datetime,
+    actuators: tuple[ActuatorSnapshot, ...],
+    tasks: tuple[PlanningTask, ...],
+    ess_actuator: EssActuatorSnapshot,
+) -> ShadowPlan:
+    projected = _project_ess(intervals, ess_actuator)
+    return ShadowPlan(
+        generated_at_utc=now_utc.astimezone(UTC),
+        intervals=projected,
+        ess_projection_status="projected",
+        actuator_snapshots=actuators,
+        tasks=tasks,
+        ess_resource=ess_actuator.capabilities,
+        ess_initial_soc_percent=max(0.0, min(100.0, float(ess_actuator.soc_percent))),
+    )
+
+
+def _add_scheduled_power(
+    intervals: list[ShadowPlanInterval],
+    index: int,
+    added_power_w: float,
+) -> list[ShadowPlanInterval]:
+    candidate = list(intervals)
+    item = candidate[index]
+    scheduled_load_w = item.scheduled_load_w + added_power_w
+    candidate[index] = replace(
+        item,
+        scheduled_load_w=scheduled_load_w,
+        net_power_before_control_w=item.background_load_w + scheduled_load_w - item.pv_power_w,
+    )
+    return candidate
 
 
 def _schedule_tasks(
