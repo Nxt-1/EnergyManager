@@ -106,9 +106,11 @@ def _ev_actuator(*, nominal_voltage_v: float = 230.0) -> EvActuatorSnapshot:
     )
 
 
-def _ev_task(start: datetime, *, required_energy_kwh: float, end: datetime) -> PlanningTask:
+def _ev_task(
+    start: datetime, *, required_energy_kwh: float, end: datetime, task_id: str = "ev_charge"
+) -> PlanningTask:
     return PlanningTask(
-        task_id="ev_charge",
+        task_id=task_id,
         kind="energy_by_deadline",
         source="test",
         actuator_id="ev",
@@ -366,7 +368,7 @@ def test_economic_scheduler_reduces_capacity_cost_instead_of_charging_at_earlies
 
     scheduled_kwh = float(plan.summary(2)["scheduled_load_kwh"])
     assert plan.optimizer_status == "optimized"
-    assert plan.scheduling_strategy == "economic_ev_greedy"
+    assert plan.scheduling_strategy.startswith("economic_ev_portfolio:")
     assert scheduled_kwh >= 3.0
     assert scheduled_kwh - 3.0 < 0.06
     assert max(item.scheduled_load_w for item in plan.intervals) <= 1840.0
@@ -374,3 +376,96 @@ def test_economic_scheduler_reduces_capacity_cost_instead_of_charging_at_earlies
     assert plan.optimizer_baseline_score_eur is not None
     assert plan.optimizer_score_eur < plan.optimizer_baseline_score_eur
 
+
+def test_shadow_planner_accepts_full_seven_day_horizon() -> None:
+    start = datetime(2026, 10, 8, 0, 0, tzinfo=_LOCAL)
+    intervals = 7 * 24 * 4
+    plan = ShadowPlanner().build(
+        _load_forecast(start, [500.0] * intervals),
+        _pv_forecast(start, [0.0] * (7 * 24)),
+        now_utc=start.astimezone(UTC),
+    )
+
+    assert len(plan.intervals) == intervals
+    assert plan.summary(168)["intervals"] == intervals
+
+
+def test_economic_scheduler_supports_multiple_ev_energy_deadlines() -> None:
+    start = datetime(2026, 10, 8, 0, 0, tzinfo=_LOCAL)
+    first = _ev_task(
+        start,
+        required_energy_kwh=2.0,
+        end=start + timedelta(hours=2),
+        task_id="ev_first",
+    )
+    second = _ev_task(
+        start,
+        required_energy_kwh=3.0,
+        end=start + timedelta(hours=6),
+        task_id="ev_second",
+    )
+    ess = _ess_actuator(soc_percent=10.0, min_soc_percent=10.0)
+    ev = _ev_actuator()
+    profile = TariffProfile(
+        profile_id="test",
+        valid_from_utc=datetime(2026, 9, 30, 22, 0, tzinfo=UTC),
+        import_energy_eur_per_kwh=0.30556,
+        export_energy_eur_per_kwh=0.0397,
+        capacity_tariff_eur_per_kw_month=4.36417,
+        capacity_tariff_floor_kw=2.5,
+    )
+    capacity = CapacityPeakState(
+        month_local="2026-10",
+        observed_peak_kw=2.5,
+        billing_peak_kw=2.5,
+        peak_window_start_local=start - timedelta(days=1),
+        peak_source="test",
+        history_complete=True,
+        estimated_window_count=1,
+        live_window_count=0,
+    )
+
+    def score(plan) -> float | None:
+        evaluation = evaluate_plan_objective(plan, profile, capacity, hours=24)
+        return evaluation.objective_eur if evaluation is not None else None
+
+    plan = ShadowPlanner().build(
+        _load_forecast(start, [500.0] * 24),
+        _pv_forecast(start, [0.0] * 6),
+        now_utc=start.astimezone(UTC),
+        actuators=(ess, ev),
+        tasks=(first, second),
+        objective_scorer=score,
+        objective_name="test-economic-objective",
+    )
+
+    first_window_kwh = sum(item.scheduled_load_w for item in plan.intervals[:8]) * 0.25 / 1000.0
+    total_kwh = sum(item.scheduled_load_w for item in plan.intervals[:24]) * 0.25 / 1000.0
+    assert plan.optimizer_status in {"optimized", "baseline_retained"}
+    assert first_window_kwh >= 2.0
+    assert total_kwh >= 5.0
+    assert max(item.scheduled_load_w for item in plan.intervals) <= 11040.0
+
+
+def test_seven_day_portfolio_search_has_bounded_candidate_count() -> None:
+    start = datetime(2026, 10, 8, 0, 0, tzinfo=_LOCAL)
+    intervals = 7 * 24 * 4
+    task = _ev_task(start, required_energy_kwh=10.0, end=start + timedelta(days=6))
+    ess = _ess_actuator(soc_percent=50.0)
+    ev = _ev_actuator()
+
+    def simple_score(plan) -> float:
+        summary = plan.summary(168)
+        return float(summary["grid_import_after_ess_kwh"] or 0.0)
+
+    plan = ShadowPlanner().build(
+        _load_forecast(start, [500.0] * intervals),
+        _pv_forecast(start, [0.0] * (7 * 24)),
+        now_utc=start.astimezone(UTC),
+        actuators=(ess, ev),
+        tasks=(task,),
+        objective_scorer=simple_score,
+        objective_name="bounded-search-test",
+    )
+
+    assert plan.optimizer_candidate_evaluations <= 21

@@ -1,4 +1,15 @@
 # Changelog
+## 0.20.0
+- Extends the internal shadow planning horizon from 48 hours to 7 days while retaining the existing 24 h and 48 h views.
+- Changes the economic objective and terminal ESS valuation to use the full 7-day horizon and adds 7-day plan-cost diagnostics.
+- Replaces the v0.19 per-increment greedy EV search with a bounded portfolio search whose candidate count does not grow
+  proportionally with every 15-minute slot in the horizon.
+- Supports multiple additive EV energy-by-deadline tasks in one plan and keeps each requirement inside its own time window.
+- Candidate generation uses generic physical schedule variants; the monetary objective still decides which feasible schedule wins.
+- Keeps the existing default EV task policy unchanged for now; recurring departures, minimum SoC and preferred SoC are future
+  task-generation work rather than hard-coded planner rules.
+- Remains hard-coded shadow mode with no real EV or ESS hardware writes.
+
 ## 0.19.1
 - Fixes the v0.19 CI lint failure by importing `Callable` from `collections.abc` on Python 3.13.
 - No optimizer, economics, scheduling, configuration, or hardware-control behavior changes.

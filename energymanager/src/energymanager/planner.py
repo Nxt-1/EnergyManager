@@ -19,8 +19,8 @@ from .load_forecast import FORECAST_INTERVAL_MINUTES, BackgroundLoadForecast
 from .pv_forecast import PvForecast
 from .tasks import PlanningTask
 
-PLANNER_VERSION = "2026-10-08-shadow-v7"
-PLANNER_HORIZON_HOURS = 48
+PLANNER_VERSION = "2026-10-08-shadow-v8"
+PLANNER_HORIZON_HOURS = 168
 _INTERVAL_HOURS = FORECAST_INTERVAL_MINUTES / 60.0
 _INTERVAL_DELTA = timedelta(minutes=FORECAST_INTERVAL_MINUTES)
 
@@ -318,7 +318,7 @@ def _schedule_tasks_economically(
     objective_scorer: Callable[[ShadowPlan], float | None],
     objective_name: str,
 ) -> _SchedulingResult:
-    """Economically schedule the current EV deadline task with discrete charger states."""
+    """Compare a bounded portfolio of feasible EV schedules using the economic objective."""
     baseline_intervals = _schedule_tasks(intervals, actuators, tasks)
     baseline_plan = _candidate_plan(baseline_intervals, now_utc, actuators, tasks, ess_actuator)
     baseline_score = objective_scorer(baseline_plan)
@@ -342,7 +342,7 @@ def _schedule_tasks_economically(
         and task.kind == "energy_by_deadline"
         and task.actuator_id == ev_actuator.actuator_id
     ]
-    if ev_actuator is None or not ev_actuator.planning_available or len(active_tasks) != 1 or len(supported) != 1:
+    if ev_actuator is None or not ev_actuator.planning_available or len(supported) != len(active_tasks):
         return _SchedulingResult(
             intervals=baseline_intervals,
             optimizer_status="unsupported_task_set",
@@ -351,29 +351,65 @@ def _schedule_tasks_economically(
             baseline_score_eur=baseline_score,
             candidate_evaluations=1,
         )
-
-    task = supported[0]
-    optimized = _optimize_ev_energy_task(
-        intervals,
-        task,
-        ev_actuator,
-        ess_actuator,
-        now_utc=now_utc,
-        actuators=actuators,
-        tasks=tasks,
-        objective_scorer=objective_scorer,
-    )
-    evaluations = optimized.candidate_evaluations + 1
-    if optimized.score_eur is None:
+    if not supported:
         return _SchedulingResult(
             intervals=baseline_intervals,
-            optimizer_status="objective_unavailable",
+            optimizer_status="no_active_tasks",
             objective_name=objective_name,
             score_eur=baseline_score,
             baseline_score_eur=baseline_score,
-            candidate_evaluations=evaluations,
+            candidate_evaluations=1,
         )
-    if optimized.score_eur >= baseline_score - 1e-9:
+
+    power_steps = _ev_charge_power_steps_w(ev_actuator)
+    if not power_steps:
+        return _SchedulingResult(
+            intervals=baseline_intervals,
+            optimizer_status="no_charge_steps",
+            objective_name=objective_name,
+            score_eur=baseline_score,
+            baseline_score_eur=baseline_score,
+            candidate_evaluations=1,
+        )
+
+    base_projection = _project_ess(intervals, ess_actuator)
+    base_grid_w = tuple(max(0.0, float(item.grid_power_after_ess_w or 0.0)) for item in base_projection)
+    ceilings = _representative_power_ceilings(power_steps)
+    strategies = ("base_grid_low", "net_low", "even", "latest")
+    best_intervals = baseline_intervals
+    best_score = baseline_score
+    best_strategy = "deadline_earliest"
+    evaluations = 1
+    seen = {_schedule_signature(baseline_intervals)}
+
+    ordered_tasks = tuple(sorted(supported, key=_task_deadline_key))
+    for strategy in strategies:
+        for ceiling_w in ceilings:
+            candidate = _schedule_ev_task_set(
+                intervals,
+                ordered_tasks,
+                ev_actuator,
+                power_ceiling_w=ceiling_w,
+                strategy=strategy,
+                base_grid_w=base_grid_w,
+            )
+            if candidate is None:
+                continue
+            signature = _schedule_signature(candidate)
+            if signature in seen:
+                continue
+            seen.add(signature)
+            candidate_plan = _candidate_plan(candidate, now_utc, actuators, tasks, ess_actuator)
+            candidate_score = objective_scorer(candidate_plan)
+            evaluations += 1
+            if candidate_score is None:
+                continue
+            if candidate_score < best_score - 1e-9:
+                best_intervals = candidate
+                best_score = candidate_score
+                best_strategy = f"economic_ev_portfolio:{strategy}"
+
+    if best_intervals is baseline_intervals:
         return _SchedulingResult(
             intervals=baseline_intervals,
             optimizer_status="baseline_retained",
@@ -383,118 +419,143 @@ def _schedule_tasks_economically(
             candidate_evaluations=evaluations,
         )
     return _SchedulingResult(
-        intervals=optimized.intervals,
-        strategy="economic_ev_greedy",
+        intervals=best_intervals,
+        strategy=best_strategy,
         optimizer_status="optimized",
         objective_name=objective_name,
-        score_eur=optimized.score_eur,
+        score_eur=best_score,
         baseline_score_eur=baseline_score,
         candidate_evaluations=evaluations,
     )
 
 
-def _optimize_ev_energy_task(
+def _representative_power_ceilings(power_steps: tuple[float, ...]) -> tuple[float, ...]:
+    """Return a small charger-power portfolio so search cost stays bounded as the horizon grows."""
+    if len(power_steps) <= 5:
+        return power_steps
+    last = len(power_steps) - 1
+    indexes = {0, round(last * 0.25), round(last * 0.50), round(last * 0.75), last}
+    return tuple(power_steps[index] for index in sorted(indexes))
+
+
+def _schedule_ev_task_set(
+    intervals: list[ShadowPlanInterval],
+    tasks: tuple[PlanningTask, ...],
+    actuator: EvActuatorSnapshot,
+    *,
+    power_ceiling_w: float,
+    strategy: str,
+    base_grid_w: tuple[float, ...],
+) -> list[ShadowPlanInterval] | None:
+    """Schedule multiple additive EV energy requirements without exceeding one physical charger state."""
+    scheduled = list(intervals)
+    for task in tasks:
+        scheduled = _schedule_ev_task_by_priority(
+            scheduled,
+            task,
+            actuator,
+            power_ceiling_w=power_ceiling_w,
+            strategy=strategy,
+            base_grid_w=base_grid_w,
+        )
+        if scheduled is None:
+            return None
+    return scheduled
+
+
+def _schedule_ev_task_by_priority(
     intervals: list[ShadowPlanInterval],
     task: PlanningTask,
     actuator: EvActuatorSnapshot,
-    ess_actuator: EssActuatorSnapshot,
     *,
-    now_utc: datetime,
-    actuators: tuple[ActuatorSnapshot, ...],
-    tasks: tuple[PlanningTask, ...],
-    objective_scorer: Callable[[ShadowPlan], float | None],
-) -> _SchedulingResult:
-    """Greedily add the lowest marginal-cost charger increment until the task is fulfilled."""
+    power_ceiling_w: float,
+    strategy: str,
+    base_grid_w: tuple[float, ...],
+) -> list[ShadowPlanInterval] | None:
     if task.earliest_start_local is None or task.latest_end_local is None or task.required_energy_kwh is None:
-        return _SchedulingResult(intervals=list(intervals), optimizer_status="invalid_task")
-    power_steps = _ev_charge_power_steps_w(actuator)
-    if not power_steps:
-        return _SchedulingResult(intervals=list(intervals), optimizer_status="no_charge_steps")
+        return None
+    steps = tuple(step for step in _ev_charge_power_steps_w(actuator) if step <= power_ceiling_w + 1e-9)
+    if not steps:
+        return None
+    eligible = _eligible_task_indexes(intervals, task)
+    if not eligible:
+        return None
+    order = _priority_indexes(intervals, eligible, strategy=strategy, base_grid_w=base_grid_w)
+    scheduled = list(intervals)
+    remaining_kwh = task.required_energy_kwh
 
+    while remaining_kwh > 1e-9:
+        progressed = False
+        for index in order:
+            current_w = scheduled[index].scheduled_load_w
+            target_w = next((step for step in steps if step > current_w + 1e-9), None)
+            if target_w is None:
+                continue
+            added_w = target_w - current_w
+            scheduled = _add_scheduled_power(scheduled, index, added_w)
+            remaining_kwh -= added_w * _INTERVAL_HOURS / 1000.0
+            progressed = True
+            if remaining_kwh <= 1e-9:
+                break
+        if not progressed:
+            return None
+    return scheduled
+
+
+def _eligible_task_indexes(intervals: list[ShadowPlanInterval], task: PlanningTask) -> list[int]:
+    if task.earliest_start_local is None or task.latest_end_local is None:
+        return []
     earliest_utc = task.earliest_start_local.astimezone(UTC)
     latest_end_utc = task.latest_end_local.astimezone(UTC)
-    eligible_indexes = [
+    return [
         index
         for index, item in enumerate(intervals)
         if item.period_start_local.astimezone(UTC) >= earliest_utc
         and (item.period_start_local + _INTERVAL_DELTA).astimezone(UTC) <= latest_end_utc
     ]
-    if not eligible_indexes:
-        return _SchedulingResult(intervals=list(intervals), optimizer_status="no_eligible_intervals")
 
-    scheduled = list(intervals)
-    levels = {index: 0 for index in eligible_indexes}
-    allocated_kwh = 0.0
-    evaluations = 0
-    current_plan = _candidate_plan(scheduled, now_utc, actuators, tasks, ess_actuator)
-    current_score = objective_scorer(current_plan)
-    evaluations += 1
-    if current_score is None:
-        return _SchedulingResult(
-            intervals=scheduled,
-            optimizer_status="objective_unavailable",
-            candidate_evaluations=evaluations,
-        )
 
-    maximum_iterations = len(eligible_indexes) * len(power_steps)
-    for _ in range(maximum_iterations):
-        if allocated_kwh >= task.required_energy_kwh - 1e-9:
-            break
-        candidates: list[
-            tuple[float, float, float, int, int, list[ShadowPlanInterval], float]
-        ] = []
-        remaining_kwh = task.required_energy_kwh - allocated_kwh
-        for index in eligible_indexes:
-            level = levels[index]
-            if level >= len(power_steps):
-                continue
-            current_power_w = 0.0 if level == 0 else power_steps[level - 1]
-            next_power_w = power_steps[level]
-            added_power_w = next_power_w - current_power_w
-            added_kwh = added_power_w * _INTERVAL_HOURS / 1000.0
-            candidate_intervals = _add_scheduled_power(scheduled, index, added_power_w)
-            candidate_plan = _candidate_plan(candidate_intervals, now_utc, actuators, tasks, ess_actuator)
-            candidate_score = objective_scorer(candidate_plan)
-            evaluations += 1
-            if candidate_score is None:
-                continue
-            marginal_cost = (candidate_score - current_score) / added_kwh
-            overshoot_kwh = max(0.0, added_kwh - remaining_kwh)
-            candidates.append(
-                (
-                    overshoot_kwh,
-                    marginal_cost,
-                    candidate_score,
-                    index,
-                    level + 1,
-                    candidate_intervals,
-                    added_kwh,
-                )
-            )
-        if not candidates:
-            break
-        non_overshooting = [candidate for candidate in candidates if candidate[0] <= 1e-9]
-        if non_overshooting:
-            chosen = min(non_overshooting, key=lambda item: (item[1], item[2], item[3]))
-        else:
-            chosen = min(candidates, key=lambda item: (item[0], item[1], item[2], item[3]))
-        _, _, current_score, index, next_level, scheduled, added_kwh = chosen
-        levels[index] = next_level
-        allocated_kwh += added_kwh
+def _priority_indexes(
+    intervals: list[ShadowPlanInterval],
+    eligible: list[int],
+    *,
+    strategy: str,
+    base_grid_w: tuple[float, ...],
+) -> list[int]:
+    if strategy == "base_grid_low":
+        return sorted(eligible, key=lambda index: (base_grid_w[index], index))
+    if strategy == "net_low":
+        return sorted(eligible, key=lambda index: (intervals[index].net_power_before_control_w, index))
+    if strategy == "latest":
+        return list(reversed(eligible))
+    if strategy == "even":
+        return _spread_indexes(eligible)
+    raise ValueError(f"Unknown EV scheduling strategy: {strategy}")
 
-    if allocated_kwh < task.required_energy_kwh - 1e-9:
-        return _SchedulingResult(
-            intervals=scheduled,
-            optimizer_status="deadline_infeasible",
-            score_eur=current_score,
-            candidate_evaluations=evaluations,
-        )
-    return _SchedulingResult(
-        intervals=scheduled,
-        optimizer_status="candidate_ready",
-        score_eur=current_score,
-        candidate_evaluations=evaluations,
-    )
+
+def _spread_indexes(indexes: list[int]) -> list[int]:
+    """Return indexes in midpoint-first order so partial use is spread across the full task window."""
+    result: list[int] = []
+    ranges = [(0, len(indexes) - 1)]
+    while ranges:
+        left, right = ranges.pop(0)
+        if left > right:
+            continue
+        middle = (left + right) // 2
+        result.append(indexes[middle])
+        ranges.append((left, middle - 1))
+        ranges.append((middle + 1, right))
+    return result
+
+
+def _schedule_signature(intervals: list[ShadowPlanInterval]) -> tuple[int, ...]:
+    return tuple(round(item.scheduled_load_w) for item in intervals)
+
+
+def _task_deadline_key(task: PlanningTask) -> datetime:
+    if task.latest_end_local is None:
+        return datetime.max.replace(tzinfo=UTC)
+    return task.latest_end_local.astimezone(UTC)
 
 
 def _candidate_plan(
@@ -556,46 +617,36 @@ def _schedule_ev_energy_task(
     task: PlanningTask,
     actuator: EvActuatorSnapshot,
 ) -> list[ShadowPlanInterval]:
-    """Place EV energy in the earliest eligible slots using feasible charger power steps."""
-    if task.earliest_start_local is None or task.latest_end_local is None or task.required_energy_kwh is None:
+    """Place one additive EV requirement in earliest slots without exceeding charger capability."""
+    if task.required_energy_kwh is None:
         return intervals
     power_steps = _ev_charge_power_steps_w(actuator)
     if not power_steps:
         return intervals
-
-    earliest_utc = task.earliest_start_local.astimezone(UTC)
-    latest_end_utc = task.latest_end_local.astimezone(UTC)
-    eligible_indexes = [
-        index
-        for index, item in enumerate(intervals)
-        if item.period_start_local.astimezone(UTC) >= earliest_utc
-        and (item.period_start_local + _INTERVAL_DELTA).astimezone(UTC) <= latest_end_utc
-    ]
+    eligible_indexes = _eligible_task_indexes(intervals, task)
     remaining_kwh = task.required_energy_kwh
     scheduled = list(intervals)
     maximum_power_w = power_steps[-1]
-    maximum_interval_kwh = maximum_power_w * _INTERVAL_HOURS / 1000.0
 
     for index in eligible_indexes:
         if remaining_kwh <= 1e-9:
             break
-        if remaining_kwh >= maximum_interval_kwh - 1e-9:
-            selected_power_w = maximum_power_w
+        current_power_w = scheduled[index].scheduled_load_w
+        if current_power_w >= maximum_power_w - 1e-9:
+            continue
+        maximum_added_w = maximum_power_w - current_power_w
+        maximum_added_kwh = maximum_added_w * _INTERVAL_HOURS / 1000.0
+        if remaining_kwh >= maximum_added_kwh - 1e-9:
+            target_power_w = maximum_power_w
         else:
-            required_power_w = remaining_kwh * 1000.0 / _INTERVAL_HOURS
-            selected_power_w = next(
-                (power_w for power_w in power_steps if power_w >= required_power_w - 1e-9),
+            required_total_w = current_power_w + remaining_kwh * 1000.0 / _INTERVAL_HOURS
+            target_power_w = next(
+                (power_w for power_w in power_steps if power_w >= required_total_w - 1e-9),
                 maximum_power_w,
             )
-        scheduled_load_w = scheduled[index].scheduled_load_w + selected_power_w
-        scheduled[index] = replace(
-            scheduled[index],
-            scheduled_load_w=scheduled_load_w,
-            net_power_before_control_w=(
-                scheduled[index].background_load_w + scheduled_load_w - scheduled[index].pv_power_w
-            ),
-        )
-        remaining_kwh -= selected_power_w * _INTERVAL_HOURS / 1000.0
+        added_power_w = max(0.0, target_power_w - current_power_w)
+        scheduled = _add_scheduled_power(scheduled, index, added_power_w)
+        remaining_kwh -= added_power_w * _INTERVAL_HOURS / 1000.0
     return scheduled
 
 

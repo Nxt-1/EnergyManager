@@ -19,8 +19,8 @@ if TYPE_CHECKING:
 
 COST_MODEL_VERSION = "2026-10-07-cost-v1"
 CAPACITY_PEAK_VERSION = "2026-10-07-capacity-v1"
-PLAN_COST_VERSION = "2026-10-08-plan-cost-v2"
-ECONOMIC_OBJECTIVE_VERSION = "2026-10-08-economic-objective-v1"
+PLAN_COST_VERSION = "2026-10-08-plan-cost-v3"
+ECONOMIC_OBJECTIVE_VERSION = "2026-10-08-economic-objective-v2"
 ECONOMICS_STATUS_ENTITY = "sensor.energy_manager_economics_status"
 CAPACITY_STATUS_ENTITY = "sensor.energy_manager_capacity_tariff_status"
 PLAN_COST_STATUS_ENTITY = "sensor.energy_manager_plan_cost_status"
@@ -543,7 +543,7 @@ class EconomicsService:
         """Return the scalar economic objective used to rank candidate shadow plans."""
         if not self.optimizer_ready or self.current_profile is None:
             return None
-        evaluation = evaluate_plan_objective(plan, self.current_profile, self.capacity_state, hours=48)
+        evaluation = evaluate_plan_objective(plan, self.current_profile, self.capacity_state, hours=168)
         return evaluation.objective_eur if evaluation is not None else None
 
     async def initialize(self) -> TariffProfile | None:
@@ -628,7 +628,8 @@ class EconomicsService:
             return None
         evaluation_24 = evaluate_plan_cost(plan, profile, capacity_state, hours=24)
         evaluation_48 = evaluate_plan_cost(plan, profile, capacity_state, hours=48)
-        objective = evaluate_plan_objective(plan, profile, capacity_state, hours=48)
+        evaluation_168 = evaluate_plan_cost(plan, profile, capacity_state, hours=168)
+        objective = evaluate_plan_objective(plan, profile, capacity_state, hours=168)
         if evaluation_24 is None:
             await self._client.set_state(
                 PLAN_COST_STATUS_ENTITY,
@@ -671,6 +672,7 @@ class EconomicsService:
             ),
             "next_24_hours": _evaluation_attributes(evaluation_24),
             "next_48_hours": _evaluation_attributes(evaluation_48) if evaluation_48 is not None else None,
+            "next_7_days": _evaluation_attributes(evaluation_168) if evaluation_168 is not None else None,
             "last_update_utc": datetime.now(UTC).isoformat(),
         }
         if not self.optimizer_ready:
