@@ -1,1 +1,2 @@
 aiohttp>=3.12,<4
+highspy==1.15.1

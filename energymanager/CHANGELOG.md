@@ -1,4 +1,14 @@
 # Changelog
+## 0.21.0
+- Adds a non-authoritative seven-day MILP evaluation using HiGHS/highspy alongside the existing v0.20 scheduler.
+- Jointly models the current EV deadline task, ESS charge/discharge, grid import/export, AC/DC PV allocation, ESS SoC and
+  monthly capacity-tariff peak while using the same economic objective as the active shadow planner.
+- Keeps discrete EV whole-ampere 1-phase/3-phase operating states and configured ESS power/SoC limits as hard constraints.
+- Limits the diagnostic solver to 5 seconds, a 1% relative MIP gap and one CPU thread; it runs at most once every 5 minutes.
+- Adds `sensor.energy_manager_milp_status` with solver time, model size, MIP gap and objective comparison against v0.20.
+- Keeps the v0.20 portfolio schedule authoritative; MILP results do not generate actuator requests or hardware writes.
+- Pins `highspy==1.15.1`, which provides CPython 3.13 musllinux wheels for the Alpine app image.
+
 ## 0.20.0
 - Extends the internal shadow planning horizon from 48 hours to 7 days while retaining the existing 24 h and 48 h views.
 - Changes the economic objective and terminal ESS valuation to use the full 7-day horizon and adds 7-day plan-cost diagnostics.

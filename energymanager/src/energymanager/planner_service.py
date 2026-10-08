@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
@@ -10,12 +11,19 @@ from .diagnostics import DiagnosticsPublisher
 from .economics import EconomicsService, PlanCostEvaluation
 from .house_state import HouseState
 from .load_service import BackgroundLoadService
+from .milp_planner import (
+    MILP_REFRESH_MINUTES,
+    MilpEvaluation,
+    evaluate_shadow_plan_milp,
+    publish_milp_evaluation,
+)
 from .planner import ShadowPlan, ShadowPlanner
 from .pv_service import PvForecastService
 from .tasks import TaskRegistry
 
 _LOGGER = logging.getLogger(__name__)
 _REFRESH_INTERVAL = timedelta(minutes=1)
+_MILP_REFRESH_INTERVAL = timedelta(minutes=MILP_REFRESH_MINUTES)
 
 
 class ShadowPlannerService:
@@ -32,6 +40,7 @@ class ShadowPlannerService:
         economics_service: EconomicsService | None = None,
         planner: ShadowPlanner | None = None,
     ) -> None:
+        self._ha_client = ha_client
         self._diagnostics = DiagnosticsPublisher(ha_client)
         self._load_service = load_service
         self._pv_service = pv_service
@@ -41,6 +50,7 @@ class ShadowPlannerService:
         self._economics_service = economics_service
         self._plan: ShadowPlan | None = None
         self._last_plan_at_utc: datetime | None = None
+        self._last_milp_at_utc: datetime | None = None
 
     @property
     def plan(self) -> ShadowPlan | None:
@@ -97,6 +107,9 @@ class ShadowPlannerService:
         cost_evaluation = None
         if self._economics_service is not None:
             cost_evaluation = await self._economics_service.publish_plan_cost(plan, local_tz=local_tz)
+        milp_evaluation = await self._maybe_run_milp(plan, now_utc=now)
+        if milp_evaluation is not None:
+            _LOGGER.info("MILP diagnostic: %s", _milp_log(milp_evaluation))
         requests = _next_interval_requests(plan)
         command_results = self._actuator_registry.evaluate_commands(requests, house_state)
         await self._diagnostics.publish_actuator_command_status(command_results)
@@ -142,6 +155,25 @@ class ShadowPlannerService:
             _command_log(command_results),
         )
 
+    async def _maybe_run_milp(self, plan: ShadowPlan, *, now_utc: datetime) -> MilpEvaluation | None:
+        """Run the non-authoritative MILP comparison at a lower cadence than the main planner."""
+        economics = self._economics_service
+        if economics is None or not economics.optimizer_ready:
+            return None
+        if economics.current_profile is None or economics.capacity_state is None:
+            return None
+        if self._last_milp_at_utc is not None and now_utc - self._last_milp_at_utc < _MILP_REFRESH_INTERVAL:
+            return None
+        self._last_milp_at_utc = now_utc
+        evaluation = await asyncio.to_thread(
+            evaluate_shadow_plan_milp,
+            plan,
+            economics.current_profile,
+            economics.capacity_state,
+        )
+        await publish_milp_evaluation(self._ha_client, evaluation)
+        return evaluation
+
 
 def _next_interval_requests(plan: ShadowPlan) -> tuple[ActuatorPowerRequest, ...]:
     """Convert the next planner interval into generic actuator requests for dry-run translation."""
@@ -170,6 +202,23 @@ def _optimizer_log(plan: ShadowPlan) -> str:
             return f"optimized/saved EUR {saving:.2f}"
         return "optimized"
     return plan.optimizer_status
+
+
+def _milp_log(evaluation: MilpEvaluation) -> str:
+    details = [evaluation.status]
+    if evaluation.solve_time_seconds is not None:
+        details.append(f"{evaluation.solve_time_seconds:.3f}s")
+    if evaluation.milp_objective_eur is not None:
+        details.append(f"EUR {evaluation.milp_objective_eur:.2f}")
+    if evaluation.estimated_improvement_eur is not None:
+        details.append(f"vs current {evaluation.estimated_improvement_eur:+.2f}")
+    details.append(
+        f"model {evaluation.variable_count} vars/{evaluation.integer_variable_count} integer/"
+        f"{evaluation.constraint_count} constraints"
+    )
+    if evaluation.reason is not None:
+        details.append(evaluation.reason)
+    return ", ".join(details)
 
 
 def _command_log(results: tuple[ActuatorCommandResult, ...]) -> str:
