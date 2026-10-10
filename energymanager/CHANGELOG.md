@@ -1,4 +1,8 @@
 # Changelog
+## 0.27.1
+- Fixes the v0.27 CI Ruff failure by removing an unused `FastDispatchResult` import.
+- No fast-dispatch, MILP, configuration, scheduling, or hardware-control behavior changes.
+
 ## 0.27.0
 - Decouples MILP solving from live Home Assistant input processing so a 7-day replan no longer blocks fast dispatch updates.
 - Runs fast shadow dispatch on an independent 1 Hz control loop using the latest coalesced Home Assistant state.

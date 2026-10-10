@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from .actuators import ActuatorCommandResult, ActuatorRegistry, ActuatorSnapshot, find_ess_actuator
 from .diagnostics import DiagnosticsPublisher
 from .economics import EconomicsService, PlanCostEvaluation
-from .fast_dispatch import FastDispatchResult, evaluate_fast_dispatch, publish_fast_dispatch
+from .fast_dispatch import evaluate_fast_dispatch, publish_fast_dispatch
 from .house_state import HouseState
 from .load_service import BackgroundLoadService
 from .milp_planner import MilpEvaluation, evaluate_shadow_plan_milp, publish_milp_evaluation
