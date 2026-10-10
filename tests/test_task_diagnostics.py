@@ -52,4 +52,4 @@ def test_task_diagnostics_label_minimum_and_preferred_targets() -> None:
     assert item["required_energy_kwh"] == 8.84
     assert item["preferred_energy_kwh"] == 24.96
     assert item["required_energy_role"] == "hard_by_deadline"
-    assert item["preferred_energy_role"] == "soft_over_planning_horizon"
+    assert item["preferred_energy_role"] == "soft_terminal_soc_over_planning_horizon"

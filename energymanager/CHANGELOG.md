@@ -1,4 +1,17 @@
 # Changelog
+## 0.25.0
+- Adds a recurring weekly EV trip schedule with configurable weekdays, departure/return times, hard departure SoC and expected
+  trip energy.
+- Generates every matching hard departure milestone inside the seven-day planning horizon plus one soft terminal preferred-SoC
+  target.
+- Models EV battery energy explicitly in MILP, including charge efficiency, battery-capacity bounds and expected trip-energy
+  withdrawals at departure.
+- Prevents EV charging during configured away windows and can keep planning while the car is currently away when the recurring
+  schedule provides a matching future return.
+- Keeps the legacy single `departure_time_local` policy unchanged when no weekly schedule is configured.
+- Adds EV SoC and trip/availability information to task and MILP diagnostics.
+- Remains hard-coded shadow mode with no hardware writes and adds no PV-specific charging rules.
+
 ## 0.24.2
 - Clarifies EV task diagnostics by publishing the hard minimum SoC and the soft preferred SoC separately.
 - Publishes preferred AC/battery energy alongside the hard energy-by-deadline requirement.

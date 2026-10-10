@@ -10,7 +10,7 @@ from .load_forecast import FORECAST_INTERVAL_MINUTES, BackgroundLoadForecast
 from .pv_forecast import PvForecast
 from .tasks import PlanningTask
 
-PLANNER_VERSION = "2026-10-08-shadow-v10"
+PLANNER_VERSION = "2026-10-10-shadow-v11"
 PLANNER_HORIZON_HOURS = 168
 _INTERVAL_HOURS = FORECAST_INTERVAL_MINUTES / 60.0
 
@@ -31,6 +31,7 @@ class ShadowPlanInterval:
     projected_soc_percent: float | None = None
     grid_power_after_ess_w: float | None = None
     curtailed_dc_pv_w: float | None = None
+    projected_ev_soc_percent: float | None = None
 
     @property
     def total_load_w(self) -> float:

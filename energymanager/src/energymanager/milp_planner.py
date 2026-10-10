@@ -22,7 +22,7 @@ from .ha_client import HomeAssistantClient
 from .planner import ShadowPlan, ShadowPlanInterval
 from .tasks import PlanningTask
 
-MILP_EVALUATION_VERSION = "2026-10-08-milp-v5"
+MILP_EVALUATION_VERSION = "2026-10-10-milp-v6"
 MILP_STATUS_ENTITY = "sensor.energy_manager_milp_status"
 MILP_TOTAL_TIME_BUDGET_SECONDS = 30.0
 MILP_ECONOMIC_TIME_LIMIT_SECONDS = MILP_TOTAL_TIME_BUDGET_SECONDS
@@ -125,6 +125,7 @@ class _MilpVariables:
     battery_charge_mode: list[Any]
     ev_single_phase_a: dict[int, Any]
     ev_three_phase_a: dict[int, Any]
+    ev_stored_energy_kwh: list[Any]
     ev_preferred_shortfall_kwh: Any | None
     capacity_peak_kw: dict[str, Any]
 
@@ -142,8 +143,10 @@ def evaluate_shadow_plan_milp(
         for task in reference_plan.tasks
         if task.planning_available
         and (
-            (task.required_energy_kwh is not None and task.required_energy_kwh > 0.0)
+            task.kind == "ev_terminal_soc_target"
+            or (task.required_energy_kwh is not None and task.required_energy_kwh > 0.0)
             or (task.preferred_energy_kwh is not None and task.preferred_energy_kwh > 0.0)
+            or (task.expected_trip_energy_kwh is not None and task.expected_trip_energy_kwh > 0.0)
         )
     )
     reference_objective = _objective(reference_plan, profile, capacity_state)
@@ -273,15 +276,17 @@ def _validate_inputs(
         return "import_export_arbitrage_not_modelled"
     if not tasks:
         return None
-    if ev is None or not ev.planning_available:
+    if ev is None or not ev.configured or ev.soc_percent is None:
         return "ev_unavailable"
+    if ev.capabilities.battery_capacity_kwh is None:
+        return "ev_battery_capacity_unavailable"
     last_interval_end_utc = (plan.intervals[-1].period_start_local + _INTERVAL_DELTA).astimezone(UTC)
     for task in tasks:
-        if task.kind != "energy_by_deadline" or task.actuator_id != ev.actuator_id:
+        if task.actuator_id != ev.actuator_id or task.kind not in {"energy_by_deadline", "ev_terminal_soc_target"}:
             return "unsupported_task_type"
         if task.earliest_start_local is None or task.latest_end_local is None:
             return "task_window_missing"
-        if task.latest_end_local.astimezone(UTC) > last_interval_end_utc:
+        if task.latest_end_local.astimezone(UTC) > last_interval_end_utc + timedelta(seconds=1):
             return "task_deadline_outside_horizon"
     return None
 
@@ -311,7 +316,7 @@ def _solve_model(
         capacity_state,
     )
     _add_constraints(model, reference_plan, ess, ev, active_tasks, variables)
-    economic_expression = _economic_objective_expression(reference_plan, ess, profile, variables)
+    economic_expression = _economic_objective_expression(reference_plan, ess, ev, profile, variables)
     model.setObjective(economic_expression, sense=highspy.ObjSense.kMinimize)
 
     economic_started = perf_counter()
@@ -353,7 +358,7 @@ def _solve_model(
     stage1_values = list(stage1_solution.col_value)
     stage1_plan = _solution_plan(reference_plan, ess, ev, profile, variables, stage1_values)
     stage1_objective = _objective(stage1_plan, profile, capacity_state)
-    stage1_internal_objective = _economic_objective_value(ess, profile, variables, stage1_values)
+    stage1_internal_objective = _economic_objective_value(ess, ev, profile, variables, stage1_values)
 
     tie_break_time_limit = max(0.0, MILP_TOTAL_TIME_BUDGET_SECONDS - economic_solve_time)
     if tie_break_time_limit >= 0.5:
@@ -519,7 +524,9 @@ def _build_variables(
 
     ev_single: dict[int, Any] = {}
     ev_three: dict[int, Any] = {}
-    if tasks and ev is not None:
+    ev_stored_energy: list[Any] = []
+    preferred_shortfall = None
+    if tasks and ev is not None and ev.capabilities.battery_capacity_kwh is not None and ev.soc_percent is not None:
         eligible = _ev_variable_indexes(plan, tasks)
         min_current = math.ceil(ev.capabilities.min_charge_current_a)
         max_current = math.floor(ev.capabilities.max_charge_current_a)
@@ -561,14 +568,21 @@ def _build_variables(
             if single_on is not None and three_on is not None:
                 model.addConstr(single_on + three_on <= 1.0)
 
-    preferred_target_kwh = _preferred_target_kwh(tasks)
-    preferred_shortfall = None
-    if preferred_target_kwh > 0.0:
-        preferred_shortfall = model.addVariable(
-            lb=0.0,
-            ub=preferred_target_kwh,
-            name="ev_preferred_shortfall_kwh",
+        ev_capacity = ev.capabilities.battery_capacity_kwh
+        initial_ev_energy = ev_capacity * float(ev.soc_percent) / 100.0
+        ev_stored_energy = [model.addVariable(lb=initial_ev_energy, ub=initial_ev_energy, name="ev_energy_0")]
+        ev_stored_energy.extend(
+            model.addVariable(lb=0.0, ub=ev_capacity, name=f"ev_energy_{index + 1}")
+            for index in range(count)
         )
+        preferred_soc = _preferred_soc_percent(tasks)
+        if preferred_soc is not None:
+            preferred_target_battery_kwh = ev_capacity * preferred_soc / 100.0
+            preferred_shortfall = model.addVariable(
+                lb=0.0,
+                ub=preferred_target_battery_kwh,
+                name="ev_preferred_shortfall_battery_kwh",
+            )
 
     month_peaks: dict[str, Any] = {}
     for item in plan.intervals:
@@ -592,6 +606,7 @@ def _build_variables(
             battery_charge_mode=battery_charge_mode,
             ev_single_phase_a=ev_single,
             ev_three_phase_a=ev_three,
+            ev_stored_energy_kwh=ev_stored_energy,
             ev_preferred_shortfall_kwh=preferred_shortfall,
             capacity_peak_kw=month_peaks,
         ),
@@ -655,34 +670,50 @@ def _add_constraints(
         )
         month = item.period_start_local.strftime("%Y-%m")
         model.addConstr(variables.grid_import_kw[index] <= variables.capacity_peak_kw[month])
+        if variables.ev_stored_energy_kwh and ev is not None:
+            trip_energy = _ev_trip_energy_at_start(item.period_start_local, tasks)
+            model.addConstr(
+                variables.ev_stored_energy_kwh[index + 1]
+                == variables.ev_stored_energy_kwh[index]
+                - trip_energy
+                + _INTERVAL_HOURS
+                * ev.capabilities.charge_efficiency
+                * _ev_power_expression(ev, variables, index)
+            )
 
-    if tasks and ev is not None:
-        minimum_step_kwh = _minimum_ev_interval_energy_kwh(ev)
+    if tasks and ev is not None and variables.ev_stored_energy_kwh:
+        ev_capacity = ev.capabilities.battery_capacity_kwh
+        assert ev_capacity is not None
         for task in tasks:
+            if task.kind != "energy_by_deadline":
+                continue
+            if task.minimum_soc_percent is not None:
+                state_index = _ev_state_index(plan, task.latest_end_local)
+                if state_index is None:
+                    raise ValueError(f"EV task deadline is not aligned to the planner grid: {task.task_id}")
+                required_stored = ev_capacity * task.minimum_soc_percent / 100.0
+                model.addConstr(variables.ev_stored_energy_kwh[state_index] >= required_stored)
+                continue
             required_kwh = float(task.required_energy_kwh or 0.0)
             if required_kwh <= 0.0:
                 continue
             task_energy: Any = 0.0
-            for index in _eligible_indexes(plan, task):
+            for index in _eligible_indexes(plan, task, tasks):
                 task_energy = task_energy + _INTERVAL_HOURS * _ev_power_expression(ev, variables, index)
             model.addConstr(task_energy >= required_kwh)
 
-        all_ev_energy: Any = 0.0
-        for index in sorted(set(variables.ev_single_phase_a) | set(variables.ev_three_phase_a)):
-            all_ev_energy = all_ev_energy + _INTERVAL_HOURS * _ev_power_expression(ev, variables, index)
-        preferred_target_kwh = _preferred_target_kwh(tasks)
-        if variables.ev_preferred_shortfall_kwh is not None:
-            model.addConstr(all_ev_energy + variables.ev_preferred_shortfall_kwh >= preferred_target_kwh)
-        maximum_target_kwh = max(
-            preferred_target_kwh,
-            max((float(task.required_energy_kwh or 0.0) for task in tasks), default=0.0),
-        )
-        model.addConstr(all_ev_energy <= maximum_target_kwh + minimum_step_kwh - 1e-6)
+        preferred_soc = _preferred_soc_percent(tasks)
+        if preferred_soc is not None and variables.ev_preferred_shortfall_kwh is not None:
+            preferred_stored = ev_capacity * preferred_soc / 100.0
+            model.addConstr(
+                variables.ev_stored_energy_kwh[-1] + variables.ev_preferred_shortfall_kwh >= preferred_stored
+            )
 
 
 def _economic_objective_expression(
     plan: ShadowPlan,
     ess: EssActuatorSnapshot,
+    ev: EvActuatorSnapshot | None,
     profile: TariffProfile,
     variables: _MilpVariables,
 ) -> Any:
@@ -692,8 +723,13 @@ def _economic_objective_expression(
         objective = objective - _INTERVAL_HOURS * profile.export_energy_eur_per_kwh * variables.grid_export_kw[index]
     for peak in variables.capacity_peak_kw.values():
         objective = objective + profile.capacity_tariff_eur_per_kw_month * peak
-    if variables.ev_preferred_shortfall_kwh is not None:
-        objective = objective + profile.import_energy_eur_per_kwh * variables.ev_preferred_shortfall_kwh
+    if variables.ev_preferred_shortfall_kwh is not None and ev is not None:
+        objective = (
+            objective
+            + profile.import_energy_eur_per_kwh
+            / ev.capabilities.charge_efficiency
+            * variables.ev_preferred_shortfall_kwh
+        )
     return (
         objective
         - profile.import_energy_eur_per_kwh
@@ -704,6 +740,7 @@ def _economic_objective_expression(
 
 def _economic_objective_value(
     ess: EssActuatorSnapshot,
+    ev: EvActuatorSnapshot | None,
     profile: TariffProfile,
     variables: _MilpVariables,
     values: list[float],
@@ -715,8 +752,12 @@ def _economic_objective_value(
     objective += profile.capacity_tariff_eur_per_kw_month * sum(
         _value(peak, values) for peak in variables.capacity_peak_kw.values()
     )
-    if variables.ev_preferred_shortfall_kwh is not None:
-        objective += profile.import_energy_eur_per_kwh * _value(variables.ev_preferred_shortfall_kwh, values)
+    if variables.ev_preferred_shortfall_kwh is not None and ev is not None:
+        objective += (
+            profile.import_energy_eur_per_kwh
+            / ev.capabilities.charge_efficiency
+            * _value(variables.ev_preferred_shortfall_kwh, values)
+        )
     objective -= (
         profile.import_energy_eur_per_kwh
         * ess.capabilities.discharge_efficiency
@@ -768,6 +809,10 @@ def _solution_plan(
         grid_kw = _value(variables.grid_import_kw[index], values) - _value(variables.grid_export_kw[index], values)
         stored_before = _value(variables.stored_energy_kwh[index], values)
         stored_after = _value(variables.stored_energy_kwh[index + 1], values)
+        ev_soc = None
+        if ev is not None and variables.ev_stored_energy_kwh and ev.capabilities.battery_capacity_kwh is not None:
+            ev_energy_after = _value(variables.ev_stored_energy_kwh[index + 1], values)
+            ev_soc = 100.0 * ev_energy_after / ev.capabilities.battery_capacity_kwh
         scheduled_w = max(0.0, ev_kw * 1000.0)
         intervals.append(
             ShadowPlanInterval(
@@ -785,11 +830,17 @@ def _solution_plan(
                 projected_soc_percent=100.0 * stored_after / resource.capacity_kwh,
                 grid_power_after_ess_w=grid_kw * 1000.0,
                 curtailed_dc_pv_w=max(0.0, _value(variables.curtailed_dc_kw[index], values) * 1000.0),
+                projected_ev_soc_percent=ev_soc,
             )
         )
-    preferred_shortfall_kwh = (
+    preferred_shortfall_battery_kwh = (
         _value(variables.ev_preferred_shortfall_kwh, values)
         if variables.ev_preferred_shortfall_kwh is not None
+        else 0.0
+    )
+    preferred_shortfall_kwh = (
+        preferred_shortfall_battery_kwh / ev.capabilities.charge_efficiency
+        if ev is not None and preferred_shortfall_battery_kwh > 0.0
         else 0.0
     )
     preferred_penalty_eur = preferred_shortfall_kwh * profile.import_energy_eur_per_kwh
@@ -839,33 +890,86 @@ def _preferred_target_kwh(tasks: tuple[PlanningTask, ...]) -> float:
     return max((float(task.preferred_energy_kwh or 0.0) for task in tasks), default=0.0)
 
 
+def _preferred_soc_percent(tasks: tuple[PlanningTask, ...]) -> float | None:
+    values = [
+        float(task.target_soc_percent)
+        for task in tasks
+        if task.target_soc_percent is not None
+        and (task.preferred_energy_kwh is not None or task.kind == "ev_terminal_soc_target")
+    ]
+    return max(values) if values else None
+
+
 def _ev_variable_indexes(plan: ShadowPlan, tasks: tuple[PlanningTask, ...]) -> list[int]:
-    indexes: set[int] = set()
-    hard_target_kwh = 0.0
-    for task in tasks:
-        hard_target_kwh = max(hard_target_kwh, float(task.required_energy_kwh or 0.0))
-        indexes.update(_eligible_indexes(plan, task))
-    if _preferred_target_kwh(tasks) > hard_target_kwh + 1e-9:
-        starts = [task.earliest_start_local for task in tasks if task.earliest_start_local is not None]
-        earliest_utc = min(value.astimezone(UTC) for value in starts) if starts else None
-        indexes.update(
-            index
-            for index, item in enumerate(plan.intervals)
-            if earliest_utc is None or item.period_start_local.astimezone(UTC) >= earliest_utc
-        )
-    return sorted(indexes)
+    starts = [task.earliest_start_local for task in tasks if task.earliest_start_local is not None]
+    earliest_utc = min(value.astimezone(UTC) for value in starts) if starts else None
+    unavailable = _ev_unavailable_windows_utc(tasks)
+    return [
+        index
+        for index, item in enumerate(plan.intervals)
+        if (earliest_utc is None or item.period_start_local.astimezone(UTC) >= earliest_utc)
+        and not _interval_is_unavailable(item.period_start_local, unavailable)
+    ]
 
 
-def _eligible_indexes(plan: ShadowPlan, task: PlanningTask) -> list[int]:
+def _eligible_indexes(
+    plan: ShadowPlan,
+    task: PlanningTask,
+    tasks: tuple[PlanningTask, ...] = (),
+) -> list[int]:
     assert task.earliest_start_local is not None and task.latest_end_local is not None
     earliest_utc = task.earliest_start_local.astimezone(UTC)
     latest_utc = task.latest_end_local.astimezone(UTC)
+    unavailable = _ev_unavailable_windows_utc(tasks)
     return [
         index
         for index, item in enumerate(plan.intervals)
         if item.period_start_local.astimezone(UTC) >= earliest_utc
         and (item.period_start_local + _INTERVAL_DELTA).astimezone(UTC) <= latest_utc
+        and not _interval_is_unavailable(item.period_start_local, unavailable)
     ]
+
+
+def _ev_unavailable_windows_utc(
+    tasks: tuple[PlanningTask, ...],
+) -> tuple[tuple[Any, Any], ...]:
+    windows: list[tuple[Any, Any]] = []
+    for task in tasks:
+        for start, end in task.ev_unavailable_windows_local:
+            windows.append((start.astimezone(UTC), end.astimezone(UTC)))
+        has_trip_window = task.latest_end_local is not None and task.expected_return_local is not None
+        if task.kind == "energy_by_deadline" and has_trip_window:
+            windows.append((task.latest_end_local.astimezone(UTC), task.expected_return_local.astimezone(UTC)))
+    return tuple(dict.fromkeys(windows))
+
+
+def _interval_is_unavailable(period_start_local: Any, windows: tuple[tuple[Any, Any], ...]) -> bool:
+    start_utc = period_start_local.astimezone(UTC)
+    return any(window_start <= start_utc < window_end for window_start, window_end in windows)
+
+
+def _ev_state_index(plan: ShadowPlan, moment: Any) -> int | None:
+    if moment is None:
+        return None
+    target_utc = moment.astimezone(UTC)
+    for index, item in enumerate(plan.intervals):
+        if abs((item.period_start_local.astimezone(UTC) - target_utc).total_seconds()) < 1.0:
+            return index
+    final_end = (plan.intervals[-1].period_start_local + _INTERVAL_DELTA).astimezone(UTC)
+    if abs((final_end - target_utc).total_seconds()) < 1.0:
+        return len(plan.intervals)
+    return None
+
+
+def _ev_trip_energy_at_start(period_start_local: Any, tasks: tuple[PlanningTask, ...]) -> float:
+    start_utc = period_start_local.astimezone(UTC)
+    total = 0.0
+    for task in tasks:
+        if task.kind != "energy_by_deadline" or task.latest_end_local is None:
+            continue
+        if abs((task.latest_end_local.astimezone(UTC) - start_utc).total_seconds()) < 1.0:
+            total += float(task.expected_trip_energy_kwh or 0.0)
+    return total
 
 
 def _minimum_ev_interval_energy_kwh(ev: EvActuatorSnapshot) -> float:
@@ -905,6 +1009,10 @@ def _validate_solution_plan(
     resource = ess.capabilities
     stored_before = resource.capacity_kwh * float(ess.soc_percent or 0.0) / 100.0
     power_steps_valid = True
+    unavailable = _ev_unavailable_windows_utc(tasks)
+    ev_energy_before = None
+    if tasks and ev is not None and ev.soc_percent is not None and ev.capabilities.battery_capacity_kwh is not None:
+        ev_energy_before = ev.capabilities.battery_capacity_kwh * ev.soc_percent / 100.0
     for index, (reference, item) in enumerate(zip(reference_plan.intervals, plan.intervals, strict=True)):
         if item.period_start_local != reference.period_start_local:
             errors.append(f"interval_{index}_timestamp_mismatch")
@@ -935,10 +1043,32 @@ def _validate_solution_plan(
             errors.append(f"interval_{index}_dc_curtailment_invalid")
         elif item.curtailed_dc_pv_w > item.pv_dc_power_w + _VALIDATION_POWER_TOLERANCE_W:
             errors.append(f"interval_{index}_dc_curtailment_exceeds_pv")
+        if tasks and ev is not None:
+            if item.projected_ev_soc_percent is None:
+                errors.append(f"interval_{index}_ev_soc_projection_missing")
+            elif not -1e-4 <= float(item.projected_ev_soc_percent) <= 100.0 + 1e-4:
+                errors.append(f"interval_{index}_ev_soc_out_of_bounds")
+            elif ev_energy_before is not None and ev.capabilities.battery_capacity_kwh is not None:
+                ev_energy_after = (
+                    ev.capabilities.battery_capacity_kwh * float(item.projected_ev_soc_percent) / 100.0
+                )
+                expected_ev_energy = (
+                    ev_energy_before
+                    - _ev_trip_energy_at_start(item.period_start_local, tasks)
+                    + item.scheduled_load_w
+                    * _INTERVAL_HOURS
+                    / 1000.0
+                    * ev.capabilities.charge_efficiency
+                )
+                if abs(ev_energy_after - expected_ev_energy) > 0.002:
+                    errors.append(f"interval_{index}_ev_energy_mismatch")
+                ev_energy_before = ev_energy_after
         if item.scheduled_load_w > _VALIDATION_POWER_TOLERANCE_W:
             if ev is None or not _ev_power_step_valid(item.scheduled_load_w, ev):
                 power_steps_valid = False
                 errors.append(f"interval_{index}_ev_power_step_invalid")
+            if _interval_is_unavailable(item.period_start_local, unavailable):
+                errors.append(f"interval_{index}_ev_charging_while_away")
 
     if not tasks:
         scheduled_kwh = sum(item.scheduled_load_w for item in plan.intervals) * _INTERVAL_HOURS / 1000.0
@@ -948,18 +1078,24 @@ def _validate_solution_plan(
 
     assert ev is not None
     for task in tasks:
+        if task.kind != "energy_by_deadline":
+            continue
         required_kwh = float(task.required_energy_kwh or 0.0)
-        eligible = set(_eligible_indexes(plan, task))
+        eligible = set(_eligible_indexes(plan, task, tasks))
         scheduled_kwh = sum(
             item.scheduled_load_w for index, item in enumerate(plan.intervals) if index in eligible
         ) * _INTERVAL_HOURS / 1000.0
         outside_kwh = sum(
             item.scheduled_load_w for index, item in enumerate(plan.intervals) if index not in eligible
         ) * _INTERVAL_HOURS / 1000.0
-        deadline_met = scheduled_kwh + 1e-6 >= required_kwh
+        if task.minimum_soc_percent is not None:
+            departure_soc = _ev_soc_at_deadline(plan, ev, task.latest_end_local)
+            deadline_met = departure_soc is not None and departure_soc + 1e-4 >= task.minimum_soc_percent
+        else:
+            deadline_met = scheduled_kwh + 1e-6 >= required_kwh
         task_valid = deadline_met and power_steps_valid
         if not deadline_met:
-            errors.append(f"task_{task.task_id}_energy_shortfall")
+            errors.append(f"task_{task.task_id}_departure_requirement_shortfall")
         task_checks.append(
             MilpTaskValidation(
                 task_id=task.task_id,
@@ -971,14 +1107,27 @@ def _validate_solution_plan(
                 valid=task_valid,
             )
         )
-    total_scheduled_kwh = sum(item.scheduled_load_w for item in plan.intervals) * _INTERVAL_HOURS / 1000.0
-    maximum_target_kwh = max(
-        _preferred_target_kwh(tasks),
-        max((float(task.required_energy_kwh or 0.0) for task in tasks), default=0.0),
-    )
-    if total_scheduled_kwh > maximum_target_kwh + _minimum_ev_interval_energy_kwh(ev) + 1e-5:
-        errors.append("ev_energy_overallocation")
     return tuple(dict.fromkeys(errors)), tuple(task_checks)
+
+
+def _ev_soc_at_deadline(
+    plan: ShadowPlan,
+    ev: EvActuatorSnapshot,
+    deadline: Any,
+) -> float | None:
+    if deadline is None or not plan.intervals:
+        return None
+    target_utc = deadline.astimezone(UTC)
+    first_start = plan.intervals[0].period_start_local.astimezone(UTC)
+    if abs((first_start - target_utc).total_seconds()) < 1.0:
+        return ev.soc_percent
+    for index, item in enumerate(plan.intervals[1:], start=1):
+        if abs((item.period_start_local.astimezone(UTC) - target_utc).total_seconds()) < 1.0:
+            return plan.intervals[index - 1].projected_ev_soc_percent
+    final_end = (plan.intervals[-1].period_start_local + _INTERVAL_DELTA).astimezone(UTC)
+    if abs((final_end - target_utc).total_seconds()) < 1.0:
+        return plan.intervals[-1].projected_ev_soc_percent
+    return None
 
 
 def _ev_power_step_valid(power_w: float, ev: EvActuatorSnapshot) -> bool:
@@ -1139,6 +1288,7 @@ async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpE
             "grid_export_kwh": _round_optional(summary["grid_export_after_ess_kwh"], 3),
             "max_grid_import_w": _round_optional(summary["max_grid_import_after_ess_w"], 1),
             "end_soc_percent": _round_optional(summary["end_soc_percent"], 2),
+            "ev_end_soc_percent": _round_optional(evaluation.plan.intervals[-1].projected_ev_soc_percent, 2),
             "curtailed_dc_pv_kwh": _round_optional(summary["curtailed_dc_pv_kwh"], 3),
         }
         attributes["milp_next_intervals"] = [
@@ -1148,6 +1298,7 @@ async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpE
                 "ess_ac_w": _round_optional(item.ess_ac_power_w, 1),
                 "grid_w": _round_optional(item.grid_power_after_ess_w, 1),
                 "soc_percent": _round_optional(item.projected_soc_percent, 2),
+                "ev_soc_percent": _round_optional(item.projected_ev_soc_percent, 2),
             }
             for item in evaluation.plan.intervals[:12]
         ]

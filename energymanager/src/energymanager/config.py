@@ -59,8 +59,19 @@ class PvSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class EvWeeklyScheduleEntry:
+    """Recurring EV trip window used to generate future planning requirements."""
+
+    weekdays: tuple[int, ...]
+    departure_time_local: str
+    return_time_local: str
+    minimum_soc_percent: float
+    expected_trip_energy_kwh: float
+
+
+@dataclass(frozen=True, slots=True)
 class EvSettings:
-    """EV input mapping, actuator envelope and target-by-departure task policy."""
+    """EV input mapping, actuator envelope and departure policy."""
 
     soc_entity: str | None = None
     connected_entity: str | None = None
@@ -75,6 +86,7 @@ class EvSettings:
     target_soc_percent: float = 80.0
     minimum_soc_percent: float | None = None
     departure_time_local: str = "07:00"
+    weekly_schedule: tuple[EvWeeklyScheduleEntry, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,6 +215,7 @@ class Settings:
                     "target_soc_percent": self.ev.target_soc_percent,
                     "minimum_soc_percent": self.ev.minimum_soc_percent,
                     "departure_time_local": self.ev.departure_time_local,
+                    "weekly_schedule": [_ev_schedule_entry_options(item) for item in self.ev.weekly_schedule],
                 }
             ),
             "economics": _without_none(
@@ -313,6 +326,7 @@ class Settings:
         if ev_minimum_soc is not None and ev_minimum_soc > ev_target_soc:
             raise ConfigurationError("ev.minimum_soc_percent must not exceed ev.target_soc_percent")
         ev_departure_time = _local_time_option(ev_raw.get("departure_time_local", "07:00"), "ev.departure_time_local")
+        ev_weekly_schedule = _ev_weekly_schedule(ev_raw.get("weekly_schedule", []))
 
         economics_enabled = _bool_option(economics_raw.get("enabled", False), "economics.enabled")
         import_energy_price = _optional_nonnegative_float(
@@ -410,6 +424,7 @@ class Settings:
                 target_soc_percent=ev_target_soc,
                 minimum_soc_percent=ev_minimum_soc,
                 departure_time_local=ev_departure_time,
+                weekly_schedule=ev_weekly_schedule,
             ),
             economics=EconomicsSettings(
                 enabled=economics_enabled,
@@ -436,6 +451,87 @@ class Settings:
             legacy_options_detected=legacy_options_detected,
         )
 
+
+
+_WEEKDAY_NAMES = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+_WEEKDAY_ALIASES = {
+    "monday": 0,
+    "mon": 0,
+    "tuesday": 1,
+    "tue": 1,
+    "wednesday": 2,
+    "wed": 2,
+    "thursday": 3,
+    "thu": 3,
+    "friday": 4,
+    "fri": 4,
+    "saturday": 5,
+    "sat": 5,
+    "sunday": 6,
+    "sun": 6,
+}
+
+
+def _ev_weekly_schedule(value: object) -> tuple[EvWeeklyScheduleEntry, ...]:
+    """Parse recurring EV trip entries from the compact Supervisor list format."""
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ConfigurationError("ev.weekly_schedule must be a list")
+    entries: list[EvWeeklyScheduleEntry] = []
+    for index, raw in enumerate(value):
+        name = f"ev.weekly_schedule[{index}]"
+        if not isinstance(raw, str):
+            raise ConfigurationError(f"{name} must be a string")
+        parts: dict[str, str] = {}
+        for component in raw.split("|"):
+            key, separator, item = component.partition("=")
+            if not separator or not key.strip() or not item.strip():
+                raise ConfigurationError(f"{name} must use key=value fields separated by |")
+            parts[key.strip().lower()] = item.strip()
+        required = {"days", "depart", "return", "min_soc", "trip_kwh"}
+        missing = sorted(required - parts.keys())
+        if missing:
+            raise ConfigurationError(f"{name} is missing fields: {', '.join(missing)}")
+        entries.append(
+            EvWeeklyScheduleEntry(
+                weekdays=_weekdays_option(parts["days"], f"{name}.days"),
+                departure_time_local=_quarter_hour_local_time_option(parts["depart"], f"{name}.depart"),
+                return_time_local=_quarter_hour_local_time_option(parts["return"], f"{name}.return"),
+                minimum_soc_percent=_percentage(parts["min_soc"], f"{name}.min_soc"),
+                expected_trip_energy_kwh=_nonnegative_float(parts["trip_kwh"], f"{name}.trip_kwh"),
+            )
+        )
+    return tuple(entries)
+
+
+def _weekdays_option(value: object, option_name: str) -> tuple[int, ...]:
+    if value is None:
+        raise ConfigurationError(f"{option_name} is required")
+    names = [part.strip().lower() for part in str(value).split(",") if part.strip()]
+    if not names:
+        raise ConfigurationError(f"{option_name} must contain at least one weekday")
+    try:
+        return tuple(sorted(set(_WEEKDAY_ALIASES[name] for name in names)))
+    except KeyError as exc:
+        allowed = ", ".join(_WEEKDAY_NAMES)
+        raise ConfigurationError(f"{option_name} contains an invalid weekday; use {allowed}") from exc
+
+
+def _quarter_hour_local_time_option(value: object, option_name: str) -> str:
+    normalized = _local_time_option(value, option_name)
+    minute = int(normalized.split(":", maxsplit=1)[1])
+    if minute % 15 != 0:
+        raise ConfigurationError(f"{option_name} must align to a 15-minute boundary")
+    return normalized
+
+
+def _ev_schedule_entry_options(entry: EvWeeklyScheduleEntry) -> str:
+    days = ",".join(_WEEKDAY_NAMES[index] for index in entry.weekdays)
+    return (
+        f"days={days}|depart={entry.departure_time_local}|return={entry.return_time_local}"
+        f"|min_soc={entry.minimum_soc_percent:g}|trip_kwh={entry.expected_trip_energy_kwh:g}"
+    )
 
 
 def _optional_datetime_utc(value: object, option_name: str) -> datetime | None:

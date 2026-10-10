@@ -8,7 +8,7 @@ from typing import Any
 from .diagnostics import TASK_STATUS_ENTITY
 from .tasks import TASK_VERSION, PlanningTask
 
-TASK_DIAGNOSTIC_VERSION = "2026-10-10-task-diagnostics-v2"
+TASK_DIAGNOSTIC_VERSION = "2026-10-10-task-diagnostics-v3"
 
 
 async def publish_task_status(client, tasks: tuple[PlanningTask, ...]) -> None:
@@ -54,10 +54,12 @@ def _task_attributes(item: PlanningTask) -> dict[str, Any]:
         "latest_end": _iso(item.latest_end_local),
         "required_energy_kwh": _round_optional(item.required_energy_kwh, 3),
         "battery_energy_required_kwh": _round_optional(item.battery_energy_required_kwh, 3),
-        "required_energy_role": "hard_by_deadline",
+        "required_energy_role": "hard_by_deadline" if item.kind == "energy_by_deadline" else None,
         "preferred_energy_kwh": _round_optional(item.preferred_energy_kwh, 3),
         "preferred_battery_energy_kwh": _round_optional(item.preferred_battery_energy_kwh, 3),
-        "preferred_energy_role": "soft_over_planning_horizon",
+        "preferred_energy_role": (
+            "soft_terminal_soc_over_planning_horizon" if item.preferred_energy_kwh is not None else None
+        ),
         "interruptible": item.interruptible,
         "current_soc_percent": _round_optional(item.current_soc_percent, 2),
         "minimum_soc_percent": _round_optional(item.minimum_soc_percent, 2),
@@ -66,6 +68,12 @@ def _task_attributes(item: PlanningTask) -> dict[str, Any]:
         "target_soc_percent_role": "preferred",
         "feasible_at_max_power": item.feasible_at_max_power,
         "minimum_runtime_hours": _round_optional(item.minimum_runtime_hours, 3),
+        "expected_return": _iso(item.expected_return_local),
+        "expected_trip_energy_kwh": _round_optional(item.expected_trip_energy_kwh, 3),
+        "unavailable_windows": [
+            {"start": start.isoformat(), "end": end.isoformat()}
+            for start, end in item.ev_unavailable_windows_local
+        ],
     }
 
 

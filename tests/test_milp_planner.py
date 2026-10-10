@@ -331,3 +331,62 @@ def test_highs_milp_can_leave_preferred_ev_target_partially_unmet_when_grid_is_e
     assert result.preferred_ev_shortfall_kwh >= 0.0
     assert result.preferred_ev_shortfall_penalty_eur >= 0.0
     assert result.task_validation[0].deadline_met is True
+
+
+def test_milp_models_weekly_trip_energy_and_blocks_charging_while_away() -> None:
+    pytest.importorskip("highspy")
+    start = datetime(2026, 10, 8, 12, 0, tzinfo=_LOCAL)
+    departure = start + timedelta(hours=1)
+    return_time = start + timedelta(hours=1, minutes=30)
+    hard = PlanningTask(
+        task_id="ev_departure_test",
+        kind="energy_by_deadline",
+        source="ev_weekly_departure_schedule",
+        actuator_id="ev",
+        status="ready",
+        planning_available=True,
+        earliest_start_local=start,
+        latest_end_local=departure,
+        required_energy_kwh=0.0,
+        battery_energy_required_kwh=0.0,
+        interruptible=True,
+        current_soc_percent=50.0,
+        minimum_soc_percent=50.0,
+        target_soc_percent=50.0,
+        feasible_at_max_power=True,
+        minimum_runtime_hours=0.0,
+        expected_return_local=return_time,
+        expected_trip_energy_kwh=5.0,
+    )
+    soft = PlanningTask(
+        task_id="ev_preferred_horizon",
+        kind="ev_terminal_soc_target",
+        source="ev_weekly_departure_schedule",
+        actuator_id="ev",
+        status="ready",
+        planning_available=True,
+        earliest_start_local=start,
+        latest_end_local=start + timedelta(hours=2),
+        required_energy_kwh=0.0,
+        battery_energy_required_kwh=0.0,
+        interruptible=True,
+        current_soc_percent=50.0,
+        target_soc_percent=50.0,
+        preferred_energy_kwh=5.0 / 0.90,
+        preferred_battery_energy_kwh=5.0,
+        feasible_at_max_power=True,
+        minimum_runtime_hours=0.0,
+        ev_unavailable_windows_local=((departure, return_time),),
+    )
+    reference = _reference_plan(start, tasks=(hard, soft))
+
+    result = evaluate_shadow_plan_milp(reference, _profile(), _capacity(start))
+
+    assert result.status in {"optimal", "feasible", "feasible_time_limit"}
+    assert result.plan is not None
+    assert result.validation_status == "passed"
+    assert len(result.task_validation) == 1
+    assert result.task_validation[0].deadline_met is True
+    away = result.plan.intervals[4:6]
+    assert all(item.scheduled_load_w == pytest.approx(0.0, abs=1e-5) for item in away)
+    assert all(item.projected_ev_soc_percent is not None for item in result.plan.intervals)
