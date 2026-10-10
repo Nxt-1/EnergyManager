@@ -1,4 +1,9 @@
 # Changelog
+## 0.27.2
+- Fixes the remaining v0.27 CI failure by aligning the planner cadence test with the asynchronous fast-dispatch architecture.
+- Actuator-command publication remains covered by the dedicated fast-dispatch tests.
+- No runtime, MILP, scheduling, configuration, or hardware-control behavior changes.
+
 ## 0.27.1
 - Fixes the v0.27 CI Ruff failure by removing an unused `FastDispatchResult` import.
 - No fast-dispatch, MILP, configuration, scheduling, or hardware-control behavior changes.

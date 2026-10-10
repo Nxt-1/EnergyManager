@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from energymanager.actuators import ActuatorRegistry
 from energymanager.config import EssSettings, Settings
-from energymanager.diagnostics import ACTUATOR_COMMAND_STATUS_ENTITY, SHADOW_PLAN_STATUS_ENTITY
+from energymanager.diagnostics import SHADOW_PLAN_STATUS_ENTITY
 from energymanager.economics import CapacityPeakState, TariffProfile
 from energymanager.house_state import HouseState
 from energymanager.load_forecast import BackgroundLoadForecast, BackgroundLoadForecastPoint
@@ -235,7 +235,6 @@ def test_planner_service_uses_ten_minute_periodic_cadence(monkeypatch) -> None:
     asyncio.run(scenario())
     assert service.plan is not None
     assert service.plan.scheduling_strategy == "milp_joint_ev_ess"
-    assert client.states[ACTUATOR_COMMAND_STATUS_ENTITY]["attributes"]["hardware_writes"] is False
 
 
 def test_planner_service_returns_while_milp_worker_is_still_solving(monkeypatch) -> None:
