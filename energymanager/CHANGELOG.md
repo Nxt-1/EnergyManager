@@ -1,4 +1,8 @@
 # Changelog
+## 0.24.1
+- Fixes the v0.24 CI Ruff failure by wrapping the EV minimum-runtime expression to the configured line-length limit.
+- No EV policy, MILP, configuration-schema or hardware-control behavior changes.
+
 ## 0.24.0
 - Splits the EV policy into a hard minimum SoC by departure and a soft preferred SoC target.
 - Keeps the existing `target_soc_percent` as the preferred target and adds optional `minimum_soc_percent`; when omitted, the

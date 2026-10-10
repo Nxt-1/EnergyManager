@@ -130,7 +130,11 @@ def _ev_charge_task(
     preferred_ac_energy = preferred_battery_energy / efficiency if preferred_battery_energy > 0.0 else 0.0
 
     maximum_power_w = _maximum_ev_power_w(actuator)
-    minimum_runtime = hard_ac_energy * 1000.0 / maximum_power_w if hard_ac_energy > 0.0 and maximum_power_w > 0.0 else 0.0
+    minimum_runtime = (
+        hard_ac_energy * 1000.0 / maximum_power_w
+        if hard_ac_energy > 0.0 and maximum_power_w > 0.0
+        else 0.0
+    )
     available_hours = max(0.0, (deadline - now_local).total_seconds() / 3600.0)
     feasible = minimum_runtime <= available_hours + 1e-9
 
