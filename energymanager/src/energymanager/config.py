@@ -73,6 +73,7 @@ class EvSettings:
     battery_capacity_kwh: float | None = None
     charge_efficiency: float = 0.90
     target_soc_percent: float = 80.0
+    minimum_soc_percent: float | None = None
     departure_time_local: str = "07:00"
 
 
@@ -200,6 +201,7 @@ class Settings:
                     "battery_capacity_kwh": self.ev.battery_capacity_kwh,
                     "charge_efficiency": self.ev.charge_efficiency,
                     "target_soc_percent": self.ev.target_soc_percent,
+                    "minimum_soc_percent": self.ev.minimum_soc_percent,
                     "departure_time_local": self.ev.departure_time_local,
                 }
             ),
@@ -302,6 +304,14 @@ class Settings:
         ev_battery_capacity = _optional_positive_float(ev_raw.get("battery_capacity_kwh"), "ev.battery_capacity_kwh")
         ev_charge_efficiency = _efficiency(ev_raw.get("charge_efficiency", 0.90), "ev.charge_efficiency")
         ev_target_soc = _percentage(ev_raw.get("target_soc_percent", 80.0), "ev.target_soc_percent")
+        ev_minimum_soc_raw = ev_raw.get("minimum_soc_percent")
+        ev_minimum_soc = (
+            None
+            if ev_minimum_soc_raw is None or str(ev_minimum_soc_raw).strip() == ""
+            else _percentage(ev_minimum_soc_raw, "ev.minimum_soc_percent")
+        )
+        if ev_minimum_soc is not None and ev_minimum_soc > ev_target_soc:
+            raise ConfigurationError("ev.minimum_soc_percent must not exceed ev.target_soc_percent")
         ev_departure_time = _local_time_option(ev_raw.get("departure_time_local", "07:00"), "ev.departure_time_local")
 
         economics_enabled = _bool_option(economics_raw.get("enabled", False), "economics.enabled")
@@ -398,6 +408,7 @@ class Settings:
                 battery_capacity_kwh=ev_battery_capacity,
                 charge_efficiency=ev_charge_efficiency,
                 target_soc_percent=ev_target_soc,
+                minimum_soc_percent=ev_minimum_soc,
                 departure_time_local=ev_departure_time,
             ),
             economics=EconomicsSettings(

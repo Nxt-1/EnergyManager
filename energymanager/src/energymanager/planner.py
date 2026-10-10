@@ -10,7 +10,7 @@ from .load_forecast import FORECAST_INTERVAL_MINUTES, BackgroundLoadForecast
 from .pv_forecast import PvForecast
 from .tasks import PlanningTask
 
-PLANNER_VERSION = "2026-10-08-shadow-v9"
+PLANNER_VERSION = "2026-10-08-shadow-v10"
 PLANNER_HORIZON_HOURS = 168
 _INTERVAL_HOURS = FORECAST_INTERVAL_MINUTES / 60.0
 
@@ -54,6 +54,8 @@ class ShadowPlan:
     optimizer_score_eur: float | None = None
     optimizer_baseline_score_eur: float | None = None
     optimizer_candidate_evaluations: int = 0
+    preferred_ev_shortfall_kwh: float = 0.0
+    preferred_ev_shortfall_penalty_eur: float = 0.0
 
     def summary(self, hours: int) -> dict[str, float | int | str | None]:
         """Return compact energy/peak statistics for the first requested hours."""

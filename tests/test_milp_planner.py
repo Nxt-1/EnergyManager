@@ -173,17 +173,36 @@ def _reference_plan(start: datetime, *, tasks: tuple[PlanningTask, ...]) -> Any:
     )
 
 
-def test_milp_rejects_multiple_active_tasks_until_multi_task_model_is_added() -> None:
+def test_milp_supports_multiple_cumulative_ev_deadline_tasks() -> None:
+    pytest.importorskip("highspy")
     start = datetime(2026, 10, 8, 12, 0, tzinfo=_LOCAL)
-    tasks = (_task(start, task_id="ev_one"), _task(start, task_id="ev_two"))
-    reference = _reference_plan(start, tasks=tasks)
+    first = _task(start, task_id="ev_first", energy_kwh=1.5)
+    second = PlanningTask(
+        task_id="ev_second",
+        kind="energy_by_deadline",
+        source="test",
+        actuator_id="ev",
+        status="ready",
+        planning_available=True,
+        earliest_start_local=start,
+        latest_end_local=start + timedelta(hours=2),
+        required_energy_kwh=3.0,
+        battery_energy_required_kwh=2.7,
+        interruptible=True,
+        current_soc_percent=50.0,
+        target_soc_percent=80.0,
+        feasible_at_max_power=True,
+        minimum_runtime_hours=3.0 / 11.04,
+    )
+    reference = _reference_plan(start, tasks=(first, second))
 
     result = evaluate_shadow_plan_milp(reference, _profile(), _capacity(start))
 
-    assert result.status == "unsupported"
-    assert result.reason == "multiple_active_tasks_not_yet_supported"
-    assert result.plan is None
+    assert result.status in {"optimal", "feasible", "feasible_time_limit"}
+    assert result.plan is not None
     assert result.active_task_count == 2
+    assert result.validation_status == "passed"
+    assert all(item.deadline_met for item in result.task_validation)
 
 
 def test_milp_status_publisher_marks_milp_authoritative() -> None:
@@ -276,3 +295,39 @@ def test_highs_milp_solves_discrete_ev_and_ess_model_when_dependency_is_availabl
     summary = result.plan.summary(2)
     assert float(summary["min_soc_percent"]) >= 10.0 - 1e-6
     assert float(summary["max_soc_percent"]) <= 100.0 + 1e-6
+
+
+def test_highs_milp_can_leave_preferred_ev_target_partially_unmet_when_grid_is_expensive() -> None:
+    pytest.importorskip("highspy")
+    start = datetime(2026, 10, 8, 12, 0, tzinfo=_LOCAL)
+    task = _task(start, energy_kwh=1.0)
+    task = PlanningTask(
+        task_id=task.task_id,
+        kind=task.kind,
+        source=task.source,
+        actuator_id=task.actuator_id,
+        status=task.status,
+        planning_available=task.planning_available,
+        earliest_start_local=task.earliest_start_local,
+        latest_end_local=task.latest_end_local,
+        required_energy_kwh=1.0,
+        battery_energy_required_kwh=0.9,
+        interruptible=True,
+        current_soc_percent=50.0,
+        minimum_soc_percent=52.0,
+        target_soc_percent=80.0,
+        preferred_energy_kwh=8.0,
+        preferred_battery_energy_kwh=7.2,
+        feasible_at_max_power=True,
+        minimum_runtime_hours=1.0 / 11.04,
+    )
+    reference = _reference_plan(start, tasks=(task,))
+    result = evaluate_shadow_plan_milp(reference, _profile(), _capacity(start))
+
+    assert result.status in {"optimal", "feasible", "feasible_time_limit"}
+    assert result.plan is not None
+    assert result.preferred_ev_target_kwh == pytest.approx(8.0)
+    assert result.preferred_ev_scheduled_kwh >= 1.0
+    assert result.preferred_ev_shortfall_kwh >= 0.0
+    assert result.preferred_ev_shortfall_penalty_eur >= 0.0
+    assert result.task_validation[0].deadline_met is True

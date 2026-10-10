@@ -1,4 +1,16 @@
 # Changelog
+## 0.24.0
+- Splits the EV policy into a hard minimum SoC by departure and a soft preferred SoC target.
+- Keeps the existing `target_soc_percent` as the preferred target and adds optional `minimum_soc_percent`; when omitted, the
+  minimum defaults to the preferred target so existing installations preserve their current behavior.
+- Lets MILP satisfy multiple cumulative EV energy-by-deadline milestones in one seven-day plan.
+- Values unmet preferred EV energy at the configured import-energy price, so extra charging is selected only when the full
+  economic plan makes it worthwhile rather than by a hard-coded PV or grid rule.
+- Allows preferred charging anywhere in the seven-day horizon while hard minimum-energy milestones remain tied to their
+  departure deadlines.
+- Publishes preferred EV target, scheduled energy, shortfall and shortfall value in the MILP diagnostics.
+- Remains hard-coded shadow mode with no hardware writes.
+
 ## 0.23.0
 - Makes the HiGHS MILP the sole authoritative shadow planner and removes the portfolio/deadline scheduler from planning.
 - Uses a 10-minute normal replan cadence with immediate replans for forecast/task/actuator changes, material ESS SoC

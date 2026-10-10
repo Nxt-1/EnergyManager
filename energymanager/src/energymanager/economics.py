@@ -19,8 +19,8 @@ if TYPE_CHECKING:
 
 COST_MODEL_VERSION = "2026-10-07-cost-v1"
 CAPACITY_PEAK_VERSION = "2026-10-07-capacity-v1"
-PLAN_COST_VERSION = "2026-10-08-plan-cost-v3"
-ECONOMIC_OBJECTIVE_VERSION = "2026-10-08-economic-objective-v2"
+PLAN_COST_VERSION = "2026-10-08-plan-cost-v4"
+ECONOMIC_OBJECTIVE_VERSION = "2026-10-08-economic-objective-v3"
 ECONOMICS_STATUS_ENTITY = "sensor.energy_manager_economics_status"
 CAPACITY_STATUS_ENTITY = "sensor.energy_manager_capacity_tariff_status"
 PLAN_COST_STATUS_ENTITY = "sensor.energy_manager_plan_cost_status"
@@ -670,6 +670,8 @@ class EconomicsService:
             "terminal_ess_value_eur": (
                 round(objective.terminal_ess_value_eur, 3) if objective is not None else None
             ),
+            "preferred_ev_shortfall_kwh": round(plan.preferred_ev_shortfall_kwh, 3),
+            "preferred_ev_shortfall_penalty_eur": round(plan.preferred_ev_shortfall_penalty_eur, 3),
             "next_24_hours": _evaluation_attributes(evaluation_24),
             "next_48_hours": _evaluation_attributes(evaluation_48) if evaluation_48 is not None else None,
             "next_7_days": _evaluation_attributes(evaluation_168) if evaluation_168 is not None else None,
@@ -779,7 +781,7 @@ def evaluate_plan_objective(
     *,
     hours: int = 48,
 ) -> EconomicObjectiveEvaluation | None:
-    """Score a projected plan by marginal cash cost minus economically usable terminal ESS energy."""
+    """Score cash cost, terminal ESS value and explicit soft planner penalties."""
     accounting = evaluate_plan_cost(plan, profile, capacity_state, hours=hours)
     if accounting is None or accounting.total_marginal_cost_eur is None:
         return None
@@ -799,12 +801,15 @@ def evaluate_plan_objective(
     )
     terminal_usable_ac_kwh = usable_stored_kwh * plan.ess_resource.discharge_efficiency
     terminal_value = terminal_usable_ac_kwh * profile.import_energy_eur_per_kwh
+    soft_preference_penalty = 0.0
+    if hours * 4 >= len(plan.intervals):
+        soft_preference_penalty = plan.preferred_ev_shortfall_penalty_eur
     return EconomicObjectiveEvaluation(
         horizon_hours=hours,
         marginal_cost_eur=accounting.total_marginal_cost_eur,
         terminal_usable_ac_kwh=terminal_usable_ac_kwh,
         terminal_ess_value_eur=terminal_value,
-        objective_eur=accounting.total_marginal_cost_eur - terminal_value,
+        objective_eur=accounting.total_marginal_cost_eur - terminal_value + soft_preference_penalty,
     )
 
 

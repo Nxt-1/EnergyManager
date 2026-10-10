@@ -216,6 +216,9 @@ def _task_signature(tasks: tuple[PlanningTask, ...]) -> tuple[tuple[object, ...]
             _quarter_hour_bucket(item.earliest_start_local),
             _iso(item.latest_end_local),
             None if item.required_energy_kwh is None else round(item.required_energy_kwh * 4.0) / 4.0,
+            None if item.preferred_energy_kwh is None else round(item.preferred_energy_kwh * 4.0) / 4.0,
+            item.minimum_soc_percent,
+            item.target_soc_percent,
         )
         for item in tasks
     )
