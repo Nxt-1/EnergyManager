@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.31.2
+- Adds pytest-asyncio to development dependencies so CI can execute the new async dashboard tests.
+- No runtime behavior or configuration changes.
+
 ## 0.31.1
 - Fixes Ruff UP037 in the MILP history writer annotation. No runtime behavior changes.
 
