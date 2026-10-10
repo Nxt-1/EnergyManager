@@ -13,6 +13,7 @@ from .actuators import (
     ActuatorCommandResult,
     ActuatorRegistry,
     EssActuatorSnapshot,
+    EvActuatorSnapshot,
 )
 from .config import EssSettings, Settings
 from .ha_client import HomeAssistantError
@@ -27,20 +28,23 @@ _ACK_GRACE_SECONDS = 2.0
 
 
 class ControlAwareActuatorRegistry(ActuatorRegistry):
-    """Expose real ESS control ownership while retaining existing actuator translation."""
+    """Expose real control ownership while retaining existing actuator translation."""
 
     def __init__(self, settings: Settings) -> None:
         super().__init__(settings)
         self._ess_control_enabled = settings.ess.control_enabled
+        self._ev_control_enabled = settings.ev.control_enabled
 
     def snapshots(self, house_state):
         snapshots = super().snapshots(house_state)
-        return tuple(
-            replace(item, control_enabled=self._ess_control_enabled)
-            if isinstance(item, EssActuatorSnapshot)
-            else item
-            for item in snapshots
-        )
+        result = []
+        for item in snapshots:
+            if isinstance(item, EssActuatorSnapshot):
+                item = replace(item, control_enabled=self._ess_control_enabled)
+            elif isinstance(item, EvActuatorSnapshot):
+                item = replace(item, control_enabled=self._ev_control_enabled)
+            result.append(item)
+        return tuple(result)
 
 
 class EssHardwareController:
@@ -112,8 +116,18 @@ class EssHardwareController:
             force=force,
         )
 
-    async def publish_command_status(self, results: tuple[ActuatorCommandResult, ...]) -> None:
+    async def publish_command_status(
+        self,
+        results: tuple[ActuatorCommandResult, ...],
+        *,
+        ev_control_enabled: bool = False,
+    ) -> None:
         """Publish command translation with explicit real/shadow ownership per actuator."""
+        hardware_actuators = []
+        if self.enabled:
+            hardware_actuators.append("ess")
+        if ev_control_enabled:
+            hardware_actuators.append("ev")
         commands = []
         for item in results:
             command: dict[str, Any] = {
@@ -124,7 +138,7 @@ class EssHardwareController:
                 "status": item.status,
                 "limited": item.limited,
                 "reason": item.reason,
-                "hardware_write_enabled": self.enabled and item.actuator_id == "ess",
+                "hardware_write_enabled": item.actuator_id in hardware_actuators,
             }
             if item.phase_count is not None:
                 command["phase_count"] = item.phase_count
@@ -135,11 +149,13 @@ class EssHardwareController:
         attributes: dict[str, Any] = {
             "friendly_name": "Energy Manager Actuator Command Status",
             "command_version": ACTUATOR_COMMAND_VERSION,
-            "shadow_mode": not self.enabled,
-            "control_enabled": self.enabled,
-            "hardware_writes": self.enabled,
-            "hardware_write_actuators": ["ess"] if self.enabled else [],
-            "shadow_only_actuators": [item.actuator_id for item in results if item.actuator_id != "ess"],
+            "shadow_mode": not hardware_actuators,
+            "control_enabled": bool(hardware_actuators),
+            "hardware_writes": bool(hardware_actuators),
+            "hardware_write_actuators": hardware_actuators,
+            "shadow_only_actuators": [
+                item.actuator_id for item in results if item.actuator_id not in hardware_actuators
+            ],
             "command_count": len(results),
             "commands": commands,
             "last_update_utc": datetime.now(UTC).isoformat(),

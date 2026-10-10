@@ -75,11 +75,15 @@ class EvWeeklyScheduleEntry:
 
 @dataclass(frozen=True, slots=True)
 class EvSettings:
-    """EV input mapping, actuator envelope and departure policy."""
+    """EV input mapping, actuator envelope, departure policy and guarded hardware control."""
 
     soc_entity: str | None = None
     connected_entity: str | None = None
     charging_power_entity: str | None = None
+    current_entity: str | None = None
+    phase_mode_entity: str | None = None
+    force_state_entity: str | None = None
+    control_enabled: bool = False
     min_charge_current_a: float = 6.0
     max_charge_current_a: float = 16.0
     nominal_voltage_v: float = 230.0
@@ -211,6 +215,10 @@ class Settings:
                     "soc_entity": self.ev.soc_entity,
                     "connected_entity": self.ev.connected_entity,
                     "charging_power_entity": self.ev.charging_power_entity,
+                    "current_entity": self.ev.current_entity,
+                    "phase_mode_entity": self.ev.phase_mode_entity,
+                    "force_state_entity": self.ev.force_state_entity,
+                    "control_enabled": self.ev.control_enabled,
                     "min_charge_current_a": self.ev.min_charge_current_a,
                     "max_charge_current_a": self.ev.max_charge_current_a,
                     "nominal_voltage_v": self.ev.nominal_voltage_v,
@@ -317,6 +325,22 @@ class Settings:
         ess_discharge_efficiency = _efficiency(
             ess_raw.get("discharge_efficiency", 0.95), "ess.discharge_efficiency"
         )
+
+        ev_current_entity = _optional_entity_id(ev_raw.get("current_entity"), "ev.current_entity")
+        ev_phase_mode_entity = _optional_entity_id(ev_raw.get("phase_mode_entity"), "ev.phase_mode_entity")
+        ev_force_state_entity = _optional_entity_id(ev_raw.get("force_state_entity"), "ev.force_state_entity")
+        if ev_current_entity is not None and not ev_current_entity.startswith("number."):
+            raise ConfigurationError("ev.current_entity must be a Home Assistant number entity")
+        if ev_phase_mode_entity is not None and not ev_phase_mode_entity.startswith("select."):
+            raise ConfigurationError("ev.phase_mode_entity must be a Home Assistant select entity")
+        if ev_force_state_entity is not None and not ev_force_state_entity.startswith("select."):
+            raise ConfigurationError("ev.force_state_entity must be a Home Assistant select entity")
+        ev_control_enabled = _bool_option(ev_raw.get("control_enabled", False), "ev.control_enabled")
+        if ev_control_enabled and None in (ev_current_entity, ev_phase_mode_entity, ev_force_state_entity):
+            raise ConfigurationError(
+                "ev.current_entity, ev.phase_mode_entity and ev.force_state_entity are required "
+                "when ev.control_enabled is true"
+            )
 
         ev_min_charge_current = _positive_float(ev_raw.get("min_charge_current_a", 6.0), "ev.min_charge_current_a")
         ev_max_charge_current = _positive_float(ev_raw.get("max_charge_current_a", 16.0), "ev.max_charge_current_a")
@@ -429,6 +453,10 @@ class Settings:
                 charging_power_entity=_optional_entity_id(
                     ev_raw.get("charging_power_entity"), "ev.charging_power_entity"
                 ),
+                current_entity=ev_current_entity,
+                phase_mode_entity=ev_phase_mode_entity,
+                force_state_entity=ev_force_state_entity,
+                control_enabled=ev_control_enabled,
                 min_charge_current_a=ev_min_charge_current,
                 max_charge_current_a=ev_max_charge_current,
                 nominal_voltage_v=ev_nominal_voltage,

@@ -20,6 +20,7 @@ from .database import EnergyManagerStore, InfluxDatabaseClient, InfluxDatabaseEr
 from .diagnostics import DiagnosticsPublisher
 from .economics import EconomicsService
 from .ess_control import ControlAwareActuatorRegistry, EssHardwareController
+from .ev_control import EvHardwareController
 from .ha_client import HomeAssistantClient
 from .legacy_influx import LegacyInfluxBackfill, LegacyInfluxClient, LegacyInfluxError
 from .load_service import BackgroundLoadHistory, BackgroundLoadService
@@ -43,9 +44,10 @@ async def async_main() -> int:
     )
     logger = logging.getLogger("energymanager")
     logger.info(
-        "Starting Energy Manager %s; ESS hardware control=%s, EV control=shadow",
+        "Starting Energy Manager %s; ESS hardware control=%s, EV hardware control=%s",
         __version__,
         "enabled" if settings.ess.control_enabled else "disabled",
+        "enabled" if settings.ev.control_enabled else "disabled",
     )
     supervisor_token = os.environ.get("SUPERVISOR_TOKEN", "")
     if not supervisor_token:
@@ -71,7 +73,9 @@ async def async_main() -> int:
             },
         )
         ess_controller = EssHardwareController(client, settings.ess)
+        ev_controller = EvHardwareController(client, settings.ev)
         await ess_controller.initialize()
+        await ev_controller.initialize()
         try:
             if settings.database.enabled:
                 assert settings.database.url is not None
@@ -81,7 +85,14 @@ async def async_main() -> int:
                     settings.database.database,
                     settings.database.token,
                 ) as database_client:
-                    await _run_with_database(settings, client, database_client, stop_event, ess_controller)
+                    await _run_with_database(
+                        settings,
+                        client,
+                        database_client,
+                        stop_event,
+                        ess_controller,
+                        ev_controller,
+                    )
             else:
                 diagnostics = DiagnosticsPublisher(client)
                 await diagnostics.publish_database_status("disabled", database=settings.database.database)
@@ -96,11 +107,13 @@ async def async_main() -> int:
                     client,
                     stop_event,
                     ess_controller=ess_controller,
+                    ev_controller=ev_controller,
                     store=None,
                     history=None,
                     economics_service=economics_service,
                 )
         finally:
+            await ev_controller.shutdown()
             await ess_controller.shutdown()
     logger.info("Energy Manager stopped")
     return 0
@@ -112,6 +125,7 @@ async def _run_with_database(
     database_client: InfluxDatabaseClient,
     stop_event: asyncio.Event,
     ess_controller: EssHardwareController,
+    ev_controller: EvHardwareController,
 ) -> None:
     logger = logging.getLogger("energymanager")
     diagnostics = DiagnosticsPublisher(client)
@@ -143,6 +157,7 @@ async def _run_with_database(
             client,
             stop_event,
             ess_controller=ess_controller,
+            ev_controller=ev_controller,
             store=None,
             history=None,
             economics_service=economics_service,
@@ -195,6 +210,7 @@ async def _run_with_database(
         client,
         stop_event,
         ess_controller=ess_controller,
+        ev_controller=ev_controller,
         store=store,
         history=history,
         economics_service=economics_service,
@@ -207,6 +223,7 @@ async def _run_app(
     stop_event: asyncio.Event,
     *,
     ess_controller: EssHardwareController,
+    ev_controller: EvHardwareController,
     store: EnergyManagerStore | None,
     history: BackgroundLoadHistory | None,
     economics_service: EconomicsService,
@@ -223,6 +240,7 @@ async def _run_app(
                 task_registry=TaskRegistry(settings.ev),
                 economics_service=economics_service,
                 ess_controller=ess_controller,
+                ev_controller=ev_controller,
             )
             app = EnergyManagerApp(
                 settings,
@@ -244,6 +262,7 @@ async def _run_app(
         task_registry=TaskRegistry(settings.ev),
         economics_service=economics_service,
         ess_controller=ess_controller,
+        ev_controller=ev_controller,
     )
     app = EnergyManagerApp(
         settings,

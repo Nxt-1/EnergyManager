@@ -1,4 +1,12 @@
 # Changelog
+## 0.29.0
+- Adds guarded real EV charger control through configurable go-e current, phase-mode and force-state entities.
+- Applies MILP EV commands as whole-ampere 1-phase/3-phase charging states and keeps EV control disabled unless explicitly enabled.
+- Preserves the previous safe phase-switch sequence: stop charging, change phase mode, wait 3 seconds, set current, then resume.
+- Forces Don't charge before the first valid plan, when the EV command is unavailable/idle and on clean shutdown.
+- Adds `sensor.energy_manager_ev_control_status` with desired/observed charger state, phase-transition state and write counters.
+- Publishes ESS and EV hardware ownership together in actuator-command diagnostics; ESS fast control and MILP policy are unchanged.
+
 ## 0.28.1
 - Changes whole-number Supervisor options to integer schema types to avoid silent numeric drift in the app UI.
 - Adds `sensor.energy_manager_configuration_status` with the effective loaded ESS/EV whole-number options.

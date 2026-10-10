@@ -10,6 +10,7 @@ from .actuators import ActuatorCommandResult, ActuatorRegistry, ActuatorSnapshot
 from .diagnostics import DiagnosticsPublisher
 from .economics import EconomicsService, PlanCostEvaluation
 from .ess_control import EssHardwareController
+from .ev_control import EvHardwareController
 from .fast_dispatch import evaluate_fast_dispatch, publish_fast_dispatch
 from .house_state import HouseState
 from .load_service import BackgroundLoadService
@@ -41,6 +42,7 @@ class ShadowPlannerService:
         task_registry: TaskRegistry,
         economics_service: EconomicsService | None = None,
         ess_controller: EssHardwareController | None = None,
+        ev_controller: EvHardwareController | None = None,
         planner: ShadowPlanner | None = None,
     ) -> None:
         self._ha_client = ha_client
@@ -52,6 +54,7 @@ class ShadowPlannerService:
         self._task_registry = task_registry
         self._economics_service = economics_service
         self._ess_controller = ess_controller
+        self._ev_controller = ev_controller
         self._plan: ShadowPlan | None = None
         self._last_plan_at_utc: datetime | None = None
         self._last_attempt_at_utc: datetime | None = None
@@ -224,10 +227,15 @@ class ShadowPlannerService:
                     error=evaluation.reason or evaluation.status,
                 )
                 if self._ess_controller is not None:
-                    await self._ess_controller.publish_command_status(())
+                    await self._ess_controller.publish_command_status(
+                        (),
+                        ev_control_enabled=self._ev_control_enabled,
+                    )
                     await self._ess_controller.safe_zero("milp_unavailable")
                 else:
                     await self._diagnostics.publish_actuator_command_status(())
+                if self._ev_controller is not None:
+                    await self._ev_controller.safe_stop("milp_unavailable")
                 return
 
             plan = evaluation.plan
@@ -284,6 +292,10 @@ class ShadowPlannerService:
     def _ess_control_enabled(self) -> bool:
         return self._ess_controller is not None and self._ess_controller.enabled
 
+    @property
+    def _ev_control_enabled(self) -> bool:
+        return self._ev_controller is not None and self._ev_controller.enabled
+
     async def shutdown(self) -> None:
         """Stop runtime tasks and leave the ESS setpoint neutral on a clean exit."""
         for task in (self._fast_dispatch_task, self._solve_task):
@@ -321,6 +333,8 @@ class ShadowPlannerService:
         if house_state is None or plan is None:
             if self._ess_controller is not None and self._ess_controller.enabled:
                 await self._ess_controller.safe_zero("no_active_plan")
+            if self._ev_controller is not None and self._ev_controller.enabled:
+                await self._ev_controller.safe_stop("no_active_plan")
             return
         now = datetime.now(UTC)
         result = evaluate_fast_dispatch(
@@ -342,7 +356,13 @@ class ShadowPlannerService:
         )
         if self._ess_controller is not None:
             await self._ess_controller.apply_dispatch(result)
-            await self._ess_controller.publish_command_status(result.command_results)
+        if self._ev_controller is not None:
+            await self._ev_controller.apply_dispatch(result)
+        if self._ess_controller is not None:
+            await self._ess_controller.publish_command_status(
+                result.command_results,
+                ev_control_enabled=self._ev_control_enabled,
+            )
         else:
             await self._diagnostics.publish_actuator_command_status(result.command_results)
         if not result.replan_required:
