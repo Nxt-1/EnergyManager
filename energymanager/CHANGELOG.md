@@ -1,4 +1,15 @@
 # Changelog
+## 0.26.0
+- Adds a fast shadow dispatch layer that tracks the current MILP grid-power target on every live Home Assistant state update.
+- Replaces the measured EV load with the MILP-planned EV load when evaluating shadow dispatch, so a not-yet-controlled EV does
+  not create a false ESS correction.
+- Calculates the ESS power needed to absorb live grid/load/PV deviations and clamps it through the existing ESS actuator limits.
+- Publishes `sensor.energy_manager_fast_dispatch_status` with planned/measured power, ESS correction, residual tracking error and
+  replan status.
+- Triggers an immediate MILP replan only when the remaining grid-target error after the feasible ESS correction is at least 500 W.
+- Keeps the MILP on its normal 10-minute cadence when the fast ESS layer can absorb a disturbance.
+- Remains hard-coded shadow mode with no hardware writes; the existing Home Assistant ESS automation remains the real writer.
+
 ## 0.25.1
 - Clarifies multi-trip EV validation diagnostics by replacing the misleading `outside_window_energy_kwh` field with
   `scheduled_after_deadline_kwh`.

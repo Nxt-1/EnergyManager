@@ -8,13 +8,13 @@ from datetime import UTC, datetime, timedelta
 
 from .actuators import (
     ActuatorCommandResult,
-    ActuatorPowerRequest,
     ActuatorRegistry,
     ActuatorSnapshot,
     find_ess_actuator,
 )
 from .diagnostics import DiagnosticsPublisher
 from .economics import EconomicsService, PlanCostEvaluation
+from .fast_dispatch import FastDispatchResult, evaluate_fast_dispatch, publish_fast_dispatch
 from .house_state import HouseState
 from .load_service import BackgroundLoadService
 from .milp_planner import MilpEvaluation, evaluate_shadow_plan_milp, publish_milp_evaluation
@@ -27,8 +27,6 @@ _LOGGER = logging.getLogger(__name__)
 _PERIODIC_REPLAN_INTERVAL = timedelta(minutes=10)
 _FAILED_RETRY_INTERVAL = timedelta(minutes=1)
 _RETAIN_PLAN_MAX_AGE = timedelta(minutes=30)
-_LOAD_DEVIATION_TRIGGER_W = 750.0
-_LOAD_DEVIATION_BUCKET_W = 500.0
 _ESS_SOC_DEVIATION_TRIGGER_PERCENT = 3.0
 _INTERVAL = timedelta(minutes=15)
 
@@ -61,7 +59,6 @@ class ShadowPlannerService:
         self._last_forecast_signature: tuple[str, str] | None = None
         self._last_task_signature: tuple[tuple[object, ...], ...] | None = None
         self._last_actuator_signature: tuple[tuple[object, ...], ...] | None = None
-        self._last_load_deviation_bucket = 0
 
     @property
     def plan(self) -> ShadowPlan | None:
@@ -105,13 +102,14 @@ class ShadowPlannerService:
             await self._diagnostics.publish_shadow_plan_status("waiting_for_economics_state")
             return
 
+        fast_dispatch = await self._evaluate_and_publish_fast_dispatch(house_state, now)
         reason = self._replan_reason(
-            house_state,
             load_forecast.generated_at_utc,
             pv_forecast.generated_at_utc,
             actuators,
             tasks,
             now,
+            fast_dispatch,
         )
         if reason is None:
             return
@@ -156,23 +154,21 @@ class ShadowPlannerService:
         )
         self._last_task_signature = _task_signature(tasks)
         self._last_actuator_signature = _actuator_signature(actuators)
-        self._last_load_deviation_bucket = _background_deviation_bucket(house_state, plan, now)
 
         await self._diagnostics.publish_shadow_plan(plan)
         cost_evaluation = await economics.publish_plan_cost(plan, local_tz=local_tz)
-        requests = _current_interval_requests(plan, now)
-        command_results = self._actuator_registry.evaluate_commands(requests, house_state)
-        await self._diagnostics.publish_actuator_command_status(command_results)
+        fast_dispatch = await self._evaluate_and_publish_fast_dispatch(house_state, now)
+        command_results = () if fast_dispatch is None else fast_dispatch.command_results
         _log_plan(plan, actuators, tasks, cost_evaluation, command_results)
 
     def _replan_reason(
         self,
-        house_state: HouseState,
         load_generated_at_utc: datetime,
         pv_generated_at_utc: datetime,
         actuators: tuple[ActuatorSnapshot, ...],
         tasks: tuple[PlanningTask, ...],
         now_utc: datetime,
+        fast_dispatch: FastDispatchResult | None,
     ) -> str | None:
         if self._plan is None or self._last_plan_at_utc is None:
             return "startup"
@@ -186,13 +182,28 @@ class ShadowPlannerService:
             return "actuator_change"
         if _ess_soc_deviates(self._plan, actuators, now_utc):
             return "ess_soc_deviation"
-
-        deviation_bucket = _background_deviation_bucket(house_state, self._plan, now_utc)
-        if deviation_bucket != self._last_load_deviation_bucket:
-            return "background_load_deviation"
+        if fast_dispatch is not None and fast_dispatch.replan_required:
+            return "fast_dispatch_residual"
         if now_utc - self._last_plan_at_utc >= _PERIODIC_REPLAN_INTERVAL:
             return "periodic"
         return None
+
+    async def _evaluate_and_publish_fast_dispatch(
+        self,
+        house_state: HouseState,
+        now_utc: datetime,
+    ) -> FastDispatchResult | None:
+        if self._plan is None:
+            return None
+        result = evaluate_fast_dispatch(
+            self._plan,
+            house_state,
+            self._actuator_registry,
+            now_utc=now_utc,
+        )
+        await publish_fast_dispatch(self._ha_client, result)
+        await self._diagnostics.publish_actuator_command_status(result.command_results)
+        return result
 
     def _can_retain_previous_plan(self, trigger: str, now_utc: datetime) -> bool:
         if self._plan is None or self._last_plan_at_utc is None:
@@ -263,18 +274,6 @@ def _current_interval(plan: ShadowPlan, now_utc: datetime):
     return None
 
 
-def _background_deviation_bucket(house_state: HouseState, plan: ShadowPlan, now_utc: datetime) -> int:
-    actual = house_state.background_load_power_w
-    current = _current_interval(plan, now_utc)
-    if actual is None or current is None:
-        return 0
-    _, interval = current
-    deviation = actual - interval.background_load_w
-    if abs(deviation) < _LOAD_DEVIATION_TRIGGER_W:
-        return 0
-    return round(deviation / _LOAD_DEVIATION_BUCKET_W)
-
-
 def _ess_soc_deviates(
     plan: ShadowPlan,
     actuators: tuple[ActuatorSnapshot, ...],
@@ -292,20 +291,6 @@ def _ess_soc_deviates(
     if expected is None:
         return False
     return abs(float(ess.soc_percent) - float(expected)) >= _ESS_SOC_DEVIATION_TRIGGER_PERCENT
-
-
-def _current_interval_requests(plan: ShadowPlan, now_utc: datetime) -> tuple[ActuatorPowerRequest, ...]:
-    """Translate the current MILP interval into generic dry-run actuator requests."""
-    current = _current_interval(plan, now_utc)
-    if current is None:
-        return ()
-    _, interval = current
-    requests: list[ActuatorPowerRequest] = []
-    if interval.ess_ac_power_w is not None:
-        requests.append(ActuatorPowerRequest(actuator_id="ess", requested_power_w=interval.ess_ac_power_w))
-    if interval.scheduled_load_w > 0.0:
-        requests.append(ActuatorPowerRequest(actuator_id="ev", requested_power_w=interval.scheduled_load_w))
-    return tuple(requests)
 
 
 def _cost_log(evaluation: PlanCostEvaluation | None) -> str:
