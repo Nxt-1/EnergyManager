@@ -1,4 +1,12 @@
 # Changelog
+## 0.30.0
+- Adds a 45-second live-input freshness watchdog for the grid, ESS and EV state used by hardware control.
+- Drives the ESS to 0 W when critical ESS/grid inputs are stale or unavailable and stops the EV when its live state is unsafe.
+- Adds bounded ESS setpoint acknowledgement retries and bounded go-e command retries, followed by a 10-second safe fallback.
+- Treats controller faults and unavailable live inputs as actuator availability changes for replanning instead of retrying forever.
+- Adds `sensor.energy_manager_control_health` with healthy/degraded/safe-fallback state, stale inputs, write failures and errors.
+- Keeps the MILP objective, tariff model, task semantics, 1 Hz dispatch cadence and configured ESS/EV limits unchanged.
+
 ## 0.29.0
 - Adds guarded real EV charger control through configurable go-e current, phase-mode and force-state entities.
 - Applies MILP EV commands as whole-ampere 1-phase/3-phase charging states and keeps EV control disabled unless explicitly enabled.

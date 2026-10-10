@@ -4,9 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from .actuators import ActuatorCommandResult, ActuatorRegistry, ActuatorSnapshot, find_ess_actuator
+from .actuators import (
+    ActuatorCommandResult,
+    ActuatorRegistry,
+    ActuatorSnapshot,
+    EssActuatorSnapshot,
+    EvActuatorSnapshot,
+    find_ess_actuator,
+)
+from .control_health import ControlHealth, evaluate_control_health, publish_control_health
 from .diagnostics import DiagnosticsPublisher
 from .economics import EconomicsService, PlanCostEvaluation
 from .ess_control import EssHardwareController
@@ -65,6 +74,7 @@ class ShadowPlannerService:
         self._fast_dispatch_task: asyncio.Task[None] | None = None
         self._solve_task: asyncio.Task[None] | None = None
         self._fast_dispatch_sequence = 0
+        self._last_control_health_signature: tuple[object, ...] | None = None
 
     @property
     def plan(self) -> ShadowPlan | None:
@@ -124,7 +134,13 @@ class ShadowPlannerService:
         if local_tz is not None and self._economics_service is not None:
             await self._economics_service.observe_house_state(house_state, now_utc=now, local_tz=local_tz)
 
-        actuators = self._actuator_registry.snapshots(house_state)
+        health = self._evaluate_control_health(house_state, now)
+        actuators = _apply_control_health_to_actuators(
+            self._actuator_registry.snapshots(house_state),
+            health,
+            ess_control_enabled=self._ess_control_enabled,
+            ev_control_enabled=self._ev_control_enabled,
+        )
         if publish_diagnostics:
             await self._diagnostics.publish_actuator_status(actuators)
         if load_forecast is None:
@@ -168,7 +184,11 @@ class ShadowPlannerService:
     ) -> None:
         if self.solve_in_progress:
             return
-        if self._last_attempt_at_utc is not None and now - self._last_attempt_at_utc < _FAILED_RETRY_INTERVAL:
+        if (
+            reason != "control_health_change"
+            and self._last_attempt_at_utc is not None
+            and now - self._last_attempt_at_utc < _FAILED_RETRY_INTERVAL
+        ):
             return
         self._last_attempt_at_utc = now
         self._solve_task = asyncio.create_task(
@@ -330,13 +350,31 @@ class ShadowPlannerService:
     async def _run_fast_dispatch_once(self) -> None:
         house_state = self._latest_house_state
         plan = self._plan
-        if house_state is None or plan is None:
+        if house_state is None:
+            return
+        now = datetime.now(UTC)
+        if plan is None:
             if self._ess_controller is not None and self._ess_controller.enabled:
                 await self._ess_controller.safe_zero("no_active_plan")
             if self._ev_controller is not None and self._ev_controller.enabled:
                 await self._ev_controller.safe_stop("no_active_plan")
+            health = self._evaluate_control_health(house_state, now)
+            self._record_control_health(health)
+            await self._publish_control_health(health)
             return
-        now = datetime.now(UTC)
+
+        health = self._evaluate_control_health(house_state, now)
+        health_changed = self._record_control_health(health)
+        if self._ess_control_enabled and not health.ess_available:
+            if self._ess_controller is not None:
+                await self._ess_controller.safe_zero("control_health_fallback")
+            if self._ev_controller is not None and self._ev_controller.enabled:
+                await self._ev_controller.safe_stop("control_health_fallback")
+            await self._publish_control_health(health)
+            if health_changed:
+                await self._request_health_replan(house_state, now)
+            return
+
         result = evaluate_fast_dispatch(
             plan,
             house_state,
@@ -357,7 +395,10 @@ class ShadowPlannerService:
         if self._ess_controller is not None:
             await self._ess_controller.apply_dispatch(result)
         if self._ev_controller is not None:
-            await self._ev_controller.apply_dispatch(result)
+            if health.ev_available:
+                await self._ev_controller.apply_dispatch(result)
+            else:
+                await self._ev_controller.safe_stop("control_health_ev_unavailable")
         if self._ess_controller is not None:
             await self._ess_controller.publish_command_status(
                 result.command_results,
@@ -365,6 +406,14 @@ class ShadowPlannerService:
             )
         else:
             await self._diagnostics.publish_actuator_command_status(result.command_results)
+
+        post_health = self._evaluate_control_health(house_state, datetime.now(UTC))
+        post_health_changed = self._record_control_health(post_health)
+        await self._publish_control_health(post_health)
+        if post_health_changed:
+            await self._request_health_replan(house_state, now)
+            if post_health.replan_required:
+                return
         if not result.replan_required:
             return
 
@@ -384,12 +433,105 @@ class ShadowPlannerService:
             tasks,
         )
 
+    def _evaluate_control_health(self, house_state: HouseState, now: datetime) -> ControlHealth:
+        ess_fault = None
+        if self._ess_controller is not None and self._ess_controller.fault_active:
+            ess_fault = self._ess_controller.last_error or "write_fault"
+        ev_fault = None
+        if self._ev_controller is not None and self._ev_controller.fault_active:
+            ev_fault = self._ev_controller.last_error or "write_fault"
+        return evaluate_control_health(
+            house_state,
+            now_utc=now,
+            ess_control_enabled=self._ess_control_enabled,
+            ev_control_enabled=self._ev_control_enabled,
+            ess_fault=ess_fault,
+            ev_fault=ev_fault,
+        )
+
+    async def _publish_control_health(self, health: ControlHealth) -> None:
+        await publish_control_health(
+            self._ha_client,
+            health,
+            ess_control_enabled=self._ess_control_enabled,
+            ev_control_enabled=self._ev_control_enabled,
+            ess_write_failures=(
+                self._ess_controller.consecutive_failures if self._ess_controller is not None else 0
+            ),
+            ev_write_failures=(
+                self._ev_controller.consecutive_failures if self._ev_controller is not None else 0
+            ),
+            ess_last_error=self._ess_controller.last_error if self._ess_controller is not None else None,
+            ev_last_error=self._ev_controller.last_error if self._ev_controller is not None else None,
+        )
+
+    def _record_control_health(self, health: ControlHealth) -> bool:
+        signature: tuple[object, ...] = (
+            health.state,
+            health.ess_available,
+            health.ev_available,
+            health.stale_inputs,
+            health.unavailable_inputs,
+            health.reasons,
+        )
+        changed = signature != self._last_control_health_signature
+        self._last_control_health_signature = signature
+        return changed
+
+    async def _request_health_replan(
+        self,
+        house_state: HouseState,
+        now: datetime,
+    ) -> None:
+        context = await self._planning_context(house_state, now, publish_diagnostics=False)
+        if context is None:
+            return
+        load_forecast, pv_forecast, economics, local_tz, actuators, tasks = context
+        self._request_replan(
+            "control_health_change",
+            house_state,
+            now,
+            load_forecast,
+            pv_forecast,
+            economics,
+            local_tz,
+            actuators,
+            tasks,
+        )
+
     def _can_retain_previous_plan(self, trigger: str, now_utc: datetime) -> bool:
         if self._plan is None or self._last_plan_at_utc is None:
             return False
         if now_utc - self._last_plan_at_utc > _RETAIN_PLAN_MAX_AGE:
             return False
         return trigger in {"periodic", "forecast_update"}
+
+
+def _apply_control_health_to_actuators(
+    actuators: tuple[ActuatorSnapshot, ...],
+    health: ControlHealth,
+    *,
+    ess_control_enabled: bool,
+    ev_control_enabled: bool,
+) -> tuple[ActuatorSnapshot, ...]:
+    result: list[ActuatorSnapshot] = []
+    for item in actuators:
+        if (
+            isinstance(item, EssActuatorSnapshot)
+            and ess_control_enabled
+            and not health.ess_available
+            and item.planning_available
+        ):
+            item = replace(item, planning_available=False, status="control_health_unavailable")
+        elif (
+            isinstance(item, EvActuatorSnapshot)
+            and ev_control_enabled
+            and not health.ev_available
+            and item.planning_available
+        ):
+            item = replace(item, planning_available=False, status="control_health_unavailable")
+        result.append(item)
+    return tuple(result)
 
 
 def _forecast_signature(load_generated_at_utc: datetime, pv_generated_at_utc: datetime) -> tuple[str, str]:

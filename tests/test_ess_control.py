@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import energymanager.ess_control as ess_control
 from energymanager.actuators import ActuatorRegistry
 from energymanager.config import ConfigurationError, EssSettings, EvSettings, Settings
 from energymanager.ess_control import ESS_CONTROL_STATUS_ENTITY, EssHardwareController
@@ -145,3 +146,35 @@ def test_settings_reject_enabled_control_without_setpoint(tmp_path: Path) -> Non
 
     with pytest.raises(ConfigurationError, match="setpoint_entity is required"):
         Settings.load(path)
+
+
+class StubbornSetpointClient(FakeClient):
+    async def call_service(self, domain: str, service: str, data: dict[str, object]) -> None:
+        self.calls.append((domain, service, data))
+        assert domain == "number"
+        assert service == "set_value"
+
+
+def test_ess_controller_limits_unacknowledged_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = StubbornSetpointClient()
+    settings = _settings()
+    result = evaluate_fast_dispatch(
+        _plan(),
+        _state(grid_w=500.0, ess_w=500.0),
+        ActuatorRegistry(settings),
+        now_utc=_NOW,
+        live_control=True,
+    )
+    controller = EssHardwareController(client, settings.ess)
+    monkeypatch.setattr(ess_control, "_ACK_GRACE_SECONDS", 0.0)
+
+    async def scenario() -> None:
+        for _ in range(4):
+            await controller.apply_dispatch(result)
+
+    asyncio.run(scenario())
+
+    assert controller.fault_active is True
+    assert client.calls[-1][2]["value"] == 0.0
+    status = client.states[ESS_CONTROL_STATUS_ENTITY]
+    assert status["state"] == "safe_fallback"

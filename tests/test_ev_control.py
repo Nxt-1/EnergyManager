@@ -121,3 +121,32 @@ def test_ev_controller_disabled_never_writes_hardware() -> None:
 
     assert client.calls == []
     assert client.published[EV_CONTROL_STATUS_ENTITY]["state"] == "disabled"
+
+
+class StubbornCurrentClient(FakeClient):
+    async def call_service(self, domain: str, service: str, data: dict[str, object]) -> None:
+        self.calls.append((domain, service, data))
+        entity_id = str(data["entity_id"])
+        if domain == "number":
+            assert service == "set_value"
+            return
+        assert domain == "select"
+        assert service == "select_option"
+        self.entity_states[entity_id] = str(data["option"])
+
+
+def test_ev_controller_limits_unacknowledged_retries() -> None:
+    client = StubbornCurrentClient(current="6", phase="1", force="1")
+    controller = EvHardwareController(client, _settings(), phase_switch_delay_seconds=0)
+    dispatch = _dispatch(power_w=2760, phases=1, current_a=12)
+
+    async def scenario() -> None:
+        for _ in range(6):
+            await controller.apply_dispatch(dispatch)
+
+    asyncio.run(scenario())
+
+    assert controller.fault_active is True
+    assert client.entity_states[_FORCE_ENTITY] == "1"
+    status = client.published[EV_CONTROL_STATUS_ENTITY]
+    assert status["attributes"]["fault_active"] is True
