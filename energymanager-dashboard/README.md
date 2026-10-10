@@ -1,13 +1,12 @@
-# EnergyManager dashboard v1.3
+EnergyManager Dashboard v1.6 (requires EnergyManager >=0.31.7)
 
-Requires EnergyManager v0.31.6, ApexCharts Card and this bundled timeline card.
+Overview: planned total load (blue filled area), background (gray overlay), leaving EV charging visible as the upper band. Actual planned EV is load minus background. Supply is dashed: AC solar, grid, ESS with a five-color approximation. The ESS color estimates the MPPT share as min(1, DC PV / positive ESS AC output). It is not a measured attribution: conversion losses, simultaneous charging and dynamic battery power can change the real split. Negative ESS charge power has no source-colored trace in this chart; inspect Planning for signed ESS power. Capacity peak is an observed grid-import 15-minute reference, not a house-load limit.
 
-1. Copy `energymanager-timeline-card.js` to `/config/www/energymanager-timeline-card.js` in Home Assistant.
-2. Settings → Dashboards → Resources → Add resource: `/local/energymanager-timeline-card.js`, type **JavaScript module**.
-3. Reload the browser (hard refresh if necessary).
-4. Replace the EnergyManager dashboard raw YAML with `energymanager-dashboard.yaml`.
+ApexCharts mixed-series limitations: the areas deliberately use cumulative layers rather than chart.stacked=true, to keep independent supply lines from being stacked with consumption. This requires total load to be drawn before background.
 
-The clickable timeline currently shows EV charging runs only, because no Daikin task is controlled by the MILP yet.
-The power chart includes expected AC+DC solar and the current observed monthly 15-minute grid import peak.
-The energy chart shows *cumulative planned* grid import, export and expected PV energy over the 24-hour window.
-These are not actual metered daily totals; adding actual daily energy requires separate verified energy sources.
+1. Install EnergyManager v0.31.7 first.
+2. Replace dashboard YAML in HA raw configuration editor.
+3. Keep existing energymanager-timeline-card.js and its registered resource.
+4. Hard refresh browser.
+
+Validation: verify load top equals background + EV, ESS segment color changes with the forecast MPPT share, peak is in watts, and there are no missing-data/configuration errors.

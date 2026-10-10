@@ -52,6 +52,9 @@ async def test_full_plan_is_split_into_seven_daily_ha_entities():
         assert count == 96
         assert attrs["interval_count"] == 96
         assert attrs["intervals"][0]["grid_w"] == 100
+        assert attrs["intervals"][0]["background_w"] == 400
+        assert attrs["intervals"][0]["ev_w"] == 100
+        assert attrs["intervals"][0]["load_w"] == 500
         all_starts.extend(slot["start"] for slot in attrs["intervals"])
     assert len(all_starts) == len(set(all_starts)) == 672
 

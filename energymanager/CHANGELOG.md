@@ -1,9 +1,14 @@
+# Changelog
+
+## 0.31.7
+- Export planned background and scheduled EV power separately for stacked-area dashboard charts.
+- Preserve total load and all other plan fields; no optimization, control, or schema changes.
+
 ## 0.31.6
 
 - Publish the contiguous EV charging execution segments for the HA timeline, with energy and peak power.
 - Preserve separate task constraints and existing MILP/control behavior.
 
-# Changelog
 
 ## 0.31.5
 - Renames internal planner types and methods to remove obsolete shadow terminology.

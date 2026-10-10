@@ -605,6 +605,8 @@ class DiagnosticsPublisher:
                     {
                         "start": item.period_start_local.isoformat(),
                         "load_w": round(item.background_load_w + item.scheduled_load_w),
+                        "background_w": round(item.background_load_w),
+                        "ev_w": round(item.scheduled_load_w),
                         "pv_ac_w": round(item.pv_ac_power_w),
                         "pv_dc_w": round(item.pv_dc_power_w),
                         "ess_w": _round_optional(item.ess_ac_power_w, 0),
