@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 from energymanager.config import NotificationSettings
 from energymanager.control_health import ControlHealth
-from energymanager.control_notifications import ControlNotificationManager, NOTIFICATION_STATUS_ENTITY
+from energymanager.control_notifications import NOTIFICATION_STATUS_ENTITY, ControlNotificationManager
 
 _NOW = datetime(2026, 10, 10, 15, 30, tzinfo=UTC)
 

@@ -1,4 +1,8 @@
 # Changelog
+## 0.30.2
+- Fixes the v0.30.1 CI Ruff failure by ordering the notification-test imports correctly.
+- No notification, ESS/EV control, watchdog, MILP, or configuration behavior changes.
+
 ## 0.30.1
 - Adds optional Home Assistant notifications for live-control health transitions, including degraded operation, ESS safe fallback and recovery.
 - Supports direct mobile-app notification services such as `notify.mobile_app_phone` through app configuration.
