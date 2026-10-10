@@ -1,4 +1,9 @@
 # Changelog
+## 0.28.1
+- Changes whole-number Supervisor options to integer schema types to avoid silent numeric drift in the app UI.
+- Adds `sensor.energy_manager_configuration_status` with the effective loaded ESS/EV whole-number options.
+- Keeps runtime numeric handling and ESS/EV control behavior unchanged.
+
 ## 0.28.0
 - Adds guarded real ESS hardware control through a configurable Home Assistant number setpoint entity.
 - Converts the canonical ESS sign (positive discharge) to the Victron setpoint sign (negative discharge), clamps to the

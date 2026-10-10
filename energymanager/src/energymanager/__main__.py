@@ -9,7 +9,13 @@ import signal
 
 from . import __version__
 from .app import EnergyManagerApp
-from .config import ConfigurationError, Settings
+from .config import (
+    CONFIGURATION_STATUS_ENTITY,
+    CONFIGURATION_STATUS_VERSION,
+    ConfigurationError,
+    Settings,
+    effective_integer_option_diagnostics,
+)
 from .database import EnergyManagerStore, InfluxDatabaseClient, InfluxDatabaseError
 from .diagnostics import DiagnosticsPublisher
 from .economics import EconomicsService
@@ -54,6 +60,16 @@ async def async_main() -> int:
             pass
 
     async with HomeAssistantClient(supervisor_token) as client:
+        await client.set_state(
+            CONFIGURATION_STATUS_ENTITY,
+            "loaded",
+            {
+                "friendly_name": "Energy Manager Configuration Status",
+                "configuration_status_version": CONFIGURATION_STATUS_VERSION,
+                "source": "/data/options.json",
+                "effective_integer_options": effective_integer_option_diagnostics(settings),
+            },
+        )
         ess_controller = EssHardwareController(client, settings.ess)
         await ess_controller.initialize()
         try:

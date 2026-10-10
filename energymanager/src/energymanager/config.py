@@ -14,6 +14,8 @@ _ENTITY_ID_RE = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
 _VALID_LOG_LEVELS = {"debug", "info", "warning", "error"}
 _VALID_ESS_POWER_SIGNS = {"discharge", "charge"}
 _DATABASE_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+CONFIGURATION_STATUS_ENTITY = "sensor.energy_manager_configuration_status"
+CONFIGURATION_STATUS_VERSION = "2026-10-10-config-v1"
 
 
 class ConfigurationError(ValueError):
@@ -464,6 +466,31 @@ class Settings:
             legacy_options_detected=legacy_options_detected,
         )
 
+
+def effective_integer_option_diagnostics(settings: Settings) -> dict[str, dict[str, int | float | None]]:
+    """Return whole-number options exactly as loaded into the effective runtime settings."""
+    return {
+        "ess": {
+            "min_soc_percent": _integer_or_none(settings.ess.min_soc_percent),
+            "max_soc_percent": _integer_or_none(settings.ess.max_soc_percent),
+            "max_charge_power_w": _integer_or_none(settings.ess.max_charge_power_w),
+            "max_discharge_power_w": _integer_or_none(settings.ess.max_discharge_power_w),
+        },
+        "ev": {
+            "min_charge_current_a": _integer_or_none(settings.ev.min_charge_current_a),
+            "max_charge_current_a": _integer_or_none(settings.ev.max_charge_current_a),
+            "nominal_voltage_v": _integer_or_none(settings.ev.nominal_voltage_v),
+            "target_soc_percent": _integer_or_none(settings.ev.target_soc_percent),
+            "minimum_soc_percent": _integer_or_none(settings.ev.minimum_soc_percent),
+        },
+    }
+
+
+def _integer_or_none(value: float | None) -> int | float | None:
+    if value is None:
+        return None
+    number = float(value)
+    return int(number) if number.is_integer() else number
 
 
 _WEEKDAY_NAMES = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
