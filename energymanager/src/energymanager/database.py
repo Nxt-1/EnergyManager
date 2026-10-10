@@ -358,7 +358,7 @@ class EnergyManagerStore:
         )
         return bool(rows)
 
-    async def record_milp_plan(self, plan: "ShadowPlan") -> None:
+    async def record_milp_plan(self, plan: ShadowPlan) -> None:
         """Archive every accepted 15-minute MILP interval with an immutable issue timestamp.
 
         A stable interval-index tag and unique nanosecond timestamps avoid creating

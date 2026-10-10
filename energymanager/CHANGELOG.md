@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.31.1
+- Fixes Ruff UP037 in the MILP history writer annotation. No runtime behavior changes.
+
 ## 0.31.0
 - Exports all 672 MILP intervals across seven Home Assistant daily plan entities for the full schedule view.
 - Archives each adopted plan interval in InfluxDB 3 for historical plan-versus-actual comparisons.
