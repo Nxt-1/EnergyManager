@@ -43,6 +43,7 @@ def test_notification_manager_sends_failure_once_and_recovery_once() -> None:
 
     async def scenario() -> None:
         manager.observe(_health("healthy"), now_utc=_NOW)
+        manager.complete_startup(now_utc=_NOW)
         manager.observe(
             _health("degraded", ev_available=False, reasons=("ev:write_fault",)),
             now_utc=_NOW + timedelta(seconds=1),
@@ -74,6 +75,7 @@ def test_notification_manager_suppresses_repeated_failure_inside_cooldown() -> N
 
     async def scenario() -> None:
         manager.observe(_health("healthy"), now_utc=_NOW)
+        manager.complete_startup(now_utc=_NOW)
         fault = _health("degraded", ev_available=False, reasons=("ev:write_fault",))
         manager.observe(fault, now_utc=_NOW + timedelta(seconds=1))
         manager.observe(_health("healthy"), now_utc=_NOW + timedelta(seconds=2))
@@ -96,6 +98,7 @@ def test_normal_ev_disconnect_does_not_notify_phone() -> None:
 
     async def scenario() -> None:
         manager.observe(_health("healthy"), now_utc=_NOW)
+        manager.complete_startup(now_utc=_NOW)
         manager.observe(
             _health("degraded", ev_available=False, reasons=("ev:disconnected",)),
             now_utc=_NOW + timedelta(seconds=1),
@@ -106,3 +109,40 @@ def test_normal_ev_disconnect_does_not_notify_phone() -> None:
     asyncio.run(scenario())
 
     assert client.calls == []
+
+
+def test_startup_transient_fault_is_not_sent_or_recovered() -> None:
+    client = FakeClient()
+    manager = ControlNotificationManager(
+        client, NotificationSettings(enabled=True, service="notify.mobile_app_phone", cooldown_seconds=300)
+    )
+
+    async def scenario() -> None:
+        manager.observe(_health("safe_fallback", reasons=("stale_inputs",)), now_utc=_NOW)
+        manager.observe(_health("healthy"), now_utc=_NOW + timedelta(seconds=1))
+        manager.complete_startup(now_utc=_NOW + timedelta(seconds=2))
+        await manager.shutdown()
+
+    asyncio.run(scenario())
+    assert client.calls == []
+    attrs = client.states[NOTIFICATION_STATUS_ENTITY]["attributes"]
+    assert attrs["startup_complete"] is True
+    assert attrs["startup_suppressed_count"] == 1
+
+
+def test_persistent_startup_fault_is_reported_on_completion() -> None:
+    client = FakeClient()
+    manager = ControlNotificationManager(
+        client, NotificationSettings(enabled=True, service="notify.mobile_app_phone", cooldown_seconds=300)
+    )
+
+    async def scenario() -> None:
+        manager.observe(_health("safe_fallback", reasons=("stale_inputs",)), now_utc=_NOW)
+        manager.complete_startup(now_utc=_NOW + timedelta(seconds=1))
+        manager.observe(_health("healthy"), now_utc=_NOW + timedelta(seconds=2))
+        await manager.shutdown()
+
+    asyncio.run(scenario())
+    assert len(client.calls) == 2
+    assert "safe fallback" in str(client.calls[0][2]["title"])
+    assert "recovered" in str(client.calls[1][2]["title"])

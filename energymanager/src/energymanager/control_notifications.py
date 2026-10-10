@@ -13,7 +13,7 @@ from .control_health import ControlHealth
 
 _LOGGER = logging.getLogger(__name__)
 NOTIFICATION_STATUS_ENTITY = "sensor.energy_manager_notification_status"
-NOTIFICATION_STATUS_VERSION = "2026-10-10-control-notifications-v1"
+NOTIFICATION_STATUS_VERSION = "2026-10-10-control-notifications-v2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +33,8 @@ class ControlNotificationManager:
         self._client = client
         self._settings = settings
         self._last_health: ControlHealth | None = None
+        self._startup_complete = False
+        self._startup_suppressed_count = 0
         self._active_alert = False
         self._last_queued_at: dict[tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...]], datetime] = {}
         self._queue: asyncio.Queue[_NotificationEvent | None] = asyncio.Queue()
@@ -53,6 +55,11 @@ class ControlNotificationManager:
         previous = self._last_health
         self._last_health = health
         alertworthy = _is_alertworthy_failure(health)
+        if not self._startup_complete:
+            if previous is None or previous != health:
+                self._startup_suppressed_count += int(alertworthy)
+                self._enqueue(_NotificationEvent("startup", health.state, "", "", False, now))
+            return
 
         if previous is None:
             if alertworthy:
@@ -83,6 +90,18 @@ class ControlNotificationManager:
             return
 
         self._enqueue(_NotificationEvent("health_changed", health.state, "", "", False, now))
+
+    def complete_startup(self, *, now_utc: datetime | None = None) -> None:
+        """Arm notifications after the initial planning attempt reaches a terminal outcome."""
+        if self._startup_complete:
+            return
+        self._startup_complete = True
+        current = self._last_health
+        self._last_health = None
+        if current is not None:
+            self.observe(current, now_utc=now_utc)
+        else:
+            self._enqueue(_NotificationEvent("startup_complete", "unknown", "", "", False, datetime.now(UTC)))
 
     async def shutdown(self) -> None:
         """Drain queued notification work during a clean shutdown."""
@@ -152,6 +171,8 @@ class ControlNotificationManager:
             "friendly_name": "Energy Manager Notification Status",
             "notification_status_version": NOTIFICATION_STATUS_VERSION,
             "enabled": self.enabled,
+            "startup_complete": self._startup_complete,
+            "startup_suppressed_count": self._startup_suppressed_count,
             "service": self._settings.service,
             "cooldown_seconds": self._settings.cooldown_seconds,
             "last_health_state": health_state,

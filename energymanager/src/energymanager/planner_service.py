@@ -286,6 +286,9 @@ class ShadowPlannerService:
             raise
         except Exception:  # noqa: BLE001 - planning failure must not terminate the live controller.
             _LOGGER.exception("Unexpected asynchronous MILP planner failure")
+        finally:
+            if reason == "startup" and self._notification_manager is not None:
+                self._notification_manager.complete_startup()
 
     def _replan_reason(
         self,

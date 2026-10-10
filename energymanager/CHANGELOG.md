@@ -1,4 +1,10 @@
 # Changelog
+## 0.30.3
+- Suppresses transient startup control notifications until the initial MILP attempt finishes.
+- Evaluates current health at startup completion and reports persistent failures and later recovery.
+- Exposes startup completion and startup-specific suppression count in notification diagnostics.
+- Leaves live hardware control, safety fallback, and notification cooldown unchanged.
+
 ## 0.30.2
 - Fixes the v0.30.1 CI Ruff failure by ordering the notification-test imports correctly.
 - No notification, ESS/EV control, watchdog, MILP, or configuration behavior changes.
