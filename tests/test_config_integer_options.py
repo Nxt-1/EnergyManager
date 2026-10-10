@@ -88,3 +88,25 @@ def test_ev_hardware_control_loads_goe_entities(tmp_path: Path) -> None:
     assert settings.ev.current_entity == "number.goe_322561_amp"
     assert settings.ev.phase_mode_entity == "select.goe_322561_psm"
     assert settings.ev.force_state_entity == "select.goe_322561_frc"
+
+
+def test_notifications_require_notify_service_when_enabled(tmp_path: Path) -> None:
+    path = tmp_path / "options.json"
+    path.write_text('{"notifications":{"enabled":true}}', encoding="utf-8")
+
+    with pytest.raises(ConfigurationError, match="notifications.service is required"):
+        Settings.load(path)
+
+
+def test_notifications_load_mobile_app_service(tmp_path: Path) -> None:
+    path = tmp_path / "options.json"
+    path.write_text(
+        '{"notifications":{"enabled":true,"service":"notify.mobile_app_phone","cooldown_seconds":120}}',
+        encoding="utf-8",
+    )
+
+    settings = Settings.load(path)
+
+    assert settings.notifications.enabled is True
+    assert settings.notifications.service == "notify.mobile_app_phone"
+    assert settings.notifications.cooldown_seconds == 120

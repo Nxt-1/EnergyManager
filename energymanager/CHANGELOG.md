@@ -1,4 +1,13 @@
 # Changelog
+## 0.30.1
+- Adds optional Home Assistant notifications for live-control health transitions, including degraded operation, ESS safe fallback and recovery.
+- Supports direct mobile-app notification services such as `notify.mobile_app_phone` through app configuration.
+- Sends notifications only for alert-worthy health failures and recovery; a normal EV disconnect is not treated as a phone alert.
+- Applies a configurable cooldown to repeated identical failure alerts.
+- Runs notification delivery outside the 1 Hz control path so a slow or failed notify service cannot block ESS/EV hardware control.
+- Adds `sensor.energy_manager_notification_status` with delivery counts, suppression count and the last notification error.
+- Keeps the v0.30 watchdog, fallback behavior, MILP, ESS control and EV control unchanged.
+
 ## 0.30.0
 - Adds a 45-second live-input freshness watchdog for the grid, ESS and EV state used by hardware control.
 - Drives the ESS to 0 W when critical ESS/grid inputs are stale or unavailable and stops the EV when its live state is unsafe.

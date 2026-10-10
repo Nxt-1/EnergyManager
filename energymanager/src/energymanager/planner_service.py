@@ -16,6 +16,7 @@ from .actuators import (
     find_ess_actuator,
 )
 from .control_health import ControlHealth, evaluate_control_health, publish_control_health
+from .control_notifications import ControlNotificationManager
 from .diagnostics import DiagnosticsPublisher
 from .economics import EconomicsService, PlanCostEvaluation
 from .ess_control import EssHardwareController
@@ -52,6 +53,7 @@ class ShadowPlannerService:
         economics_service: EconomicsService | None = None,
         ess_controller: EssHardwareController | None = None,
         ev_controller: EvHardwareController | None = None,
+        notification_manager: ControlNotificationManager | None = None,
         planner: ShadowPlanner | None = None,
     ) -> None:
         self._ha_client = ha_client
@@ -64,6 +66,7 @@ class ShadowPlannerService:
         self._economics_service = economics_service
         self._ess_controller = ess_controller
         self._ev_controller = ev_controller
+        self._notification_manager = notification_manager
         self._plan: ShadowPlan | None = None
         self._last_plan_at_utc: datetime | None = None
         self._last_attempt_at_utc: datetime | None = None
@@ -326,6 +329,8 @@ class ShadowPlannerService:
         )
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
+        if self._notification_manager is not None:
+            await self._notification_manager.shutdown()
 
     def _ensure_fast_dispatch_loop(self) -> None:
         if self._fast_dispatch_task is None or self._fast_dispatch_task.done():
@@ -464,6 +469,8 @@ class ShadowPlannerService:
             ess_last_error=self._ess_controller.last_error if self._ess_controller is not None else None,
             ev_last_error=self._ev_controller.last_error if self._ev_controller is not None else None,
         )
+        if self._notification_manager is not None:
+            self._notification_manager.observe(health)
 
     def _record_control_health(self, health: ControlHealth) -> bool:
         signature: tuple[object, ...] = (

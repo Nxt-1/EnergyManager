@@ -14,6 +14,7 @@ _ENTITY_ID_RE = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
 _VALID_LOG_LEVELS = {"debug", "info", "warning", "error"}
 _VALID_ESS_POWER_SIGNS = {"discharge", "charge"}
 _DATABASE_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+_NOTIFY_SERVICE_RE = re.compile(r"^notify\.[a-z0-9_]+$")
 CONFIGURATION_STATUS_ENTITY = "sensor.energy_manager_configuration_status"
 CONFIGURATION_STATUS_VERSION = "2026-10-10-config-v1"
 
@@ -144,6 +145,15 @@ class LegacyInfluxSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class NotificationSettings:
+    """Optional Home Assistant notify service for live-control health transitions."""
+
+    enabled: bool = False
+    service: str | None = None
+    cooldown_seconds: int = 300
+
+
+@dataclass(frozen=True, slots=True)
 class Settings:
     """Runtime settings exposed by the Home Assistant app configuration."""
 
@@ -153,6 +163,7 @@ class Settings:
     pv: PvSettings = PvSettings()
     ev: EvSettings = EvSettings()
     economics: EconomicsSettings = EconomicsSettings()
+    notifications: NotificationSettings = NotificationSettings()
     database: DatabaseSettings = DatabaseSettings()
     legacy_influx: LegacyInfluxSettings = LegacyInfluxSettings()
     legacy_options_detected: bool = False
@@ -244,6 +255,13 @@ class Settings:
                     ),
                 }
             ),
+            "notifications": _without_none(
+                {
+                    "enabled": self.notifications.enabled,
+                    "service": self.notifications.service,
+                    "cooldown_seconds": self.notifications.cooldown_seconds,
+                }
+            ),
             "database": _without_none(
                 {
                     "enabled": self.database.enabled,
@@ -286,6 +304,7 @@ class Settings:
         pv_raw = _mapping(raw.get("pv"), "pv")
         ev_raw = _mapping(raw.get("ev"), "ev")
         economics_raw = _mapping(raw.get("economics"), "economics")
+        notifications_raw = _mapping(raw.get("notifications"), "notifications")
         database_raw = _mapping(raw.get("database"), "database")
         legacy_influx_raw = _mapping(raw.get("legacy_influx"), "legacy_influx")
 
@@ -387,6 +406,23 @@ class Settings:
                 "economics requires import/export energy prices and capacity tariff when enabled"
             )
 
+        notifications_enabled = _bool_option(
+            notifications_raw.get("enabled", False), "notifications.enabled"
+        )
+        notification_service = _optional_string(notifications_raw.get("service"))
+        if notification_service is not None:
+            notification_service = notification_service.lower()
+            if not _NOTIFY_SERVICE_RE.fullmatch(notification_service):
+                raise ConfigurationError(
+                    "notifications.service must be a Home Assistant notify service such as "
+                    "notify.mobile_app_phone"
+                )
+        if notifications_enabled and notification_service is None:
+            raise ConfigurationError("notifications.service is required when notifications.enabled is true")
+        notification_cooldown = _nonnegative_int(
+            notifications_raw.get("cooldown_seconds", 300), "notifications.cooldown_seconds"
+        )
+
         database_enabled = _bool_option(database_raw.get("enabled", False), "database.enabled")
         database_url = _optional_string(database_raw.get("url"))
         database_name = str(database_raw.get("database", "energy_manager")).strip() or "energy_manager"
@@ -476,6 +512,11 @@ class Settings:
                 capacity_tariff_eur_per_kw_month=capacity_tariff,
                 capacity_tariff_floor_kw=capacity_floor,
                 valid_from_utc=economics_valid_from,
+            ),
+            notifications=NotificationSettings(
+                enabled=notifications_enabled,
+                service=notification_service,
+                cooldown_seconds=notification_cooldown,
             ),
             database=DatabaseSettings(
                 enabled=database_enabled,
@@ -666,6 +707,20 @@ def _nonnegative_float(value: object, option_name: str) -> float:
         number = float(value)
     except (TypeError, ValueError) as exc:
         raise ConfigurationError(f"{option_name} must be a number") from exc
+    if number < 0:
+        raise ConfigurationError(f"{option_name} must be zero or greater")
+    return number
+
+
+def _nonnegative_int(value: object, option_name: str) -> int:
+    if isinstance(value, bool):
+        raise ConfigurationError(f"{option_name} must be a whole number")
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ConfigurationError(f"{option_name} must be a whole number") from exc
+    if str(value).strip() not in {str(number), f"{number}.0"}:
+        raise ConfigurationError(f"{option_name} must be a whole number")
     if number < 0:
         raise ConfigurationError(f"{option_name} must be zero or greater")
     return number

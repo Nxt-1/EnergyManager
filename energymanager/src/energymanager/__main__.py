@@ -16,6 +16,7 @@ from .config import (
     Settings,
     effective_integer_option_diagnostics,
 )
+from .control_notifications import ControlNotificationManager
 from .database import EnergyManagerStore, InfluxDatabaseClient, InfluxDatabaseError
 from .diagnostics import DiagnosticsPublisher
 from .economics import EconomicsService
@@ -48,6 +49,11 @@ async def async_main() -> int:
         __version__,
         "enabled" if settings.ess.control_enabled else "disabled",
         "enabled" if settings.ev.control_enabled else "disabled",
+    )
+    logger.info(
+        "Control notifications=%s%s",
+        "enabled" if settings.notifications.enabled else "disabled",
+        f" via {settings.notifications.service}" if settings.notifications.enabled else "",
     )
     supervisor_token = os.environ.get("SUPERVISOR_TOKEN", "")
     if not supervisor_token:
@@ -229,6 +235,7 @@ async def _run_app(
     economics_service: EconomicsService,
 ) -> None:
     load_service = BackgroundLoadService(client, history=history, store=store)
+    notification_manager = ControlNotificationManager(client, settings.notifications)
     if settings.pv.forecast_enabled:
         async with OpenMeteoClient() as meteo_client:
             pv_service = PvForecastService(client, meteo_client, store=store)
@@ -241,6 +248,7 @@ async def _run_app(
                 economics_service=economics_service,
                 ess_controller=ess_controller,
                 ev_controller=ev_controller,
+                notification_manager=notification_manager,
             )
             app = EnergyManagerApp(
                 settings,
@@ -263,6 +271,7 @@ async def _run_app(
         economics_service=economics_service,
         ess_controller=ess_controller,
         ev_controller=ev_controller,
+        notification_manager=notification_manager,
     )
     app = EnergyManagerApp(
         settings,
