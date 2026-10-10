@@ -1,4 +1,17 @@
 # Changelog
+## 0.28.0
+- Adds guarded real ESS hardware control through a configurable Home Assistant number setpoint entity.
+- Converts the canonical ESS sign (positive discharge) to the Victron setpoint sign (negative discharge), clamps to the
+  configured charge/discharge limits and rounds to the existing 10 W setpoint step.
+- Uses the live P1 grid deviation for real ESS feedback, with a 100 W deadband, instead of the shadow-only EV-load
+  substitution used before hardware control. This prevents an EV still controlled elsewhere from creating fictitious ESS
+  corrections.
+- Commands a safe zero setpoint before planning starts, when no safe live target exists and on clean shutdown.
+- Adds `sensor.energy_manager_ess_control_status` with desired/observed setpoint, write/acknowledgement state and write count.
+- Publishes actuator-command diagnostics with ESS hardware-write ownership while EV control remains shadow-only.
+- Adds `ess.setpoint_entity` and `ess.control_enabled`; hardware control remains disabled unless explicitly enabled.
+- Keeps the MILP, economics and EV scheduling policy unchanged.
+
 ## 0.27.2
 - Fixes the remaining v0.27 CI failure by aligning the planner cadence test with the asynchronous fast-dispatch architecture.
 - Actuator-command publication remains covered by the dedicated fast-dispatch tests.

@@ -8,12 +8,12 @@ import os
 import signal
 
 from . import __version__
-from .actuators import ActuatorRegistry
 from .app import EnergyManagerApp
 from .config import ConfigurationError, Settings
 from .database import EnergyManagerStore, InfluxDatabaseClient, InfluxDatabaseError
 from .diagnostics import DiagnosticsPublisher
 from .economics import EconomicsService
+from .ess_control import ControlAwareActuatorRegistry, EssHardwareController
 from .ha_client import HomeAssistantClient
 from .legacy_influx import LegacyInfluxBackfill, LegacyInfluxClient, LegacyInfluxError
 from .load_service import BackgroundLoadHistory, BackgroundLoadService
@@ -36,8 +36,11 @@ async def async_main() -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     logger = logging.getLogger("energymanager")
-    logger.info("Starting Energy Manager %s in hard-coded shadow mode", __version__)
-
+    logger.info(
+        "Starting Energy Manager %s; ESS hardware control=%s, EV control=shadow",
+        __version__,
+        "enabled" if settings.ess.control_enabled else "disabled",
+    )
     supervisor_token = os.environ.get("SUPERVISOR_TOKEN", "")
     if not supervisor_token:
         logger.error("SUPERVISOR_TOKEN is missing; Home Assistant API access is unavailable")
@@ -49,33 +52,40 @@ async def async_main() -> int:
             loop.add_signal_handler(sig, stop_event.set)
         except NotImplementedError:
             pass
+
     async with HomeAssistantClient(supervisor_token) as client:
-        if settings.database.enabled:
-            assert settings.database.url is not None
-            assert settings.database.token is not None
-            async with InfluxDatabaseClient(
-                settings.database.url,
-                settings.database.database,
-                settings.database.token,
-            ) as database_client:
-                await _run_with_database(settings, client, database_client, stop_event)
-        else:
-            diagnostics = DiagnosticsPublisher(client)
-            await diagnostics.publish_database_status("disabled", database=settings.database.database)
-            economics_service = EconomicsService(
-                settings.economics,
-                client,
-                grid_import_entity_id=settings.grid.import_power_entity,
-            )
-            await economics_service.initialize()
-            await _run_app(
-                settings,
-                client,
-                stop_event,
-                store=None,
-                history=None,
-                economics_service=economics_service,
-            )
+        ess_controller = EssHardwareController(client, settings.ess)
+        await ess_controller.initialize()
+        try:
+            if settings.database.enabled:
+                assert settings.database.url is not None
+                assert settings.database.token is not None
+                async with InfluxDatabaseClient(
+                    settings.database.url,
+                    settings.database.database,
+                    settings.database.token,
+                ) as database_client:
+                    await _run_with_database(settings, client, database_client, stop_event, ess_controller)
+            else:
+                diagnostics = DiagnosticsPublisher(client)
+                await diagnostics.publish_database_status("disabled", database=settings.database.database)
+                economics_service = EconomicsService(
+                    settings.economics,
+                    client,
+                    grid_import_entity_id=settings.grid.import_power_entity,
+                )
+                await economics_service.initialize()
+                await _run_app(
+                    settings,
+                    client,
+                    stop_event,
+                    ess_controller=ess_controller,
+                    store=None,
+                    history=None,
+                    economics_service=economics_service,
+                )
+        finally:
+            await ess_controller.shutdown()
     logger.info("Energy Manager stopped")
     return 0
 
@@ -85,6 +95,7 @@ async def _run_with_database(
     client: HomeAssistantClient,
     database_client: InfluxDatabaseClient,
     stop_event: asyncio.Event,
+    ess_controller: EssHardwareController,
 ) -> None:
     logger = logging.getLogger("energymanager")
     diagnostics = DiagnosticsPublisher(client)
@@ -115,6 +126,7 @@ async def _run_with_database(
             settings,
             client,
             stop_event,
+            ess_controller=ess_controller,
             store=None,
             history=None,
             economics_service=economics_service,
@@ -166,6 +178,7 @@ async def _run_with_database(
         settings,
         client,
         stop_event,
+        ess_controller=ess_controller,
         store=store,
         history=history,
         economics_service=economics_service,
@@ -177,6 +190,7 @@ async def _run_app(
     client: HomeAssistantClient,
     stop_event: asyncio.Event,
     *,
+    ess_controller: EssHardwareController,
     store: EnergyManagerStore | None,
     history: BackgroundLoadHistory | None,
     economics_service: EconomicsService,
@@ -189,9 +203,10 @@ async def _run_app(
                 client,
                 load_service,
                 pv_service,
-                actuator_registry=ActuatorRegistry(settings),
+                actuator_registry=ControlAwareActuatorRegistry(settings),
                 task_registry=TaskRegistry(settings.ev),
                 economics_service=economics_service,
+                ess_controller=ess_controller,
             )
             app = EnergyManagerApp(
                 settings,
@@ -200,15 +215,19 @@ async def _run_app(
                 background_load_service=load_service,
                 shadow_planner_service=planner_service,
             )
-            await app.run(stop_event)
+            try:
+                await app.run(stop_event)
+            finally:
+                await planner_service.shutdown()
         return
     planner_service = ShadowPlannerService(
         client,
         load_service,
         None,
-        actuator_registry=ActuatorRegistry(settings),
+        actuator_registry=ControlAwareActuatorRegistry(settings),
         task_registry=TaskRegistry(settings.ev),
         economics_service=economics_service,
+        ess_controller=ess_controller,
     )
     app = EnergyManagerApp(
         settings,
@@ -216,7 +235,10 @@ async def _run_app(
         background_load_service=load_service,
         shadow_planner_service=planner_service,
     )
-    await app.run(stop_event)
+    try:
+        await app.run(stop_event)
+    finally:
+        await planner_service.shutdown()
 
 
 def main() -> None:

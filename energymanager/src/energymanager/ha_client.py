@@ -19,7 +19,7 @@ class HomeAssistantError(RuntimeError):
 
 
 class HomeAssistantClient:
-    """Read Home Assistant state and publish Energy Manager diagnostics."""
+    """Read Home Assistant state, call services and publish Energy Manager diagnostics."""
 
     def __init__(self, token: str) -> None:
         if not token:
@@ -50,7 +50,6 @@ class HomeAssistantClient:
         session = self._require_session()
         encoded_entity = quote(entity_id, safe="._-")
         url = f"{REST_BASE_URL}/states/{encoded_entity}"
-
         async with session.get(url) as response:
             if response.status == 404:
                 raise HomeAssistantError(f"Home Assistant entity not found: {entity_id}")
@@ -65,9 +64,19 @@ class HomeAssistantClient:
         encoded_entity = quote(entity_id, safe="._-")
         url = f"{REST_BASE_URL}/states/{encoded_entity}"
         payload = {"state": str(state), "attributes": attributes}
-
         async with session.post(url, json=payload) as response:
             if response.status not in {200, 201}:
+                body = await response.text()
+                raise HomeAssistantError(f"POST {url} returned HTTP {response.status}: {body}")
+
+    async def call_service(self, domain: str, service: str, data: dict[str, Any]) -> None:
+        """Call one Home Assistant service through the REST API."""
+        session = self._require_session()
+        encoded_domain = quote(domain, safe="_-")
+        encoded_service = quote(service, safe="_-")
+        url = f"{REST_BASE_URL}/services/{encoded_domain}/{encoded_service}"
+        async with session.post(url, json=data) as response:
+            if response.status != 200:
                 body = await response.text()
                 raise HomeAssistantError(f"POST {url} returned HTTP {response.status}: {body}")
 
@@ -99,11 +108,9 @@ class HomeAssistantClient:
         entities = tuple(dict.fromkeys(entity_ids))
         if not entities:
             raise ValueError("At least one entity ID is required")
-
         async with session.ws_connect(WEBSOCKET_URL, heartbeat=30) as websocket:
             await self._authenticate_websocket(websocket)
             subscriptions: dict[int, str] = {}
-
             for subscription_id, entity_id in enumerate(entities, start=1):
                 await websocket.send_json(
                     {
@@ -115,7 +122,6 @@ class HomeAssistantClient:
                         },
                     }
                 )
-
                 subscription_result = await self._receive_json(websocket)
                 if (
                     subscription_result.get("type") != "result"
@@ -124,14 +130,12 @@ class HomeAssistantClient:
                 ):
                     raise HomeAssistantError(f"Unable to subscribe to {entity_id}: {subscription_result}")
                 subscriptions[subscription_id] = entity_id
-
             async for message in websocket:
                 if message.type == aiohttp.WSMsgType.TEXT:
                     try:
                         payload = json.loads(message.data)
                     except json.JSONDecodeError as exc:
                         raise HomeAssistantError("Home Assistant returned invalid WebSocket JSON") from exc
-
                     subscription_id = payload.get("id")
                     if payload.get("type") != "event" or subscription_id not in subscriptions:
                         continue
@@ -141,7 +145,6 @@ class HomeAssistantClient:
                     if isinstance(new_state, dict):
                         yield subscriptions[subscription_id], new_state
                     continue
-
                 if message.type in {
                     aiohttp.WSMsgType.CLOSE,
                     aiohttp.WSMsgType.CLOSED,
@@ -157,7 +160,6 @@ class HomeAssistantClient:
         auth_required = await self._receive_json(websocket)
         if auth_required.get("type") != "auth_required":
             raise HomeAssistantError(f"Unexpected WebSocket authentication message: {auth_required}")
-
         await websocket.send_json({"type": "auth", "access_token": self._token})
         auth_result = await self._receive_json(websocket)
         if auth_result.get("type") != "auth_ok":
@@ -169,7 +171,6 @@ class HomeAssistantClient:
         message = await websocket.receive()
         if message.type != aiohttp.WSMsgType.TEXT:
             raise HomeAssistantError(f"Unexpected WebSocket message type: {message.type}")
-
         try:
             payload = json.loads(message.data)
         except json.JSONDecodeError as exc:

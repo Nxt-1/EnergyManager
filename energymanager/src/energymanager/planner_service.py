@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from .actuators import ActuatorCommandResult, ActuatorRegistry, ActuatorSnapshot, find_ess_actuator
 from .diagnostics import DiagnosticsPublisher
 from .economics import EconomicsService, PlanCostEvaluation
+from .ess_control import EssHardwareController
 from .fast_dispatch import evaluate_fast_dispatch, publish_fast_dispatch
 from .house_state import HouseState
 from .load_service import BackgroundLoadService
@@ -39,6 +40,7 @@ class ShadowPlannerService:
         actuator_registry: ActuatorRegistry,
         task_registry: TaskRegistry,
         economics_service: EconomicsService | None = None,
+        ess_controller: EssHardwareController | None = None,
         planner: ShadowPlanner | None = None,
     ) -> None:
         self._ha_client = ha_client
@@ -49,6 +51,7 @@ class ShadowPlannerService:
         self._actuator_registry = actuator_registry
         self._task_registry = task_registry
         self._economics_service = economics_service
+        self._ess_controller = ess_controller
         self._plan: ShadowPlan | None = None
         self._last_plan_at_utc: datetime | None = None
         self._last_attempt_at_utc: datetime | None = None
@@ -220,7 +223,11 @@ class ShadowPlannerService:
                     "milp_unavailable",
                     error=evaluation.reason or evaluation.status,
                 )
-                await self._diagnostics.publish_actuator_command_status(())
+                if self._ess_controller is not None:
+                    await self._ess_controller.publish_command_status(())
+                    await self._ess_controller.safe_zero("milp_unavailable")
+                else:
+                    await self._diagnostics.publish_actuator_command_status(())
                 return
 
             plan = evaluation.plan
@@ -241,6 +248,7 @@ class ShadowPlannerService:
                 latest_state,
                 self._actuator_registry,
                 now_utc=datetime.now(UTC),
+                live_control=self._ess_control_enabled,
             )
             _log_plan(plan, actuators, tasks, cost_evaluation, fast_result.command_results)
         except asyncio.CancelledError:
@@ -272,6 +280,21 @@ class ShadowPlannerService:
             return "periodic"
         return None
 
+    @property
+    def _ess_control_enabled(self) -> bool:
+        return self._ess_controller is not None and self._ess_controller.enabled
+
+    async def shutdown(self) -> None:
+        """Stop runtime tasks and leave the ESS setpoint neutral on a clean exit."""
+        for task in (self._fast_dispatch_task, self._solve_task):
+            if task is not None and not task.done():
+                task.cancel()
+        pending = tuple(
+            task for task in (self._fast_dispatch_task, self._solve_task) if task is not None
+        )
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
     def _ensure_fast_dispatch_loop(self) -> None:
         if self._fast_dispatch_task is None or self._fast_dispatch_task.done():
             self._fast_dispatch_task = asyncio.create_task(self._fast_dispatch_loop())
@@ -296,9 +319,17 @@ class ShadowPlannerService:
         house_state = self._latest_house_state
         plan = self._plan
         if house_state is None or plan is None:
+            if self._ess_controller is not None and self._ess_controller.enabled:
+                await self._ess_controller.safe_zero("no_active_plan")
             return
         now = datetime.now(UTC)
-        result = evaluate_fast_dispatch(plan, house_state, self._actuator_registry, now_utc=now)
+        result = evaluate_fast_dispatch(
+            plan,
+            house_state,
+            self._actuator_registry,
+            now_utc=now,
+            live_control=self._ess_control_enabled,
+        )
         self._fast_dispatch_sequence += 1
         await publish_fast_dispatch(
             self._ha_client,
@@ -306,8 +337,14 @@ class ShadowPlannerService:
             control_interval_seconds=_FAST_DISPATCH_INTERVAL_SECONDS,
             dispatch_sequence=self._fast_dispatch_sequence,
             milp_solve_in_progress=self.solve_in_progress,
+            control_enabled=self._ess_control_enabled,
+            hardware_writes=self._ess_control_enabled,
         )
-        await self._diagnostics.publish_actuator_command_status(result.command_results)
+        if self._ess_controller is not None:
+            await self._ess_controller.apply_dispatch(result)
+            await self._ess_controller.publish_command_status(result.command_results)
+        else:
+            await self._diagnostics.publish_actuator_command_status(result.command_results)
         if not result.replan_required:
             return
 
@@ -432,7 +469,7 @@ def _log_plan(
     _LOGGER.info(
         "MILP shadow plan updated: next 24 h background %.2f kWh, scheduled %.2f kWh, PV potential %.2f kWh, "
         "pre-control deficit %.2f kWh, projected grid import %.2f kWh, ESS SoC %.1f -> %.1f%%, "
-        "curtailed DC PV %.2f kWh, economics %s, actuators [%s], tasks [%s], dry-run commands [%s]",
+        "curtailed DC PV %.2f kWh, economics %s, actuators [%s], tasks [%s], commands [%s]",
         summary["background_load_kwh"],
         summary["scheduled_load_kwh"],
         summary["pv_potential_kwh"],

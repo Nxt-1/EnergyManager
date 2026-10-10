@@ -10,10 +10,11 @@ from .actuators import ActuatorCommandResult, ActuatorPowerRequest, ActuatorRegi
 from .house_state import HouseState
 from .planner import ShadowPlan, ShadowPlanInterval
 
-FAST_DISPATCH_VERSION = "2026-10-10-fast-dispatch-v2"
+FAST_DISPATCH_VERSION = "2026-10-10-fast-dispatch-v3"
 FAST_DISPATCH_STATUS_ENTITY = "sensor.energy_manager_fast_dispatch_status"
 _INTERVAL = timedelta(minutes=15)
 _REPLAN_RESIDUAL_W = 500.0
+_LIVE_CONTROL_DEADBAND_W = 100.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,15 +52,28 @@ async def publish_fast_dispatch(
     control_interval_seconds: float | None = None,
     dispatch_sequence: int | None = None,
     milp_solve_in_progress: bool = False,
+    control_enabled: bool = False,
+    hardware_writes: bool = False,
 ) -> None:
-    """Publish the live shadow dispatch correction into Home Assistant."""
+    """Publish the current fast-dispatch correction into Home Assistant."""
     attributes: dict[str, Any] = {
         "friendly_name": "Energy Manager Fast Dispatch Status",
         "fast_dispatch_version": FAST_DISPATCH_VERSION,
-        "shadow_mode": True,
-        "control_enabled": False,
-        "hardware_writes": False,
-        "tracking_strategy": "milp_grid_target_with_live_ess_feedback",
+        "shadow_mode": not control_enabled,
+        "control_enabled": control_enabled,
+        "hardware_writes": hardware_writes,
+        "tracking_strategy": (
+            "milp_grid_target_with_live_grid_feedback"
+            if control_enabled
+            else "milp_grid_target_with_shadow_ev_substitution"
+        ),
+        "control_deadband_w": _LIVE_CONTROL_DEADBAND_W if control_enabled else 0.0,
+        "deadband_active": (
+            control_enabled
+            and result.measured_grid_power_w is not None
+            and result.planned_grid_power_w is not None
+            and abs(result.measured_grid_power_w - result.planned_grid_power_w) < _LIVE_CONTROL_DEADBAND_W
+        ),
         "control_interval_seconds": control_interval_seconds,
         "dispatch_sequence": dispatch_sequence,
         "milp_solve_in_progress": milp_solve_in_progress,
@@ -73,8 +87,9 @@ async def publish_fast_dispatch(
         "measured_background_power_w": _round(result.measured_background_power_w),
         "planned_background_power_w": _round(result.planned_background_power_w),
         "background_deviation_w": _round(result.background_deviation_w),
-        "estimated_grid_without_ess_with_planned_ev_w": _round(
-            result.estimated_grid_without_ess_with_planned_ev_w
+        "estimated_grid_without_ess_w": _round(result.estimated_grid_without_ess_with_planned_ev_w),
+        "estimated_grid_without_ess_with_planned_ev_w": (
+            None if control_enabled else _round(result.estimated_grid_without_ess_with_planned_ev_w)
         ),
         "requested_ess_power_w": _round(result.requested_ess_power_w),
         "accepted_ess_power_w": _round(result.accepted_ess_power_w),
@@ -96,12 +111,13 @@ def evaluate_fast_dispatch(
     actuator_registry: ActuatorRegistry,
     *,
     now_utc: datetime,
+    live_control: bool = False,
 ) -> FastDispatchResult:
     """Calculate the ESS correction needed to track the current MILP grid target.
 
-    The measured EV load is removed from the live grid balance and replaced by the
-    MILP-planned EV load. This keeps shadow evaluation meaningful before Energy
-    Manager is the real EV writer.
+    Shadow evaluation substitutes the MILP-planned EV load for measured EV power.
+    Real ESS control instead follows the actual P1 grid deviation, so an EV still
+    controlled elsewhere cannot create a fictitious ESS correction.
     """
     interval = _current_interval(plan, now_utc)
     if interval is None:
@@ -124,7 +140,7 @@ def evaluate_fast_dispatch(
         missing.append("measured_grid")
     if measured_ess is None:
         missing.append("measured_ess")
-    if measured_ev is None:
+    if measured_ev is None and not live_control:
         missing.append("measured_ev")
     if missing:
         return FastDispatchResult(
@@ -155,12 +171,19 @@ def evaluate_fast_dispatch(
     assert planned_ess is not None
     assert measured_grid is not None
     assert measured_ess is not None
-    assert measured_ev is not None
-
-    uncontrolled_with_planned_ev = measured_grid + measured_ess - measured_ev + planned_ev
-    requested_ess = uncontrolled_with_planned_ev - planned_grid
+    if live_control:
+        uncontrolled_with_planned_ev = measured_grid + measured_ess
+        grid_error = measured_grid - planned_grid
+        if abs(grid_error) < _LIVE_CONTROL_DEADBAND_W:
+            requested_ess = measured_ess
+        else:
+            requested_ess = measured_ess + grid_error
+    else:
+        assert measured_ev is not None
+        uncontrolled_with_planned_ev = measured_grid + measured_ess - measured_ev + planned_ev
+        requested_ess = uncontrolled_with_planned_ev - planned_grid
     requests = [ActuatorPowerRequest(actuator_id="ess", requested_power_w=requested_ess)]
-    if planned_ev > 0.0 or measured_ev > 0.0:
+    if planned_ev > 0.0 or (measured_ev is not None and measured_ev > 0.0):
         requests.append(ActuatorPowerRequest(actuator_id="ev", requested_power_w=planned_ev))
     command_results = actuator_registry.evaluate_commands(tuple(requests), house_state)
     ess_result = next((item for item in command_results if item.actuator_id == "ess"), None)

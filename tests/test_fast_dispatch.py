@@ -142,3 +142,28 @@ def test_fast_dispatch_publishes_fixed_rate_runtime_metadata() -> None:
     assert attributes["control_interval_seconds"] == 1.0
     assert attributes["dispatch_sequence"] == 17
     assert attributes["milp_solve_in_progress"] is True
+
+
+def test_fast_dispatch_live_control_uses_actual_grid_not_planned_ev_substitution() -> None:
+    plan = _plan(planned_grid_w=0.0, planned_ess_w=500.0, planned_ev_w=3000.0)
+    state = _state(grid_w=500.0, ess_w=500.0, ev_w=0.0)
+
+    result = evaluate_fast_dispatch(plan, state, _registry(), now_utc=_NOW, live_control=True)
+
+    assert result.requested_ess_power_w == 1000.0
+    assert result.accepted_ess_power_w == 1000.0
+    assert result.projected_grid_power_w == 0.0
+    assert result.residual_to_plan_w == 0.0
+    assert result.replan_required is False
+
+
+def test_fast_dispatch_live_control_holds_current_ess_inside_deadband() -> None:
+    plan = _plan(planned_grid_w=0.0, planned_ess_w=500.0)
+    state = _state(grid_w=80.0, ess_w=500.0)
+
+    result = evaluate_fast_dispatch(plan, state, _registry(), now_utc=_NOW, live_control=True)
+
+    assert result.requested_ess_power_w == 500.0
+    assert result.accepted_ess_power_w == 500.0
+    assert result.projected_grid_power_w == 80.0
+    assert result.replan_required is False

@@ -1,0 +1,315 @@
+"""Guarded Home Assistant hardware writer for the Victron ESS setpoint."""
+
+from __future__ import annotations
+
+import logging
+import math
+from dataclasses import replace
+from datetime import UTC, datetime
+from typing import Any
+
+from .actuators import (
+    ACTUATOR_COMMAND_VERSION,
+    ActuatorCommandResult,
+    ActuatorRegistry,
+    EssActuatorSnapshot,
+)
+from .config import EssSettings, Settings
+from .ha_client import HomeAssistantError
+
+_LOGGER = logging.getLogger(__name__)
+ESS_CONTROL_VERSION = "2026-10-10-ess-control-v1"
+ESS_CONTROL_STATUS_ENTITY = "sensor.energy_manager_ess_control_status"
+ACTUATOR_COMMAND_STATUS_ENTITY = "sensor.energy_manager_actuator_command_status"
+_SETPOINT_STEP_W = 10.0
+_ACK_TOLERANCE_W = 10.0
+_ACK_GRACE_SECONDS = 2.0
+
+
+class ControlAwareActuatorRegistry(ActuatorRegistry):
+    """Expose real ESS control ownership while retaining existing actuator translation."""
+
+    def __init__(self, settings: Settings) -> None:
+        super().__init__(settings)
+        self._ess_control_enabled = settings.ess.control_enabled
+
+    def snapshots(self, house_state):
+        snapshots = super().snapshots(house_state)
+        return tuple(
+            replace(item, control_enabled=self._ess_control_enabled)
+            if isinstance(item, EssActuatorSnapshot)
+            else item
+            for item in snapshots
+        )
+
+
+class EssHardwareController:
+    """Translate canonical ESS power requests into Victron HA number writes."""
+
+    def __init__(self, client, settings: EssSettings) -> None:
+        self._client = client
+        self._settings = settings
+        self._write_count = 0
+        self._last_write_utc: datetime | None = None
+        self._last_commanded_setpoint_w: float | None = None
+
+    @property
+    def enabled(self) -> bool:
+        return self._settings.control_enabled and self._settings.setpoint_entity is not None
+
+    async def initialize(self) -> None:
+        """Neutralize the Victron setpoint before the first live plan is available."""
+        if not self.enabled:
+            await self._publish_status("disabled", reason="control_disabled")
+            return
+        _LOGGER.warning(
+            "ESS hardware control ENABLED: setpoint=%s, limits=-%.0f/+%.0f W",
+            self._settings.setpoint_entity,
+            self._settings.max_discharge_power_w,
+            self._settings.max_charge_power_w,
+        )
+        await self.safe_zero("startup_safe_zero", force=True)
+
+    async def shutdown(self) -> None:
+        """Attempt to leave the external ESS setpoint neutral on a clean shutdown."""
+        if self.enabled:
+            await self.safe_zero("shutdown_safe_zero", force=True)
+
+    async def apply_dispatch(self, result) -> None:
+        """Write the accepted ESS command from one fast-dispatch cycle."""
+        if not self.enabled:
+            await self._publish_status(
+                "disabled",
+                reason="control_disabled",
+                requested_ess_power_w=result.requested_ess_power_w,
+                accepted_ess_power_w=result.accepted_ess_power_w,
+            )
+            return
+
+        ess_result = next((item for item in result.command_results if item.actuator_id == "ess"), None)
+        if ess_result is None or result.accepted_ess_power_w is None:
+            await self.safe_zero("fast_dispatch_unavailable")
+            return
+
+        desired_setpoint = -float(ess_result.accepted_power_w)
+        await self._apply_target(
+            desired_setpoint,
+            reason="fast_dispatch",
+            requested_ess_power_w=ess_result.requested_power_w,
+            accepted_ess_power_w=ess_result.accepted_power_w,
+        )
+
+    async def safe_zero(self, reason: str, *, force: bool = False) -> None:
+        """Command zero when live control has no safe non-zero target."""
+        if not self.enabled:
+            await self._publish_status("disabled", reason="control_disabled")
+            return
+        await self._apply_target(
+            0.0,
+            reason=reason,
+            requested_ess_power_w=0.0,
+            accepted_ess_power_w=0.0,
+            force=force,
+        )
+
+    async def publish_command_status(self, results: tuple[ActuatorCommandResult, ...]) -> None:
+        """Publish command translation with explicit real/shadow ownership per actuator."""
+        commands = []
+        for item in results:
+            command: dict[str, Any] = {
+                "id": item.actuator_id,
+                "kind": item.kind,
+                "requested_power_w": round(item.requested_power_w, 1),
+                "accepted_power_w": round(item.accepted_power_w, 1),
+                "status": item.status,
+                "limited": item.limited,
+                "reason": item.reason,
+                "hardware_write_enabled": self.enabled and item.actuator_id == "ess",
+            }
+            if item.phase_count is not None:
+                command["phase_count"] = item.phase_count
+            if item.current_a is not None:
+                command["current_a"] = round(item.current_a, 3)
+            commands.append(command)
+
+        attributes: dict[str, Any] = {
+            "friendly_name": "Energy Manager Actuator Command Status",
+            "command_version": ACTUATOR_COMMAND_VERSION,
+            "shadow_mode": not self.enabled,
+            "control_enabled": self.enabled,
+            "hardware_writes": self.enabled,
+            "hardware_write_actuators": ["ess"] if self.enabled else [],
+            "shadow_only_actuators": [item.actuator_id for item in results if item.actuator_id != "ess"],
+            "command_count": len(results),
+            "commands": commands,
+            "last_update_utc": datetime.now(UTC).isoformat(),
+        }
+        if not results:
+            state = "idle"
+        elif any(item.status == "rejected" for item in results):
+            state = "rejected"
+        elif any(item.status == "limited" for item in results):
+            state = "limited"
+        else:
+            state = "accepted"
+        await self._client.set_state(ACTUATOR_COMMAND_STATUS_ENTITY, state, attributes)
+
+    async def _apply_target(
+        self,
+        setpoint_w: float,
+        *,
+        reason: str,
+        requested_ess_power_w: float,
+        accepted_ess_power_w: float,
+        force: bool = False,
+    ) -> None:
+        entity_id = self._settings.setpoint_entity
+        assert entity_id is not None
+        target = self._normalize_setpoint(setpoint_w)
+        observed, read_error = await self._read_setpoint()
+
+        if observed is None and target != 0.0 and not force:
+            await self._publish_status(
+                "read_error",
+                reason=reason,
+                requested_ess_power_w=requested_ess_power_w,
+                accepted_ess_power_w=accepted_ess_power_w,
+                desired_setpoint_w=target,
+                observed_setpoint_w=None,
+                error=read_error or "setpoint_state_unavailable",
+            )
+            return
+
+        acknowledged = observed is not None and math.isclose(observed, target, abs_tol=_ACK_TOLERANCE_W)
+        if acknowledged and not force:
+            await self._publish_status(
+                "safe_zero" if target == 0.0 else "tracking",
+                reason=reason,
+                requested_ess_power_w=requested_ess_power_w,
+                accepted_ess_power_w=accepted_ess_power_w,
+                desired_setpoint_w=target,
+                observed_setpoint_w=observed,
+                acknowledged=True,
+            )
+            return
+
+        now = datetime.now(UTC)
+        awaiting_ack = (
+            not force
+            and self._last_commanded_setpoint_w is not None
+            and math.isclose(self._last_commanded_setpoint_w, target, abs_tol=1e-6)
+            and self._last_write_utc is not None
+            and (now - self._last_write_utc).total_seconds() < _ACK_GRACE_SECONDS
+        )
+        if awaiting_ack:
+            await self._publish_status(
+                "awaiting_ack",
+                reason=reason,
+                requested_ess_power_w=requested_ess_power_w,
+                accepted_ess_power_w=accepted_ess_power_w,
+                desired_setpoint_w=target,
+                observed_setpoint_w=observed,
+                acknowledged=False,
+                error=read_error if observed is None else None,
+            )
+            return
+
+        try:
+            await self._client.call_service(
+                "number",
+                "set_value",
+                {"entity_id": entity_id, "value": target},
+            )
+        except (HomeAssistantError, OSError, TimeoutError) as exc:
+            _LOGGER.error("ESS setpoint write failed: %s", exc)
+            await self._publish_status(
+                "write_error",
+                reason=reason,
+                requested_ess_power_w=requested_ess_power_w,
+                accepted_ess_power_w=accepted_ess_power_w,
+                desired_setpoint_w=target,
+                observed_setpoint_w=observed,
+                error=str(exc),
+            )
+            return
+
+        self._write_count += 1
+        self._last_write_utc = now
+        self._last_commanded_setpoint_w = target
+        await self._publish_status(
+            "write_sent",
+            reason=reason,
+            requested_ess_power_w=requested_ess_power_w,
+            accepted_ess_power_w=accepted_ess_power_w,
+            desired_setpoint_w=target,
+            observed_setpoint_w=observed,
+            write_performed=True,
+            acknowledged=False,
+            error=read_error if observed is None else None,
+        )
+
+    async def _read_setpoint(self) -> tuple[float | None, str | None]:
+        entity_id = self._settings.setpoint_entity
+        assert entity_id is not None
+        try:
+            state = await self._client.get_state(entity_id)
+        except (HomeAssistantError, OSError, TimeoutError) as exc:
+            return None, str(exc)
+        raw = state.get("state")
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return None, f"non_numeric_setpoint_state:{raw!r}"
+        if not math.isfinite(value):
+            return None, f"non_finite_setpoint_state:{raw!r}"
+        return value, None
+
+    def _normalize_setpoint(self, setpoint_w: float) -> float:
+        minimum = -float(self._settings.max_discharge_power_w)
+        maximum = float(self._settings.max_charge_power_w)
+        limited = max(minimum, min(maximum, float(setpoint_w)))
+        return round(limited / _SETPOINT_STEP_W) * _SETPOINT_STEP_W
+
+    async def _publish_status(
+        self,
+        status: str,
+        *,
+        reason: str,
+        requested_ess_power_w: float | None = None,
+        accepted_ess_power_w: float | None = None,
+        desired_setpoint_w: float | None = None,
+        observed_setpoint_w: float | None = None,
+        write_performed: bool = False,
+        acknowledged: bool | None = None,
+        error: str | None = None,
+    ) -> None:
+        attributes: dict[str, Any] = {
+            "friendly_name": "Energy Manager ESS Control Status",
+            "ess_control_version": ESS_CONTROL_VERSION,
+            "control_enabled": self.enabled,
+            "hardware_writes": self.enabled,
+            "setpoint_entity": self._settings.setpoint_entity,
+            "canonical_positive_means": "discharge",
+            "victron_setpoint_positive_means": "charge",
+            "setpoint_step_w": _SETPOINT_STEP_W,
+            "max_charge_power_w": self._settings.max_charge_power_w,
+            "max_discharge_power_w": self._settings.max_discharge_power_w,
+            "reason": reason,
+            "requested_ess_power_w": _round_optional(requested_ess_power_w),
+            "accepted_ess_power_w": _round_optional(accepted_ess_power_w),
+            "desired_setpoint_w": _round_optional(desired_setpoint_w),
+            "observed_setpoint_w": _round_optional(observed_setpoint_w),
+            "write_performed": write_performed,
+            "acknowledged": acknowledged,
+            "write_count": self._write_count,
+            "last_write_utc": self._last_write_utc.isoformat() if self._last_write_utc else None,
+            "last_commanded_setpoint_w": _round_optional(self._last_commanded_setpoint_w),
+            "last_update_utc": datetime.now(UTC).isoformat(),
+        }
+        if error is not None:
+            attributes["error"] = error
+        await self._client.set_state(ESS_CONTROL_STATUS_ENTITY, status, attributes)
+
+
+def _round_optional(value: float | None) -> float | None:
+    return None if value is None else round(float(value), 1)

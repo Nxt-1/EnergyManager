@@ -1,5 +1,5 @@
 name: Energy Manager
-version: "0.27.2"
+version: "0.28.0"
 slug: energy_manager
 description: Predictive home energy manager for Home Assistant
 url: https://github.com/Nxt-1/EnergyManager
@@ -15,6 +15,7 @@ options:
   grid: {}
   ess:
     power_positive_means: discharge
+    control_enabled: false
   pv: {}
   ev:
     weekly_schedule: []
@@ -35,6 +36,8 @@ schema:
   ess:
     soc_entity: str?
     power_entity: str?
+    setpoint_entity: str?
+    control_enabled: bool
     power_positive_means: list(discharge|charge)
     capacity_kwh: float?
     min_soc_percent: float?

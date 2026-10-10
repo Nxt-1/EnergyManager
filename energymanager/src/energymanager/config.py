@@ -35,7 +35,7 @@ class GridSettings:
 
 @dataclass(frozen=True, slots=True)
 class EssSettings:
-    """ESS input mapping plus the planning envelope used by shadow simulation."""
+    """ESS input mapping, planning envelope and guarded hardware-control settings."""
 
     soc_entity: str | None = None
     power_entity: str | None = None
@@ -47,6 +47,8 @@ class EssSettings:
     max_discharge_power_w: float = 2000.0
     charge_efficiency: float = 0.95
     discharge_efficiency: float = 0.95
+    setpoint_entity: str | None = None
+    control_enabled: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,6 +185,8 @@ class Settings:
                 {
                     "soc_entity": self.ess.soc_entity,
                     "power_entity": self.ess.power_entity,
+                    "setpoint_entity": self.ess.setpoint_entity,
+                    "control_enabled": self.ess.control_enabled,
                     "power_positive_means": self.ess.power_positive_means,
                     "capacity_kwh": self.ess.capacity_kwh,
                     "min_soc_percent": self.ess.min_soc_percent,
@@ -286,6 +290,13 @@ class Settings:
         )
         if grid_import is not None and grid_import == grid_export:
             raise ConfigurationError("grid import and export power entities must be different")
+
+        ess_setpoint_entity = _optional_entity_id(ess_raw.get("setpoint_entity"), "ess.setpoint_entity")
+        if ess_setpoint_entity is not None and not ess_setpoint_entity.startswith("number."):
+            raise ConfigurationError("ess.setpoint_entity must be a Home Assistant number entity")
+        ess_control_enabled = _bool_option(ess_raw.get("control_enabled", False), "ess.control_enabled")
+        if ess_control_enabled and ess_setpoint_entity is None:
+            raise ConfigurationError("ess.setpoint_entity is required when ess.control_enabled is true")
 
         ess_power_sign = str(ess_raw.get("power_positive_means", "discharge")).lower().strip()
         if ess_power_sign not in _VALID_ESS_POWER_SIGNS:
@@ -394,6 +405,8 @@ class Settings:
             ess=EssSettings(
                 soc_entity=_optional_entity_id(ess_raw.get("soc_entity"), "ess.soc_entity"),
                 power_entity=_optional_entity_id(ess_raw.get("power_entity"), "ess.power_entity"),
+                setpoint_entity=ess_setpoint_entity,
+                control_enabled=ess_control_enabled,
                 power_positive_means=ess_power_sign,
                 capacity_kwh=ess_capacity_kwh,
                 min_soc_percent=ess_min_soc,
