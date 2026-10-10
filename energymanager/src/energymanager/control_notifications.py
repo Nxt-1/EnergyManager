@@ -69,7 +69,9 @@ class ControlNotificationManager:
             if alertworthy:
                 self._pending_signature = (health.state, health.reasons, health.stale_inputs, health.unavailable_inputs)
                 self._pending_fault_since = now
-                self._enqueue(_NotificationEvent("pending_fault", health.state, "", "", False, now, str(health.reasons)))
+                self._enqueue(
+                    _NotificationEvent("pending_fault", health.state, "", "", False, now, str(health.reasons))
+                )
             else:
                 self._enqueue(_NotificationEvent("armed", health.state, "", "", False, now))
             return
@@ -81,7 +83,9 @@ class ControlNotificationManager:
             if self._pending_signature != signature:
                 self._pending_signature = signature
                 self._pending_fault_since = now
-                self._enqueue(_NotificationEvent("pending_fault", health.state, "", "", False, now, str(health.reasons)))
+                self._enqueue(
+                    _NotificationEvent("pending_fault", health.state, "", "", False, now, str(health.reasons))
+                )
                 return
             if self._pending_fault_since is not None and (now - self._pending_fault_since).total_seconds() >= 15:
                 self._active_alert = self._queue_failure(health, now)
