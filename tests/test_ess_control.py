@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-import energymanager.ess_control as ess_control
 from energymanager.actuators import ActuatorRegistry
 from energymanager.config import ConfigurationError, EssSettings, EvSettings, Settings
 from energymanager.ess_control import ESS_CONTROL_STATUS_ENTITY, EssHardwareController
@@ -117,7 +116,7 @@ def test_ess_controller_converts_discharge_to_negative_victron_setpoint() -> Non
     attributes = status["attributes"]
     assert isinstance(attributes, dict)
     assert attributes["hardware_writes"] is True
-    assert attributes["acknowledged"] is True
+    assert attributes["acknowledged"] is None
 
 
 def test_ess_controller_initializes_to_safe_zero() -> None:
@@ -155,7 +154,7 @@ class StubbornSetpointClient(FakeClient):
         assert service == "set_value"
 
 
-def test_ess_controller_limits_unacknowledged_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ess_controller_does_not_require_echo_acknowledgement() -> None:
     client = StubbornSetpointClient()
     settings = _settings()
     result = evaluate_fast_dispatch(
@@ -166,7 +165,6 @@ def test_ess_controller_limits_unacknowledged_retries(monkeypatch: pytest.Monkey
         live_control=True,
     )
     controller = EssHardwareController(client, settings.ess)
-    monkeypatch.setattr(ess_control, "_ACK_GRACE_SECONDS", 0.0)
 
     async def scenario() -> None:
         for _ in range(4):
@@ -174,7 +172,8 @@ def test_ess_controller_limits_unacknowledged_retries(monkeypatch: pytest.Monkey
 
     asyncio.run(scenario())
 
-    assert controller.fault_active is True
-    assert client.calls[-1][2]["value"] == 0.0
+    assert controller.fault_active is False
+    assert len(client.calls) == 1
+    assert client.calls[-1][2]["value"] == -1000.0
     status = client.states[ESS_CONTROL_STATUS_ENTITY]
-    assert status["state"] == "safe_fallback"
+    assert status["state"] == "tracking"

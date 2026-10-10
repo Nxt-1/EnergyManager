@@ -103,7 +103,8 @@ def evaluate_control_health(
             ev_available = False
             reasons.append("ev:disconnected")
         if ev_fault is not None:
-            ev_available = False
+            if ev_fault != "connected_not_charging":
+                ev_available = False
             reasons.append(f"ev:{ev_fault}")
 
     if stale:

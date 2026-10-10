@@ -428,6 +428,8 @@ class ShadowPlannerService:
         else:
             await self._diagnostics.publish_actuator_command_status(result.command_results)
 
+        if self._ev_controller is not None:
+            self._ev_controller.observe_charging(house_state)
         post_health = self._evaluate_control_health(house_state, datetime.now(UTC))
         post_health_changed = self._record_control_health(post_health)
         await self._publish_control_health(post_health)
@@ -461,6 +463,8 @@ class ShadowPlannerService:
         ev_fault = None
         if self._ev_controller is not None and self._ev_controller.fault_active:
             ev_fault = self._ev_controller.last_error or "write_fault"
+        if self._ev_controller is not None and self._ev_controller.delivery_error:
+            ev_fault = self._ev_controller.delivery_error
         return evaluate_control_health(
             house_state,
             now_utc=now,

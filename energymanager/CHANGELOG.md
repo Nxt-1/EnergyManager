@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.31.3
+- Stops treating delayed HA setpoint echoes as ESS write failures; retains service-call error and safety handling.
+- Diagnoses an EV that remains plugged in, commanded to charge and below 100 W for 90 seconds.
+- Suppresses phone alerts for brief health transients; exposes a bounded recent-event history for dashboard diagnostics.
+- Keeps normal EV disconnection informational and does not stop EV charging for a delivery warning alone.
+- Does not change MILP optimization or hardware limits.
+
 ## 0.31.2
 - Adds pytest-asyncio to development dependencies so CI can execute the new async dashboard tests.
 - No runtime behavior or configuration changes.

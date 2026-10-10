@@ -66,3 +66,17 @@ def test_disconnected_ev_degrades_without_disabling_ess() -> None:
     assert health.ev_available is False
     assert "ev:disconnected" in health.reasons
     assert health.replan_required is True
+
+
+def test_connected_not_charging_alert_does_not_disable_ev_command_path() -> None:
+    health = evaluate_control_health(
+        _state(),
+        now_utc=_NOW,
+        ess_control_enabled=True,
+        ev_control_enabled=True,
+        ev_fault="connected_not_charging",
+    )
+    assert health.state == "degraded"
+    assert health.ev_available is True
+    assert "ev:connected_not_charging" in health.reasons
+    assert health.replan_required is False

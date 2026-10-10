@@ -50,9 +50,9 @@ def test_notification_manager_sends_failure_once_and_recovery_once() -> None:
         )
         manager.observe(
             _health("degraded", ev_available=False, reasons=("ev:write_fault",)),
-            now_utc=_NOW + timedelta(seconds=2),
+            now_utc=_NOW + timedelta(seconds=17),
         )
-        manager.observe(_health("healthy"), now_utc=_NOW + timedelta(seconds=3))
+        manager.observe(_health("healthy"), now_utc=_NOW + timedelta(seconds=18))
         await manager.shutdown()
 
     asyncio.run(scenario())
@@ -78,8 +78,10 @@ def test_notification_manager_suppresses_repeated_failure_inside_cooldown() -> N
         manager.complete_startup(now_utc=_NOW)
         fault = _health("degraded", ev_available=False, reasons=("ev:write_fault",))
         manager.observe(fault, now_utc=_NOW + timedelta(seconds=1))
-        manager.observe(_health("healthy"), now_utc=_NOW + timedelta(seconds=2))
-        manager.observe(fault, now_utc=_NOW + timedelta(seconds=3))
+        manager.observe(fault, now_utc=_NOW + timedelta(seconds=17))
+        manager.observe(_health("healthy"), now_utc=_NOW + timedelta(seconds=18))
+        manager.observe(fault, now_utc=_NOW + timedelta(seconds=19))
+        manager.observe(fault, now_utc=_NOW + timedelta(seconds=35))
         await manager.shutdown()
 
     asyncio.run(scenario())

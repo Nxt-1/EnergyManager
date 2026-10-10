@@ -1,0 +1,670 @@
+# Native Home Assistant dashboard (YAML mode)
+# Requires ApexCharts Card installed via HACS.
+title: EnergyManager
+views:
+- title: Overview
+  path: overview
+  icon: mdi:view-dashboard
+  cards:
+  - type: markdown
+    content: '## EnergyManager · Live overview
+
+      Positive ESS power means **discharging**; positive grid power means **importing**. DC PV charges the ESS and must not
+      be counted twice as AC production.'
+  - type: grid
+    columns: 3
+    square: false
+    cards:
+    - type: tile
+      entity: sensor.energy_manager_grid_power
+      name: Grid net
+    - type: tile
+      entity: sensor.energy_manager_pv_total_power
+      name: PV combined
+    - type: tile
+      entity: sensor.energy_manager_house_load_power
+      name: House load
+    - type: tile
+      entity: sensor.energy_manager_ess_soc
+      name: ESS SoC
+    - type: tile
+      entity: sensor.energy_manager_ev_soc
+      name: EV SoC
+    - type: tile
+      entity: sensor.energy_manager_ev_charging_power
+      name: EV charging
+  - type: entities
+    title: Controller
+    show_header_toggle: false
+    entities:
+    - sensor.energy_manager_control_health
+    - sensor.energy_manager_fast_dispatch_status
+    - sensor.energy_manager_ess_control_status
+    - sensor.energy_manager_ev_control_status
+    - sensor.energy_manager_shadow_plan_status
+    - sensor.energy_manager_notification_status
+  - type: custom:apexcharts-card
+    header:
+      show: true
+      title: Next 24 h · Planned AC-side power
+      show_states: false
+    graph_span: 24h
+    span:
+      start: minute
+    now:
+      show: true
+      label: Now
+    update_interval: 1min
+    apex_config:
+      chart:
+        height: 300
+      legend:
+        show: true
+        showForSingleSeries: true
+      tooltip:
+        shared: true
+      xaxis:
+        type: datetime
+      yaxis:
+        decimalsInFloat: 0
+    series:
+    - entity: sensor.energy_manager_plan_day_1
+      name: Load incl. EV
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.load_w)]);
+      color: '#909090'
+    - entity: sensor.energy_manager_plan_day_1
+      name: AC PV
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
+      color: '#f6a500'
+    - entity: sensor.energy_manager_plan_day_1
+      name: ESS discharge +
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
+      color: '#2966c7'
+    - entity: sensor.energy_manager_plan_day_1
+      name: Grid import +
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
+      color: '#bc4e7d'
+  - type: custom:apexcharts-card
+    header:
+      show: true
+      title: Next 24 h · Planned battery SoC
+      show_states: false
+    graph_span: 24h
+    span:
+      start: minute
+    now:
+      show: true
+      label: Now
+    update_interval: 1min
+    apex_config:
+      chart:
+        height: 300
+      legend:
+        show: true
+        showForSingleSeries: true
+      tooltip:
+        shared: true
+      xaxis:
+        type: datetime
+      yaxis:
+        decimalsInFloat: 0
+    series:
+    - entity: sensor.energy_manager_plan_day_1
+      name: ESS SoC
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
+      color: '#2e8b57'
+    - entity: sensor.energy_manager_plan_day_1
+      name: EV SoC
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
+      color: '#8b5aa9'
+    yaxis:
+    - min: 0
+      max: 100
+      decimals: 0
+  - type: entities
+    title: Next 24 h forecast
+    show_header_toggle: false
+    entities:
+    - sensor.energy_manager_shadow_plan_next_24_hours_grid_import_energy
+    - sensor.energy_manager_shadow_plan_next_24_hours_net_deficit_energy
+    - sensor.energy_manager_background_load_forecast_next_24_hours_energy
+    - sensor.energy_manager_pv_forecast_tomorrow_energy
+- title: Planning
+  path: planning
+  icon: mdi:calendar-clock
+  cards:
+  - type: markdown
+    content: '## Full 7-day MILP schedule
+
+      The seven plan-day sensors each contain 96 consecutive 15-minute intervals. Each new MILP solve replaces the displayed
+      forecast. Graphs show **current projections**, not historical decisions.'
+  - type: custom:apexcharts-card
+    header:
+      show: true
+      title: 7 days · Planned AC-side power
+      show_states: false
+    graph_span: 7d
+    span:
+      start: minute
+    now:
+      show: true
+      label: Now
+    update_interval: 1min
+    apex_config:
+      chart:
+        height: 300
+      legend:
+        show: true
+        showForSingleSeries: true
+      tooltip:
+        shared: true
+      xaxis:
+        type: datetime
+      yaxis:
+        decimalsInFloat: 0
+    series:
+    - entity: sensor.energy_manager_plan_day_1
+      name: Grid
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
+      color: '#bc4e7d'
+    - entity: sensor.energy_manager_plan_day_2
+      name: Grid · 2
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
+      color: '#bc4e7d'
+    - entity: sensor.energy_manager_plan_day_3
+      name: Grid · 3
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
+      color: '#bc4e7d'
+    - entity: sensor.energy_manager_plan_day_4
+      name: Grid · 4
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
+      color: '#bc4e7d'
+    - entity: sensor.energy_manager_plan_day_5
+      name: Grid · 5
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
+      color: '#bc4e7d'
+    - entity: sensor.energy_manager_plan_day_6
+      name: Grid · 6
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
+      color: '#bc4e7d'
+    - entity: sensor.energy_manager_plan_day_7
+      name: Grid · 7
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
+      color: '#bc4e7d'
+    - entity: sensor.energy_manager_plan_day_1
+      name: ESS
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
+      color: '#2966c7'
+    - entity: sensor.energy_manager_plan_day_2
+      name: ESS · 2
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
+      color: '#2966c7'
+    - entity: sensor.energy_manager_plan_day_3
+      name: ESS · 3
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
+      color: '#2966c7'
+    - entity: sensor.energy_manager_plan_day_4
+      name: ESS · 4
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
+      color: '#2966c7'
+    - entity: sensor.energy_manager_plan_day_5
+      name: ESS · 5
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
+      color: '#2966c7'
+    - entity: sensor.energy_manager_plan_day_6
+      name: ESS · 6
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
+      color: '#2966c7'
+    - entity: sensor.energy_manager_plan_day_7
+      name: ESS · 7
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
+      color: '#2966c7'
+    - entity: sensor.energy_manager_plan_day_1
+      name: AC PV
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
+      color: '#f6a500'
+    - entity: sensor.energy_manager_plan_day_2
+      name: AC PV · 2
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
+      color: '#f6a500'
+    - entity: sensor.energy_manager_plan_day_3
+      name: AC PV · 3
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
+      color: '#f6a500'
+    - entity: sensor.energy_manager_plan_day_4
+      name: AC PV · 4
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
+      color: '#f6a500'
+    - entity: sensor.energy_manager_plan_day_5
+      name: AC PV · 5
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
+      color: '#f6a500'
+    - entity: sensor.energy_manager_plan_day_6
+      name: AC PV · 6
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
+      color: '#f6a500'
+    - entity: sensor.energy_manager_plan_day_7
+      name: AC PV · 7
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
+      color: '#f6a500'
+  - type: custom:apexcharts-card
+    header:
+      show: true
+      title: 7 days · ESS and EV SoC
+      show_states: false
+    graph_span: 7d
+    span:
+      start: minute
+    now:
+      show: true
+      label: Now
+    update_interval: 1min
+    apex_config:
+      chart:
+        height: 300
+      legend:
+        show: true
+        showForSingleSeries: true
+      tooltip:
+        shared: true
+      xaxis:
+        type: datetime
+      yaxis:
+        decimalsInFloat: 0
+    series:
+    - entity: sensor.energy_manager_plan_day_1
+      name: ESS
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
+      color: '#2e8b57'
+    - entity: sensor.energy_manager_plan_day_2
+      name: ESS · 2
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
+      color: '#2e8b57'
+    - entity: sensor.energy_manager_plan_day_3
+      name: ESS · 3
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
+      color: '#2e8b57'
+    - entity: sensor.energy_manager_plan_day_4
+      name: ESS · 4
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
+      color: '#2e8b57'
+    - entity: sensor.energy_manager_plan_day_5
+      name: ESS · 5
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
+      color: '#2e8b57'
+    - entity: sensor.energy_manager_plan_day_6
+      name: ESS · 6
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
+      color: '#2e8b57'
+    - entity: sensor.energy_manager_plan_day_7
+      name: ESS · 7
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
+      color: '#2e8b57'
+    - entity: sensor.energy_manager_plan_day_1
+      name: EV
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
+      color: '#8b5aa9'
+    - entity: sensor.energy_manager_plan_day_2
+      name: EV · 2
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
+      color: '#8b5aa9'
+    - entity: sensor.energy_manager_plan_day_3
+      name: EV · 3
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
+      color: '#8b5aa9'
+    - entity: sensor.energy_manager_plan_day_4
+      name: EV · 4
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
+      color: '#8b5aa9'
+    - entity: sensor.energy_manager_plan_day_5
+      name: EV · 5
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
+      color: '#8b5aa9'
+    - entity: sensor.energy_manager_plan_day_6
+      name: EV · 6
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
+      color: '#8b5aa9'
+    - entity: sensor.energy_manager_plan_day_7
+      name: EV · 7
+      type: line
+      stroke_width: 2
+      extend_to: end
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
+      color: '#8b5aa9'
+    yaxis:
+    - min: 0
+      max: 100
+      decimals: 0
+  - type: entities
+    title: Planning state and tasks
+    show_header_toggle: false
+    entities:
+    - sensor.energy_manager_shadow_plan_status
+    - sensor.energy_manager_task_status
+    - sensor.energy_manager_actuator_status
+    - sensor.energy_manager_plan_cost_status
+    - sensor.energy_manager_capacity_tariff_status
+  - type: entities
+    title: Schedule source — 7 days
+    show_header_toggle: false
+    entities:
+    - sensor.energy_manager_plan_day_1
+    - sensor.energy_manager_plan_day_2
+    - sensor.energy_manager_plan_day_3
+    - sensor.energy_manager_plan_day_4
+    - sensor.energy_manager_plan_day_5
+    - sensor.energy_manager_plan_day_6
+    - sensor.energy_manager_plan_day_7
+  - type: markdown
+    content: '**Note:** `load_w` includes controllable loads such as EV charging; `pv_dc_w` is DC-side generation, not additional
+      AC export. Separate planned EV power is not yet exported in these intervals.'
+- title: Performance
+  path: performance
+  icon: mdi:chart-line
+  cards:
+  - type: markdown
+    content: '## Recorded actual operation
+
+      This initial view shows actual Home Assistant history. Historical plan-versus-actual overlays require an InfluxDB 3
+      history-query bridge and verification of stored snapshots.'
+  - type: history-graph
+    title: Actual power — last 24 hours
+    hours_to_show: 24
+    refresh_interval: 60
+    entities:
+    - sensor.energy_manager_grid_power
+    - sensor.energy_manager_house_load_power
+    - sensor.energy_manager_pv_total_power
+    - sensor.energy_manager_ess_power
+    - sensor.energy_manager_ev_charging_power
+  - type: history-graph
+    title: ESS / EV SoC — last 48 hours
+    hours_to_show: 48
+    refresh_interval: 60
+    entities:
+    - sensor.energy_manager_ess_soc
+    - sensor.energy_manager_ev_soc
+  - type: entities
+    title: Forecast quality and persistence
+    show_header_toggle: false
+    entities:
+    - sensor.energy_manager_background_load_backtest
+    - sensor.energy_manager_database_status
+    - sensor.energy_manager_input_health
+    - sensor.energy_manager_plan_cost_status
+  - type: markdown
+    content: '**Not yet available:** auditable historical plan comparisons, actual-versus-baseline cost, and 15-minute peak
+      attribution. These will need data-access and calculation work rather than invented dashboard values.'
+- title: Diagnostics
+  path: diagnostics
+  icon: mdi:clipboard-text-clock
+  cards:
+  - type: entities
+    title: Live control health
+    entities:
+    - sensor.energy_manager_control_health
+    - sensor.energy_manager_ess_control_status
+    - sensor.energy_manager_ev_control_status
+    - sensor.energy_manager_notification_status
+    - sensor.energy_manager_fast_dispatch_status
+  - type: markdown
+    title: Recent notification events
+    content: >-
+      {% set events = state_attr('sensor.energy_manager_notification_status', 'recent_events') or [] %}
+      {% if not events %}
+      No events recorded since the current EnergyManager startup.
+      {% else %}
+      | Time (UTC) | Event | Health | Reason |
+      |:--|:--|:--|:--|
+      {% for e in events | reverse %}
+      | {{ e.time[:19] }} | {{ e.event }} | {{ e.health }} | {{ (e.reason or '-') | replace('|','/') }} |
+      {% endfor %}
+      {% endif %}
+  - type: markdown
+    content: >-
+      The list shows the last 30 notification-manager events from the running add-on,
+      including suppressed/pending alerts. It is not yet a durable historical event database.
+      Short-lived health changes remain visible here without sending phone notifications.

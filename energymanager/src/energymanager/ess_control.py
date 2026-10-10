@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import math
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -19,13 +18,10 @@ from .config import EssSettings, Settings
 from .ha_client import HomeAssistantError
 
 _LOGGER = logging.getLogger(__name__)
-ESS_CONTROL_VERSION = "2026-10-10-ess-control-v2"
+ESS_CONTROL_VERSION = "2026-10-10-ess-control-v3"
 ESS_CONTROL_STATUS_ENTITY = "sensor.energy_manager_ess_control_status"
 ACTUATOR_COMMAND_STATUS_ENTITY = "sensor.energy_manager_actuator_command_status"
 _SETPOINT_STEP_W = 10.0
-_ACK_TOLERANCE_W = 10.0
-_ACK_GRACE_SECONDS = 2.0
-_MAX_ACK_ATTEMPTS = 3
 _MAX_WRITE_ERRORS = 3
 _FAULT_COOLDOWN = timedelta(seconds=10)
 
@@ -59,7 +55,6 @@ class EssHardwareController:
         self._write_count = 0
         self._last_write_utc: datetime | None = None
         self._last_commanded_setpoint_w: float | None = None
-        self._ack_attempts = 0
         self._write_errors = 0
         self._fault_until_utc: datetime | None = None
         self._last_error: str | None = None
@@ -74,7 +69,7 @@ class EssHardwareController:
 
     @property
     def consecutive_failures(self) -> int:
-        return max(max(0, self._ack_attempts - 1), self._write_errors)
+        return self._write_errors
 
     @property
     def last_error(self) -> str | None:
@@ -204,7 +199,6 @@ class EssHardwareController:
         now = datetime.now(UTC)
         if self._fault_until_utc is not None and now >= self._fault_until_utc:
             self._fault_until_utc = None
-            self._ack_attempts = 0
             self._write_errors = 0
 
         if self.fault_active and target != 0.0 and not force:
@@ -219,69 +213,16 @@ class EssHardwareController:
             )
             return
 
-        observed, read_error = await self._read_setpoint()
-        if observed is None and target != 0.0 and not force:
-            await self._trip_fault(read_error or "setpoint_state_unavailable")
-            await self._publish_status(
-                "safe_fallback",
-                reason="setpoint_state_unavailable",
-                requested_ess_power_w=requested_ess_power_w,
-                accepted_ess_power_w=accepted_ess_power_w,
-                desired_setpoint_w=0.0,
-                observed_setpoint_w=None,
-                acknowledged=False,
-                error=self._last_error,
-            )
-            return
-
-        acknowledged = observed is not None and math.isclose(observed, target, abs_tol=_ACK_TOLERANCE_W)
-        if acknowledged and not force:
-            self._reset_failure_tracking()
+        # A successful HA service call is not a Victron execution acknowledgement.
+        # Do not require the HA number entity to echo fast-changing 1 Hz commands.
+        if not force and self._last_commanded_setpoint_w == target:
             await self._publish_status(
                 "safe_zero" if target == 0.0 else "tracking",
                 reason=reason,
                 requested_ess_power_w=requested_ess_power_w,
                 accepted_ess_power_w=accepted_ess_power_w,
                 desired_setpoint_w=target,
-                observed_setpoint_w=observed,
-                acknowledged=True,
-            )
-            return
-
-        same_target = (
-            self._last_commanded_setpoint_w is not None
-            and math.isclose(self._last_commanded_setpoint_w, target, abs_tol=1e-6)
-        )
-        awaiting_ack = (
-            not force
-            and same_target
-            and self._last_write_utc is not None
-            and (now - self._last_write_utc).total_seconds() < _ACK_GRACE_SECONDS
-        )
-        if awaiting_ack:
-            await self._publish_status(
-                "awaiting_ack",
-                reason=reason,
-                requested_ess_power_w=requested_ess_power_w,
-                accepted_ess_power_w=accepted_ess_power_w,
-                desired_setpoint_w=target,
-                observed_setpoint_w=observed,
-                acknowledged=False,
-                error=read_error if observed is None else None,
-            )
-            return
-
-        if same_target and self._ack_attempts >= _MAX_ACK_ATTEMPTS and not force:
-            await self._trip_fault("setpoint_not_acknowledged")
-            await self._publish_status(
-                "safe_fallback",
-                reason="setpoint_not_acknowledged",
-                requested_ess_power_w=requested_ess_power_w,
-                accepted_ess_power_w=accepted_ess_power_w,
-                desired_setpoint_w=0.0,
-                observed_setpoint_w=observed,
-                acknowledged=False,
-                error=self._last_error,
+                acknowledged=None,
             )
             return
 
@@ -303,7 +244,6 @@ class EssHardwareController:
                 requested_ess_power_w=requested_ess_power_w,
                 accepted_ess_power_w=accepted_ess_power_w,
                 desired_setpoint_w=0.0 if self.fault_active else target,
-                observed_setpoint_w=observed,
                 error=self._last_error,
             )
             return
@@ -311,18 +251,16 @@ class EssHardwareController:
         self._write_errors = 0
         self._write_count += 1
         self._last_write_utc = now
-        self._ack_attempts = self._ack_attempts + 1 if same_target else 1
         self._last_commanded_setpoint_w = target
+        self._last_error = None
         await self._publish_status(
             "write_sent",
             reason=reason,
             requested_ess_power_w=requested_ess_power_w,
             accepted_ess_power_w=accepted_ess_power_w,
             desired_setpoint_w=target,
-            observed_setpoint_w=observed,
             write_performed=True,
-            acknowledged=False,
-            error=read_error if observed is None else None,
+            acknowledged=None,
         )
 
     async def _trip_fault(self, error: str) -> None:
@@ -343,28 +281,6 @@ class EssHardwareController:
         self._write_count += 1
         self._last_write_utc = datetime.now(UTC)
         self._last_commanded_setpoint_w = 0.0
-
-    def _reset_failure_tracking(self) -> None:
-        self._ack_attempts = 0
-        self._write_errors = 0
-        self._fault_until_utc = None
-        self._last_error = None
-
-    async def _read_setpoint(self) -> tuple[float | None, str | None]:
-        entity_id = self._settings.setpoint_entity
-        assert entity_id is not None
-        try:
-            state = await self._client.get_state(entity_id)
-        except (HomeAssistantError, OSError, TimeoutError) as exc:
-            return None, str(exc)
-        raw = state.get("state")
-        try:
-            value = float(raw)
-        except (TypeError, ValueError):
-            return None, f"non_numeric_setpoint_state:{raw!r}"
-        if not math.isfinite(value):
-            return None, f"non_finite_setpoint_state:{raw!r}"
-        return value, None
 
     def _normalize_setpoint(self, setpoint_w: float) -> float:
         minimum = -float(self._settings.max_discharge_power_w)
@@ -406,9 +322,9 @@ class EssHardwareController:
             "write_count": self._write_count,
             "last_write_utc": self._last_write_utc.isoformat() if self._last_write_utc else None,
             "last_commanded_setpoint_w": _round_optional(self._last_commanded_setpoint_w),
-            "ack_attempts": self._ack_attempts,
+            "ack_attempts": 0,
             "write_error_count": self._write_errors,
-            "max_retry_attempts": max(_MAX_ACK_ATTEMPTS, _MAX_WRITE_ERRORS),
+            "max_retry_attempts": _MAX_WRITE_ERRORS,
             "fault_active": self.fault_active,
             "fault_until_utc": self._fault_until_utc.isoformat() if self._fault_until_utc else None,
             "last_error": self._last_error,

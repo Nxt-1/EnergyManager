@@ -150,3 +150,28 @@ def test_ev_controller_limits_unacknowledged_retries() -> None:
     assert client.entity_states[_FORCE_ENTITY] == "1"
     status = client.published[EV_CONTROL_STATUS_ENTITY]
     assert status["attributes"]["fault_active"] is True
+
+
+def test_connected_ev_not_charging_diagnostic_requires_sustained_zero_power() -> None:
+    from datetime import UTC, datetime, timedelta
+
+    class State:
+        def __init__(self, connected: bool, power: float):
+            self.connected = connected
+            self.power = power
+
+        def value(self, key: str):
+            return self.connected if key == "ev.connected" else self.power
+
+    controller = EvHardwareController(FakeClient(), _settings())
+    start = datetime(2026, 10, 10, 20, tzinfo=UTC)
+    controller._requested_charge_power_w = 1380.0
+    controller.observe_charging(State(True, 0.0), now_utc=start)
+    controller.observe_charging(State(True, 0.0), now_utc=start + timedelta(seconds=89))
+    assert controller.delivery_error is None
+    controller.observe_charging(State(True, 0.0), now_utc=start + timedelta(seconds=91))
+    assert controller.delivery_error == "connected_not_charging"
+    controller.observe_charging(State(True, 1380.0), now_utc=start + timedelta(seconds=92))
+    assert controller.delivery_error is None
+    controller.observe_charging(State(False, 0.0), now_utc=start + timedelta(seconds=100))
+    assert controller.delivery_error is None

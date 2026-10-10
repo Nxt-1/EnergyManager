@@ -13,7 +13,7 @@ from .control_health import ControlHealth
 
 _LOGGER = logging.getLogger(__name__)
 NOTIFICATION_STATUS_ENTITY = "sensor.energy_manager_notification_status"
-NOTIFICATION_STATUS_VERSION = "2026-10-10-control-notifications-v2"
+NOTIFICATION_STATUS_VERSION = "2026-10-10-control-notifications-v3"
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +24,7 @@ class _NotificationEvent:
     message: str
     send: bool
     created_at_utc: datetime
+    reason: str = ""
 
 
 class ControlNotificationManager:
@@ -44,6 +45,9 @@ class ControlNotificationManager:
         self._last_event: str | None = None
         self._last_notification_utc: datetime | None = None
         self._last_error: str | None = None
+        self._events: list[dict[str, Any]] = []
+        self._pending_fault_since: datetime | None = None
+        self._pending_signature: tuple[Any, ...] | None = None
 
     @property
     def enabled(self) -> bool:
@@ -63,12 +67,29 @@ class ControlNotificationManager:
 
         if previous is None:
             if alertworthy:
-                self._active_alert = self._queue_failure(health, now)
+                self._pending_signature = (health.state, health.reasons, health.stale_inputs, health.unavailable_inputs)
+                self._pending_fault_since = now
+                self._enqueue(_NotificationEvent("pending_fault", health.state, "", "", False, now, str(health.reasons)))
             else:
                 self._enqueue(_NotificationEvent("armed", health.state, "", "", False, now))
             return
 
-        previous_alertworthy = _is_alertworthy_failure(previous)
+        # Require persistent health failure before sending a phone notification.
+        # Brief transitions remain visible in the diagnostics event history.
+        signature = (health.state, health.reasons, health.stale_inputs, health.unavailable_inputs)
+        if alertworthy and not self._active_alert:
+            if self._pending_signature != signature:
+                self._pending_signature = signature
+                self._pending_fault_since = now
+                self._enqueue(_NotificationEvent("pending_fault", health.state, "", "", False, now, str(health.reasons)))
+                return
+            if self._pending_fault_since is not None and (now - self._pending_fault_since).total_seconds() >= 15:
+                self._active_alert = self._queue_failure(health, now)
+            return
+        if not alertworthy:
+            self._pending_signature = None
+            self._pending_fault_since = None
+
         same_signature = (
             previous.state == health.state
             and previous.reasons == health.reasons
@@ -79,8 +100,6 @@ class ControlNotificationManager:
             return
 
         if alertworthy:
-            if not previous_alertworthy or health.state == "safe_fallback" and previous.state != "safe_fallback":
-                self._active_alert = self._queue_failure(health, now)
             return
 
         if self._active_alert:
@@ -99,7 +118,11 @@ class ControlNotificationManager:
         current = self._last_health
         self._last_health = None
         if current is not None:
-            self.observe(current, now_utc=now_utc)
+            if _is_alertworthy_failure(current):
+                self._last_health = current
+                self._active_alert = self._queue_failure(current, now_utc or datetime.now(UTC))
+            else:
+                self.observe(current, now_utc=now_utc)
         else:
             self._enqueue(_NotificationEvent("startup_complete", "unknown", "", "", False, datetime.now(UTC)))
 
@@ -122,7 +145,7 @@ class ControlNotificationManager:
             return False
         self._last_queued_at[key] = now
         title, message = _failure_message(health)
-        self._enqueue(_NotificationEvent(kind, health.state, title, message, True, now))
+        self._enqueue(_NotificationEvent(kind, health.state, title, message, True, now, str(health.reasons)))
         return True
 
     def _enqueue(self, event: _NotificationEvent) -> None:
@@ -142,6 +165,14 @@ class ControlNotificationManager:
 
     async def _handle_event(self, event: _NotificationEvent) -> None:
         self._last_event = event.kind
+        self._events.append({
+            "time": event.created_at_utc.isoformat(),
+            "event": event.kind,
+            "health": event.health_state,
+            "notification_requested": event.send,
+            "reason": event.reason or event.message[:180],
+        })
+        self._events = self._events[-30:]
         if not self.enabled or not event.send:
             await self._publish_status("disabled" if not self.enabled else "armed", event.health_state)
             return
@@ -177,6 +208,7 @@ class ControlNotificationManager:
             "cooldown_seconds": self._settings.cooldown_seconds,
             "last_health_state": health_state,
             "last_event": self._last_event,
+            "recent_events": list(self._events),
             "sent_count": self._sent_count,
             "suppressed_count": self._suppressed_count,
             "last_notification_utc": (
@@ -194,7 +226,17 @@ class ControlNotificationManager:
 def _is_alertworthy_failure(health: ControlHealth) -> bool:
     if health.state == "healthy":
         return False
+    # An unplugged EV is not an actionable fault. Only independent ESS/grid issues
+    # can make the same health snapshot phone-worthy.
+    if "ev:disconnected" in health.reasons and all(
+        reason.startswith("ev:") for reason in health.reasons
+    ) and all(key.startswith("ev.") for key in (*health.stale_inputs, *health.unavailable_inputs)):
+        return False
     if health.stale_inputs or health.unavailable_inputs:
+        if health.reasons == ("ev:disconnected",) and all(
+            item.startswith("ev.") for item in (*health.stale_inputs, *health.unavailable_inputs)
+        ):
+            return False
         return True
     meaningful = tuple(reason for reason in health.reasons if reason != "ev:disconnected")
     return bool(meaningful) or health.state == "safe_fallback"
