@@ -6,12 +6,7 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
-from .actuators import (
-    ActuatorCommandResult,
-    ActuatorRegistry,
-    ActuatorSnapshot,
-    find_ess_actuator,
-)
+from .actuators import ActuatorCommandResult, ActuatorRegistry, ActuatorSnapshot, find_ess_actuator
 from .diagnostics import DiagnosticsPublisher
 from .economics import EconomicsService, PlanCostEvaluation
 from .fast_dispatch import FastDispatchResult, evaluate_fast_dispatch, publish_fast_dispatch
@@ -28,6 +23,7 @@ _PERIODIC_REPLAN_INTERVAL = timedelta(minutes=10)
 _FAILED_RETRY_INTERVAL = timedelta(minutes=1)
 _RETAIN_PLAN_MAX_AGE = timedelta(minutes=30)
 _ESS_SOC_DEVIATION_TRIGGER_PERCENT = 3.0
+_FAST_DISPATCH_INTERVAL_SECONDS = 1.0
 _INTERVAL = timedelta(minutes=15)
 
 
@@ -59,10 +55,18 @@ class ShadowPlannerService:
         self._last_forecast_signature: tuple[str, str] | None = None
         self._last_task_signature: tuple[tuple[object, ...], ...] | None = None
         self._last_actuator_signature: tuple[tuple[object, ...], ...] | None = None
+        self._latest_house_state: HouseState | None = None
+        self._fast_dispatch_task: asyncio.Task[None] | None = None
+        self._solve_task: asyncio.Task[None] | None = None
+        self._fast_dispatch_sequence = 0
 
     @property
     def plan(self) -> ShadowPlan | None:
         return self._plan
+
+    @property
+    def solve_in_progress(self) -> bool:
+        return self._solve_task is not None and not self._solve_task.done()
 
     async def update_from_house_state(
         self,
@@ -70,8 +74,43 @@ class ShadowPlannerService:
         *,
         now_utc: datetime | None = None,
     ) -> None:
-        """Observe live state and replan periodically or immediately after a material change."""
+        """Observe live state and request replans without blocking input processing."""
         now = (now_utc or datetime.now(UTC)).astimezone(UTC)
+        self._latest_house_state = house_state
+        self._ensure_fast_dispatch_loop()
+
+        context = await self._planning_context(house_state, now, publish_diagnostics=True)
+        if context is None:
+            return
+        load_forecast, pv_forecast, economics, local_tz, actuators, tasks = context
+        reason = self._replan_reason(
+            load_forecast.generated_at_utc,
+            pv_forecast.generated_at_utc,
+            actuators,
+            tasks,
+            now,
+        )
+        if reason is None:
+            return
+        self._request_replan(
+            reason,
+            house_state,
+            now,
+            load_forecast,
+            pv_forecast,
+            economics,
+            local_tz,
+            actuators,
+            tasks,
+        )
+
+    async def _planning_context(
+        self,
+        house_state: HouseState,
+        now: datetime,
+        *,
+        publish_diagnostics: bool,
+    ):
         load_forecast = self._load_service.forecast
         local_tz = None
         if load_forecast is not None and load_forecast.points:
@@ -80,86 +119,134 @@ class ShadowPlannerService:
             await self._economics_service.observe_house_state(house_state, now_utc=now, local_tz=local_tz)
 
         actuators = self._actuator_registry.snapshots(house_state)
-        await self._diagnostics.publish_actuator_status(actuators)
+        if publish_diagnostics:
+            await self._diagnostics.publish_actuator_status(actuators)
         if load_forecast is None:
-            await self._diagnostics.publish_shadow_plan_status("waiting_for_load_forecast")
-            return
+            if publish_diagnostics:
+                await self._diagnostics.publish_shadow_plan_status("waiting_for_load_forecast")
+            return None
         if local_tz is None:
             local_tz = now.astimezone().tzinfo
         assert local_tz is not None
         tasks = self._task_registry.snapshots(actuators, now_utc=now, local_tz=local_tz)
-        await publish_task_status(self._ha_client, tasks)
+        if publish_diagnostics:
+            await publish_task_status(self._ha_client, tasks)
         pv_forecast = self._pv_service.forecast if self._pv_service is not None else None
         if pv_forecast is None:
-            await self._diagnostics.publish_shadow_plan_status("waiting_for_pv_forecast")
-            return
+            if publish_diagnostics:
+                await self._diagnostics.publish_shadow_plan_status("waiting_for_pv_forecast")
+            return None
 
         economics = self._economics_service
         if economics is None or not economics.optimizer_ready:
-            await self._diagnostics.publish_shadow_plan_status("waiting_for_economics")
-            return
+            if publish_diagnostics:
+                await self._diagnostics.publish_shadow_plan_status("waiting_for_economics")
+            return None
         if economics.current_profile is None or economics.capacity_state is None:
-            await self._diagnostics.publish_shadow_plan_status("waiting_for_economics_state")
-            return
+            if publish_diagnostics:
+                await self._diagnostics.publish_shadow_plan_status("waiting_for_economics_state")
+            return None
+        return load_forecast, pv_forecast, economics, local_tz, actuators, tasks
 
-        fast_dispatch = await self._evaluate_and_publish_fast_dispatch(house_state, now)
-        reason = self._replan_reason(
-            load_forecast.generated_at_utc,
-            pv_forecast.generated_at_utc,
-            actuators,
-            tasks,
-            now,
-            fast_dispatch,
-        )
-        if reason is None:
+    def _request_replan(
+        self,
+        reason: str,
+        house_state: HouseState,
+        now: datetime,
+        load_forecast,
+        pv_forecast,
+        economics: EconomicsService,
+        local_tz,
+        actuators: tuple[ActuatorSnapshot, ...],
+        tasks: tuple[PlanningTask, ...],
+    ) -> None:
+        if self.solve_in_progress:
             return
         if self._last_attempt_at_utc is not None and now - self._last_attempt_at_utc < _FAILED_RETRY_INTERVAL:
             return
         self._last_attempt_at_utc = now
-
-        frame = self._planner.build(
-            load_forecast,
-            pv_forecast,
-            now_utc=now,
-            actuators=actuators,
-            tasks=tasks,
-        )
-        evaluation = await asyncio.to_thread(
-            evaluate_shadow_plan_milp,
-            frame,
-            economics.current_profile,
-            economics.capacity_state,
-        )
-        await publish_milp_evaluation(self._ha_client, evaluation)
-        _LOGGER.info("MILP planner: trigger=%s, %s", reason, _milp_log(evaluation))
-
-        if not evaluation.adoption_ready or evaluation.plan is None:
-            if self._can_retain_previous_plan(reason, now):
-                _LOGGER.warning("MILP replan failed; retaining previous shadow plan temporarily: %s", evaluation.reason)
-                return
-            self._plan = None
-            await self._diagnostics.publish_shadow_plan_status(
-                "milp_unavailable",
-                error=evaluation.reason or evaluation.status,
+        self._solve_task = asyncio.create_task(
+            self._run_replan(
+                reason,
+                house_state,
+                now,
+                load_forecast,
+                pv_forecast,
+                economics,
+                local_tz,
+                actuators,
+                tasks,
             )
-            await self._diagnostics.publish_actuator_command_status(())
-            return
-
-        plan = evaluation.plan
-        self._plan = plan
-        self._last_plan_at_utc = now
-        self._last_forecast_signature = _forecast_signature(
-            load_forecast.generated_at_utc,
-            pv_forecast.generated_at_utc,
         )
-        self._last_task_signature = _task_signature(tasks)
-        self._last_actuator_signature = _actuator_signature(actuators)
 
-        await self._diagnostics.publish_shadow_plan(plan)
-        cost_evaluation = await economics.publish_plan_cost(plan, local_tz=local_tz)
-        fast_dispatch = await self._evaluate_and_publish_fast_dispatch(house_state, now)
-        command_results = () if fast_dispatch is None else fast_dispatch.command_results
-        _log_plan(plan, actuators, tasks, cost_evaluation, command_results)
+    async def _run_replan(
+        self,
+        reason: str,
+        house_state: HouseState,
+        now: datetime,
+        load_forecast,
+        pv_forecast,
+        economics: EconomicsService,
+        local_tz,
+        actuators: tuple[ActuatorSnapshot, ...],
+        tasks: tuple[PlanningTask, ...],
+    ) -> None:
+        try:
+            frame = self._planner.build(
+                load_forecast,
+                pv_forecast,
+                now_utc=now,
+                actuators=actuators,
+                tasks=tasks,
+            )
+            evaluation = await asyncio.to_thread(
+                evaluate_shadow_plan_milp,
+                frame,
+                economics.current_profile,
+                economics.capacity_state,
+            )
+            await publish_milp_evaluation(self._ha_client, evaluation)
+            _LOGGER.info("MILP planner: trigger=%s, %s", reason, _milp_log(evaluation))
+
+            if not evaluation.adoption_ready or evaluation.plan is None:
+                if self._can_retain_previous_plan(reason, datetime.now(UTC)):
+                    _LOGGER.warning(
+                        "MILP replan failed; retaining previous shadow plan temporarily: %s",
+                        evaluation.reason,
+                    )
+                    return
+                self._plan = None
+                await self._diagnostics.publish_shadow_plan_status(
+                    "milp_unavailable",
+                    error=evaluation.reason or evaluation.status,
+                )
+                await self._diagnostics.publish_actuator_command_status(())
+                return
+
+            plan = evaluation.plan
+            self._plan = plan
+            self._last_plan_at_utc = now
+            self._last_forecast_signature = _forecast_signature(
+                load_forecast.generated_at_utc,
+                pv_forecast.generated_at_utc,
+            )
+            self._last_task_signature = _task_signature(tasks)
+            self._last_actuator_signature = _actuator_signature(actuators)
+
+            await self._diagnostics.publish_shadow_plan(plan)
+            cost_evaluation = await economics.publish_plan_cost(plan, local_tz=local_tz)
+            latest_state = self._latest_house_state or house_state
+            fast_result = evaluate_fast_dispatch(
+                plan,
+                latest_state,
+                self._actuator_registry,
+                now_utc=datetime.now(UTC),
+            )
+            _log_plan(plan, actuators, tasks, cost_evaluation, fast_result.command_results)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - planning failure must not terminate the live controller.
+            _LOGGER.exception("Unexpected asynchronous MILP planner failure")
 
     def _replan_reason(
         self,
@@ -168,7 +255,6 @@ class ShadowPlannerService:
         actuators: tuple[ActuatorSnapshot, ...],
         tasks: tuple[PlanningTask, ...],
         now_utc: datetime,
-        fast_dispatch: FastDispatchResult | None,
     ) -> str | None:
         if self._plan is None or self._last_plan_at_utc is None:
             return "startup"
@@ -182,28 +268,64 @@ class ShadowPlannerService:
             return "actuator_change"
         if _ess_soc_deviates(self._plan, actuators, now_utc):
             return "ess_soc_deviation"
-        if fast_dispatch is not None and fast_dispatch.replan_required:
-            return "fast_dispatch_residual"
         if now_utc - self._last_plan_at_utc >= _PERIODIC_REPLAN_INTERVAL:
             return "periodic"
         return None
 
-    async def _evaluate_and_publish_fast_dispatch(
-        self,
-        house_state: HouseState,
-        now_utc: datetime,
-    ) -> FastDispatchResult | None:
-        if self._plan is None:
-            return None
-        result = evaluate_fast_dispatch(
-            self._plan,
-            house_state,
-            self._actuator_registry,
-            now_utc=now_utc,
+    def _ensure_fast_dispatch_loop(self) -> None:
+        if self._fast_dispatch_task is None or self._fast_dispatch_task.done():
+            self._fast_dispatch_task = asyncio.create_task(self._fast_dispatch_loop())
+
+    async def _fast_dispatch_loop(self) -> None:
+        loop = asyncio.get_running_loop()
+        next_run = loop.time()
+        try:
+            while True:
+                delay = next_run - loop.time()
+                if delay > 0.0:
+                    await asyncio.sleep(delay)
+                started = loop.time()
+                await self._run_fast_dispatch_once()
+                next_run = max(next_run + _FAST_DISPATCH_INTERVAL_SECONDS, started + _FAST_DISPATCH_INTERVAL_SECONDS)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - fast dispatch must restart after an unexpected diagnostic failure.
+            _LOGGER.exception("Fast dispatch loop stopped unexpectedly")
+
+    async def _run_fast_dispatch_once(self) -> None:
+        house_state = self._latest_house_state
+        plan = self._plan
+        if house_state is None or plan is None:
+            return
+        now = datetime.now(UTC)
+        result = evaluate_fast_dispatch(plan, house_state, self._actuator_registry, now_utc=now)
+        self._fast_dispatch_sequence += 1
+        await publish_fast_dispatch(
+            self._ha_client,
+            result,
+            control_interval_seconds=_FAST_DISPATCH_INTERVAL_SECONDS,
+            dispatch_sequence=self._fast_dispatch_sequence,
+            milp_solve_in_progress=self.solve_in_progress,
         )
-        await publish_fast_dispatch(self._ha_client, result)
         await self._diagnostics.publish_actuator_command_status(result.command_results)
-        return result
+        if not result.replan_required:
+            return
+
+        context = await self._planning_context(house_state, now, publish_diagnostics=False)
+        if context is None:
+            return
+        load_forecast, pv_forecast, economics, local_tz, actuators, tasks = context
+        self._request_replan(
+            "fast_dispatch_residual",
+            house_state,
+            now,
+            load_forecast,
+            pv_forecast,
+            economics,
+            local_tz,
+            actuators,
+            tasks,
+        )
 
     def _can_retain_previous_plan(self, trigger: str, now_utc: datetime) -> bool:
         if self._plan is None or self._last_plan_at_utc is None:
@@ -250,10 +372,6 @@ def _actuator_signature(actuators: tuple[ActuatorSnapshot, ...]) -> tuple[tuple[
         )
         for item in actuators
     )
-
-
-def _iso(value: datetime | None) -> str | None:
-    return value.isoformat() if value is not None else None
 
 
 def _quarter_hour_bucket(value: datetime | None) -> str | None:

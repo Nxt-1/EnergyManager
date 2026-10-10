@@ -1,4 +1,13 @@
 # Changelog
+## 0.27.0
+- Decouples MILP solving from live Home Assistant input processing so a 7-day replan no longer blocks fast dispatch updates.
+- Runs fast shadow dispatch on an independent 1 Hz control loop using the latest coalesced Home Assistant state.
+- Publishes the fast-dispatch sequence number, configured control interval and whether a MILP solve is in progress.
+- Atomically replaces the active shadow plan only after a newly solved MILP plan passes validation.
+- Prevents overlapping MILP solves; live state processing and fast ESS correction continue while HiGHS runs in a worker thread.
+- Keeps the 10-minute periodic MILP cadence and existing event-triggered replans.
+- Remains hard-coded shadow mode with no hardware writes.
+
 ## 0.26.0
 - Adds a fast shadow dispatch layer that tracks the current MILP grid-power target on every live Home Assistant state update.
 - Replaces the measured EV load with the MILP-planned EV load when evaluating shadow dispatch, so a not-yet-controlled EV does

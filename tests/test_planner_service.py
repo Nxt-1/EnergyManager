@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -8,10 +9,7 @@ from zoneinfo import ZoneInfo
 
 from energymanager.actuators import ActuatorRegistry
 from energymanager.config import EssSettings, Settings
-from energymanager.diagnostics import (
-    ACTUATOR_COMMAND_STATUS_ENTITY,
-    SHADOW_PLAN_STATUS_ENTITY,
-)
+from energymanager.diagnostics import ACTUATOR_COMMAND_STATUS_ENTITY, SHADOW_PLAN_STATUS_ENTITY
 from energymanager.economics import CapacityPeakState, TariffProfile
 from energymanager.house_state import HouseState
 from energymanager.load_forecast import BackgroundLoadForecast, BackgroundLoadForecastPoint
@@ -219,11 +217,54 @@ def test_planner_service_uses_ten_minute_periodic_cadence(monkeypatch) -> None:
         economics_service=FakeEconomicsService(start),  # type: ignore[arg-type]
     )
     state = _house_state(start)
-    asyncio.run(service.update_from_house_state(state, now_utc=start.astimezone(UTC)))
-    asyncio.run(service.update_from_house_state(state, now_utc=(start + timedelta(minutes=5)).astimezone(UTC)))
-    assert calls == 1
-    asyncio.run(service.update_from_house_state(state, now_utc=(start + timedelta(minutes=10)).astimezone(UTC)))
-    assert calls == 2
+
+    async def scenario() -> None:
+        await service.update_from_house_state(state, now_utc=start.astimezone(UTC))
+        assert service.solve_in_progress is True
+        assert service._solve_task is not None
+        await service._solve_task
+        assert calls == 1
+
+        await service.update_from_house_state(state, now_utc=(start + timedelta(minutes=5)).astimezone(UTC))
+        assert calls == 1
+        await service.update_from_house_state(state, now_utc=(start + timedelta(minutes=10)).astimezone(UTC))
+        assert service._solve_task is not None
+        await service._solve_task
+        assert calls == 2
+
+    asyncio.run(scenario())
     assert service.plan is not None
     assert service.plan.scheduling_strategy == "milp_joint_ev_ess"
     assert client.states[ACTUATOR_COMMAND_STATUS_ENTITY]["attributes"]["hardware_writes"] is False
+
+
+def test_planner_service_returns_while_milp_worker_is_still_solving(monkeypatch) -> None:
+    start = datetime(2026, 10, 8, 12, 0, tzinfo=_LOCAL)
+    load, pv = _forecasts(start)
+    client = FakeHomeAssistantClient()
+
+    def slow_solver(frame, profile, capacity_state):
+        time.sleep(0.15)
+        return _solved_evaluation(frame)
+
+    monkeypatch.setattr("energymanager.planner_service.evaluate_shadow_plan_milp", slow_solver)
+    service = ShadowPlannerService(
+        client,
+        FakeLoadService(load),  # type: ignore[arg-type]
+        FakePvService(pv),  # type: ignore[arg-type]
+        actuator_registry=ActuatorRegistry(_settings()),
+        task_registry=TaskRegistry(Settings().ev),
+        economics_service=FakeEconomicsService(start),  # type: ignore[arg-type]
+    )
+
+    async def scenario() -> None:
+        before = asyncio.get_running_loop().time()
+        await service.update_from_house_state(_house_state(start), now_utc=start.astimezone(UTC))
+        elapsed = asyncio.get_running_loop().time() - before
+        assert elapsed < 0.10
+        assert service.solve_in_progress is True
+        assert service._solve_task is not None
+        await service._solve_task
+        assert service.plan is not None
+
+    asyncio.run(scenario())

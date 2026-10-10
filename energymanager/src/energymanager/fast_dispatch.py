@@ -10,7 +10,7 @@ from .actuators import ActuatorCommandResult, ActuatorPowerRequest, ActuatorRegi
 from .house_state import HouseState
 from .planner import ShadowPlan, ShadowPlanInterval
 
-FAST_DISPATCH_VERSION = "2026-10-10-fast-dispatch-v1"
+FAST_DISPATCH_VERSION = "2026-10-10-fast-dispatch-v2"
 FAST_DISPATCH_STATUS_ENTITY = "sensor.energy_manager_fast_dispatch_status"
 _INTERVAL = timedelta(minutes=15)
 _REPLAN_RESIDUAL_W = 500.0
@@ -44,7 +44,14 @@ class FastDispatchResult:
     command_results: tuple[ActuatorCommandResult, ...] = ()
 
 
-async def publish_fast_dispatch(client, result: FastDispatchResult) -> None:
+async def publish_fast_dispatch(
+    client,
+    result: FastDispatchResult,
+    *,
+    control_interval_seconds: float | None = None,
+    dispatch_sequence: int | None = None,
+    milp_solve_in_progress: bool = False,
+) -> None:
     """Publish the live shadow dispatch correction into Home Assistant."""
     attributes: dict[str, Any] = {
         "friendly_name": "Energy Manager Fast Dispatch Status",
@@ -53,6 +60,9 @@ async def publish_fast_dispatch(client, result: FastDispatchResult) -> None:
         "control_enabled": False,
         "hardware_writes": False,
         "tracking_strategy": "milp_grid_target_with_live_ess_feedback",
+        "control_interval_seconds": control_interval_seconds,
+        "dispatch_sequence": dispatch_sequence,
+        "milp_solve_in_progress": milp_solve_in_progress,
         "interval_start_local": _iso(result.interval_start_local),
         "planned_grid_power_w": _round(result.planned_grid_power_w),
         "planned_ess_power_w": _round(result.planned_ess_power_w),

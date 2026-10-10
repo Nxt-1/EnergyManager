@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 
 from energymanager.actuators import ActuatorRegistry
 from energymanager.config import EssSettings, EvSettings, Settings
-from energymanager.fast_dispatch import evaluate_fast_dispatch
+from energymanager.fast_dispatch import FAST_DISPATCH_STATUS_ENTITY, evaluate_fast_dispatch, publish_fast_dispatch
 from energymanager.house_state import HouseState
 from energymanager.planner import ShadowPlan, ShadowPlanInterval
 
@@ -107,3 +108,37 @@ def test_fast_dispatch_substitutes_planned_ev_for_shadow_actual_ev() -> None:
     assert result.residual_to_plan_w == 0.0
     assert result.replan_required is False
     assert [item.actuator_id for item in result.command_results] == ["ess", "ev"]
+
+
+class _FakeClient:
+    def __init__(self) -> None:
+        self.states: dict[str, dict[str, object]] = {}
+
+    async def set_state(self, entity_id: str, state: str, attributes: dict[str, object]) -> None:
+        self.states[entity_id] = {"state": state, "attributes": attributes}
+
+
+def test_fast_dispatch_publishes_fixed_rate_runtime_metadata() -> None:
+    client = _FakeClient()
+    result = evaluate_fast_dispatch(
+        _plan(planned_grid_w=500.0, planned_ess_w=500.0),
+        _state(grid_w=500.0, ess_w=500.0),
+        _registry(),
+        now_utc=_NOW,
+    )
+
+    asyncio.run(
+        publish_fast_dispatch(
+            client,
+            result,
+            control_interval_seconds=1.0,
+            dispatch_sequence=17,
+            milp_solve_in_progress=True,
+        )
+    )
+
+    attributes = client.states[FAST_DISPATCH_STATUS_ENTITY]["attributes"]
+    assert isinstance(attributes, dict)
+    assert attributes["control_interval_seconds"] == 1.0
+    assert attributes["dispatch_sequence"] == 17
+    assert attributes["milp_solve_in_progress"] is True
