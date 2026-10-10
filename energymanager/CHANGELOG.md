@@ -1,4 +1,10 @@
 # Changelog
+## 0.24.2
+- Clarifies EV task diagnostics by publishing the hard minimum SoC and the soft preferred SoC separately.
+- Publishes preferred AC/battery energy alongside the hard energy-by-deadline requirement.
+- Keeps `target_soc_percent` as a compatibility alias and explicitly marks its role as `preferred`.
+- No task policy, MILP, configuration-schema or hardware-control behavior changes.
+
 ## 0.24.1
 - Fixes the v0.24 CI Ruff failure by wrapping the EV minimum-runtime expression to the configured line-length limit.
 - No EV policy, MILP, configuration-schema or hardware-control behavior changes.

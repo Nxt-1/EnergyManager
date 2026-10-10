@@ -20,6 +20,7 @@ from .load_service import BackgroundLoadService
 from .milp_planner import MilpEvaluation, evaluate_shadow_plan_milp, publish_milp_evaluation
 from .planner import ShadowPlan, ShadowPlanner
 from .pv_service import PvForecastService
+from .task_diagnostics import publish_task_status
 from .tasks import PlanningTask, TaskRegistry
 
 _LOGGER = logging.getLogger(__name__)
@@ -90,7 +91,7 @@ class ShadowPlannerService:
             local_tz = now.astimezone().tzinfo
         assert local_tz is not None
         tasks = self._task_registry.snapshots(actuators, now_utc=now, local_tz=local_tz)
-        await self._diagnostics.publish_task_status(tasks)
+        await publish_task_status(self._ha_client, tasks)
         pv_forecast = self._pv_service.forecast if self._pv_service is not None else None
         if pv_forecast is None:
             await self._diagnostics.publish_shadow_plan_status("waiting_for_pv_forecast")
