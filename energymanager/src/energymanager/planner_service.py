@@ -17,6 +17,7 @@ from .actuators import (
 )
 from .control_health import ControlHealth, evaluate_control_health, publish_control_health
 from .control_notifications import ControlNotificationManager
+from .database import EnergyManagerStore
 from .diagnostics import DiagnosticsPublisher
 from .economics import EconomicsService, PlanCostEvaluation
 from .ess_control import EssHardwareController
@@ -54,6 +55,7 @@ class ShadowPlannerService:
         ess_controller: EssHardwareController | None = None,
         ev_controller: EvHardwareController | None = None,
         notification_manager: ControlNotificationManager | None = None,
+        store: EnergyManagerStore | None = None,
         planner: ShadowPlanner | None = None,
     ) -> None:
         self._ha_client = ha_client
@@ -67,6 +69,7 @@ class ShadowPlannerService:
         self._ess_controller = ess_controller
         self._ev_controller = ev_controller
         self._notification_manager = notification_manager
+        self._store = store
         self._plan: ShadowPlan | None = None
         self._last_plan_at_utc: datetime | None = None
         self._last_attempt_at_utc: datetime | None = None
@@ -272,6 +275,9 @@ class ShadowPlannerService:
             self._last_actuator_signature = _actuator_signature(actuators)
 
             await self._diagnostics.publish_shadow_plan(plan)
+            if self._store is not None:
+                # Never delay a control cycle or invalidate a valid plan due to history storage.
+                asyncio.create_task(self._archive_plan(plan))
             cost_evaluation = await economics.publish_plan_cost(plan, local_tz=local_tz)
             latest_state = self._latest_house_state or house_state
             fast_result = evaluate_fast_dispatch(
@@ -289,6 +295,13 @@ class ShadowPlannerService:
         finally:
             if reason == "startup" and self._notification_manager is not None:
                 self._notification_manager.complete_startup()
+
+    async def _archive_plan(self, plan: ShadowPlan) -> None:
+        try:
+            assert self._store is not None
+            await self._store.record_milp_plan(plan)
+        except Exception:  # noqa: BLE001 - persistence must never affect live control.
+            _LOGGER.exception("MILP history archive failed; live control remains unaffected")
 
     def _replan_reason(
         self,

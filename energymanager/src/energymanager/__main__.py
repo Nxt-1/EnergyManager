@@ -249,6 +249,7 @@ async def _run_app(
                 ess_controller=ess_controller,
                 ev_controller=ev_controller,
                 notification_manager=notification_manager,
+                store=store,
             )
             app = EnergyManagerApp(
                 settings,
@@ -272,6 +273,7 @@ async def _run_app(
         ess_controller=ess_controller,
         ev_controller=ev_controller,
         notification_manager=notification_manager,
+        store=store,
     )
     app = EnergyManagerApp(
         settings,

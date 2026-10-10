@@ -1,4 +1,10 @@
 # Changelog
+
+## 0.31.0
+- Exports all 672 MILP intervals across seven Home Assistant daily plan entities for the full schedule view.
+- Archives each adopted plan interval in InfluxDB 3 for historical plan-versus-actual comparisons.
+- Historical writes run outside the MILP execution path, and database failures do not interrupt live control.
+- Does not alter planning objectives, ESS/EV control decisions, or safety handling.
 ## 0.30.3
 - Suppresses transient startup control notifications until the initial MILP attempt finishes.
 - Evaluates current health at startup completion and reports persistent failures and later recovery.

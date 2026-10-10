@@ -15,6 +15,7 @@ import aiohttp
 from .load_backtest import BACKTEST_VERSION, BackgroundLoadBacktest
 from .load_forecast import MODEL_VERSION, BackgroundLoadForecast, LoadSample
 from .open_meteo import FORECAST_MODEL
+from .planner import ShadowPlan
 from .pv_forecast import CALIBRATION_VERSION, PvForecast
 
 _LOGGER = logging.getLogger(__name__)
@@ -356,6 +357,38 @@ class EnergyManagerStore:
             f"WHERE table_name = '{table_sql}' LIMIT 1"
         )
         return bool(rows)
+
+    async def record_milp_plan(self, plan: "ShadowPlan") -> None:
+        """Archive every accepted 15-minute MILP interval with an immutable issue timestamp.
+
+        A stable interval-index tag and unique nanosecond timestamps avoid creating
+        one high-cardinality series per plan revision. Failed writes must be handled
+        by the caller, independently from ESS/EV control.
+        """
+        issued = plan.generated_at_utc.astimezone(UTC)
+        issued_ns = _timestamp_ns(issued)
+        lines: list[str] = []
+        for index, item in enumerate(plan.intervals):
+            fields = [
+                f'issued_at_utc="{_escape_string(issued.isoformat())}"',
+                f'target_start_local="{_escape_string(item.period_start_local.isoformat())}"',
+                f'background_w={item.background_load_w:.3f}',
+                f'scheduled_w={item.scheduled_load_w:.3f}',
+                f'pv_ac_w={item.pv_ac_power_w:.3f}',
+                f'pv_dc_w={item.pv_dc_power_w:.3f}',
+                f'net_before_control_w={item.net_power_before_control_w:.3f}',
+            ]
+            for key, value in (
+                ("ess_ac_w", item.ess_ac_power_w),
+                ("grid_after_ess_w", item.grid_power_after_ess_w),
+                ("ess_soc_percent", item.projected_soc_percent),
+                ("ev_soc_percent", item.projected_ev_soc_percent),
+                ("dc_pv_curtailed_w", item.curtailed_dc_pv_w),
+            ):
+                if value is not None:
+                    fields.append(f"{key}={value:.3f}")
+            lines.append(f"milp_plan_interval,interval_index={index} {','.join(fields)} {issued_ns + index}")
+        await _write_in_batches(self._client, lines)
 
     async def record_pv_forecast(self, forecast: PvForecast, now_local: datetime) -> None:
         """Persist one row per forecast target day for a rolling PV forecast revision."""

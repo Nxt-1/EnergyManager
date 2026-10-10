@@ -588,6 +588,34 @@ class DiagnosticsPublisher:
             }
         await self._client.set_state(SHADOW_PLAN_STATUS_ENTITY, "ready", status_attributes)
 
+        # Split 672 intervals into daily-sized entities to keep HA attributes manageable.
+        # Slots are offsets from the plan start, not calendar dates (DST-safe).
+        for day in range(7):
+            slots = plan.intervals[day * 96 : (day + 1) * 96]
+            attributes = {
+                "friendly_name": f"Energy Manager Plan Day {day + 1}",
+                "generated_at_utc": plan.generated_at_utc.isoformat(),
+                "first_interval": day * 96,
+                "interval_minutes": 15,
+                "interval_count": len(slots),
+                "intervals": [
+                    {
+                        "start": item.period_start_local.isoformat(),
+                        "load_w": round(item.background_load_w + item.scheduled_load_w),
+                        "pv_ac_w": round(item.pv_ac_power_w),
+                        "pv_dc_w": round(item.pv_dc_power_w),
+                        "ess_w": _round_optional(item.ess_ac_power_w, 0),
+                        "grid_w": _round_optional(item.grid_power_after_ess_w, 0),
+                        "ess_soc": _round_optional(item.projected_soc_percent, 1),
+                        "ev_soc": _round_optional(item.projected_ev_soc_percent, 1),
+                    }
+                    for item in slots
+                ],
+            }
+            await self._client.set_state(
+                f"sensor.energy_manager_plan_day_{day + 1}", len(slots), attributes
+            )
+
         energy_attributes = _energy_attributes("Energy Manager Shadow Plan Next 24 Hours Net Deficit")
         energy_attributes.update(
             {
