@@ -1,4 +1,10 @@
 # Changelog
+## 0.25.1
+- Clarifies multi-trip EV validation diagnostics by replacing the misleading `outside_window_energy_kwh` field with
+  `scheduled_after_deadline_kwh`.
+- Adds `charging_during_away_windows_kwh` as a separate validation metric for actual charging while the EV is unavailable.
+- No MILP decisions, trip scheduling, task semantics, economic calculations, configuration or hardware-control behavior changes.
+
 ## 0.25.0
 - Adds a recurring weekly EV trip schedule with configurable weekdays, departure/return times, hard departure SoC and expected
   trip energy.

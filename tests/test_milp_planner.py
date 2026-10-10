@@ -387,6 +387,8 @@ def test_milp_models_weekly_trip_energy_and_blocks_charging_while_away() -> None
     assert result.validation_status == "passed"
     assert len(result.task_validation) == 1
     assert result.task_validation[0].deadline_met is True
+    assert result.task_validation[0].charging_during_away_windows_kwh == pytest.approx(0.0, abs=1e-6)
+    assert result.task_validation[0].scheduled_after_deadline_kwh >= 0.0
     away = result.plan.intervals[4:6]
     assert all(item.scheduled_load_w == pytest.approx(0.0, abs=1e-5) for item in away)
     assert all(item.projected_ev_soc_percent is not None for item in result.plan.intervals)

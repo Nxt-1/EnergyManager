@@ -22,7 +22,7 @@ from .ha_client import HomeAssistantClient
 from .planner import ShadowPlan, ShadowPlanInterval
 from .tasks import PlanningTask
 
-MILP_EVALUATION_VERSION = "2026-10-10-milp-v6"
+MILP_EVALUATION_VERSION = "2026-10-10-milp-v7"
 MILP_STATUS_ENTITY = "sensor.energy_manager_milp_status"
 MILP_TOTAL_TIME_BUDGET_SECONDS = 30.0
 MILP_ECONOMIC_TIME_LIMIT_SECONDS = MILP_TOTAL_TIME_BUDGET_SECONDS
@@ -43,7 +43,8 @@ class MilpTaskValidation:
     task_id: str
     required_energy_kwh: float
     scheduled_energy_kwh: float
-    outside_window_energy_kwh: float
+    scheduled_after_deadline_kwh: float
+    charging_during_away_windows_kwh: float
     deadline_met: bool
     power_steps_valid: bool
     valid: bool
@@ -1085,9 +1086,26 @@ def _validate_solution_plan(
         scheduled_kwh = sum(
             item.scheduled_load_w for index, item in enumerate(plan.intervals) if index in eligible
         ) * _INTERVAL_HOURS / 1000.0
-        outside_kwh = sum(
-            item.scheduled_load_w for index, item in enumerate(plan.intervals) if index not in eligible
-        ) * _INTERVAL_HOURS / 1000.0
+        deadline_utc = task.latest_end_local.astimezone(UTC) if task.latest_end_local is not None else None
+        scheduled_after_deadline_kwh = (
+            sum(
+                item.scheduled_load_w
+                for item in plan.intervals
+                if deadline_utc is not None
+                and (item.period_start_local + _INTERVAL_DELTA).astimezone(UTC) > deadline_utc
+            )
+            * _INTERVAL_HOURS
+            / 1000.0
+        )
+        charging_during_away_windows_kwh = (
+            sum(
+                item.scheduled_load_w
+                for item in plan.intervals
+                if _interval_is_unavailable(item.period_start_local, unavailable)
+            )
+            * _INTERVAL_HOURS
+            / 1000.0
+        )
         if task.minimum_soc_percent is not None:
             departure_soc = _ev_soc_at_deadline(plan, ev, task.latest_end_local)
             deadline_met = departure_soc is not None and departure_soc + 1e-4 >= task.minimum_soc_percent
@@ -1101,7 +1119,8 @@ def _validate_solution_plan(
                 task_id=task.task_id,
                 required_energy_kwh=required_kwh,
                 scheduled_energy_kwh=scheduled_kwh,
-                outside_window_energy_kwh=outside_kwh,
+                scheduled_after_deadline_kwh=scheduled_after_deadline_kwh,
+                charging_during_away_windows_kwh=charging_during_away_windows_kwh,
                 deadline_met=deadline_met,
                 power_steps_valid=power_steps_valid,
                 valid=task_valid,
@@ -1270,7 +1289,8 @@ async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpE
                 "id": item.task_id,
                 "required_energy_kwh": round(item.required_energy_kwh, 3),
                 "scheduled_energy_kwh": round(item.scheduled_energy_kwh, 3),
-                "outside_window_energy_kwh": round(item.outside_window_energy_kwh, 4),
+                "scheduled_after_deadline_kwh": round(item.scheduled_after_deadline_kwh, 4),
+                "charging_during_away_windows_kwh": round(item.charging_during_away_windows_kwh, 4),
                 "deadline_met": item.deadline_met,
                 "power_steps_valid": item.power_steps_valid,
                 "valid": item.valid,
