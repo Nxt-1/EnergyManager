@@ -9,12 +9,12 @@ from zoneinfo import ZoneInfo
 
 from energymanager.actuators import ActuatorRegistry
 from energymanager.config import EssSettings, Settings
-from energymanager.diagnostics import SHADOW_PLAN_STATUS_ENTITY
+from energymanager.diagnostics import PLAN_STATUS_ENTITY
 from energymanager.economics import CapacityPeakState, TariffProfile
 from energymanager.house_state import HouseState
 from energymanager.load_forecast import BackgroundLoadForecast, BackgroundLoadForecastPoint
 from energymanager.milp_planner import MilpEvaluation
-from energymanager.planner_service import ShadowPlannerService
+from energymanager.planner_service import PlannerService
 from energymanager.pv_forecast import PvForecast, PvForecastPoint
 from energymanager.tasks import TaskRegistry
 
@@ -169,7 +169,7 @@ def test_planner_service_waits_for_pv_forecast() -> None:
     start = datetime(2026, 10, 8, 12, 0, tzinfo=_LOCAL)
     load, _ = _forecasts(start)
     client = FakeHomeAssistantClient()
-    service = ShadowPlannerService(
+    service = PlannerService(
         client,
         FakeLoadService(load),  # type: ignore[arg-type]
         FakePvService(None),  # type: ignore[arg-type]
@@ -178,14 +178,14 @@ def test_planner_service_waits_for_pv_forecast() -> None:
         economics_service=FakeEconomicsService(start),  # type: ignore[arg-type]
     )
     asyncio.run(service.update_from_house_state(_house_state(start), now_utc=start.astimezone(UTC)))
-    assert client.states[SHADOW_PLAN_STATUS_ENTITY]["state"] == "waiting_for_pv_forecast"
+    assert client.states[PLAN_STATUS_ENTITY]["state"] == "waiting_for_pv_forecast"
 
 
 def test_planner_service_requires_economics_for_milp() -> None:
     start = datetime(2026, 10, 8, 12, 0, tzinfo=_LOCAL)
     load, pv = _forecasts(start)
     client = FakeHomeAssistantClient()
-    service = ShadowPlannerService(
+    service = PlannerService(
         client,
         FakeLoadService(load),  # type: ignore[arg-type]
         FakePvService(pv),  # type: ignore[arg-type]
@@ -193,7 +193,7 @@ def test_planner_service_requires_economics_for_milp() -> None:
         task_registry=TaskRegistry(Settings().ev),
     )
     asyncio.run(service.update_from_house_state(_house_state(start), now_utc=start.astimezone(UTC)))
-    assert client.states[SHADOW_PLAN_STATUS_ENTITY]["state"] == "waiting_for_economics"
+    assert client.states[PLAN_STATUS_ENTITY]["state"] == "waiting_for_economics"
 
 
 def test_planner_service_uses_ten_minute_periodic_cadence(monkeypatch) -> None:
@@ -207,8 +207,8 @@ def test_planner_service_uses_ten_minute_periodic_cadence(monkeypatch) -> None:
         calls += 1
         return _solved_evaluation(frame)
 
-    monkeypatch.setattr("energymanager.planner_service.evaluate_shadow_plan_milp", fake_solver)
-    service = ShadowPlannerService(
+    monkeypatch.setattr("energymanager.planner_service.evaluate_plan_milp", fake_solver)
+    service = PlannerService(
         client,
         FakeLoadService(load),  # type: ignore[arg-type]
         FakePvService(pv),  # type: ignore[arg-type]
@@ -246,8 +246,8 @@ def test_planner_service_returns_while_milp_worker_is_still_solving(monkeypatch)
         time.sleep(0.15)
         return _solved_evaluation(frame)
 
-    monkeypatch.setattr("energymanager.planner_service.evaluate_shadow_plan_milp", slow_solver)
-    service = ShadowPlannerService(
+    monkeypatch.setattr("energymanager.planner_service.evaluate_plan_milp", slow_solver)
+    service = PlannerService(
         client,
         FakeLoadService(load),  # type: ignore[arg-type]
         FakePvService(pv),  # type: ignore[arg-type]

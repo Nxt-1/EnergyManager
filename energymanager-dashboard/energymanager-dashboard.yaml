@@ -6,11 +6,6 @@ views:
   path: overview
   icon: mdi:view-dashboard
   cards:
-  - type: markdown
-    content: '## EnergyManager · Live overview
-
-      Positive ESS power means **discharging**; positive grid power means **importing**. DC PV charges the ESS and must not
-      be counted twice as AC production.'
   - type: grid
     columns: 3
     square: false
@@ -33,20 +28,10 @@ views:
     - type: tile
       entity: sensor.energy_manager_ev_charging_power
       name: EV charging
-  - type: entities
-    title: Controller
-    show_header_toggle: false
-    entities:
-    - sensor.energy_manager_control_health
-    - sensor.energy_manager_fast_dispatch_status
-    - sensor.energy_manager_ess_control_status
-    - sensor.energy_manager_ev_control_status
-    - sensor.energy_manager_shadow_plan_status
-    - sensor.energy_manager_notification_status
   - type: custom:apexcharts-card
     header:
       show: true
-      title: Next 24 h · Planned AC-side power
+      title: Power · next 24 h
       show_states: false
     graph_span: 24h
     span:
@@ -57,7 +42,11 @@ views:
     update_interval: 1min
     apex_config:
       chart:
-        height: 300
+        height: 240
+        toolbar:
+          show: false
+      grid:
+        borderColor: var(--divider-color)
       legend:
         show: true
         showForSingleSeries: true
@@ -69,7 +58,7 @@ views:
         decimalsInFloat: 0
     series:
     - entity: sensor.energy_manager_plan_day_1
-      name: Load incl. EV
+      name: Load
       type: line
       stroke_width: 2
       extend_to: end
@@ -77,7 +66,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.load_w)]);
-      color: '#909090'
     - entity: sensor.energy_manager_plan_day_1
       name: AC PV
       type: line
@@ -87,9 +75,8 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
-      color: '#f6a500'
     - entity: sensor.energy_manager_plan_day_1
-      name: ESS discharge +
+      name: ESS
       type: line
       stroke_width: 2
       extend_to: end
@@ -97,9 +84,8 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
-      color: '#2966c7'
     - entity: sensor.energy_manager_plan_day_1
-      name: Grid import +
+      name: Grid
       type: line
       stroke_width: 2
       extend_to: end
@@ -107,11 +93,10 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
-      color: '#bc4e7d'
   - type: custom:apexcharts-card
     header:
       show: true
-      title: Next 24 h · Planned battery SoC
+      title: Battery SoC · next 24 h
       show_states: false
     graph_span: 24h
     span:
@@ -122,7 +107,11 @@ views:
     update_interval: 1min
     apex_config:
       chart:
-        height: 300
+        height: 240
+        toolbar:
+          show: false
+      grid:
+        borderColor: var(--divider-color)
       legend:
         show: true
         showForSingleSeries: true
@@ -142,7 +131,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
-      color: '#2e8b57'
     - entity: sensor.energy_manager_plan_day_1
       name: EV SoC
       type: line
@@ -152,28 +140,26 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
-      color: '#8b5aa9'
     yaxis:
     - min: 0
       max: 100
       decimals: 0
   - type: entities
-    title: Next 24 h forecast
+    title: Next 24 h
     show_header_toggle: false
     entities:
-    - sensor.energy_manager_shadow_plan_next_24_hours_grid_import_energy
-    - sensor.energy_manager_shadow_plan_next_24_hours_net_deficit_energy
-    - sensor.energy_manager_background_load_forecast_next_24_hours_energy
-    - sensor.energy_manager_pv_forecast_tomorrow_energy
+    - entity: sensor.energy_manager_shadow_plan_next_24_hours_grid_import_energy
+      name: Grid import
+    - entity: sensor.energy_manager_shadow_plan_next_24_hours_net_deficit_energy
+      name: Net deficit
+    - entity: sensor.energy_manager_background_load_forecast_next_24_hours_energy
+      name: Background load
+    - entity: sensor.energy_manager_pv_forecast_tomorrow_energy
+      name: Tomorrow's PV
 - title: Planning
   path: planning
   icon: mdi:calendar-clock
   cards:
-  - type: markdown
-    content: '## Full 7-day MILP schedule
-
-      The seven plan-day sensors each contain 96 consecutive 15-minute intervals. Each new MILP solve replaces the displayed
-      forecast. Graphs show **current projections**, not historical decisions.'
   - type: custom:apexcharts-card
     header:
       show: true
@@ -208,7 +194,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
-      color: '#bc4e7d'
     - entity: sensor.energy_manager_plan_day_2
       name: Grid · 2
       type: line
@@ -218,7 +203,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
-      color: '#bc4e7d'
     - entity: sensor.energy_manager_plan_day_3
       name: Grid · 3
       type: line
@@ -228,7 +212,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
-      color: '#bc4e7d'
     - entity: sensor.energy_manager_plan_day_4
       name: Grid · 4
       type: line
@@ -238,7 +221,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
-      color: '#bc4e7d'
     - entity: sensor.energy_manager_plan_day_5
       name: Grid · 5
       type: line
@@ -248,7 +230,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
-      color: '#bc4e7d'
     - entity: sensor.energy_manager_plan_day_6
       name: Grid · 6
       type: line
@@ -258,7 +239,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
-      color: '#bc4e7d'
     - entity: sensor.energy_manager_plan_day_7
       name: Grid · 7
       type: line
@@ -268,7 +248,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
-      color: '#bc4e7d'
     - entity: sensor.energy_manager_plan_day_1
       name: ESS
       type: line
@@ -278,7 +257,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
-      color: '#2966c7'
     - entity: sensor.energy_manager_plan_day_2
       name: ESS · 2
       type: line
@@ -288,7 +266,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
-      color: '#2966c7'
     - entity: sensor.energy_manager_plan_day_3
       name: ESS · 3
       type: line
@@ -298,7 +275,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
-      color: '#2966c7'
     - entity: sensor.energy_manager_plan_day_4
       name: ESS · 4
       type: line
@@ -308,7 +284,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
-      color: '#2966c7'
     - entity: sensor.energy_manager_plan_day_5
       name: ESS · 5
       type: line
@@ -318,7 +293,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
-      color: '#2966c7'
     - entity: sensor.energy_manager_plan_day_6
       name: ESS · 6
       type: line
@@ -328,7 +302,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
-      color: '#2966c7'
     - entity: sensor.energy_manager_plan_day_7
       name: ESS · 7
       type: line
@@ -338,7 +311,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
-      color: '#2966c7'
     - entity: sensor.energy_manager_plan_day_1
       name: AC PV
       type: line
@@ -348,7 +320,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
-      color: '#f6a500'
     - entity: sensor.energy_manager_plan_day_2
       name: AC PV · 2
       type: line
@@ -358,7 +329,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
-      color: '#f6a500'
     - entity: sensor.energy_manager_plan_day_3
       name: AC PV · 3
       type: line
@@ -368,7 +338,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
-      color: '#f6a500'
     - entity: sensor.energy_manager_plan_day_4
       name: AC PV · 4
       type: line
@@ -378,7 +347,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
-      color: '#f6a500'
     - entity: sensor.energy_manager_plan_day_5
       name: AC PV · 5
       type: line
@@ -388,7 +356,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
-      color: '#f6a500'
     - entity: sensor.energy_manager_plan_day_6
       name: AC PV · 6
       type: line
@@ -398,7 +365,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
-      color: '#f6a500'
     - entity: sensor.energy_manager_plan_day_7
       name: AC PV · 7
       type: line
@@ -408,7 +374,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
-      color: '#f6a500'
   - type: custom:apexcharts-card
     header:
       show: true
@@ -443,7 +408,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
-      color: '#2e8b57'
     - entity: sensor.energy_manager_plan_day_2
       name: ESS · 2
       type: line
@@ -453,7 +417,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
-      color: '#2e8b57'
     - entity: sensor.energy_manager_plan_day_3
       name: ESS · 3
       type: line
@@ -463,7 +426,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
-      color: '#2e8b57'
     - entity: sensor.energy_manager_plan_day_4
       name: ESS · 4
       type: line
@@ -473,7 +435,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
-      color: '#2e8b57'
     - entity: sensor.energy_manager_plan_day_5
       name: ESS · 5
       type: line
@@ -483,7 +444,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
-      color: '#2e8b57'
     - entity: sensor.energy_manager_plan_day_6
       name: ESS · 6
       type: line
@@ -493,7 +453,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
-      color: '#2e8b57'
     - entity: sensor.energy_manager_plan_day_7
       name: ESS · 7
       type: line
@@ -503,7 +462,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
-      color: '#2e8b57'
     - entity: sensor.energy_manager_plan_day_1
       name: EV
       type: line
@@ -513,7 +471,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
-      color: '#8b5aa9'
     - entity: sensor.energy_manager_plan_day_2
       name: EV · 2
       type: line
@@ -523,7 +480,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
-      color: '#8b5aa9'
     - entity: sensor.energy_manager_plan_day_3
       name: EV · 3
       type: line
@@ -533,7 +489,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
-      color: '#8b5aa9'
     - entity: sensor.energy_manager_plan_day_4
       name: EV · 4
       type: line
@@ -543,7 +498,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
-      color: '#8b5aa9'
     - entity: sensor.energy_manager_plan_day_5
       name: EV · 5
       type: line
@@ -553,7 +507,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
-      color: '#8b5aa9'
     - entity: sensor.energy_manager_plan_day_6
       name: EV · 6
       type: line
@@ -563,7 +516,6 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
-      color: '#8b5aa9'
     - entity: sensor.energy_manager_plan_day_7
       name: EV · 7
       type: line
@@ -573,16 +525,16 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
-      color: '#8b5aa9'
     yaxis:
     - min: 0
       max: 100
       decimals: 0
   - type: entities
-    title: Planning state and tasks
+    title: Tasks and plan status
     show_header_toggle: false
     entities:
-    - sensor.energy_manager_shadow_plan_status
+    - entity: sensor.energy_manager_shadow_plan_status
+      name: Plan status
     - sensor.energy_manager_task_status
     - sensor.energy_manager_actuator_status
     - sensor.energy_manager_plan_cost_status
@@ -598,9 +550,6 @@ views:
     - sensor.energy_manager_plan_day_5
     - sensor.energy_manager_plan_day_6
     - sensor.energy_manager_plan_day_7
-  - type: markdown
-    content: '**Note:** `load_w` includes controllable loads such as EV charging; `pv_dc_w` is DC-side generation, not additional
-      AC export. Separate planned EV power is not yet exported in these intervals.'
 - title: Performance
   path: performance
   icon: mdi:chart-line

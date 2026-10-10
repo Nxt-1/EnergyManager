@@ -1,4 +1,4 @@
-"""Fast shadow dispatch tracking between slower MILP replans."""
+"""Fast live dispatch tracking between slower MILP replans."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any
 
 from .actuators import ActuatorCommandResult, ActuatorPowerRequest, ActuatorRegistry
 from .house_state import HouseState
-from .planner import ShadowPlan, ShadowPlanInterval
+from .planner import EnergyPlan, PlanInterval
 
 FAST_DISPATCH_VERSION = "2026-10-10-fast-dispatch-v3"
 FAST_DISPATCH_STATUS_ENTITY = "sensor.energy_manager_fast_dispatch_status"
@@ -19,7 +19,7 @@ _LIVE_CONTROL_DEADBAND_W = 100.0
 
 @dataclass(frozen=True, slots=True)
 class FastDispatchResult:
-    """One live shadow correction around the current MILP interval."""
+    """One live live correction around the current MILP interval."""
 
     status: str
     interval_start_local: datetime | None
@@ -106,7 +106,7 @@ async def publish_fast_dispatch(
 
 
 def evaluate_fast_dispatch(
-    plan: ShadowPlan,
+    plan: EnergyPlan,
     house_state: HouseState,
     actuator_registry: ActuatorRegistry,
     *,
@@ -252,7 +252,7 @@ def evaluate_fast_dispatch(
     )
 
 
-def _current_interval(plan: ShadowPlan, now_utc: datetime) -> ShadowPlanInterval | None:
+def _current_interval(plan: EnergyPlan, now_utc: datetime) -> PlanInterval | None:
     for item in plan.intervals:
         start_utc = item.period_start_local.astimezone(UTC)
         if start_utc <= now_utc < start_utc + _INTERVAL:

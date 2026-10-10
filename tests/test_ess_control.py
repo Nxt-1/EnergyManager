@@ -11,7 +11,7 @@ from energymanager.config import ConfigurationError, EssSettings, EvSettings, Se
 from energymanager.ess_control import ESS_CONTROL_STATUS_ENTITY, EssHardwareController
 from energymanager.fast_dispatch import evaluate_fast_dispatch
 from energymanager.house_state import HouseState
-from energymanager.planner import ShadowPlan, ShadowPlanInterval
+from energymanager.planner import EnergyPlan, PlanInterval
 
 _NOW = datetime(2026, 10, 10, 15, 30, tzinfo=UTC)
 _SETPOINT_ENTITY = "number.garage_gx_device_ac_power_setpoint"
@@ -74,8 +74,8 @@ def _state(*, grid_w: float, ess_w: float, ev_w: float = 0.0) -> HouseState:
     return state
 
 
-def _plan() -> ShadowPlan:
-    interval = ShadowPlanInterval(
+def _plan() -> EnergyPlan:
+    interval = PlanInterval(
         period_start_local=_NOW,
         background_load_w=1000.0,
         scheduled_load_w=3000.0,
@@ -88,7 +88,7 @@ def _plan() -> ShadowPlan:
         grid_power_after_ess_w=0.0,
         curtailed_dc_pv_w=0.0,
     )
-    return ShadowPlan(generated_at_utc=_NOW, intervals=(interval,), ess_projection_status="projected")
+    return EnergyPlan(generated_at_utc=_NOW, intervals=(interval,), ess_projection_status="projected")
 
 
 def test_ess_controller_converts_discharge_to_negative_victron_setpoint() -> None:

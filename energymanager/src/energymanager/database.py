@@ -15,7 +15,7 @@ import aiohttp
 from .load_backtest import BACKTEST_VERSION, BackgroundLoadBacktest
 from .load_forecast import MODEL_VERSION, BackgroundLoadForecast, LoadSample
 from .open_meteo import FORECAST_MODEL
-from .planner import ShadowPlan
+from .planner import EnergyPlan
 from .pv_forecast import CALIBRATION_VERSION, PvForecast
 
 _LOGGER = logging.getLogger(__name__)
@@ -358,7 +358,7 @@ class EnergyManagerStore:
         )
         return bool(rows)
 
-    async def record_milp_plan(self, plan: ShadowPlan) -> None:
+    async def record_milp_plan(self, plan: EnergyPlan) -> None:
         """Archive every accepted 15-minute MILP interval with an immutable issue timestamp.
 
         A stable interval-index tag and unique nanosecond timestamps avoid creating

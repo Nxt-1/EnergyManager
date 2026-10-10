@@ -16,10 +16,10 @@ from energymanager.milp_planner import (
     MILP_ECONOMIC_TOLERANCE_EUR,
     MILP_TOTAL_TIME_BUDGET_SECONDS,
     MilpEvaluation,
-    evaluate_shadow_plan_milp,
+    evaluate_plan_milp,
     publish_milp_evaluation,
 )
-from energymanager.planner import ShadowPlanner
+from energymanager.planner import PlanBuilder
 from energymanager.pv_forecast import PvForecast, PvForecastPoint
 from energymanager.tasks import PlanningTask
 
@@ -164,7 +164,7 @@ def _capacity(start: datetime) -> CapacityPeakState:
 
 
 def _reference_plan(start: datetime, *, tasks: tuple[PlanningTask, ...]) -> Any:
-    return ShadowPlanner().build(
+    return PlanBuilder().build(
         _load_forecast(start, [500.0] * 8),
         _pv_forecast(start, [0.0, 0.0]),
         now_utc=start.astimezone(UTC),
@@ -196,7 +196,7 @@ def test_milp_supports_multiple_cumulative_ev_deadline_tasks() -> None:
     )
     reference = _reference_plan(start, tasks=(first, second))
 
-    result = evaluate_shadow_plan_milp(reference, _profile(), _capacity(start))
+    result = evaluate_plan_milp(reference, _profile(), _capacity(start))
 
     assert result.status in {"optimal", "feasible", "feasible_time_limit"}
     assert result.plan is not None
@@ -261,7 +261,7 @@ def test_highs_milp_solves_discrete_ev_and_ess_model_when_dependency_is_availabl
     task = _task(start, energy_kwh=3.0)
     reference = _reference_plan(start, tasks=(task,))
 
-    result = evaluate_shadow_plan_milp(reference, _profile(), _capacity(start))
+    result = evaluate_plan_milp(reference, _profile(), _capacity(start))
 
     assert result.status in {"optimal", "feasible", "feasible_time_limit"}
     assert result.plan is not None
@@ -322,7 +322,7 @@ def test_highs_milp_can_leave_preferred_ev_target_partially_unmet_when_grid_is_e
         minimum_runtime_hours=1.0 / 11.04,
     )
     reference = _reference_plan(start, tasks=(task,))
-    result = evaluate_shadow_plan_milp(reference, _profile(), _capacity(start))
+    result = evaluate_plan_milp(reference, _profile(), _capacity(start))
 
     assert result.status in {"optimal", "feasible", "feasible_time_limit"}
     assert result.plan is not None
@@ -380,7 +380,7 @@ def test_milp_models_weekly_trip_energy_and_blocks_charging_while_away() -> None
     )
     reference = _reference_plan(start, tasks=(hard, soft))
 
-    result = evaluate_shadow_plan_milp(reference, _profile(), _capacity(start))
+    result = evaluate_plan_milp(reference, _profile(), _capacity(start))
 
     assert result.status in {"optimal", "feasible", "feasible_time_limit"}
     assert result.plan is not None

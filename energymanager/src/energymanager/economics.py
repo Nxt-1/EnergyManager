@@ -1,4 +1,4 @@
-"""Versioned tariff inputs, capacity-peak state and shadow-plan economics."""
+"""Versioned tariff inputs, capacity-peak state and plan economics."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from .ha_client import HomeAssistantClient
 
 if TYPE_CHECKING:
     from .house_state import HouseState
-    from .planner import ShadowPlan
+    from .planner import EnergyPlan
 
 COST_MODEL_VERSION = "2026-10-07-cost-v1"
 CAPACITY_PEAK_VERSION = "2026-10-07-capacity-v1"
@@ -539,8 +539,8 @@ class EconomicsService:
     def optimizer_objective_name(self) -> str:
         return ECONOMIC_OBJECTIVE_VERSION
 
-    def optimizer_score(self, plan: ShadowPlan) -> float | None:
-        """Return the scalar economic objective used to rank candidate shadow plans."""
+    def optimizer_score(self, plan: EnergyPlan) -> float | None:
+        """Return the scalar economic objective used to rank candidate plans."""
         if not self.optimizer_ready or self.current_profile is None:
             return None
         evaluation = evaluate_plan_objective(plan, self.current_profile, self.capacity_state, hours=168)
@@ -620,7 +620,7 @@ class EconomicsService:
             return
         await self._capacity_tracker.observe(float(value), now_utc=now_utc, local_tz=local_tz)
 
-    async def publish_plan_cost(self, plan: ShadowPlan, *, local_tz: tzinfo) -> PlanCostEvaluation | None:
+    async def publish_plan_cost(self, plan: EnergyPlan, *, local_tz: tzinfo) -> PlanCostEvaluation | None:
         """Evaluate and publish cash-flow accounting plus the active optimizer objective."""
         profile = self.current_profile
         capacity_state = self.capacity_state
@@ -698,7 +698,7 @@ class EconomicsService:
 
 
 def evaluate_plan_cost(
-    plan: ShadowPlan,
+    plan: EnergyPlan,
     profile: TariffProfile,
     capacity_state: CapacityPeakState | None,
     *,
@@ -775,7 +775,7 @@ def evaluate_plan_cost(
 
 
 def evaluate_plan_objective(
-    plan: ShadowPlan,
+    plan: EnergyPlan,
     profile: TariffProfile,
     capacity_state: CapacityPeakState | None,
     *,

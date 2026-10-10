@@ -19,7 +19,7 @@ from .house_state import HouseState, InputReading
 from .load_backtest import BACKTEST_VERSION, BackgroundLoadBacktest
 from .load_forecast import MODEL_VERSION, BackgroundLoadForecast
 from .open_meteo import FORECAST_DAYS, FORECAST_MODEL
-from .planner import PLANNER_HORIZON_HOURS, PLANNER_VERSION, ShadowPlan
+from .planner import PLANNER_HORIZON_HOURS, PLANNER_VERSION, EnergyPlan
 from .pv_forecast import CALIBRATION_VERSION, PvDailyEnergy, PvForecast
 from .tasks import TASK_VERSION, PlanningTask
 
@@ -50,9 +50,9 @@ PV_FORECAST_TOMORROW_ENTITY = "sensor.energy_manager_pv_forecast_tomorrow_energy
 PV_FORECAST_NEXT_HOUR_ENTITY = "sensor.energy_manager_pv_forecast_next_hour_power"
 PV_FORECAST_NEXT_7_DAYS_ENTITY = "sensor.energy_manager_pv_forecast_next_7_days_energy"
 DATABASE_STATUS_ENTITY = "sensor.energy_manager_database_status"
-SHADOW_PLAN_STATUS_ENTITY = "sensor.energy_manager_shadow_plan_status"
-SHADOW_PLAN_NET_DEFICIT_ENTITY = "sensor.energy_manager_shadow_plan_next_24_hours_net_deficit_energy"
-SHADOW_PLAN_GRID_IMPORT_ENTITY = "sensor.energy_manager_shadow_plan_next_24_hours_grid_import_energy"
+PLAN_STATUS_ENTITY = "sensor.energy_manager_shadow_plan_status"
+PLAN_NET_DEFICIT_ENTITY = "sensor.energy_manager_shadow_plan_next_24_hours_net_deficit_energy"
+PLAN_GRID_IMPORT_ENTITY = "sensor.energy_manager_shadow_plan_next_24_hours_grid_import_energy"
 ACTUATOR_STATUS_ENTITY = "sensor.energy_manager_actuator_status"
 ACTUATOR_COMMAND_STATUS_ENTITY = "sensor.energy_manager_actuator_command_status"
 TASK_STATUS_ENTITY = "sensor.energy_manager_task_status"
@@ -93,7 +93,7 @@ class DiagnosticsPublisher:
         attributes: dict[str, Any] = {
             "friendly_name": "Energy Manager Status",
             "version": __version__,
-            "shadow_mode": True,
+            "planning_mode": "authoritative",
             "last_update_utc": datetime.now(UTC).isoformat(),
         }
         if house_state is not None:
@@ -465,8 +465,8 @@ class DiagnosticsPublisher:
         attributes: dict[str, Any] = {
             "friendly_name": "Energy Manager Actuator Status",
             "actuator_version": ACTUATOR_VERSION,
-            "shadow_mode": True,
-            "control_enabled": False,
+            "planning_mode": "authoritative",
+            "control_scope": "planning_only",
             "configured_count": len(configured),
             "planning_available_count": len(available),
             "actuators": [_actuator_attributes(item) for item in actuators],
@@ -483,8 +483,8 @@ class DiagnosticsPublisher:
         attributes: dict[str, Any] = {
             "friendly_name": "Energy Manager Actuator Command Status",
             "command_version": ACTUATOR_COMMAND_VERSION,
-            "shadow_mode": True,
-            "control_enabled": False,
+            "planning_mode": "authoritative",
+            "control_scope": "planning_only",
             "hardware_writes": False,
             "command_count": len(results),
             "commands": [_actuator_command_attributes(item) for item in results],
@@ -506,8 +506,8 @@ class DiagnosticsPublisher:
         attributes: dict[str, Any] = {
             "friendly_name": "Energy Manager Task Status",
             "task_version": TASK_VERSION,
-            "shadow_mode": True,
-            "control_enabled": False,
+            "planning_mode": "authoritative",
+            "control_scope": "planning_only",
             "task_count": len(tasks),
             "planning_available_count": ready_count,
             "tasks": [_task_attributes(item) for item in tasks],
@@ -527,28 +527,28 @@ class DiagnosticsPublisher:
             state = tasks[0].status
         await self._client.set_state(TASK_STATUS_ENTITY, state, attributes)
 
-    async def publish_shadow_plan_status(self, status: str, *, error: str | None = None) -> None:
+    async def publish_plan_status(self, status: str, *, error: str | None = None) -> None:
         """Publish planner readiness without implying that any control is active."""
         attributes: dict[str, Any] = {
-            "friendly_name": "Energy Manager Shadow Plan Status",
+            "friendly_name": "Energy Manager Plan Status",
             "planner_version": PLANNER_VERSION,
-            "shadow_mode": True,
-            "control_enabled": False,
+            "planning_mode": "authoritative",
+            "control_scope": "planning_only",
             "last_update_utc": datetime.now(UTC).isoformat(),
         }
         if error:
             attributes["error"] = error
-        await self._client.set_state(SHADOW_PLAN_STATUS_ENTITY, status, attributes)
+        await self._client.set_state(PLAN_STATUS_ENTITY, status, attributes)
 
-    async def publish_shadow_plan(self, plan: ShadowPlan) -> None:
-        """Publish compact summaries for the current read-only shadow plan."""
+    async def publish_plan(self, plan: EnergyPlan) -> None:
+        """Publish compact summaries for the current read-only plan."""
         summary_24h = plan.summary(24)
         summary_48h = plan.summary(48)
         status_attributes: dict[str, Any] = {
-            "friendly_name": "Energy Manager Shadow Plan Status",
+            "friendly_name": "Energy Manager Plan Status",
             "planner_version": PLANNER_VERSION,
-            "shadow_mode": True,
-            "control_enabled": False,
+            "planning_mode": "authoritative",
+            "control_scope": "planning_only",
             "mode": "forecast_balance_with_actuator_projection",
             "horizon_hours": PLANNER_HORIZON_HOURS,
             "generated_at_utc": plan.generated_at_utc.isoformat(),
@@ -586,7 +586,7 @@ class DiagnosticsPublisher:
                 "charge_efficiency": round(plan.ess_resource.charge_efficiency, 4),
                 "discharge_efficiency": round(plan.ess_resource.discharge_efficiency, 4),
             }
-        await self._client.set_state(SHADOW_PLAN_STATUS_ENTITY, "ready", status_attributes)
+        await self._client.set_state(PLAN_STATUS_ENTITY, "ready", status_attributes)
 
         # Split 672 intervals into daily-sized entities to keep HA attributes manageable.
         # Slots are offsets from the plan start, not calendar dates (DST-safe).
@@ -616,7 +616,7 @@ class DiagnosticsPublisher:
                 f"sensor.energy_manager_plan_day_{day + 1}", len(slots), attributes
             )
 
-        energy_attributes = _energy_attributes("Energy Manager Shadow Plan Next 24 Hours Net Deficit")
+        energy_attributes = _energy_attributes("Energy Manager Plan Next 24 Hours Net Deficit")
         energy_attributes.update(
             {
                 "planner_version": PLANNER_VERSION,
@@ -629,12 +629,12 @@ class DiagnosticsPublisher:
             }
         )
         await self._client.set_state(
-            SHADOW_PLAN_NET_DEFICIT_ENTITY,
+            PLAN_NET_DEFICIT_ENTITY,
             round(float(summary_24h["net_deficit_kwh"]), 3),
             energy_attributes,
         )
 
-        grid_import_attributes = _energy_attributes("Energy Manager Shadow Plan Next 24 Hours Grid Import")
+        grid_import_attributes = _energy_attributes("Energy Manager Plan Next 24 Hours Grid Import")
         grid_import_attributes.update(
             {
                 "planner_version": PLANNER_VERSION,
@@ -659,12 +659,12 @@ class DiagnosticsPublisher:
                 }
             )
             await self._client.set_state(
-                SHADOW_PLAN_GRID_IMPORT_ENTITY,
+                PLAN_GRID_IMPORT_ENTITY,
                 round(float(grid_import), 3),
                 grid_import_attributes,
             )
         else:
-            await self._client.set_state(SHADOW_PLAN_GRID_IMPORT_ENTITY, "unavailable", grid_import_attributes)
+            await self._client.set_state(PLAN_GRID_IMPORT_ENTITY, "unavailable", grid_import_attributes)
 
     async def cleanup_legacy_entities(self) -> None:
         """Remove diagnostics created by older Energy Manager releases."""

@@ -6,7 +6,7 @@ import pytest
 
 from energymanager.database import EnergyManagerStore
 from energymanager.diagnostics import DiagnosticsPublisher
-from energymanager.planner import ShadowPlan, ShadowPlanInterval
+from energymanager.planner import EnergyPlan, PlanInterval
 
 
 class RecordingClient:
@@ -24,7 +24,7 @@ class RecordingClient:
 def make_plan():
     start = datetime(2026, 10, 10, 18, 0, tzinfo=UTC)
     intervals = tuple(
-        ShadowPlanInterval(
+        PlanInterval(
             period_start_local=start + timedelta(minutes=15 * index),
             background_load_w=400,
             scheduled_load_w=100,
@@ -39,13 +39,13 @@ def make_plan():
         )
         for index in range(672)
     )
-    return ShadowPlan(generated_at_utc=start, intervals=intervals)
+    return EnergyPlan(generated_at_utc=start, intervals=intervals)
 
 
 @pytest.mark.asyncio
 async def test_full_plan_is_split_into_seven_daily_ha_entities():
     client = RecordingClient()
-    await DiagnosticsPublisher(client).publish_shadow_plan(make_plan())
+    await DiagnosticsPublisher(client).publish_plan(make_plan())
     all_starts = []
     for day in range(1, 8):
         count, attrs = client.states[f"sensor.energy_manager_plan_day_{day}"]

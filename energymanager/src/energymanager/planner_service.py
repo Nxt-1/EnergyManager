@@ -1,4 +1,4 @@
-"""Runtime coordinator for the authoritative MILP shadow planner."""
+"""Runtime coordinator for the authoritative MILP planner."""
 
 from __future__ import annotations
 
@@ -25,8 +25,8 @@ from .ev_control import EvHardwareController
 from .fast_dispatch import evaluate_fast_dispatch, publish_fast_dispatch
 from .house_state import HouseState
 from .load_service import BackgroundLoadService
-from .milp_planner import MilpEvaluation, evaluate_shadow_plan_milp, publish_milp_evaluation
-from .planner import ShadowPlan, ShadowPlanner
+from .milp_planner import MilpEvaluation, evaluate_plan_milp, publish_milp_evaluation
+from .planner import EnergyPlan, PlanBuilder
 from .pv_service import PvForecastService
 from .task_diagnostics import publish_task_status
 from .tasks import PlanningTask, TaskRegistry
@@ -40,8 +40,8 @@ _FAST_DISPATCH_INTERVAL_SECONDS = 1.0
 _INTERVAL = timedelta(minutes=15)
 
 
-class ShadowPlannerService:
-    """Build, solve and publish the single authoritative MILP shadow plan."""
+class PlannerService:
+    """Build, solve and publish the single authoritative MILP plan."""
 
     def __init__(
         self,
@@ -56,13 +56,13 @@ class ShadowPlannerService:
         ev_controller: EvHardwareController | None = None,
         notification_manager: ControlNotificationManager | None = None,
         store: EnergyManagerStore | None = None,
-        planner: ShadowPlanner | None = None,
+        planner: PlanBuilder | None = None,
     ) -> None:
         self._ha_client = ha_client
         self._diagnostics = DiagnosticsPublisher(ha_client)
         self._load_service = load_service
         self._pv_service = pv_service
-        self._planner = planner or ShadowPlanner()
+        self._planner = planner or PlanBuilder()
         self._actuator_registry = actuator_registry
         self._task_registry = task_registry
         self._economics_service = economics_service
@@ -70,7 +70,7 @@ class ShadowPlannerService:
         self._ev_controller = ev_controller
         self._notification_manager = notification_manager
         self._store = store
-        self._plan: ShadowPlan | None = None
+        self._plan: EnergyPlan | None = None
         self._last_plan_at_utc: datetime | None = None
         self._last_attempt_at_utc: datetime | None = None
         self._last_forecast_signature: tuple[str, str] | None = None
@@ -83,7 +83,7 @@ class ShadowPlannerService:
         self._last_control_health_signature: tuple[object, ...] | None = None
 
     @property
-    def plan(self) -> ShadowPlan | None:
+    def plan(self) -> EnergyPlan | None:
         return self._plan
 
     @property
@@ -151,7 +151,7 @@ class ShadowPlannerService:
             await self._diagnostics.publish_actuator_status(actuators)
         if load_forecast is None:
             if publish_diagnostics:
-                await self._diagnostics.publish_shadow_plan_status("waiting_for_load_forecast")
+                await self._diagnostics.publish_plan_status("waiting_for_load_forecast")
             return None
         if local_tz is None:
             local_tz = now.astimezone().tzinfo
@@ -162,17 +162,17 @@ class ShadowPlannerService:
         pv_forecast = self._pv_service.forecast if self._pv_service is not None else None
         if pv_forecast is None:
             if publish_diagnostics:
-                await self._diagnostics.publish_shadow_plan_status("waiting_for_pv_forecast")
+                await self._diagnostics.publish_plan_status("waiting_for_pv_forecast")
             return None
 
         economics = self._economics_service
         if economics is None or not economics.optimizer_ready:
             if publish_diagnostics:
-                await self._diagnostics.publish_shadow_plan_status("waiting_for_economics")
+                await self._diagnostics.publish_plan_status("waiting_for_economics")
             return None
         if economics.current_profile is None or economics.capacity_state is None:
             if publish_diagnostics:
-                await self._diagnostics.publish_shadow_plan_status("waiting_for_economics_state")
+                await self._diagnostics.publish_plan_status("waiting_for_economics_state")
             return None
         return load_forecast, pv_forecast, economics, local_tz, actuators, tasks
 
@@ -232,7 +232,7 @@ class ShadowPlannerService:
                 tasks=tasks,
             )
             evaluation = await asyncio.to_thread(
-                evaluate_shadow_plan_milp,
+                evaluate_plan_milp,
                 frame,
                 economics.current_profile,
                 economics.capacity_state,
@@ -243,12 +243,12 @@ class ShadowPlannerService:
             if not evaluation.adoption_ready or evaluation.plan is None:
                 if self._can_retain_previous_plan(reason, datetime.now(UTC)):
                     _LOGGER.warning(
-                        "MILP replan failed; retaining previous shadow plan temporarily: %s",
+                        "MILP replan failed; retaining previous plan temporarily: %s",
                         evaluation.reason,
                     )
                     return
                 self._plan = None
-                await self._diagnostics.publish_shadow_plan_status(
+                await self._diagnostics.publish_plan_status(
                     "milp_unavailable",
                     error=evaluation.reason or evaluation.status,
                 )
@@ -274,7 +274,7 @@ class ShadowPlannerService:
             self._last_task_signature = _task_signature(tasks)
             self._last_actuator_signature = _actuator_signature(actuators)
 
-            await self._diagnostics.publish_shadow_plan(plan)
+            await self._diagnostics.publish_plan(plan)
             if self._store is not None:
                 # Never delay a control cycle or invalidate a valid plan due to history storage.
                 asyncio.create_task(self._archive_plan(plan))
@@ -296,7 +296,7 @@ class ShadowPlannerService:
             if reason == "startup" and self._notification_manager is not None:
                 self._notification_manager.complete_startup()
 
-    async def _archive_plan(self, plan: ShadowPlan) -> None:
+    async def _archive_plan(self, plan: EnergyPlan) -> None:
         try:
             assert self._store is not None
             await self._store.record_milp_plan(plan)
@@ -607,7 +607,7 @@ def _quarter_hour_bucket(value: datetime | None) -> str | None:
     return value.replace(minute=bucket_minute, second=0, microsecond=0).isoformat()
 
 
-def _current_interval(plan: ShadowPlan, now_utc: datetime):
+def _current_interval(plan: EnergyPlan, now_utc: datetime):
     for index, item in enumerate(plan.intervals):
         start_utc = item.period_start_local.astimezone(UTC)
         if start_utc <= now_utc < start_utc + _INTERVAL:
@@ -619,7 +619,7 @@ def _current_interval(plan: ShadowPlan, now_utc: datetime):
 
 
 def _ess_soc_deviates(
-    plan: ShadowPlan,
+    plan: EnergyPlan,
     actuators: tuple[ActuatorSnapshot, ...],
     now_utc: datetime,
 ) -> bool:
@@ -646,7 +646,7 @@ def _cost_log(evaluation: PlanCostEvaluation | None) -> str:
 
 
 def _log_plan(
-    plan: ShadowPlan,
+    plan: EnergyPlan,
     actuators: tuple[ActuatorSnapshot, ...],
     tasks: tuple[PlanningTask, ...],
     cost_evaluation: PlanCostEvaluation | None,
@@ -656,7 +656,7 @@ def _log_plan(
     actuator_status = ", ".join(f"{item.actuator_id}:{item.status}" for item in actuators)
     task_status = ", ".join(f"{item.task_id}:{item.status}" for item in tasks)
     _LOGGER.info(
-        "MILP shadow plan updated: next 24 h background %.2f kWh, scheduled %.2f kWh, PV potential %.2f kWh, "
+        "MILP plan updated: next 24 h background %.2f kWh, scheduled %.2f kWh, PV potential %.2f kWh, "
         "pre-control deficit %.2f kWh, projected grid import %.2f kWh, ESS SoC %.1f -> %.1f%%, "
         "curtailed DC PV %.2f kWh, economics %s, actuators [%s], tasks [%s], commands [%s]",
         summary["background_load_kwh"],

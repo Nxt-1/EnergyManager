@@ -10,13 +10,13 @@ from .load_forecast import FORECAST_INTERVAL_MINUTES, BackgroundLoadForecast
 from .pv_forecast import PvForecast
 from .tasks import PlanningTask
 
-PLANNER_VERSION = "2026-10-10-shadow-v11"
+PLANNER_VERSION = "2026-10-10-planner-v12"
 PLANNER_HORIZON_HOURS = 168
 _INTERVAL_HOURS = FORECAST_INTERVAL_MINUTES / 60.0
 
 
 @dataclass(frozen=True, slots=True)
-class ShadowPlanInterval:
+class PlanInterval:
     """One 15-minute interval in the planner forecast or solved MILP plan."""
 
     period_start_local: datetime
@@ -39,11 +39,11 @@ class ShadowPlanInterval:
 
 
 @dataclass(frozen=True, slots=True)
-class ShadowPlan:
+class EnergyPlan:
     """Read-only seven-day forecast frame or solved MILP plan."""
 
     generated_at_utc: datetime
-    intervals: tuple[ShadowPlanInterval, ...]
+    intervals: tuple[PlanInterval, ...]
     ess_projection_status: str = "not_solved"
     actuator_snapshots: tuple[ActuatorSnapshot, ...] = ()
     tasks: tuple[PlanningTask, ...] = ()
@@ -171,7 +171,7 @@ class ShadowPlan:
         return result
 
 
-class ShadowPlanner:
+class PlanBuilder:
     """Merge load and PV forecasts into the neutral input frame consumed by MILP."""
 
     def build(
@@ -182,7 +182,7 @@ class ShadowPlanner:
         now_utc: datetime,
         actuators: tuple[ActuatorSnapshot, ...] = (),
         tasks: tuple[PlanningTask, ...] = (),
-    ) -> ShadowPlan:
+    ) -> EnergyPlan:
         if now_utc.tzinfo is None:
             raise ValueError("now_utc must be timezone-aware")
         horizon_end_utc = now_utc.astimezone(UTC) + timedelta(hours=PLANNER_HORIZON_HOURS)
@@ -194,13 +194,13 @@ class ShadowPlanner:
         if not load_points:
             raise ValueError("Background-load forecast has no future intervals in the planning horizon")
 
-        intervals: list[ShadowPlanInterval] = []
+        intervals: list[PlanInterval] = []
         for load_point in load_points:
             pv_ac_w, pv_dc_w = _pv_powers_for_interval(pv_forecast, load_point.period_start_local)
             background_w = max(0.0, load_point.power_w)
             pv_total_w = pv_ac_w + pv_dc_w
             intervals.append(
-                ShadowPlanInterval(
+                PlanInterval(
                     period_start_local=load_point.period_start_local,
                     background_load_w=background_w,
                     scheduled_load_w=0.0,
@@ -212,7 +212,7 @@ class ShadowPlanner:
             )
 
         ess = find_ess_actuator(actuators)
-        return ShadowPlan(
+        return EnergyPlan(
             generated_at_utc=now_utc.astimezone(UTC),
             intervals=tuple(intervals),
             actuator_snapshots=actuators,

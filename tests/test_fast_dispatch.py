@@ -7,7 +7,7 @@ from energymanager.actuators import ActuatorRegistry
 from energymanager.config import EssSettings, EvSettings, Settings
 from energymanager.fast_dispatch import FAST_DISPATCH_STATUS_ENTITY, evaluate_fast_dispatch, publish_fast_dispatch
 from energymanager.house_state import HouseState
-from energymanager.planner import ShadowPlan, ShadowPlanInterval
+from energymanager.planner import EnergyPlan, PlanInterval
 
 _NOW = datetime(2026, 10, 10, 15, 30, tzinfo=UTC)
 
@@ -48,8 +48,8 @@ def _registry() -> ActuatorRegistry:
     return ActuatorRegistry(settings)
 
 
-def _plan(*, planned_grid_w: float, planned_ess_w: float, planned_ev_w: float = 0.0) -> ShadowPlan:
-    interval = ShadowPlanInterval(
+def _plan(*, planned_grid_w: float, planned_ess_w: float, planned_ev_w: float = 0.0) -> EnergyPlan:
+    interval = PlanInterval(
         period_start_local=_NOW,
         background_load_w=1000.0,
         scheduled_load_w=planned_ev_w,
@@ -62,7 +62,7 @@ def _plan(*, planned_grid_w: float, planned_ess_w: float, planned_ev_w: float = 
         grid_power_after_ess_w=planned_grid_w,
         curtailed_dc_pv_w=0.0,
     )
-    return ShadowPlan(generated_at_utc=_NOW, intervals=(interval,), ess_projection_status="projected")
+    return EnergyPlan(generated_at_utc=_NOW, intervals=(interval,), ess_projection_status="projected")
 
 
 def test_fast_dispatch_absorbs_unexpected_load_with_ess() -> None:

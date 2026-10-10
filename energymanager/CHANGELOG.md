@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.31.5
+- Renames internal planner types and methods to remove obsolete shadow terminology.
+- Renames the plan status display name and corrects planner-only diagnostic metadata.
+- Retains legacy Home Assistant entity IDs and stored InfluxDB schemas for compatibility.
+- Does not change MILP policy, dispatch, hardware control or safety behavior.
+
 ## 0.31.4
 - Fixes two Ruff E501 line-length violations in notification diagnostics; no runtime behavior changes.
 

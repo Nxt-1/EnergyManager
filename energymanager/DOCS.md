@@ -1,6 +1,6 @@
 # Energy Manager
 
-Energy Manager is currently a read-only shadow-mode Home Assistant app. It now combines the rolling PV and background-load forecasts in a first planner timeline while keeping all device control disabled.
+Energy Manager runs an authoritative MILP planner with live ESS and EV hardware control. The forecast and planning diagnostics are published to Home Assistant.
 
 ## Configuration
 
@@ -19,7 +19,7 @@ ESS SoC is normalized to percent. ESS power is normalized so positive means disc
 Version 0.12 adds an optional planning envelope under `ess`: nominal capacity, minimum/maximum planning SoC, maximum
 charge/discharge power and charge/discharge efficiencies. Existing configurations remain valid when these fields are omitted.
 The runtime defaults are 15 kWh, 10-100% SoC, 2 kW charge/discharge and 95% efficiency in each direction. These are
-shadow-planning assumptions only and must be confirmed before any later control release. Dynamic BMS/thermal limits will
+planning assumptions and must be confirmed before any later control release. Dynamic BMS/thermal limits will
 eventually be allowed to tighten the configured envelope at runtime.
 
 ### PV measurements
@@ -163,7 +163,7 @@ actuator translates that request into a device-feasible dry-run result. ESS comm
 power and SoC boundaries. EV commands map requested charging power to whole-ampere 1-phase/3-phase operating points,
 choosing the highest feasible point that does not exceed the request.
 
-`sensor.energy_manager_actuator_command_status` exposes requested and accepted dry-run commands. The current shadow
+`sensor.energy_manager_actuator_command_status` exposes requested and accepted dry-run commands. The current planning
 planner sends the next ESS interval through this interface to verify the end-to-end command path. EV command translation
 is implemented and tested, but the planner does not request EV charging until an EV task exists. `control_enabled` and
 `hardware_writes` remain false: v0.14 cannot change Victron or go-e state.
@@ -183,7 +183,7 @@ to 80%, and local departure time to 07:00 when omitted.
 `sensor.energy_manager_task_status` exposes the current task catalog. Version 0.15 only gives tasks to the planner; it does not
 yet place EV charging into intervals or request EV actuator power. This keeps task generation separate from optimization.
 
-## Shadow planner
+## Planner
 
 Version 0.11.0 adds the first planner foundation without scheduling or controlling devices yet. It aligns the existing
 15-minute background-load forecast with the hourly PV-potential forecast on one 15-minute timeline and retains 48 hours

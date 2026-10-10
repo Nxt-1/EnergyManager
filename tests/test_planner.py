@@ -7,7 +7,7 @@ import pytest
 
 from energymanager.actuators import EssActuatorSnapshot, EssCapabilities
 from energymanager.load_forecast import BackgroundLoadForecast, BackgroundLoadForecastPoint
-from energymanager.planner import ShadowPlanner
+from energymanager.planner import PlanBuilder
 from energymanager.pv_forecast import PvForecast, PvForecastPoint
 
 _LOCAL = ZoneInfo("Europe/Brussels")
@@ -76,7 +76,7 @@ def _ess() -> EssActuatorSnapshot:
 
 def test_shadow_planner_builds_neutral_milp_input_frame() -> None:
     start = datetime(2026, 10, 8, 12, 0, tzinfo=_LOCAL)
-    plan = ShadowPlanner().build(
+    plan = PlanBuilder().build(
         _load_forecast(start, [1000.0] * 4),
         _pv_forecast(start, [400.0], shed_w=100.0),
         now_utc=start.astimezone(UTC),
@@ -96,7 +96,7 @@ def test_shadow_planner_builds_neutral_milp_input_frame() -> None:
 
 def test_shadow_plan_summary_keeps_ac_and_dc_pv_separate() -> None:
     start = datetime(2026, 10, 8, 12, 0, tzinfo=_LOCAL)
-    plan = ShadowPlanner().build(
+    plan = PlanBuilder().build(
         _load_forecast(start, [1000.0] * 4),
         _pv_forecast(start, [400.0], shed_w=100.0),
         now_utc=start.astimezone(UTC),
@@ -113,7 +113,7 @@ def test_shadow_plan_summary_keeps_ac_and_dc_pv_separate() -> None:
 def test_shadow_planner_accepts_full_seven_day_horizon() -> None:
     start = datetime(2026, 10, 8, 0, 0, tzinfo=_LOCAL)
     intervals = 7 * 24 * 4
-    plan = ShadowPlanner().build(
+    plan = PlanBuilder().build(
         _load_forecast(start, [500.0] * intervals),
         _pv_forecast(start, [0.0] * (7 * 24)),
         now_utc=start.astimezone(UTC),
@@ -126,7 +126,7 @@ def test_shadow_planner_accepts_full_seven_day_horizon() -> None:
 def test_shadow_planner_rejects_naive_now() -> None:
     start = datetime(2026, 10, 8, 12, 0, tzinfo=_LOCAL)
     with pytest.raises(ValueError):
-        ShadowPlanner().build(
+        PlanBuilder().build(
             _load_forecast(start, [500.0]),
             _pv_forecast(start, [0.0]),
             now_utc=datetime(2026, 10, 8, 10, 0),

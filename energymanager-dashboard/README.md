@@ -1,30 +1,21 @@
-# EnergyManager native Home Assistant dashboard — v1
+# EnergyManager dashboard v1.2
+
+Native Home Assistant dashboard using the existing EnergyManager entities.
 
 ## Install
-1. Ensure **ApexCharts Card** is installed with HACS and its Lovelace resource is loaded.
-2. Home Assistant → Settings → Dashboards → Add dashboard → New dashboard, and open its raw configuration editor (or use a YAML-mode dashboard).
-3. Paste the contents of `energymanager-dashboard.yaml` into the dashboard raw configuration editor.
-4. Save. The dashboard has Overview, Planning and Performance views.
 
-If creating a dashboard with a built-in default card, remove the default view before pasting.
+In Home Assistant: Settings → Dashboards → select the EnergyManager dashboard → Raw configuration editor. Replace the current YAML with `energymanager-dashboard.yaml`.
 
-## Important limitations
-- Day 1–7 fields are HA state *attributes* and will be available only while the add-on publishes them.
-- ApexCharts plots the daily chunks as separate series to cover the entire 672-interval horizon.
-- The display shows a **rolling** schedule from the latest solve; historical plans cannot yet be displayed here.
-- Day series use `load_w`, `pv_ac_w`, `pv_dc_w`, `ess_w`, `grid_w`, `ess_soc`, `ev_soc`. There is no separate `ev_power_w` in the published plan slots.
-- PV DC power is internal to battery charging and is not summed into the grid AC balance.
-- Performance uses HA Recorder; ensure those sensors are retained in history.
-- If custom cards show as unavailable, verify the ApexCharts frontend resource is correctly registered.
+ApexCharts Card must be installed through HACS for the forecast plots. Native History Graph cards are used for recorded measurements. No EnergyManager add-on upgrade is needed.
 
-## Check after installation
-- Overview: live power and controller status load.
-- Planning: timeline spans seven days and both batteries' SoC tracks appear.
-- Performance: real history appears for power and SoC.
-- Check the plan-day timestamps update on subsequent MILP solves.
+## Changes since v1.1
 
-## Diagnostics tab (v1.1)
+- Removed the overview explanation and redundant controller-status card; diagnostics remain on the Diagnostics tab.
+- Shortened the 24-hour forecast names and power/SoC legend labels.
+- Simplified the Overview ApexCharts configuration and removed fixed hex colors throughout to allow theme-responsive colors.
+- Removed redundant explanation cards in Planning, but retained seven-day planning, Performance, and Diagnostics views.
+- Kept existing `shadow_plan` entity identifiers for compatibility; their on-screen naming no longer uses the legacy term.
 
-This version adds live control-health entities and the last 30 notification-manager events,
-including pending, suppressed and delivered alerts. Event history is currently in-memory
-and resets when the add-on restarts. Uses `recent_events` exposed from EnergyManager v0.31.3.
+## Notes
+
+ApexCharts is still required to graph forward-looking plan data stored in sensor attributes; native HA history graphs cannot plot arbitrary future time series. Full backend terminology refactoring must be carried out in a separate EnergyManager release, with entity-ID migration and tests.

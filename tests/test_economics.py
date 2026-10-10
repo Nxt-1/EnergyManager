@@ -21,7 +21,7 @@ from energymanager.economics import (
     evaluate_plan_cost,
     evaluate_plan_objective,
 )
-from energymanager.planner import ShadowPlan, ShadowPlanInterval
+from energymanager.planner import EnergyPlan, PlanInterval
 
 
 class FakeHomeAssistantClient:
@@ -494,9 +494,9 @@ def test_economic_objective_values_terminal_ess_energy_at_avoidable_import_cost(
         discharge_efficiency=0.90,
     )
 
-    def plan(end_soc: float) -> ShadowPlan:
+    def plan(end_soc: float) -> EnergyPlan:
         intervals = tuple(
-            ShadowPlanInterval(
+            PlanInterval(
                 period_start_local=start + timedelta(minutes=15 * index),
                 background_load_w=1000.0,
                 scheduled_load_w=0.0,
@@ -512,7 +512,7 @@ def test_economic_objective_values_terminal_ess_energy_at_avoidable_import_cost(
             )
             for index in range(4)
         )
-        return ShadowPlan(
+        return EnergyPlan(
             generated_at_utc=start.astimezone(UTC),
             intervals=intervals,
             ess_projection_status="projected",

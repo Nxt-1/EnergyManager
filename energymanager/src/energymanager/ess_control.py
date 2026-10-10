@@ -136,7 +136,7 @@ class EssHardwareController:
         *,
         ev_control_enabled: bool = False,
     ) -> None:
-        """Publish command translation with explicit real/shadow ownership per actuator."""
+        """Publish command translation with explicit hardware ownership per actuator."""
         hardware_actuators = []
         if self.enabled:
             hardware_actuators.append("ess")

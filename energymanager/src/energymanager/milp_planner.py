@@ -1,4 +1,4 @@
-"""Authoritative seven-day MILP shadow planner."""
+"""Authoritative seven-day MILP planner."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from .economics import (
     evaluate_plan_objective,
 )
 from .ha_client import HomeAssistantClient
-from .planner import ShadowPlan, ShadowPlanInterval
+from .planner import EnergyPlan, PlanInterval
 from .tasks import PlanningTask
 
 MILP_EVALUATION_VERSION = "2026-10-10-milp-v7"
@@ -68,7 +68,7 @@ class MilpCostBreakdown:
 
 @dataclass(frozen=True, slots=True)
 class MilpEvaluation:
-    """Result of the authoritative HiGHS shadow planner solve."""
+    """Result of the authoritative HiGHS planner solve."""
 
     status: str
     model_status: str | None
@@ -108,7 +108,7 @@ class MilpEvaluation:
     milp_cost: MilpCostBreakdown | None = None
     adoption_ready: bool = False
     fallback_to_reference: bool = True
-    plan: ShadowPlan | None = None
+    plan: EnergyPlan | None = None
     reason: str | None = None
 
 
@@ -131,12 +131,12 @@ class _MilpVariables:
     capacity_peak_kw: dict[str, Any]
 
 
-def evaluate_shadow_plan_milp(
-    reference_plan: ShadowPlan,
+def evaluate_plan_milp(
+    reference_plan: EnergyPlan,
     profile: TariffProfile,
     capacity_state: CapacityPeakState,
 ) -> MilpEvaluation:
-    """Solve the authoritative EV+ESS MILP shadow plan."""
+    """Solve the authoritative EV+ESS MILP plan."""
     ess = find_ess_actuator(reference_plan.actuator_snapshots)
     ev = find_ev_actuator(reference_plan.actuator_snapshots)
     active_tasks = tuple(
@@ -187,7 +187,7 @@ def evaluate_shadow_plan_milp(
 
 
 def _empty_result(
-    plan: ShadowPlan,
+    plan: EnergyPlan,
     tasks: tuple[PlanningTask, ...],
     reference_objective: float | None,
     *,
@@ -260,7 +260,7 @@ def _replace_solver_version(result: MilpEvaluation, version: str) -> MilpEvaluat
 
 
 def _validate_inputs(
-    plan: ShadowPlan,
+    plan: EnergyPlan,
     ess: EssActuatorSnapshot | None,
     ev: EvActuatorSnapshot | None,
     tasks: tuple[PlanningTask, ...],
@@ -293,7 +293,7 @@ def _validate_inputs(
 
 def _solve_model(
     highspy: Any,
-    reference_plan: ShadowPlan,
+    reference_plan: EnergyPlan,
     profile: TariffProfile,
     capacity_state: CapacityPeakState,
     ess: EssActuatorSnapshot,
@@ -478,7 +478,7 @@ def _set_primal_warm_start(model: Any, highspy: Any, values: list[float]) -> tup
 def _build_variables(
     model: Any,
     highspy: Any,
-    plan: ShadowPlan,
+    plan: EnergyPlan,
     ess: EssActuatorSnapshot,
     ev: EvActuatorSnapshot | None,
     tasks: tuple[PlanningTask, ...],
@@ -617,7 +617,7 @@ def _build_variables(
 
 def _add_constraints(
     model: Any,
-    plan: ShadowPlan,
+    plan: EnergyPlan,
     ess: EssActuatorSnapshot,
     ev: EvActuatorSnapshot | None,
     tasks: tuple[PlanningTask, ...],
@@ -712,7 +712,7 @@ def _add_constraints(
 
 
 def _economic_objective_expression(
-    plan: ShadowPlan,
+    plan: EnergyPlan,
     ess: EssActuatorSnapshot,
     ev: EvActuatorSnapshot | None,
     profile: TariffProfile,
@@ -768,7 +768,7 @@ def _economic_objective_value(
 
 
 def _time_weighted_grid_import_expression(
-    plan: ShadowPlan,
+    plan: EnergyPlan,
     variables: _MilpVariables,
 ) -> Any:
     objective: Any = 0.0
@@ -793,15 +793,15 @@ def _early_value_weight(index: int) -> float:
 
 
 def _solution_plan(
-    reference_plan: ShadowPlan,
+    reference_plan: EnergyPlan,
     ess: EssActuatorSnapshot,
     ev: EvActuatorSnapshot | None,
     profile: TariffProfile,
     variables: _MilpVariables,
     values: list[float],
-) -> ShadowPlan:
+) -> EnergyPlan:
     resource = ess.capabilities
-    intervals: list[ShadowPlanInterval] = []
+    intervals: list[PlanInterval] = []
     for index, item in enumerate(reference_plan.intervals):
         ev_kw = _ev_power_value(ev, variables, values, index)
         ac_charge_kw = _value(variables.ac_charge_kw[index], values)
@@ -816,7 +816,7 @@ def _solution_plan(
             ev_soc = 100.0 * ev_energy_after / ev.capabilities.battery_capacity_kwh
         scheduled_w = max(0.0, ev_kw * 1000.0)
         intervals.append(
-            ShadowPlanInterval(
+            PlanInterval(
                 period_start_local=item.period_start_local,
                 background_load_w=item.background_load_w,
                 scheduled_load_w=scheduled_w,
@@ -845,7 +845,7 @@ def _solution_plan(
         else 0.0
     )
     preferred_penalty_eur = preferred_shortfall_kwh * profile.import_energy_eur_per_kwh
-    return ShadowPlan(
+    return EnergyPlan(
         generated_at_utc=reference_plan.generated_at_utc,
         intervals=tuple(intervals),
         ess_projection_status="projected",
@@ -901,7 +901,7 @@ def _preferred_soc_percent(tasks: tuple[PlanningTask, ...]) -> float | None:
     return max(values) if values else None
 
 
-def _ev_variable_indexes(plan: ShadowPlan, tasks: tuple[PlanningTask, ...]) -> list[int]:
+def _ev_variable_indexes(plan: EnergyPlan, tasks: tuple[PlanningTask, ...]) -> list[int]:
     starts = [task.earliest_start_local for task in tasks if task.earliest_start_local is not None]
     earliest_utc = min(value.astimezone(UTC) for value in starts) if starts else None
     unavailable = _ev_unavailable_windows_utc(tasks)
@@ -914,7 +914,7 @@ def _ev_variable_indexes(plan: ShadowPlan, tasks: tuple[PlanningTask, ...]) -> l
 
 
 def _eligible_indexes(
-    plan: ShadowPlan,
+    plan: EnergyPlan,
     task: PlanningTask,
     tasks: tuple[PlanningTask, ...] = (),
 ) -> list[int]:
@@ -949,7 +949,7 @@ def _interval_is_unavailable(period_start_local: Any, windows: tuple[tuple[Any, 
     return any(window_start <= start_utc < window_end for window_start, window_end in windows)
 
 
-def _ev_state_index(plan: ShadowPlan, moment: Any) -> int | None:
+def _ev_state_index(plan: EnergyPlan, moment: Any) -> int | None:
     if moment is None:
         return None
     target_utc = moment.astimezone(UTC)
@@ -985,7 +985,7 @@ def _capacity_baseline_kw(month: str, profile: TariffProfile, state: CapacityPea
     return profile.capacity_tariff_floor_kw
 
 
-def _objective(plan: ShadowPlan, profile: TariffProfile, state: CapacityPeakState) -> float | None:
+def _objective(plan: EnergyPlan, profile: TariffProfile, state: CapacityPeakState) -> float | None:
     evaluation = evaluate_plan_objective(plan, profile, state, hours=168)
     return evaluation.objective_eur if evaluation is not None else None
 
@@ -995,8 +995,8 @@ def _has_solution(highspy: Any, info: Any) -> bool:
 
 
 def _validate_solution_plan(
-    reference_plan: ShadowPlan,
-    plan: ShadowPlan,
+    reference_plan: EnergyPlan,
+    plan: EnergyPlan,
     ess: EssActuatorSnapshot,
     ev: EvActuatorSnapshot | None,
     tasks: tuple[PlanningTask, ...],
@@ -1130,7 +1130,7 @@ def _validate_solution_plan(
 
 
 def _ev_soc_at_deadline(
-    plan: ShadowPlan,
+    plan: EnergyPlan,
     ev: EvActuatorSnapshot,
     deadline: Any,
 ) -> float | None:
@@ -1168,7 +1168,7 @@ def _ev_power_step_valid(power_w: float, ev: EvActuatorSnapshot) -> bool:
 
 
 def _cost_breakdown(
-    plan: ShadowPlan,
+    plan: EnergyPlan,
     profile: TariffProfile,
     capacity_state: CapacityPeakState,
 ) -> MilpCostBreakdown | None:
@@ -1247,7 +1247,7 @@ async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpE
         "friendly_name": "Energy Manager MILP Planner",
         "milp_version": MILP_EVALUATION_VERSION,
         "authoritative": True,
-        "shadow_mode": True,
+        "planning_mode": "authoritative",
         "hardware_writes": False,
         "solver": "HiGHS/highspy",
         "solver_version": evaluation.solver_version,
