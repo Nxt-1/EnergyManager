@@ -1,3 +1,8 @@
+## 0.31.6
+
+- Publish the contiguous EV charging execution segments for the HA timeline, with energy and peak power.
+- Preserve separate task constraints and existing MILP/control behavior.
+
 # Changelog
 
 ## 0.31.5

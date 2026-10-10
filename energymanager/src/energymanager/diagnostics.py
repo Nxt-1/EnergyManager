@@ -56,6 +56,7 @@ PLAN_GRID_IMPORT_ENTITY = "sensor.energy_manager_shadow_plan_next_24_hours_grid_
 ACTUATOR_STATUS_ENTITY = "sensor.energy_manager_actuator_status"
 ACTUATOR_COMMAND_STATUS_ENTITY = "sensor.energy_manager_actuator_command_status"
 TASK_STATUS_ENTITY = "sensor.energy_manager_task_status"
+PLAN_TIMELINE_ENTITY = "sensor.energy_manager_plan_timeline"
 
 LEGACY_ENTITIES = (
     "sensor.energy_manager_observed_grid_power",
@@ -588,6 +589,8 @@ class DiagnosticsPublisher:
             }
         await self._client.set_state(PLAN_STATUS_ENTITY, "ready", status_attributes)
 
+        await self._publish_plan_timeline(plan)
+
         # Split 672 intervals into daily-sized entities to keep HA attributes manageable.
         # Slots are offsets from the plan start, not calendar dates (DST-safe).
         for day in range(7):
@@ -670,6 +673,53 @@ class DiagnosticsPublisher:
         """Remove diagnostics created by older Energy Manager releases."""
         for entity_id in LEGACY_ENTITIES:
             await self._client.delete_state(entity_id)
+
+    async def _publish_plan_timeline(self, plan: EnergyPlan) -> None:
+        """Publish contiguous scheduled EV charging runs, not task-deadline windows."""
+        segments: list[dict[str, Any]] = []
+        current: dict[str, Any] | None = None
+        interval_seconds = 15 * 60
+        for interval in plan.intervals:
+            power = max(0.0, interval.scheduled_load_w)
+            if power <= 1.0:
+                if current is not None:
+                    segments.append(current)
+                    current = None
+                continue
+            start = interval.period_start_local
+            end = start + timedelta(seconds=interval_seconds)
+            if current is None:
+                current = {
+                    "id": f"ev_{len(segments) + 1}",
+                    "name": "EV", "actuator_id": "ev", "kind": "charging",
+                    "start": start.isoformat(), "end": end.isoformat(),
+                    "peak_power_w": round(power), "energy_kwh": round(power * 0.25 / 1000, 3),
+                }
+            else:
+                current["end"] = end.isoformat()
+                current["peak_power_w"] = max(current["peak_power_w"], round(power))
+                current["energy_kwh"] += power * 0.25 / 1000
+        if current is not None:
+            segments.append(current)
+        for segment in segments:
+            segment["energy_kwh"] = round(segment["energy_kwh"], 3)
+        task_info = [
+            {"id": task.task_id, "kind": task.kind, "status": task.status,
+             "earliest_start": task.earliest_start_local.isoformat() if task.earliest_start_local else None,
+             "latest_end": task.latest_end_local.isoformat() if task.latest_end_local else None,
+             "required_energy_kwh": task.required_energy_kwh}
+            for task in plan.tasks if task.actuator_id == "ev"
+        ]
+        await self._client.set_state(PLAN_TIMELINE_ENTITY, len(segments), {
+            "friendly_name": "Energy Manager Plan Timeline",
+            "generated_at_utc": plan.generated_at_utc.isoformat(),
+            "horizon_hours": PLANNER_HORIZON_HOURS,
+            "interval_minutes": 15,
+            "segment_count": len(segments),
+            "segments": segments,
+            "task_constraints": task_info,
+            "note": "Segments are actual planned EV charging runs, not allocations to individual departures.",
+        })
 
     async def _publish_grid_net(self, house_state: HouseState) -> None:
         import_reading = house_state.readings.get("grid.import_power")

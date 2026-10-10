@@ -67,3 +67,16 @@ async def test_full_plan_is_archived_with_distinct_timestamps_and_revision_id():
     assert "ess_soc_percent=60.000" in client.writes[0]
     assert "grid_after_ess_w=100.000" in client.writes[-1]
     assert len({line.rsplit(" ", 1)[-1] for line in client.writes}) == 672
+
+
+@pytest.mark.asyncio
+async def test_plan_timeline_exports_contiguous_ev_charging_segments():
+    client = RecordingClient()
+    plan = make_plan()
+    await DiagnosticsPublisher(client).publish_plan(plan)
+    state, attributes = client.states["sensor.energy_manager_plan_timeline"]
+    assert state == 1
+    assert attributes["segments"][0]["name"] == "EV"
+    assert attributes["segments"][0]["energy_kwh"] == 16.8
+    assert attributes["segments"][0]["peak_power_w"] == 100
+    assert attributes["segments"][0]["start"] == plan.intervals[0].period_start_local.isoformat()

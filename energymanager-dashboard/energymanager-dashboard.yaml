@@ -6,6 +6,10 @@ views:
   path: overview
   icon: mdi:view-dashboard
   cards:
+  - type: custom:energymanager-timeline-card
+    entity: sensor.energy_manager_plan_timeline
+    title: Scheduled tasks · next 24 h
+    hours: 24
   - type: grid
     columns: 3
     square: false
@@ -31,7 +35,7 @@ views:
   - type: custom:apexcharts-card
     header:
       show: true
-      title: Power · next 24 h
+      title: Planned power · next 24 h
       show_states: false
     graph_span: 24h
     span:
@@ -93,6 +97,76 @@ views:
         legend_value: false
         in_header: false
       data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
+    - entity: sensor.energy_manager_plan_day_1
+      name: Solar expected
+      type: line
+      stroke_width: 2
+      curve: smooth
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: >-
+        return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w) + Number(p.pv_dc_w)]);
+    - entity: sensor.energy_manager_plan_day_1
+      name: Peak (15 min)
+      type: line
+      stroke_width: 1
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: >-
+        const peak = Number(hass.states['sensor.energy_manager_capacity_tariff_status']?.attributes?.observed_peak_kw);
+        if (!Number.isFinite(peak) || peak <= 0) return [];
+        return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), peak * 1000]);
+  - type: custom:apexcharts-card
+    header:
+      show: true
+      title: Planned energy · next 24 h
+      show_states: false
+    graph_span: 24h
+    span:
+      start: minute
+    now:
+      show: true
+    update_interval: 1min
+    apex_config:
+      chart:
+        height: 230
+      legend:
+        show: true
+      tooltip:
+        shared: true
+    series:
+    - entity: sensor.energy_manager_plan_day_1
+      name: Grid import
+      type: line
+      stroke_width: 2
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: >-
+        let kwh = 0;
+        return (entity.attributes.intervals || []).map(p => { kwh += Math.max(0, Number(p.grid_w)) * 0.25 / 1000; return [new Date(p.start).getTime(), +kwh.toFixed(3)]; });
+    - entity: sensor.energy_manager_plan_day_1
+      name: Grid export
+      type: line
+      stroke_width: 2
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: >-
+        let kwh = 0;
+        return (entity.attributes.intervals || []).map(p => { kwh += Math.max(0, -Number(p.grid_w)) * 0.25 / 1000; return [new Date(p.start).getTime(), +kwh.toFixed(3)]; });
+    - entity: sensor.energy_manager_plan_day_1
+      name: Solar expected
+      type: line
+      stroke_width: 2
+      show:
+        legend_value: false
+        in_header: false
+      data_generator: >-
+        let kwh = 0;
+        return (entity.attributes.intervals || []).map(p => { kwh += (Number(p.pv_ac_w) + Number(p.pv_dc_w)) * 0.25 / 1000; return [new Date(p.start).getTime(), +kwh.toFixed(3)]; });
   - type: custom:apexcharts-card
     header:
       show: true
