@@ -1,19 +1,45 @@
-# EnergyManager Dashboard v1.7
+# EnergyManager Dashboard v2.30 — Timeline alignment lifecycle fix
 
-Install the EnergyManager v0.31.8 add-on first. Replace the dashboard raw YAML with `energymanager-dashboard.yaml`. The timeline JavaScript is unchanged from v1.6.
+Your diagnostics confirmed the plot coordinates were valid (`apex-globals` gave 526.6–1484.5 CSS px),
+while the timeline's reference rectangle returned x=0, making the previous computed right margin negative.
+This is a timeline layout timing problem, not a wrong ApexCharts x-axis or time scale.
 
-Each Overview power tile now shows the live power and today's actual/estimated energy (kWh). The Peak tile shows the configured monthly highest 15-minute import average and current P1 quarter-hour average; no guessed peak is substituted when these inputs are absent.
+Changes **only** to `energymanager-timeline-card.js`:
+- Schedule alignment after the card is mounted instead of measuring during synchronous HTML construction.
+- Reject zero-width timeline rectangles; retry every two seconds until HA has laid out the timeline.
+- Recover unmodified timeline bounds using its current margins, without resetting styles and forcing reflow.
+- Recheck alignment when the plot bounds change or the dashboard is resized.
+- Report meaningful diagnostics (`reason`, `timelineWidthPx`, and base/plot bounds).
 
-In the add-on `monitoring` settings, configure any available `*_energy_entity` to a **daily-reset** energy counter (kWh/Wh). If an entity is a lifetime increasing counter, turn on the corresponding `*_counter_cumulative` option: the first observation becomes the reference for that day (so the first partial day is incomplete); a new baseline is established on the next day. With no valid energy counter, EnergyManager integrates the corresponding observed power from the point it starts observing and tags the result `estimated_from_power`. The fallback is an estimate, not a recovered historical meter value. Optional counters do not affect control health.
+No changes to the power/SoC graphs, chart data, five-minute statistics cache, fixed 06:00 window,
+24-hour timestamps, task scheduling, card colors, or dashboard YAML.
 
-Configure `monthly_peak_entity` for the highest 15-minute grid-import average **this month**, and `quarter_hour_average_entity` for the P1 average **in the current quarter-hour**. Both must be power sensors in W or kW.
+## Installation
 
-The custom monitor sensors are `sensor.energy_manager_<channel>_energy_today` for channels `grid_import`, `grid_export`, `pv_ac`, `pv_dc`, `house`, `ev`, `ess_charge`, `ess_discharge`, and `sensor.energy_manager_monthly_peak_kw` / `sensor.energy_manager_quarter_hour_average_kw`.
+1. Replace `/config/www/energymanager-timeline-card.js` with the included file.
+2. Set Home Assistant's **JavaScript module** resource URL to `/local/energymanager-timeline-card.js?v=230`.
+3. Hard-refresh the dashboard; if HA is still serving an older file, clear its frontend cache.
+4. Keep the existing YAML (the archive includes a byte-identical copy of v2.29).
 
 ## Validation needed
 
-- GitHub Actions Ruff and pytest pass.
-- Inspect effective add-on monitoring options and confirm the selected HA IDs.
-- Verify `sensor.energy_manager_grid_import_energy_today`, `sensor.energy_manager_pv_ac_energy_today`, and any other configured counters. Check `source` and `date` attributes.
-- Check peak values against the P1 readings, especially W/kW conversion.
-- Verify ESS, EV and MILP remain healthy after installation.
+After both graphs and timeline have rendered, run:
+
+```js
+window.energyManagerPlotAlignmentStatus
+```
+
+Expected: `plotFound: true`, `aligned: true`, `reason: 'ok'`, realistic `timelineBaseLeftPx` (not 0),
+left and right timeline 06:00 markers lining up with the power plot's boundaries. Check once again
+with the Chrome console closed / window resized. Click a task to verify its details still work.
+
+If alignment remains false, send the **full diagnostic object**, especially `reason`,
+`timelineWidthPx`, `timelineBaseLeftPx`, `timelineBaseRightPx`, `powerPlotLeftPx`,
+`powerPlotRightPx`.
+
+## Checks
+
+- JavaScript syntax: check passed.
+- Simulated zero-width initialization, deferred retry, and repeated alignment: check passed.
+- YAML byte-identical to v2.29.
+- Live browser geometry must be verified in Home Assistant.
