@@ -145,6 +145,30 @@ class LegacyInfluxSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class MonitoringSettings:
+    """Optional meter mappings; daily counters preferred over total-increasing counters."""
+
+    grid_import_energy_entity: str | None = None
+    grid_export_energy_entity: str | None = None
+    pv_ac_energy_entity: str | None = None
+    pv_dc_energy_entity: str | None = None
+    house_energy_entity: str | None = None
+    ev_energy_entity: str | None = None
+    ess_charge_energy_entity: str | None = None
+    ess_discharge_energy_entity: str | None = None
+    grid_import_counter_cumulative: bool = False
+    grid_export_counter_cumulative: bool = False
+    pv_ac_counter_cumulative: bool = False
+    pv_dc_counter_cumulative: bool = False
+    house_counter_cumulative: bool = False
+    ev_counter_cumulative: bool = False
+    ess_charge_counter_cumulative: bool = False
+    ess_discharge_counter_cumulative: bool = False
+    monthly_peak_entity: str | None = None
+    quarter_hour_average_entity: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class NotificationSettings:
     """Optional Home Assistant notify service for live-control health transitions."""
 
@@ -164,6 +188,7 @@ class Settings:
     ev: EvSettings = EvSettings()
     economics: EconomicsSettings = EconomicsSettings()
     notifications: NotificationSettings = NotificationSettings()
+    monitoring: MonitoringSettings = MonitoringSettings()
     database: DatabaseSettings = DatabaseSettings()
     legacy_influx: LegacyInfluxSettings = LegacyInfluxSettings()
     legacy_options_detected: bool = False
@@ -255,6 +280,9 @@ class Settings:
                     ),
                 }
             ),
+            "monitoring": _without_none(
+                {key: getattr(self.monitoring, key) for key in MonitoringSettings.__dataclass_fields__}
+            ),
             "notifications": _without_none(
                 {
                     "enabled": self.notifications.enabled,
@@ -305,6 +333,7 @@ class Settings:
         ev_raw = _mapping(raw.get("ev"), "ev")
         economics_raw = _mapping(raw.get("economics"), "economics")
         notifications_raw = _mapping(raw.get("notifications"), "notifications")
+        monitoring_raw = _mapping(raw.get("monitoring"), "monitoring")
         database_raw = _mapping(raw.get("database"), "database")
         legacy_influx_raw = _mapping(raw.get("legacy_influx"), "legacy_influx")
 
@@ -513,6 +542,12 @@ class Settings:
                 capacity_tariff_floor_kw=capacity_floor,
                 valid_from_utc=economics_valid_from,
             ),
+            monitoring=MonitoringSettings(**{
+                key: (_bool_option(monitoring_raw.get(key, False), f"monitoring.{key}")
+                      if key.endswith("_counter_cumulative") else
+                      _optional_entity_id(monitoring_raw.get(key), f"monitoring.{key}"))
+                for key in MonitoringSettings.__dataclass_fields__
+            }),
             notifications=NotificationSettings(
                 enabled=notifications_enabled,
                 service=notification_service,

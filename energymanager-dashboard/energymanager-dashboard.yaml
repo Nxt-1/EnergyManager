@@ -1,4 +1,4 @@
-# EnergyManager dashboard v1.6 — planned load areas and ESS source estimate
+# EnergyManager dashboard v1.7 — numerical daily energies and P1 quarter-hour peak
 title: EnergyManager
 views:
 - title: Overview
@@ -13,24 +13,81 @@ views:
     columns: 3
     square: false
     cards:
-    - type: tile
-      entity: sensor.energy_manager_grid_power
-      name: Grid net
-    - type: tile
-      entity: sensor.energy_manager_pv_total_power
-      name: PV combined
-    - type: tile
-      entity: sensor.energy_manager_house_load_power
-      name: House load
+    - type: markdown
+      content: '{% set p = states(''sensor.energy_manager_grid_power'') %}
+
+
+        ### Grid
+
+
+        **{{ p if p not in [''unknown'',''unavailable''] else ''—'' }} W**
+
+
+        Import: **{{ states(''sensor.energy_manager_grid_import_energy_today'') if is_number(states(''sensor.energy_manager_grid_import_energy_today''))
+        else ''—'' }} kWh**
+
+
+        Export: **{{ states(''sensor.energy_manager_grid_export_energy_today'') if is_number(states(''sensor.energy_manager_grid_export_energy_today''))
+        else ''—'' }} kWh**'
+    - type: markdown
+      content: '{% set p = states(''sensor.energy_manager_pv_total_power'') %}
+
+
+        ### Solar
+
+
+        **{{ p if p not in [''unknown'',''unavailable''] else ''—'' }} W**
+
+
+        *(AC + DC)*
+
+
+        AC: **{{ states(''sensor.energy_manager_pv_ac_energy_today'') if is_number(states(''sensor.energy_manager_pv_ac_energy_today''))
+        else ''—'' }} kWh**
+
+
+        DC: **{{ states(''sensor.energy_manager_pv_dc_energy_today'') if is_number(states(''sensor.energy_manager_pv_dc_energy_today''))
+        else ''—'' }} kWh**'
+    - type: markdown
+      content: '{% set p = states(''sensor.energy_manager_house_load_power'') %}
+
+
+        ### House
+
+
+        **{{ p if p not in [''unknown'',''unavailable''] else ''—'' }} W**
+
+
+        Today: **{{ states(''sensor.energy_manager_house_energy_today'') if is_number(states(''sensor.energy_manager_house_energy_today''))
+        else ''—'' }} kWh**'
     - type: tile
       entity: sensor.energy_manager_ess_soc
-      name: ESS SoC
+      name: ESS
     - type: tile
       entity: sensor.energy_manager_ev_soc
-      name: EV SoC
-    - type: tile
-      entity: sensor.energy_manager_ev_charging_power
-      name: EV charging
+      name: EV
+    - type: markdown
+      content: '{% set p = states(''sensor.energy_manager_ev_charging_power'') %}
+
+
+        ### EV charging
+
+
+        **{{ p if p not in [''unknown'',''unavailable''] else ''—'' }} W**
+
+
+        Charged: **{{ states(''sensor.energy_manager_ev_energy_today'') if is_number(states(''sensor.energy_manager_ev_energy_today''))
+        else ''—'' }} kWh**'
+    - type: markdown
+      content: '### Capacity peak
+
+
+        **{{ states(''sensor.energy_manager_monthly_peak_kw'') if is_number(states(''sensor.energy_manager_monthly_peak_kw''))
+        else ''—'' }} kW**
+
+
+        Current quarter: **{{ states(''sensor.energy_manager_quarter_hour_average_kw'') if is_number(states(''sensor.energy_manager_quarter_hour_average_kw''))
+        else ''—'' }} kW**'
   - type: custom:apexcharts-card
     header:
       show: true
@@ -156,8 +213,8 @@ views:
         const bucket = p => { const ess = Number(p.ess_w) || 0; if (ess <= 0) return -1; const ratio = Math.min(1, Math.max(0,
         (Number(p.pv_dc_w) || 0) / ess)); return Math.min(4, Math.floor(ratio * 5)); };
 
-        return a.map((p, i) => [new Date(p.start).getTime(), (bucket(p) === 0 || (i > 0 && bucket(a[i - 1]) === 0)) ?
-        Math.max(0, Number(p.ess_w) || 0) : null]);'
+        return a.map((p, i) => [new Date(p.start).getTime(), (bucket(p) === 0 || (i > 0 && bucket(a[i - 1]) === 0)) ? Math.max(0,
+        Number(p.ess_w) || 0) : null]);'
       color: '#2563eb'
     - entity: sensor.energy_manager_plan_day_1
       name: ESS · mostly battery
@@ -172,8 +229,8 @@ views:
         const bucket = p => { const ess = Number(p.ess_w) || 0; if (ess <= 0) return -1; const ratio = Math.min(1, Math.max(0,
         (Number(p.pv_dc_w) || 0) / ess)); return Math.min(4, Math.floor(ratio * 5)); };
 
-        return a.map((p, i) => [new Date(p.start).getTime(), (bucket(p) === 1 || (i > 0 && bucket(a[i - 1]) === 1)) ?
-        Math.max(0, Number(p.ess_w) || 0) : null]);'
+        return a.map((p, i) => [new Date(p.start).getTime(), (bucket(p) === 1 || (i > 0 && bucket(a[i - 1]) === 1)) ? Math.max(0,
+        Number(p.ess_w) || 0) : null]);'
       color: '#548bc4'
     - entity: sensor.energy_manager_plan_day_1
       name: ESS · mixed
@@ -188,8 +245,8 @@ views:
         const bucket = p => { const ess = Number(p.ess_w) || 0; if (ess <= 0) return -1; const ratio = Math.min(1, Math.max(0,
         (Number(p.pv_dc_w) || 0) / ess)); return Math.min(4, Math.floor(ratio * 5)); };
 
-        return a.map((p, i) => [new Date(p.start).getTime(), (bucket(p) === 2 || (i > 0 && bucket(a[i - 1]) === 2)) ?
-        Math.max(0, Number(p.ess_w) || 0) : null]);'
+        return a.map((p, i) => [new Date(p.start).getTime(), (bucket(p) === 2 || (i > 0 && bucket(a[i - 1]) === 2)) ? Math.max(0,
+        Number(p.ess_w) || 0) : null]);'
       color: '#817f98'
     - entity: sensor.energy_manager_plan_day_1
       name: ESS · mostly MPPT
@@ -204,8 +261,8 @@ views:
         const bucket = p => { const ess = Number(p.ess_w) || 0; if (ess <= 0) return -1; const ratio = Math.min(1, Math.max(0,
         (Number(p.pv_dc_w) || 0) / ess)); return Math.min(4, Math.floor(ratio * 5)); };
 
-        return a.map((p, i) => [new Date(p.start).getTime(), (bucket(p) === 3 || (i > 0 && bucket(a[i - 1]) === 3)) ?
-        Math.max(0, Number(p.ess_w) || 0) : null]);'
+        return a.map((p, i) => [new Date(p.start).getTime(), (bucket(p) === 3 || (i > 0 && bucket(a[i - 1]) === 3)) ? Math.max(0,
+        Number(p.ess_w) || 0) : null]);'
       color: '#64a878'
     - entity: sensor.energy_manager_plan_day_1
       name: ESS · MPPT
@@ -220,8 +277,8 @@ views:
         const bucket = p => { const ess = Number(p.ess_w) || 0; if (ess <= 0) return -1; const ratio = Math.min(1, Math.max(0,
         (Number(p.pv_dc_w) || 0) / ess)); return Math.min(4, Math.floor(ratio * 5)); };
 
-        return a.map((p, i) => [new Date(p.start).getTime(), (bucket(p) === 4 || (i > 0 && bucket(a[i - 1]) === 4)) ?
-        Math.max(0, Number(p.ess_w) || 0) : null]);'
+        return a.map((p, i) => [new Date(p.start).getTime(), (bucket(p) === 4 || (i > 0 && bucket(a[i - 1]) === 4)) ? Math.max(0,
+        Number(p.ess_w) || 0) : null]);'
       color: '#16a34a'
     - entity: sensor.energy_manager_plan_day_1
       name: Peak (15 min)
@@ -235,9 +292,9 @@ views:
         || 0) * 1000]);
       color: '#dc2626'
   - type: markdown
-    content: 'ESS line color: **blue = battery-dominant**, **green = MPPT-dominant** (estimated from forecast MPPT and
-      ESS AC output; not measured power-path attribution). AC solar is shown separately. Solid areas show background
-      and EV charging; grid/ESS/solar are dashed lines.'
+    content: 'ESS line color: **blue = battery-dominant**, **green = MPPT-dominant** (estimated from forecast MPPT and ESS
+      AC output; not measured power-path attribution). AC solar is shown separately. Solid areas show background and EV charging;
+      grid/ESS/solar are dashed lines.'
   - type: custom:apexcharts-card
     header:
       show: true
@@ -702,8 +759,8 @@ views:
   - type: markdown
     content: '## Recorded actual operation
 
-      This initial view shows actual Home Assistant history. Historical plan-versus-actual overlays require an InfluxDB
-      3 history-query bridge and verification of stored snapshots.'
+      This initial view shows actual Home Assistant history. Historical plan-versus-actual overlays require an InfluxDB 3
+      history-query bridge and verification of stored snapshots.'
   - type: history-graph
     title: Actual power — last 24 hours
     hours_to_show: 24
@@ -730,8 +787,8 @@ views:
     - sensor.energy_manager_input_health
     - sensor.energy_manager_plan_cost_status
   - type: markdown
-    content: '**Not yet available:** auditable historical plan comparisons, actual-versus-baseline cost, and 15-minute
-      peak attribution. These will need data-access and calculation work rather than invented dashboard values.'
+    content: '**Not yet available:** auditable historical plan comparisons, actual-versus-baseline cost, and 15-minute peak
+      attribution. These will need data-access and calculation work rather than invented dashboard values.'
 - title: Diagnostics
   path: diagnostics
   icon: mdi:clipboard-text-clock
@@ -746,11 +803,11 @@ views:
     - sensor.energy_manager_fast_dispatch_status
   - type: markdown
     title: Recent notification events
-    content: '{% set events = state_attr(''sensor.energy_manager_notification_status'', ''recent_events'') or [] %} {%
-      if not events %} No events recorded since the current EnergyManager startup. {% else %} | Time (UTC) | Event |
-      Health | Reason | |:--|:--|:--|:--| {% for e in events | reverse %} | {{ e.time[:19] }} | {{ e.event }} | {{ e.health
-      }} | {{ (e.reason or ''-'') | replace(''|'',''/'') }} | {% endfor %} {% endif %}'
+    content: '{% set events = state_attr(''sensor.energy_manager_notification_status'', ''recent_events'') or [] %} {% if
+      not events %} No events recorded since the current EnergyManager startup. {% else %} | Time (UTC) | Event | Health |
+      Reason | |:--|:--|:--|:--| {% for e in events | reverse %} | {{ e.time[:19] }} | {{ e.event }} | {{ e.health }} | {{
+      (e.reason or ''-'') | replace(''|'',''/'') }} | {% endfor %} {% endif %}'
   - type: markdown
     content: The list shows the last 30 notification-manager events from the running add-on, including suppressed/pending
-      alerts. It is not yet a durable historical event database. Short-lived health changes remain visible here without
-      sending phone notifications.
+      alerts. It is not yet a durable historical event database. Short-lived health changes remain visible here without sending
+      phone notifications.

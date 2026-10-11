@@ -12,6 +12,7 @@ import aiohttp
 
 from .config import Settings
 from .diagnostics import DiagnosticsPublisher
+from .energy_monitor import EnergyMonitor
 from .ha_client import HomeAssistantClient, HomeAssistantError
 from .house_state import HouseState
 from .inputs import InputSpec, build_input_specs
@@ -44,6 +45,7 @@ class EnergyManagerApp:
         self._background_load_service = background_load_service
         self._planner_service = planner_service
         self._diagnostics = DiagnosticsPublisher(client)
+        self._energy_monitor = EnergyMonitor(client, settings.monitoring)
         self._house_state = HouseState()
         self._specs = build_input_specs(settings)
         self._specs_by_entity: dict[str, list[InputSpec]] = defaultdict(list)
@@ -104,6 +106,7 @@ class EnergyManagerApp:
         entities = tuple(self._specs_by_entity)
         await self._refresh_all_inputs()
         await self._publish_house_state()
+        await self._publish_energy_monitor()
 
         if not entities:
             _LOGGER.warning("No Home Assistant input entities are configured")
@@ -134,6 +137,7 @@ class EnergyManagerApp:
 
                 if refresh_task in done:
                     await self._refresh_all_inputs()
+                    await self._publish_energy_monitor()
                     self._house_state.update_staleness(_STALE_AFTER)
                     await self._publish_house_state()
                     refresh_task = asyncio.create_task(asyncio.sleep(_REFRESH_INTERVAL))
@@ -206,6 +210,12 @@ class EnergyManagerApp:
         for spec in self._specs_by_entity.get(entity_id, ()):
             self._house_state.reading(spec.key).set_invalid(reason, observed_at_utc=observed_at_utc)
         _LOGGER.warning("Unable to refresh %s: %s", entity_id, reason)
+
+    async def _publish_energy_monitor(self) -> None:
+        try:
+            await self._energy_monitor.update(self._house_state)
+        except Exception as exc:  # noqa: BLE001 - optional dashboard telemetry is isolated.
+            _LOGGER.warning("Energy dashboard telemetry failed: %s", exc)
 
     async def _publish_house_state(self) -> None:
         for reading in self._house_state.readings.values():

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.31.8
+- Add optional daily energy monitoring and two P1 capacity-peak inputs.
+- Read configured daily or cumulative counters; use a persisted power-derived estimate when absent.
+- Publish dashboard-only energy and peak sensors without modifying planner or control health.
+
 ## 0.31.7
 - Export planned background and scheduled EV power separately for stacked-area dashboard charts.
 - Preserve total load and all other plan fields; no optimization, control, or schema changes.
