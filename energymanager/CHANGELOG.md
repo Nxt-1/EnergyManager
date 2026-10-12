@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.31.11
+- Limit the EV scheduling tie-break to 10 seconds within the existing 30-second overall solver budget.
+- Add EV session-start variables only after the economic solution has been computed.
+- Report separate economic and selected schedules (charging, starts, early-grid use and SoC ranges).
+- Preserve the €0.01 economic tolerance, hard constraints and existing hardware behavior.
+
 ## 0.31.10
 - Prefer fewer EV charging sessions within the existing €0.01 near-optimal economic band.
 - Prefer earlier EV charging when equivalent; retain a weak tie-break for postponing grid imports.

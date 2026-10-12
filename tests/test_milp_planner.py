@@ -462,3 +462,93 @@ def test_ev_tie_break_weights_do_not_change_economic_tolerance() -> None:
     assert MILP_ECONOMIC_TOLERANCE_EUR == pytest.approx(0.01)
     assert MILP_EV_SESSION_START_WEIGHT > 7.0 * 10.0 * MILP_EV_CHARGE_DELAY_WEIGHT
     assert 0.0 < MILP_GRID_IMPORT_DELAY_WEIGHT < MILP_EV_CHARGE_DELAY_WEIGHT
+
+
+def test_ev_session_variables_added_only_for_second_stage_with_complete_warm_start() -> None:
+    """A valid first-stage incumbent should remain feasible when session columns are appended."""
+    from types import SimpleNamespace
+
+    from energymanager.milp_planner import _add_ev_session_start_variables
+
+    class FakeVar:
+        def __init__(self, index: int) -> None:
+            self.index = index
+
+        def __ge__(self, value: float) -> bool:
+            return value <= 1.0
+
+    class FakeModel:
+        def __init__(self, count: int) -> None:
+            self.count = count
+            self.constraints: list[bool] = []
+
+        def addVariable(self, **_kwargs: Any) -> Any:
+            variable = FakeVar(self.count)
+            self.count += 1
+            return variable
+
+        def addConstr(self, constraint: bool) -> None:
+            self.constraints.append(constraint)
+
+    start = datetime(2026, 10, 8, 12, tzinfo=_LOCAL)
+    plan = _reference_plan(start, tasks=(_task(start),))
+    stage1_values = [0.0, 6.0, 6.0, 6.0]
+    variables = SimpleNamespace(
+        ev_active={0: 0.0, 1: 1.0, 2: 1.0, 4: 1.0},
+        ev_single_phase_a={index: SimpleNamespace(index=position) for position, index in enumerate((0, 1, 2, 4))},
+        ev_three_phase_a={},
+        ev_session_start={},
+    )
+    model = FakeModel(len(stage1_values))
+
+    warm_start = _add_ev_session_start_variables(model, _ev(), variables, stage1_values)
+
+    assert len(warm_start) == model.count == 8
+    assert warm_start[:4] == stage1_values
+    assert warm_start[4:] == [0.0, 1.0, 0.0, 1.0]
+    assert all(model.constraints)
+    assert len(variables.ev_session_start) == 4
+
+
+def test_tie_break_cpu_budget_is_capped_without_changing_total_budget() -> None:
+    from energymanager.milp_planner import MILP_TIE_BREAK_MAX_TIME_SECONDS
+
+    assert MILP_TOTAL_TIME_BUDGET_SECONDS == 30.0
+    assert MILP_TIE_BREAK_MAX_TIME_SECONDS == 10.0
+    assert MILP_TIE_BREAK_MAX_TIME_SECONDS < MILP_TOTAL_TIME_BUDGET_SECONDS
+
+
+def test_published_milp_status_includes_both_schedules_for_diagnosis() -> None:
+    client = FakeHomeAssistantClient()
+    economic = {"ev_session_count": 5, "ev_charge_next_24h_kwh": 0.345}
+    chosen = {"ev_session_count": 2, "ev_charge_next_24h_kwh": 3.45}
+    evaluation = MilpEvaluation(
+        status="feasible_time_limit",
+        model_status="Time limit reached",
+        solver_version="test",
+        solve_time_seconds=12.3,
+        mip_gap=0.3,
+        mip_node_count=0,
+        variable_count=9756,
+        integer_variable_count=3232,
+        constraint_count=8887,
+        horizon_intervals=672,
+        active_task_count=6,
+        reference_strategy="milp_input",
+        reference_objective_eur=None,
+        milp_objective_eur=1.7483,
+        estimated_improvement_eur=None,
+        economic_stage_status="optimal",
+        economic_stage_mip_gap=0.001,
+        economic_stage_variable_count=9284,
+        economic_stage_constraint_count=8415,
+        economic_stage_summary=economic,
+        selected_stage_summary=chosen,
+    )
+    asyncio.run(publish_milp_evaluation(client, evaluation))
+    attributes = client.states["sensor.energy_manager_milp_status"]["attributes"]
+    assert attributes["milp_version"] == "2026-10-12-milp-v9"
+    assert attributes["tie_break_max_time_seconds"] == 10.0
+    assert attributes["economic_stage_variable_count"] == 9284
+    assert attributes["economic_stage_schedule"] == economic
+    assert attributes["selected_stage_schedule"] == chosen

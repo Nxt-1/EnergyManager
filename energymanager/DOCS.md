@@ -349,3 +349,13 @@ HTTP Basic authentication.
 ### Backtest comparison fairness
 
 Load-model accuracy is scored only on forecast intervals shared by all candidate models. Coverage remains a separate availability diagnostic.
+
+### MILP stage comparison (v0.31.11)
+
+`sensor.energy_manager_milp_status` exposes `economic_stage_schedule` and
+`selected_stage_schedule`, each reporting EV session count, delayed-charging score,
+next-24-hour EV energy, charging before the first departure, minimum ESS SoC,
+maximum EV SoC, and grid-import energy. `economic_stage_status` and
+`economic_stage_mip_gap` describe the first solve separately from the tie-break.
+The tie-break is limited to 10 seconds; the total planning budget remains 30 seconds.
+EV session-start variables are created only for the second solve.

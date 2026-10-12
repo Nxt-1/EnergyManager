@@ -22,9 +22,10 @@ from .ha_client import HomeAssistantClient
 from .planner import EnergyPlan, PlanInterval
 from .tasks import PlanningTask
 
-MILP_EVALUATION_VERSION = "2026-10-12-milp-v8"
+MILP_EVALUATION_VERSION = "2026-10-12-milp-v9"
 MILP_STATUS_ENTITY = "sensor.energy_manager_milp_status"
 MILP_TOTAL_TIME_BUDGET_SECONDS = 30.0
+MILP_TIE_BREAK_MAX_TIME_SECONDS = 10.0
 MILP_ECONOMIC_TIME_LIMIT_SECONDS = MILP_TOTAL_TIME_BUDGET_SECONDS
 MILP_TIME_LIMIT_SECONDS = MILP_TOTAL_TIME_BUDGET_SECONDS
 MILP_RELATIVE_GAP = 0.01
@@ -99,6 +100,12 @@ class MilpEvaluation:
     tie_break_warm_start_status: str | None = None
     selected_solution_stage: str | None = None
     first_stage_objective_eur: float | None = None
+    economic_stage_summary: dict[str, float | int | str | None] | None = None
+    selected_stage_summary: dict[str, float | int | str | None] | None = None
+    economic_stage_mip_gap: float | None = None
+    economic_stage_status: str | None = None
+    economic_stage_variable_count: int | None = None
+    economic_stage_constraint_count: int | None = None
     economic_tolerance_eur: float = MILP_ECONOMIC_TOLERANCE_EUR
     early_value_half_life_days: float = MILP_EARLY_VALUE_HALF_LIFE_DAYS
     time_weighted_grid_import_score: float | None = None
@@ -249,6 +256,12 @@ def _replace_solver_version(result: MilpEvaluation, version: str) -> MilpEvaluat
         tie_break_warm_start_status=result.tie_break_warm_start_status,
         selected_solution_stage=result.selected_solution_stage,
         first_stage_objective_eur=result.first_stage_objective_eur,
+        economic_stage_summary=result.economic_stage_summary,
+        selected_stage_summary=result.selected_stage_summary,
+        economic_stage_mip_gap=result.economic_stage_mip_gap,
+        economic_stage_status=result.economic_stage_status,
+        economic_stage_variable_count=result.economic_stage_variable_count,
+        economic_stage_constraint_count=result.economic_stage_constraint_count,
         economic_tolerance_eur=result.economic_tolerance_eur,
         early_value_half_life_days=result.early_value_half_life_days,
         time_weighted_grid_import_score=result.time_weighted_grid_import_score,
@@ -368,26 +381,43 @@ def _solve_model(
         )
 
     stage1_values = list(stage1_solution.col_value)
+    economic_stage_variable_count = int(model.getNumCol())
+    economic_stage_constraint_count = int(model.getNumRow())
     stage1_plan = _solution_plan(reference_plan, ess, ev, profile, variables, stage1_values)
     stage1_objective = _objective(stage1_plan, profile, capacity_state)
     stage1_internal_objective = _economic_objective_value(ess, ev, profile, variables, stage1_values)
 
-    tie_break_time_limit = max(0.0, MILP_TOTAL_TIME_BUDGET_SECONDS - economic_solve_time)
+    tie_break_time_limit = min(
+        MILP_TIE_BREAK_MAX_TIME_SECONDS,
+        max(0.0, MILP_TOTAL_TIME_BUDGET_SECONDS - economic_solve_time),
+    )
     if tie_break_time_limit >= 0.5:
-        model.addConstr(economic_expression <= stage1_internal_objective + MILP_ECONOMIC_TOLERANCE_EUR)
-        tie_break_expression = _ev_schedule_tie_break_expression(reference_plan, ev, variables)
-        model.setObjective(tie_break_expression, sense=highspy.ObjSense.kMinimize)
-        warm_start_applied, warm_start_status = _set_primal_warm_start(model, highspy, stage1_values)
-        model.setOptionValue("time_limit", tie_break_time_limit)
-
         tie_break_started = perf_counter()
-        model.run()
-        tie_break_solve_time = perf_counter() - tie_break_started
-        stage2_model_status = model.modelStatusToString(model.getModelStatus())
-        stage2_info = model.getInfo()
-        stage2_solution = model.getSolution()
-        stage2_has_solution = _has_solution(highspy, stage2_info)
-        tie_break_status = _status_from_model(stage2_model_status, has_solution=stage2_has_solution)
+        warm_start_applied = False
+        warm_start_status = "not_attempted"
+        try:
+            model.addConstr(economic_expression <= stage1_internal_objective + MILP_ECONOMIC_TOLERANCE_EUR)
+            # Session-start variables only affect the secondary objective, not electricity costs.
+            tie_break_values = _add_ev_session_start_variables(model, ev, variables, stage1_values)
+            tie_break_expression = _ev_schedule_tie_break_expression(reference_plan, ev, variables)
+            model.setObjective(tie_break_expression, sense=highspy.ObjSense.kMinimize)
+            warm_start_applied, warm_start_status = _set_primal_warm_start(model, highspy, tie_break_values)
+            model.setOptionValue("time_limit", tie_break_time_limit)
+            model.run()
+            tie_break_solve_time = perf_counter() - tie_break_started
+            stage2_model_status = model.modelStatusToString(model.getModelStatus())
+            stage2_info = model.getInfo()
+            stage2_solution = model.getSolution()
+            stage2_has_solution = _has_solution(highspy, stage2_info)
+            tie_break_status = _status_from_model(stage2_model_status, has_solution=stage2_has_solution)
+        except Exception as exc:
+            # A failed scheduling preference must never invalidate a sound economic plan.
+            tie_break_solve_time = perf_counter() - tie_break_started
+            stage2_model_status = stage1_model_status
+            stage2_info = stage1_info
+            stage2_solution = stage1_solution
+            stage2_has_solution = False
+            tie_break_status = f"error:{type(exc).__name__}:{exc}"
     else:
         warm_start_applied = False
         warm_start_status = "skipped_no_budget"
@@ -455,6 +485,12 @@ def _solve_model(
         tie_break_warm_start_status=warm_start_status,
         selected_solution_stage=selected_solution_stage,
         first_stage_objective_eur=stage1_objective,
+        economic_stage_summary=_schedule_summary(reference_plan, stage1_plan, variables, stage1_values, active_tasks),
+        selected_stage_summary=_schedule_summary(reference_plan, milp_plan, variables, values, active_tasks),
+        economic_stage_mip_gap=_finite_optional(getattr(stage1_info, "mip_gap", None)),
+        economic_stage_status=_status_from_model(stage1_model_status, has_solution=True),
+        economic_stage_variable_count=economic_stage_variable_count,
+        economic_stage_constraint_count=economic_stage_constraint_count,
         time_weighted_grid_import_score=_time_weighted_grid_import_value(variables, values),
         ev_session_count=_ev_session_count(reference_plan, variables, values),
         ev_charge_delay_score_kwh_days=_ev_charge_delay_value(reference_plan, ev, variables, values),
@@ -474,6 +510,81 @@ def _solve_model(
         plan=milp_plan,
         reason=reason,
     )
+
+
+def _add_ev_session_start_variables(
+    model: Any,
+    ev: EvActuatorSnapshot | None,
+    variables: _MilpVariables,
+    stage1_values: list[float],
+) -> list[float]:
+    """Extend the economic incumbent to include stage-2-only continuous session variables."""
+    warm_start = list(stage1_values)
+    previous_charging = bool(ev is not None and (ev.current_power_w or 0.0) >= 100.0)
+    for index, active in sorted(variables.ev_active.items()):
+        single = variables.ev_single_phase_a.get(index)
+        three = variables.ev_three_phase_a.get(index)
+        charging = bool(
+            (single is not None and _value(single, stage1_values) >= 0.5)
+            or (three is not None and _value(three, stage1_values) >= 0.5)
+        )
+        predecessor_active = variables.ev_active.get(index - 1, float(previous_charging) if index == 0 else 0.0)
+        start = model.addVariable(lb=0.0, ub=1.0, name=f"ev_session_start_{index}")
+        variables.ev_session_start[index] = start
+        model.addConstr(start >= active - predecessor_active)
+        # append in variable-index order: HiGHS requires one warm-start value per column
+        if start.index != len(warm_start):
+            raise ValueError("EV session warm-start column indexing mismatch")
+        previous_slot_charging = previous_charging if index == 0 else any(
+            previous is not None and _value(previous, stage1_values) >= 0.5
+            for previous in (
+                variables.ev_single_phase_a.get(index - 1),
+                variables.ev_three_phase_a.get(index - 1),
+            )
+        )
+        warm_start.append(float(charging and not previous_slot_charging))
+    return warm_start
+
+
+def _schedule_summary(
+    reference_plan: EnergyPlan,
+    plan: EnergyPlan,
+    variables: _MilpVariables,
+    values: list[float],
+    tasks: tuple[PlanningTask, ...],
+) -> dict[str, float | int | str | None]:
+    """Small comparable fingerprint of the economic and secondary solutions."""
+    today = plan.intervals[:96]
+    departures = [
+        task.latest_end_local for task in tasks
+        if task.kind == "energy_by_deadline" and task.latest_end_local is not None
+    ]
+    first_departure = min(departures) if departures else None
+    scheduled_before_departure = sum(
+        item.scheduled_load_w * _INTERVAL_HOURS / 1000.0 for item in plan.intervals
+        if first_departure is not None and item.period_start_local < first_departure
+    )
+    ess_soc = [item.projected_soc_percent for item in today if item.projected_soc_percent is not None]
+    ev_soc = [item.projected_ev_soc_percent for item in today if item.projected_ev_soc_percent is not None]
+    return {
+        "ev_session_count": _ev_session_count(reference_plan, variables, values),
+        "ev_charge_delay_score_kwh_days": round(
+            _ev_charge_delay_value(
+                reference_plan, find_ev_actuator(reference_plan.actuator_snapshots), variables, values
+            ), 4
+        ),
+        "ev_charge_next_24h_kwh": round(sum(
+            item.scheduled_load_w * _INTERVAL_HOURS / 1000.0 for item in today
+        ), 3),
+        "ev_charge_before_first_departure_kwh": round(scheduled_before_departure, 3),
+        "first_departure_local": first_departure.isoformat() if first_departure else None,
+        "ess_min_soc_next_24h_percent": round(min(ess_soc), 2) if ess_soc else None,
+        "ev_max_soc_next_24h_percent": round(max(ev_soc), 2) if ev_soc else None,
+        "grid_import_next_24h_kwh": round(sum(
+            max(0.0, item.grid_power_after_ess_w or 0.0) * _INTERVAL_HOURS / 1000.0
+            for item in today
+        ), 3),
+    }
 
 
 def _set_primal_warm_start(model: Any, highspy: Any, values: list[float]) -> tuple[bool, str]:
@@ -544,7 +655,6 @@ def _build_variables(
     preferred_shortfall = None
     if tasks and ev is not None and ev.capabilities.battery_capacity_kwh is not None and ev.soc_percent is not None:
         eligible = _ev_variable_indexes(plan, tasks)
-        previous_active: Any = 1.0 if (ev.current_power_w or 0.0) >= 100.0 else 0.0
         min_current = math.ceil(ev.capabilities.min_charge_current_a)
         max_current = math.floor(ev.capabilities.max_charge_current_a)
         for index in eligible:
@@ -588,13 +698,6 @@ def _build_variables(
                 three_on if three_on is not None else 0.0
             )
             ev_active[index] = active
-            # Continuous auxiliary variable is sufficient: at the tie-break optimum it equals
-            # max(0, active_now - active_previous). No extra binary variable is necessary.
-            start = model.addVariable(lb=0.0, ub=1.0, name=f"ev_session_start_{index}")
-            ev_session_start[index] = start
-            # An interruption in eligibility always breaks the session, even when the
-            # preceding eligible slot was several intervals earlier.
-            model.addConstr(start >= active - ev_active.get(index - 1, previous_active if index == 0 else 0.0))
 
         ev_capacity = ev.capabilities.battery_capacity_kwh
         initial_ev_energy = ev_capacity * float(ev.soc_percent) / 100.0
@@ -1337,6 +1440,7 @@ async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpE
         "total_time_budget_seconds": MILP_TOTAL_TIME_BUDGET_SECONDS,
         "economic_time_limit_seconds": evaluation.economic_time_limit_seconds,
         "tie_break_time_limit_seconds": _round_optional(evaluation.tie_break_time_limit_seconds, 3),
+        "tie_break_max_time_seconds": MILP_TIE_BREAK_MAX_TIME_SECONDS,
         "mip_relative_gap_target": MILP_RELATIVE_GAP,
         "mip_gap": _round_optional(evaluation.mip_gap, 5),
         "mip_node_count": evaluation.mip_node_count,
@@ -1346,6 +1450,12 @@ async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpE
         "constraint_count": evaluation.constraint_count,
         "active_task_count": evaluation.active_task_count,
         "first_stage_objective_eur": _round_optional(evaluation.first_stage_objective_eur, 4),
+        "economic_stage_status": evaluation.economic_stage_status,
+        "economic_stage_mip_gap": _round_optional(evaluation.economic_stage_mip_gap, 5),
+        "economic_stage_variable_count": evaluation.economic_stage_variable_count,
+        "economic_stage_constraint_count": evaluation.economic_stage_constraint_count,
+        "economic_stage_schedule": evaluation.economic_stage_summary,
+        "selected_stage_schedule": evaluation.selected_stage_summary,
         "milp_objective_eur": _round_optional(evaluation.milp_objective_eur, 4),
         "economic_objective_delta_eur": _round_optional(objective_delta, 4),
         "economic_tolerance_eur": evaluation.economic_tolerance_eur,
