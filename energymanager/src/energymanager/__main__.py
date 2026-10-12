@@ -250,6 +250,7 @@ async def _run_app(
                 ev_controller=ev_controller,
                 notification_manager=notification_manager,
                 store=store,
+                benchmark_once=settings.benchmark_milp_once,
             )
             app = EnergyManagerApp(
                 settings,
@@ -274,6 +275,7 @@ async def _run_app(
         ev_controller=ev_controller,
         notification_manager=notification_manager,
         store=store,
+        benchmark_once=settings.benchmark_milp_once,
     )
     app = EnergyManagerApp(
         settings,

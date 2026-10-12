@@ -1,5 +1,5 @@
 name: Energy Manager
-version: "0.31.11"
+version: "0.31.12"
 slug: energy_manager
 description: Predictive home energy manager for Home Assistant
 url: https://github.com/Nxt-1/EnergyManager
@@ -12,6 +12,7 @@ homeassistant_api: true
 image: ghcr.io/nxt-1/energymanager
 options:
   log_level: info
+  benchmark_milp_once: false
   grid: {}
   ess:
     power_positive_means: discharge
@@ -35,6 +36,7 @@ options:
     retention_policy: autogen
 schema:
   log_level: list(debug|info|warning|error)
+  benchmark_milp_once: bool
   grid:
     import_power_entity: str?
     export_power_entity: str?

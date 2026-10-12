@@ -151,8 +151,10 @@ def evaluate_plan_milp(
     reference_plan: EnergyPlan,
     profile: TariffProfile,
     capacity_state: CapacityPeakState,
+    *,
+    tie_break_max_time_seconds: float | None = None,
 ) -> MilpEvaluation:
-    """Solve the authoritative EV+ESS MILP plan."""
+    """Solve the authoritative EV+ESS MILP plan (optional benchmark-only limit override)."""
     ess = find_ess_actuator(reference_plan.actuator_snapshots)
     ev = find_ev_actuator(reference_plan.actuator_snapshots)
     active_tasks = tuple(
@@ -190,7 +192,10 @@ def evaluate_plan_milp(
 
     assert ess is not None and ess.soc_percent is not None
     try:
-        return _solve_model(highspy, reference_plan, profile, capacity_state, ess, ev, active_tasks)
+        return _solve_model(
+            highspy, reference_plan, profile, capacity_state, ess, ev, active_tasks,
+            tie_break_max_time_seconds=tie_break_max_time_seconds,
+        )
     except Exception as exc:  # pragma: no cover - runtime safety around the optional diagnostic solver
         result = _empty_result(
             reference_plan,
@@ -323,6 +328,8 @@ def _solve_model(
     ess: EssActuatorSnapshot,
     ev: EvActuatorSnapshot | None,
     active_tasks: tuple[PlanningTask, ...],
+    *,
+    tie_break_max_time_seconds: float | None = None,
 ) -> MilpEvaluation:
     model = highspy.Highs()
     model.setOptionValue("output_flag", False)
@@ -387,10 +394,14 @@ def _solve_model(
     stage1_objective = _objective(stage1_plan, profile, capacity_state)
     stage1_internal_objective = _economic_objective_value(ess, ev, profile, variables, stage1_values)
 
-    tie_break_time_limit = min(
-        MILP_TIE_BREAK_MAX_TIME_SECONDS,
-        max(0.0, MILP_TOTAL_TIME_BUDGET_SECONDS - economic_solve_time),
-    )
+    if tie_break_max_time_seconds is None:
+        tie_break_time_limit = min(
+            MILP_TIE_BREAK_MAX_TIME_SECONDS,
+            max(0.0, MILP_TOTAL_TIME_BUDGET_SECONDS - economic_solve_time),
+        )
+    else:
+        # Benchmark runs are isolated and do not control actuators or publish authoritative plans.
+        tie_break_time_limit = float(tie_break_max_time_seconds)
     if tie_break_time_limit >= 0.5:
         tie_break_started = perf_counter()
         warm_start_applied = False

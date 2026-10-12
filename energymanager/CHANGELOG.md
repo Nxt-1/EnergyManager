@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.31.12
+- Add an opt-in, one-shot benchmark of MILP tie-break limits at 10, 30, 60 and 120 seconds.
+- Run the fixed planning snapshot in a separate, terminate-on-shutdown process and report the four outcomes.
+- Keep the authoritative 10-second tie-break and all ESS/EV control behavior unchanged.
+
 ## 0.31.11
 - Limit the EV scheduling tie-break to 10 seconds within the existing 30-second overall solver budget.
 - Add EV session-start variables only after the economic solution has been computed.

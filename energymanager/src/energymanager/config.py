@@ -182,6 +182,7 @@ class Settings:
     """Runtime settings exposed by the Home Assistant app configuration."""
 
     log_level: str = "info"
+    benchmark_milp_once: bool = False
     grid: GridSettings = GridSettings()
     ess: EssSettings = EssSettings()
     pv: PvSettings = PvSettings()
@@ -217,6 +218,7 @@ class Settings:
         """Return normalized nested options suitable for writing back to Supervisor."""
         return {
             "log_level": self.log_level,
+            "benchmark_milp_once": self.benchmark_milp_once,
             "grid": _without_none(
                 {
                     "import_power_entity": self.grid.import_power_entity,
@@ -327,6 +329,7 @@ class Settings:
         if log_level not in _VALID_LOG_LEVELS:
             allowed = ", ".join(sorted(_VALID_LOG_LEVELS))
             raise ConfigurationError(f"log_level must be one of: {allowed}")
+        benchmark_milp_once = _bool_option(raw.get("benchmark_milp_once", False), "benchmark_milp_once")
         grid_raw = _mapping(raw.get("grid"), "grid")
         ess_raw = _mapping(raw.get("ess"), "ess")
         pv_raw = _mapping(raw.get("pv"), "pv")
@@ -492,6 +495,7 @@ class Settings:
 
         return cls(
             log_level=log_level,
+            benchmark_milp_once=benchmark_milp_once,
             grid=GridSettings(import_power_entity=grid_import, export_power_entity=grid_export),
             ess=EssSettings(
                 soc_entity=_optional_entity_id(ess_raw.get("soc_entity"), "ess.soc_entity"),
