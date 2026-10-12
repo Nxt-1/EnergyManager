@@ -490,7 +490,6 @@ def test_ev_session_variables_added_only_for_second_stage_with_complete_warm_sta
         def addConstr(self, constraint: bool) -> None:
             self.constraints.append(constraint)
 
-    start = datetime(2026, 10, 8, 12, tzinfo=_LOCAL)
     stage1_values = [0.0, 6.0, 6.0, 6.0]
     variables = SimpleNamespace(
         ev_active={0: 0.0, 1: 1.0, 2: 1.0, 4: 1.0},
