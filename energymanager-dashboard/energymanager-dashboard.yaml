@@ -1,4 +1,4 @@
-# EnergyManager Dashboard v2.37 — resource /local/energymanager-timeline-card.js?v=237
+# EnergyManager Dashboard v2.38 — resource /local/energymanager-timeline-card.js?v=238
 title: EnergyManager
 views:
 - title: Overview
@@ -915,15 +915,14 @@ views:
         show:
           legend_value: false
           in_header: false
-        data_generator: return [1, 2].flatMap(day => hass.states[`sensor.energy_manager_plan_day_${day}`]?.attributes?.intervals || []).map(p => [new Date(p.start).getTime(), (Number(hass.states['sensor.energy_manager_capacity_tariff_status']?.attributes?.observed_peak_kw)
-          || 0) * 1000]);
+        data_generator: 'return window.energyManagerPeakReferenceV238.points(hass, start, end);'
         color: '#dc2626'
     - type: custom:energymanager-timeline-card
       grid_options:
         columns: full
         rows: auto
       entity: sensor.energy_manager_plan_timeline
-      title: Scheduled tasks · 24 h view
+      title: Tasks · actual / planned · 24 h view
       fixed_day_window: true
     - type: custom:energymanager-day-chart
       grid_options:
@@ -1100,7 +1099,7 @@ views:
         show:
           legend_value: false
           in_header: false
-        data_generator: "return (await window.energyManagerPlanningV232?.points?.(hass, start, end, 'peak')) ?? [];"
+        data_generator: 'return window.energyManagerPeakReferenceV238.points(hass, start, end);'
         color: '#dc2626'
     - type: custom:energymanager-planning-tasks-card
       grid_options:

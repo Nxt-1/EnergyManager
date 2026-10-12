@@ -88,6 +88,105 @@ if (!customElements.get('energymanager-time-navigator')) {
   customElements.define('energymanager-time-navigator', EnergyManagerTimeNavigator);
 }
 
+
+// The observed monthly capacity peak is a reference, never a zero-valued placeholder.
+// Preserve a previously valid measurement through short Home Assistant restarts.
+const energyManagerPeakReferenceV238 = (() => {
+  let lastWatts = null;
+  let lastSource = null;
+  const status = { watts: null, source: null, valid: false };
+  const read = raw => {
+    if (raw == null || raw === '' || ['unknown', 'unavailable'].includes(String(raw).toLowerCase())) return null;
+    const number = Number(raw);
+    return Number.isFinite(number) && number > 0 ? number : null;
+  };
+  function points(hass, start, end) {
+    const cardPeak = read(hass.states['sensor.energy_manager_monthly_peak_kw']?.state);
+    const capacityPeak = read(hass.states['sensor.energy_manager_capacity_tariff_status']?.attributes?.observed_peak_kw);
+    if (cardPeak !== null) { lastWatts = cardPeak * 1000; lastSource = 'monthly_peak_kw'; }
+    else if (capacityPeak !== null) { lastWatts = capacityPeak * 1000; lastSource = 'capacity_tariff_status'; }
+    status.watts = lastWatts;
+    status.source = lastSource;
+    status.valid = cardPeak !== null || capacityPeak !== null;
+    return lastWatts === null ? [] : [[start.getTime(), lastWatts], [end.getTime(), lastWatts]];
+  }
+  return { points, status };
+})();
+window.energyManagerPeakReferenceV238 = energyManagerPeakReferenceV238;
+
+// Convert measured EV charging power into past execution blocks using efficient 5-minute statistics.
+// These are actual charging sessions, not archived MILP decisions.
+const energyManagerObservedTasksV238 = (() => {
+  const ID = 'sensor.energy_manager_ev_charging_power';
+  const STEP_MS = 5 * 60 * 1000;
+  const THRESHOLD_W = 250;
+  const status = { requests: 0, rows: 0, segments: 0, durationMs: null, error: null };
+  let cacheKey = null;
+  let cacheTask = null;
+  function numeric(raw) {
+    if (raw === null || raw === undefined || raw === '' ||
+        ['unknown', 'unavailable'].includes(String(raw).toLowerCase())) return null;
+    const val = Number(raw);
+    return Number.isFinite(val) ? val : null;
+  }
+  function timestamp(raw) { return typeof raw === 'number' ? (raw < 1e11 ? raw * 1000 : raw) : Date.parse(raw); }
+  function build(rows, begin, cutoff) {
+    const readings = new Map();
+    for (const row of rows || []) {
+      const t = timestamp(row.start), power = numeric(row.mean);
+      if (Number.isFinite(t) && t >= begin && t < cutoff && power !== null) {
+        readings.set(Math.floor(t / STEP_MS) * STEP_MS, power);
+      }
+    }
+    const segments = [];
+    let current = null;
+    for (const [t, power] of [...readings].sort((a, b) => a[0] - b[0])) {
+      if (power < THRESHOLD_W) { if (current) { segments.push(current); current = null; } continue; }
+      if (!current || t - Date.parse(current.end) > STEP_MS) {
+        if (current) segments.push(current);
+        current = { id: `observed_ev_${t}`, name: 'EV', actuator_id: 'ev', kind: 'charging',
+          start: new Date(t).toISOString(), end: new Date(t + STEP_MS).toISOString(),
+          peak_power_w: 0, energy_kwh: 0, observed: true };
+      }
+      current.end = new Date(t + STEP_MS).toISOString();
+      current.peak_power_w = Math.max(current.peak_power_w, Math.round(power));
+      current.energy_kwh += power * STEP_MS / 3600000000;
+    }
+    if (current) segments.push(current);
+    for (const segment of segments) segment.energy_kwh = Math.round(segment.energy_kwh * 1000) / 1000;
+    status.rows = readings.size;
+    status.segments = segments.length;
+    return segments;
+  }
+  function get(hass, begin, end) {
+    const cutoff = Math.floor(Math.min(Date.now(), end) / STEP_MS) * STEP_MS;
+    if (cutoff <= begin) return Promise.resolve([]);
+    const key = `${begin}/${cutoff}`;
+    if (key === cacheKey && cacheTask) return cacheTask;
+    cacheKey = key;
+    cacheTask = (async () => {
+      const t0 = performance.now();
+      status.requests++;
+      const data = await hass.callWS({
+        type: 'recorder/statistics_during_period', statistic_ids: [ID],
+        start_time: new Date(begin).toISOString(), end_time: new Date(cutoff).toISOString(),
+        period: '5minute', types: ['mean']
+      });
+      status.error = null;
+      status.durationMs = Math.round(performance.now() - t0);
+      return build(data?.[ID] || [], begin, cutoff);
+    })();
+    cacheTask.catch(error => {
+      status.error = String(error?.message || error);
+      if (cacheKey === key) { cacheKey = null; cacheTask = null; }
+      console.warn('[EnergyManager Dashboard] Observed task history unavailable:', error);
+    });
+    return cacheTask;
+  }
+  return { get, status, build };
+})();
+window.energyManagerObservedTasksV238 = energyManagerObservedTasksV238;
+
 class EnergyManagerTimelineCard extends HTMLElement {
   setConfig(config) {
     if (!config?.entity) throw new Error('EnergyManager timeline requires an entity');
@@ -97,6 +196,18 @@ class EnergyManagerTimelineCard extends HTMLElement {
     this._hass = hass;
     // Do not overwrite an open dialog during HA state refresh.
     if (!this.querySelector('dialog[open]')) this.render();
+  }
+  _loadObservedTasks(begin, end) {
+    const cutoff = Math.floor(Math.min(Date.now(), end) / 300000) * 300000;
+    const key = `${begin}/${cutoff}`;
+    if (key === this._observedKey) return;
+    this._observedKey = key;
+    // Keep the previous snapshot visible during a refresh; never turn missing history into zero activity.
+    energyManagerObservedTasksV238.get(this._hass, begin, end).then(segments => {
+      if (this._observedKey !== key) return;
+      this._observedSegments = segments;
+      if (this.isConnected && !this.querySelector('dialog[open]')) this.render();
+    }).catch(() => { /* The future planned timeline is still useful if Recorder is offline. */ });
   }
   connectedCallback() {
     this._onPlotBounds = () => this._scheduleAlignment();
@@ -193,15 +304,24 @@ class EnergyManagerTimelineCard extends HTMLElement {
     const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({
       '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
     }[c]));
-    // The timeline sensor contains future execution segments only; do not fabricate past tasks.
-    const visible = segments.filter(s => new Date(s.end).getTime() > Math.max(now, windowStart) &&
-      new Date(s.start).getTime() < windowEnd);
+    // Past task history uses measured EV charging; future segments retain the current MILP plan.
+    if (fixedWindow && windowStart < now) this._loadObservedTasks(windowStart, Math.min(now, windowEnd));
+    const observed = fixedWindow ? (this._observedSegments || []).filter(s =>
+      Date.parse(s.end) > windowStart && Date.parse(s.start) < Math.min(now, windowEnd)) : [];
+    const planned = segments.filter(s => Date.parse(s.end) > Math.max(now, windowStart) &&
+      Date.parse(s.start) < windowEnd);
+    const visible = [
+      ...observed.map(s => ({ ...s, observed: true })),
+      ...planned.map(s => ({ ...s, observed: false }))
+    ];
     const items = visible.map((s, i) => {
-      const start = Math.max(now, windowStart, new Date(s.start).getTime());
-      const stop = Math.min(windowEnd, new Date(s.end).getTime());
+      const start = Math.max(windowStart, s.observed ? -Infinity : now, Date.parse(s.start));
+      const stop = Math.min(windowEnd, s.observed ? now : Infinity, Date.parse(s.end));
       const left = 100 * (start - windowStart) / (windowEnd - windowStart);
       const width = 100 * (stop - start) / (windowEnd - windowStart);
-      return `<button type="button" data-idx="${i}" aria-label="Details for ${esc(s.name)}" title="${esc(s.name)}: ${esc(label(new Date(s.start).getTime()))}" style="position:absolute;left:${left}%;width:${width}%;top:5px;height:30px;background:var(--primary-color);border:0;border-radius:4px;color:var(--text-primary-color,#fff);cursor:pointer;overflow:hidden;white-space:nowrap;font-weight:600;min-width:2px">${width>7?esc(s.name):''}</button>`;
+      const kind = s.observed ? 'Actual' : 'Planned';
+      const color = s.observed ? '#16a34a' : 'var(--primary-color)';
+      return `<button type="button" data-idx="${i}" aria-label="${kind} ${esc(s.name)}" title="${kind} ${esc(s.name)}: ${esc(label(Date.parse(s.start)))}" style="position:absolute;left:${left}%;width:${width}%;top:5px;height:30px;background:${color};border:0;border-radius:4px;color:#fff;cursor:pointer;overflow:hidden;white-space:nowrap;font-weight:600;min-width:2px">${width>7?esc(s.name):''}</button>`;
     }).join('');
     const nowPosition = 100 * (now - windowStart) / (windowEnd - windowStart);
     const nowMarker = fixedWindow && nowPosition >= 0 && nowPosition <= 100 ?
@@ -221,20 +341,21 @@ class EnergyManagerTimelineCard extends HTMLElement {
       <div style="position:relative;background:var(--secondary-background-color);height:40px;border-radius:6px;overflow:hidden">${items}${nowMarker}</div>
       ${fixedWindow ? `<div style="position:relative;height:18px;margin-top:6px;font-size:11px;opacity:.7">${axis}</div>` : ''}
       </div>
-      ${visible.length ? '' : '<p style="opacity:.7">No planned execution in this period.</p>'}
+      ${fixedWindow ? '<div style="font-size:11px;opacity:.72;margin-top:7px"><span style="color:#16a34a">●</span> Actual EV charging <span style="color:var(--primary-color);margin-left:12px">●</span> Planned EV charging</div>' : ''}
+      ${visible.length ? '' : '<p style="opacity:.7">No observed or planned charging in this period.</p>'}
       <small style="display:block;opacity:.65;margin-top:10px">${esc(entity?.attributes?.generated_at_utc ? 'Plan: '+label(new Date(entity.attributes.generated_at_utc).getTime()) : 'Waiting for plan')}</small>
       </div></ha-card><dialog aria-label="Scheduled task details" style="border:1px solid var(--divider-color);border-radius:12px;background:var(--card-background-color,var(--primary-background-color));color:var(--primary-text-color);padding:20px;width:min(420px,calc(100vw - 48px));box-shadow:0 12px 35px #0005"></dialog>`;
     const dialog = this.querySelector('dialog');
     this.querySelectorAll('button[data-idx]').forEach(btn => btn.addEventListener('click', () => {
       const item = visible[Number(btn.dataset.idx)];
       const kwh = Number(item.energy_kwh), watts = Number(item.peak_power_w);
-      dialog.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><strong>${esc(item.name)} · Scheduled</strong><button type="button" data-close style="background:none;border:0;color:inherit;font-size:23px;cursor:pointer" aria-label="Close">×</button></div>
+      dialog.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><strong>${esc(item.name)} · ${item.observed ? 'Actual' : 'Scheduled'}</strong><button type="button" data-close style="background:none;border:0;color:inherit;font-size:23px;cursor:pointer" aria-label="Close">×</button></div>
         <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:20px">
           <div>Start<br><b>${esc(label(new Date(item.start).getTime()))}</b></div>
           <div>End<br><b>${esc(label(new Date(item.end).getTime()))}</b></div>
           <div>Energy<br><b>${Number.isFinite(kwh) ? kwh.toFixed(2)+' kWh' : '—'}</b></div>
           <div>Peak power<br><b>${Number.isFinite(watts) ? Math.round(watts)+' W' : '—'}</b></div>
-        </div><p style="opacity:.7;font-size:12px;margin-bottom:0">Scheduled execution period, not a uniquely assigned departure task.</p>`;
+        </div><p style="opacity:.7;font-size:12px;margin-bottom:0">${item.observed ? 'Measured charging based on 5-minute Recorder averages.' : 'Scheduled execution period, not a uniquely assigned departure task.'}</p>`;
       dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
       dialog.showModal();
     }));
@@ -1218,14 +1339,15 @@ if (!customElements.get('energymanager-notification-events-card')) {
 
 // Module resource/version verification (logged once per script evaluation).
 // The Planning helper retains its v2.32 name to keep the existing chart API stable.
-window.energyManagerDashboardVersion = '2.37';
+window.energyManagerDashboardVersion = '2.38';
 window.energyManagerDashboardInfo = {
-  version: '2.37',
+  version: '2.38',
   loadedAt: new Date().toISOString(),
   planningHelperReady: typeof window.energyManagerPlanningV232?.points === 'function',
   taskCardReady: Boolean(customElements.get('energymanager-planning-tasks-card')),
   overviewNavigationReady: Boolean(customElements.get('energymanager-time-navigator')),
   overviewSocReady: typeof window.energyManagerOverviewSocV236?.points === 'function',
-  notificationEventsCardReady: Boolean(customElements.get('energymanager-notification-events-card'))
+  notificationEventsCardReady: Boolean(customElements.get('energymanager-notification-events-card')),
+  observedTaskHistoryReady: typeof window.energyManagerObservedTasksV238?.get === 'function'
 };
-console.info('[EnergyManager Dashboard] JavaScript v2.37 loaded', window.energyManagerDashboardInfo);
+console.info('[EnergyManager Dashboard] JavaScript v2.38 loaded', window.energyManagerDashboardInfo);
