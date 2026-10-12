@@ -392,3 +392,73 @@ def test_milp_models_weekly_trip_energy_and_blocks_charging_while_away() -> None
     away = result.plan.intervals[4:6]
     assert all(item.scheduled_load_w == pytest.approx(0.0, abs=1e-5) for item in away)
     assert all(item.projected_ev_soc_percent is not None for item in result.plan.intervals)
+
+
+def test_ev_tie_break_prefers_one_contiguous_session_and_earlier_charging() -> None:
+    """Secondary schedule preferences are evaluated independently of electricity prices."""
+    from types import SimpleNamespace
+
+    from energymanager.milp_planner import _ev_schedule_tie_break_expression
+
+    start = datetime(2026, 10, 8, 12, 0, tzinfo=_LOCAL)
+    reference = _reference_plan(start, tasks=(_task(start, energy_kwh=1.0),))
+    ev = _ev()
+
+    def score(slots: tuple[int, ...]) -> float:
+        on = {index: 6.0 for index in slots}
+        starts = {index: float(index - 1 not in slots) for index in slots}
+        variables = SimpleNamespace(
+            grid_import_kw=[0.0] * len(reference.intervals),
+            ev_session_start=starts,
+            ev_single_phase_a=on,
+            ev_three_phase_a={},
+        )
+        return float(_ev_schedule_tie_break_expression(reference, ev, variables))
+
+    assert score((0, 1)) < score((0, 2))  # Avoid two isolated 15-minute sessions.
+    assert score((0, 1)) < score((4, 5))  # Start earlier when energy and cost are equal.
+    assert score((4, 5)) < score((0, 4))  # An extra start outweighs a small timing benefit.
+
+
+def test_ev_tie_break_retains_weaker_preference_for_later_grid_import() -> None:
+    from types import SimpleNamespace
+
+    from energymanager.milp_planner import _ev_schedule_tie_break_expression
+
+    start = datetime(2026, 10, 8, 12, 0, tzinfo=_LOCAL)
+    reference = _reference_plan(start, tasks=(_task(start),))
+
+    def score(import_index: int) -> float:
+        imports = [0.0] * len(reference.intervals)
+        imports[import_index] = 1.0
+        variables = SimpleNamespace(grid_import_kw=imports, ev_session_start={})
+        return float(_ev_schedule_tie_break_expression(reference, None, variables))
+
+    assert score(7) < score(0)
+
+
+def test_ev_session_metric_counts_only_actual_off_to_on_transitions() -> None:
+    from types import SimpleNamespace
+
+    from energymanager.milp_planner import _ev_session_count
+
+    start = datetime(2026, 10, 8, 12, 0, tzinfo=_LOCAL)
+    reference = _reference_plan(start, tasks=(_task(start),))
+    amps = [6.0, 6.0, 0.0, 6.0]
+    variables = SimpleNamespace(
+        ev_single_phase_a={index: SimpleNamespace(index=index) for index in range(4)},
+        ev_three_phase_a={},
+    )
+    assert _ev_session_count(reference, variables, amps) == 2
+
+
+def test_ev_tie_break_weights_do_not_change_economic_tolerance() -> None:
+    from energymanager.milp_planner import (
+        MILP_EV_CHARGE_DELAY_WEIGHT,
+        MILP_EV_SESSION_START_WEIGHT,
+        MILP_GRID_IMPORT_DELAY_WEIGHT,
+    )
+
+    assert MILP_ECONOMIC_TOLERANCE_EUR == pytest.approx(0.01)
+    assert MILP_EV_SESSION_START_WEIGHT > 7.0 * 10.0 * MILP_EV_CHARGE_DELAY_WEIGHT
+    assert 0.0 < MILP_GRID_IMPORT_DELAY_WEIGHT < MILP_EV_CHARGE_DELAY_WEIGHT

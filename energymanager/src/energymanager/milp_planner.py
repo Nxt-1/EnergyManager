@@ -22,7 +22,7 @@ from .ha_client import HomeAssistantClient
 from .planner import EnergyPlan, PlanInterval
 from .tasks import PlanningTask
 
-MILP_EVALUATION_VERSION = "2026-10-10-milp-v7"
+MILP_EVALUATION_VERSION = "2026-10-12-milp-v8"
 MILP_STATUS_ENTITY = "sensor.energy_manager_milp_status"
 MILP_TOTAL_TIME_BUDGET_SECONDS = 30.0
 MILP_ECONOMIC_TIME_LIMIT_SECONDS = MILP_TOTAL_TIME_BUDGET_SECONDS
@@ -31,6 +31,11 @@ MILP_RELATIVE_GAP = 0.01
 MILP_REFRESH_MINUTES = 10
 MILP_ECONOMIC_TOLERANCE_EUR = 0.01
 MILP_EARLY_VALUE_HALF_LIFE_DAYS = 3.0
+# These weights apply ONLY inside the economic €0.01 near-optimality band, never to monetary costs.
+# One EV session costs more than the delay of a typical full EV recharge across the seven-day horizon.
+MILP_EV_SESSION_START_WEIGHT = 120.0
+MILP_EV_CHARGE_DELAY_WEIGHT = 1.0
+MILP_GRID_IMPORT_DELAY_WEIGHT = 0.01
 _VALIDATION_POWER_TOLERANCE_W = 5.0
 _INTERVAL_HOURS = 0.25
 _INTERVAL_DELTA = timedelta(minutes=15)
@@ -97,6 +102,8 @@ class MilpEvaluation:
     economic_tolerance_eur: float = MILP_ECONOMIC_TOLERANCE_EUR
     early_value_half_life_days: float = MILP_EARLY_VALUE_HALF_LIFE_DAYS
     time_weighted_grid_import_score: float | None = None
+    ev_session_count: int | None = None
+    ev_charge_delay_score_kwh_days: float | None = None
     preferred_ev_target_kwh: float = 0.0
     preferred_ev_scheduled_kwh: float = 0.0
     preferred_ev_shortfall_kwh: float = 0.0
@@ -126,6 +133,8 @@ class _MilpVariables:
     battery_charge_mode: list[Any]
     ev_single_phase_a: dict[int, Any]
     ev_three_phase_a: dict[int, Any]
+    ev_active: dict[int, Any]
+    ev_session_start: dict[int, Any]
     ev_stored_energy_kwh: list[Any]
     ev_preferred_shortfall_kwh: Any | None
     capacity_peak_kw: dict[str, Any]
@@ -243,6 +252,8 @@ def _replace_solver_version(result: MilpEvaluation, version: str) -> MilpEvaluat
         economic_tolerance_eur=result.economic_tolerance_eur,
         early_value_half_life_days=result.early_value_half_life_days,
         time_weighted_grid_import_score=result.time_weighted_grid_import_score,
+        ev_session_count=result.ev_session_count,
+        ev_charge_delay_score_kwh_days=result.ev_charge_delay_score_kwh_days,
         preferred_ev_target_kwh=result.preferred_ev_target_kwh,
         preferred_ev_scheduled_kwh=result.preferred_ev_scheduled_kwh,
         preferred_ev_shortfall_kwh=result.preferred_ev_shortfall_kwh,
@@ -364,7 +375,7 @@ def _solve_model(
     tie_break_time_limit = max(0.0, MILP_TOTAL_TIME_BUDGET_SECONDS - economic_solve_time)
     if tie_break_time_limit >= 0.5:
         model.addConstr(economic_expression <= stage1_internal_objective + MILP_ECONOMIC_TOLERANCE_EUR)
-        tie_break_expression = _time_weighted_grid_import_expression(reference_plan, variables)
+        tie_break_expression = _ev_schedule_tie_break_expression(reference_plan, ev, variables)
         model.setObjective(tie_break_expression, sense=highspy.ObjSense.kMinimize)
         warm_start_applied, warm_start_status = _set_primal_warm_start(model, highspy, stage1_values)
         model.setOptionValue("time_limit", tie_break_time_limit)
@@ -445,6 +456,8 @@ def _solve_model(
         selected_solution_stage=selected_solution_stage,
         first_stage_objective_eur=stage1_objective,
         time_weighted_grid_import_score=_time_weighted_grid_import_value(variables, values),
+        ev_session_count=_ev_session_count(reference_plan, variables, values),
+        ev_charge_delay_score_kwh_days=_ev_charge_delay_value(reference_plan, ev, variables, values),
         preferred_ev_target_kwh=_preferred_target_kwh(active_tasks),
         preferred_ev_scheduled_kwh=(
             sum(item.scheduled_load_w for item in milp_plan.intervals) * _INTERVAL_HOURS / 1000.0
@@ -525,10 +538,13 @@ def _build_variables(
 
     ev_single: dict[int, Any] = {}
     ev_three: dict[int, Any] = {}
+    ev_active: dict[int, Any] = {}
+    ev_session_start: dict[int, Any] = {}
     ev_stored_energy: list[Any] = []
     preferred_shortfall = None
     if tasks and ev is not None and ev.capabilities.battery_capacity_kwh is not None and ev.soc_percent is not None:
         eligible = _ev_variable_indexes(plan, tasks)
+        previous_active: Any = 1.0 if (ev.current_power_w or 0.0) >= 100.0 else 0.0
         min_current = math.ceil(ev.capabilities.min_charge_current_a)
         max_current = math.floor(ev.capabilities.max_charge_current_a)
         for index in eligible:
@@ -568,6 +584,17 @@ def _build_variables(
                 integer_count += 2
             if single_on is not None and three_on is not None:
                 model.addConstr(single_on + three_on <= 1.0)
+            active = (single_on if single_on is not None else 0.0) + (
+                three_on if three_on is not None else 0.0
+            )
+            ev_active[index] = active
+            # Continuous auxiliary variable is sufficient: at the tie-break optimum it equals
+            # max(0, active_now - active_previous). No extra binary variable is necessary.
+            start = model.addVariable(lb=0.0, ub=1.0, name=f"ev_session_start_{index}")
+            ev_session_start[index] = start
+            # An interruption in eligibility always breaks the session, even when the
+            # preceding eligible slot was several intervals earlier.
+            model.addConstr(start >= active - ev_active.get(index - 1, previous_active if index == 0 else 0.0))
 
         ev_capacity = ev.capabilities.battery_capacity_kwh
         initial_ev_energy = ev_capacity * float(ev.soc_percent) / 100.0
@@ -607,6 +634,8 @@ def _build_variables(
             battery_charge_mode=battery_charge_mode,
             ev_single_phase_a=ev_single,
             ev_three_phase_a=ev_three,
+            ev_active=ev_active,
+            ev_session_start=ev_session_start,
             ev_stored_energy_kwh=ev_stored_energy,
             ev_preferred_shortfall_kwh=preferred_shortfall,
             capacity_peak_kw=month_peaks,
@@ -765,6 +794,56 @@ def _economic_objective_value(
         * _value(variables.stored_energy_kwh[-1], values)
     )
     return objective
+
+
+def _ev_schedule_tie_break_expression(
+    plan: EnergyPlan,
+    ev: EvActuatorSnapshot | None,
+    variables: _MilpVariables,
+) -> Any:
+    """Favor contiguous, earlier EV charging without overriding the optimal electricity cost.
+
+    The economic cost is capped by the stage-1 result before this objective is used.
+    Session starts are intentionally more expensive than shifting normal EV charging by days.
+    A small residual preference still favors postponing otherwise-equivalent grid imports.
+    """
+    objective: Any = MILP_GRID_IMPORT_DELAY_WEIGHT * _time_weighted_grid_import_expression(plan, variables)
+    for index, start in variables.ev_session_start.items():
+        objective += MILP_EV_SESSION_START_WEIGHT * start
+        delay_days = index / 96.0
+        objective += (
+            MILP_EV_CHARGE_DELAY_WEIGHT * delay_days * _INTERVAL_HOURS
+            * _ev_power_expression(ev, variables, index)
+        )
+    return objective
+
+
+def _ev_session_count(plan: EnergyPlan, variables: _MilpVariables, values: list[float]) -> int:
+    """Count actual charger off-to-on transitions, including after unavailable intervals."""
+    count = 0
+    ev = find_ev_actuator(plan.actuator_snapshots)
+    previous_active = bool(ev is not None and (ev.current_power_w or 0.0) >= 100.0)
+    for index in range(len(plan.intervals)):
+        single = variables.ev_single_phase_a.get(index)
+        three = variables.ev_three_phase_a.get(index)
+        active = (single is not None and _value(single, values) >= 0.5) or (
+            three is not None and _value(three, values) >= 0.5
+        )
+        count += int(active and not previous_active)
+        previous_active = active
+    return count
+
+
+def _ev_charge_delay_value(
+    plan: EnergyPlan,
+    ev: EvActuatorSnapshot | None,
+    variables: _MilpVariables,
+    values: list[float],
+) -> float:
+    return sum(
+        (index / 96.0) * _INTERVAL_HOURS * _ev_power_value(ev, variables, values, index)
+        for index in range(len(plan.intervals))
+    )
 
 
 def _time_weighted_grid_import_expression(
@@ -1274,7 +1353,12 @@ async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpE
         "tie_break_warm_start_applied": evaluation.tie_break_warm_start_applied,
         "tie_break_warm_start_status": evaluation.tie_break_warm_start_status,
         "selected_solution_stage": evaluation.selected_solution_stage,
-        "tie_break_objective": "exponential_time_weighted_grid_import",
+        "tie_break_objective": "ev_sessions_then_earlier_charging_with_grid_delay",
+        "ev_session_start_weight": MILP_EV_SESSION_START_WEIGHT,
+        "ev_charge_delay_weight": MILP_EV_CHARGE_DELAY_WEIGHT,
+        "grid_import_delay_weight": MILP_GRID_IMPORT_DELAY_WEIGHT,
+        "ev_session_count": evaluation.ev_session_count,
+        "ev_charge_delay_score_kwh_days": _round_optional(evaluation.ev_charge_delay_score_kwh_days, 4),
         "early_value_half_life_days": evaluation.early_value_half_life_days,
         "time_weighted_grid_import_score": _round_optional(evaluation.time_weighted_grid_import_score, 5),
         "preferred_ev_target_kwh": round(evaluation.preferred_ev_target_kwh, 3),

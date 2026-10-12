@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.31.10
+- Prefer fewer EV charging sessions within the existing €0.01 near-optimal economic band.
+- Prefer earlier EV charging when equivalent; retain a weak tie-break for postponing grid imports.
+- Use continuous EV session-start variables without additional binary variables.
+- Publish EV session count and charging-delay score for validation.
+- No changes to hard deadlines, SoC or hardware limits, fast dispatch, notifications or dashboard.
+
 ## 0.31.9
 - Retain the last valid EV SoC, connection and charging-power inputs for up to 10 minutes during brief outages.
   Explicit EV disconnection still takes effect immediately. Hold EV commands during the grace period; ESS remains active.

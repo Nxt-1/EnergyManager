@@ -183,6 +183,19 @@ to 80%, and local departure time to 07:00 when omitted.
 `sensor.energy_manager_task_status` exposes the current task catalog. Version 0.15 only gives tasks to the planner; it does not
 yet place EV charging into intervals or request EV actuator power. This keeps task generation separate from optimization.
 
+## MILP EV charging preferences (v0.31.10)
+
+After minimizing electricity and capacity costs, the planner allows up to EUR 0.01 of economic near-optimality
+for schedule preferences. Within that band, it favors fewer EV off-to-on transitions and, secondarily, earlier
+EV charging. A weaker preference for postponing otherwise-equivalent grid import remains active. These
+preferences do not alter departure SoC constraints, charger current steps, or EV away windows; isolated charging
+remains possible where it has an economic or feasibility benefit. An already-running charger is treated as a
+continuing session at the beginning of the planning horizon.
+
+`sensor.energy_manager_milp_status` reports `tie_break_objective`, `ev_session_count`,
+`ev_charge_delay_score_kwh_days` and objective weights for troubleshooting. If the tie-break has no time budget
+or yields no feasible solution, the economic stage remains authoritative.
+
 ## Planner
 
 Version 0.11.0 adds the first planner foundation without scheduling or controlling devices yet. It aligns the existing
