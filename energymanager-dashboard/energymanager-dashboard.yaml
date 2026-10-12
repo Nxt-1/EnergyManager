@@ -1,3 +1,4 @@
+# EnergyManager Dashboard v2.37 — resource /local/energymanager-timeline-card.js?v=237
 title: EnergyManager
 views:
 - title: Overview
@@ -218,6 +219,7 @@ views:
           hundred: '100'
           limit: "[[[\n  const minSoc = Number(\n    states['number.garage_gx_device_ess_min_soc_limit']?.state ?? 20\n  );\n\
             \  return `Min ${minSoc}%`;\n]]]\n"
+          power: "[[[\n  const state = states['sensor.energy_manager_ess_power']?.state;\n  const watts = Number(state);\n  if (!state || ['unknown', 'unavailable'].includes(state) || !Number.isFinite(watts)) return '—';\n  const mode = watts > 25 ? 'Discharge' : watts < -25 ? 'Charge' : 'Idle';\n  return `${mode} · ${Math.round(Math.abs(watts))} W`;\n]]]\n"
         styles:
           card:
           - height: 58px
@@ -231,8 +233,8 @@ views:
               \    to right,\n    ${fill} 0%,\n    ${fill} ${soc}%,\n    var(--ha-card-background, var(--card-background-color))\
               \ ${soc}%,\n    var(--ha-card-background, var(--card-background-color)) 100%\n  )`;\n]]]\n"
           grid:
-          - grid-template-areas: '"i n s"'
-          - grid-template-columns: 32px min-content 1fr
+          - grid-template-areas: '"i n s power"'
+          - grid-template-columns: 32px min-content min-content 1fr
           - align-items: center
           icon:
           - width: 24px
@@ -249,6 +251,12 @@ views:
           - justify-self: start
           - margin-left: 8px
           custom_fields:
+            power:
+            - justify-self: end
+            - font-size: 12px
+            - font-weight: 500
+            - white-space: nowrap
+            - padding-right: 4px
             zero:
             - position: absolute
             - left: 8px
@@ -274,6 +282,7 @@ views:
             - color: var(--secondary-text-color)
         triggers_update:
         - sensor.energy_manager_ess_soc
+        - sensor.energy_manager_ess_power
         - number.garage_gx_device_ess_min_soc_limit
       - type: custom:button-card
         entity: sensor.energy_manager_ev_soc
@@ -406,10 +415,21 @@ views:
           name: Peak
           icon: mdi:gauge
           show_state: true
+          state_display: |-
+            [[[
+              const raw = entity?.state;
+              if (raw == null || ['unknown', 'unavailable', ''].includes(raw) ||
+                  !Number.isFinite(Number(raw))) return '—';
+              return `${Math.round(Number(raw) * 1000).toLocaleString()} W`;
+            ]]]
           show_label: true
-          label: '[[[ const a = states[''sensor.energy_manager_quarter_hour_average_kw'']?.state; return `Quarter: ${a !=
-            null && ![''unknown'',''unavailable'',''''].includes(a) && Number.isFinite(Number(a)) ? Number(a).toFixed(3) :
-            ''—''} kW`; ]]]'
+          label: |-
+            [[[
+              const raw = states['sensor.energy_manager_quarter_hour_average_kw']?.state;
+              if (raw == null || ['unknown', 'unavailable', ''].includes(raw) ||
+                  !Number.isFinite(Number(raw))) return 'Quarter: —';
+              return `Quarter: ${Math.round(Number(raw) * 1000).toLocaleString()} W`;
+            ]]]
           tap_action:
             action: more-info
           triggers_update:
@@ -522,13 +542,17 @@ views:
             - justify-self: center
             - align-self: center
           size: 24px
+    - type: custom:energymanager-time-navigator
+      grid_options:
+        columns: full
+        rows: auto
     - type: custom:energymanager-day-chart
       grid_options:
         columns: full
         rows: auto
       header:
         show: true
-        title: Power · actual / planned · 06:00–06:00
+        title: Power · actual / planned · 24 h view
         show_states: false
       graph_span: 24h
       span:
@@ -657,8 +681,7 @@ views:
           \ <= now && now <= finish && current.every(s =>\n  s && !['unknown', 'unavailable'].includes(String(s.state)) &&\
           \ Number.isFinite(Number(s.state)) &&\n  Number.isFinite(Date.parse(s.last_updated || '')) && now - Date.parse(s.last_updated)\
           \ < 120000)) {\n  points.push([now, current.reduce((sum, s) => sum + Number(s.state), 0)]);\n}\n\n// Forecast updates\
-          \ independently of the cached history, using current MILP intervals.\nfor (const interval of entity.attributes.intervals\
-          \ || []) {\n  const time = Date.parse(interval.start);\n  const values = keys.map(key => Number(key === 'background_w'\n\
+          \ independently of the cached history, using current MILP intervals.\nconst forecast = [1, 2].flatMap(day =>\n  hass.states[`sensor.energy_manager_plan_day_${day}`]?.attributes?.intervals || []);\nfor (const interval of forecast) {\n  const time = Date.parse(interval.start);\n  const values = keys.map(key => Number(key === 'background_w'\n\
           \    ? (interval.background_w ?? interval.load_w) : interval[key]));\n  if (Number.isFinite(time) && time > now\
           \ && time <= finish && values.every(Number.isFinite)) {\n    points.push([time, values.reduce((sum, value) => sum\
           \ + value, 0)]);\n  }\n}\nreturn [...new Map(points.map(point => [point[0], point])).values()]\n  .sort((a, b) =>\
@@ -714,7 +737,7 @@ views:
           \ =>\n  s && !['unknown', 'unavailable'].includes(String(s.state)) && Number.isFinite(Number(s.state)) &&\n  Number.isFinite(Date.parse(s.last_updated\
           \ || '')) && now - Date.parse(s.last_updated) < 120000)) {\n  points.push([now, current.reduce((sum, s) => sum +\
           \ Number(s.state), 0)]);\n}\n\n// Forecast updates independently of the cached history, using current MILP intervals.\n\
-          for (const interval of entity.attributes.intervals || []) {\n  const time = Date.parse(interval.start);\n  const\
+          const forecast = [1, 2].flatMap(day =>\n  hass.states[`sensor.energy_manager_plan_day_${day}`]?.attributes?.intervals || []);\nfor (const interval of forecast) {\n  const time = Date.parse(interval.start);\n  const\
           \ values = keys.map(key => Number(key === 'background_w'\n    ? (interval.background_w ?? interval.load_w) : interval[key]));\n\
           \  if (Number.isFinite(time) && time > now && time <= finish && values.every(Number.isFinite)) {\n    points.push([time,\
           \ values.reduce((sum, value) => sum + value, 0)]);\n  }\n}\nreturn [...new Map(points.map(point => [point[0], point])).values()]\n\
@@ -769,8 +792,7 @@ views:
           if (begin <= now && now <= finish && current.every(s =>\n  s && !['unknown', 'unavailable'].includes(String(s.state))\
           \ && Number.isFinite(Number(s.state)) &&\n  Number.isFinite(Date.parse(s.last_updated || '')) && now - Date.parse(s.last_updated)\
           \ < 120000)) {\n  points.push([now, current.reduce((sum, s) => sum + Number(s.state), 0)]);\n}\n\n// Forecast updates\
-          \ independently of the cached history, using current MILP intervals.\nfor (const interval of entity.attributes.intervals\
-          \ || []) {\n  const time = Date.parse(interval.start);\n  const values = keys.map(key => Number(key === 'background_w'\n\
+          \ independently of the cached history, using current MILP intervals.\nconst forecast = [1, 2].flatMap(day =>\n  hass.states[`sensor.energy_manager_plan_day_${day}`]?.attributes?.intervals || []);\nfor (const interval of forecast) {\n  const time = Date.parse(interval.start);\n  const values = keys.map(key => Number(key === 'background_w'\n\
           \    ? (interval.background_w ?? interval.load_w) : interval[key]));\n  if (Number.isFinite(time) && time > now\
           \ && time <= finish && values.every(Number.isFinite)) {\n    points.push([time, values.reduce((sum, value) => sum\
           \ + value, 0)]);\n  }\n}\nreturn [...new Map(points.map(point => [point[0], point])).values()]\n  .sort((a, b) =>\
@@ -825,8 +847,7 @@ views:
           if (begin <= now && now <= finish && current.every(s =>\n  s && !['unknown', 'unavailable'].includes(String(s.state))\
           \ && Number.isFinite(Number(s.state)) &&\n  Number.isFinite(Date.parse(s.last_updated || '')) && now - Date.parse(s.last_updated)\
           \ < 120000)) {\n  points.push([now, current.reduce((sum, s) => sum + Number(s.state), 0)]);\n}\n\n// Forecast updates\
-          \ independently of the cached history, using current MILP intervals.\nfor (const interval of entity.attributes.intervals\
-          \ || []) {\n  const time = Date.parse(interval.start);\n  const values = keys.map(key => Number(key === 'background_w'\n\
+          \ independently of the cached history, using current MILP intervals.\nconst forecast = [1, 2].flatMap(day =>\n  hass.states[`sensor.energy_manager_plan_day_${day}`]?.attributes?.intervals || []);\nfor (const interval of forecast) {\n  const time = Date.parse(interval.start);\n  const values = keys.map(key => Number(key === 'background_w'\n\
           \    ? (interval.background_w ?? interval.load_w) : interval[key]));\n  if (Number.isFinite(time) && time > now\
           \ && time <= finish && values.every(Number.isFinite)) {\n    points.push([time, values.reduce((sum, value) => sum\
           \ + value, 0)]);\n  }\n}\nreturn [...new Map(points.map(point => [point[0], point])).values()]\n  .sort((a, b) =>\
@@ -880,8 +901,7 @@ views:
           if (begin <= now && now <= finish && current.every(s =>\n  s && !['unknown', 'unavailable'].includes(String(s.state))\
           \ && Number.isFinite(Number(s.state)) &&\n  Number.isFinite(Date.parse(s.last_updated || '')) && now - Date.parse(s.last_updated)\
           \ < 120000)) {\n  points.push([now, current.reduce((sum, s) => sum + Number(s.state), 0)]);\n}\n\n// Forecast updates\
-          \ independently of the cached history, using current MILP intervals.\nfor (const interval of entity.attributes.intervals\
-          \ || []) {\n  const time = Date.parse(interval.start);\n  const values = keys.map(key => Number(key === 'background_w'\n\
+          \ independently of the cached history, using current MILP intervals.\nconst forecast = [1, 2].flatMap(day =>\n  hass.states[`sensor.energy_manager_plan_day_${day}`]?.attributes?.intervals || []);\nfor (const interval of forecast) {\n  const time = Date.parse(interval.start);\n  const values = keys.map(key => Number(key === 'background_w'\n\
           \    ? (interval.background_w ?? interval.load_w) : interval[key]));\n  if (Number.isFinite(time) && time > now\
           \ && time <= finish && values.every(Number.isFinite)) {\n    points.push([time, values.reduce((sum, value) => sum\
           \ + value, 0)]);\n  }\n}\nreturn [...new Map(points.map(point => [point[0], point])).values()]\n  .sort((a, b) =>\
@@ -895,7 +915,7 @@ views:
         show:
           legend_value: false
           in_header: false
-        data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), (Number(hass.states['sensor.energy_manager_capacity_tariff_status']?.attributes?.observed_peak_kw)
+        data_generator: return [1, 2].flatMap(day => hass.states[`sensor.energy_manager_plan_day_${day}`]?.attributes?.intervals || []).map(p => [new Date(p.start).getTime(), (Number(hass.states['sensor.energy_manager_capacity_tariff_status']?.attributes?.observed_peak_kw)
           || 0) * 1000]);
         color: '#dc2626'
     - type: custom:energymanager-timeline-card
@@ -903,15 +923,15 @@ views:
         columns: full
         rows: auto
       entity: sensor.energy_manager_plan_timeline
-      title: Scheduled tasks · 06:00–06:00
+      title: Scheduled tasks · 24 h view
       fixed_day_window: true
     - type: custom:energymanager-day-chart
       grid_options:
-        columns: 12
+        columns: full
         rows: auto
       header:
         show: true
-        title: Battery SoC · actual / planned · 06:00–06:00
+        title: Battery SoC · actual / planned · 24 h view
         show_states: false
       graph_span: 24h
       span:
@@ -944,585 +964,266 @@ views:
         name: ESS SoC
         type: line
         stroke_width: 2
-        extend_to: end
+        extend_to: false
         show:
           legend_value: false
           in_header: false
-        data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
-        color: '#ea580c'
-        stroke_dash: 5
+        data_generator: >-
+          return (await window.energyManagerOverviewSocV236?.points?.(hass, start, end, 'ess_soc')) ?? [];
+        color: '#007AC2'
       - entity: sensor.energy_manager_plan_day_1
         name: EV SoC
         type: line
         stroke_width: 2
-        extend_to: end
-        show:
-          legend_value: false
-          in_header: false
-        data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
-        color: '#16a34a'
-        stroke_dash: 5
-      - entity: sensor.energy_manager_ess_soc
-        name: ESS · actual
-        type: line
         extend_to: false
-        stroke_width: 2
-        statistics:
-          type: mean
-          period: 5minute
-          align: start
         show:
           legend_value: false
           in_header: false
-        color: '#ea580c'
-      - entity: sensor.energy_manager_ev_soc
-        name: EV · actual
-        type: line
-        extend_to: false
-        stroke_width: 2
-        statistics:
-          type: mean
-          period: 5minute
-          align: start
-        show:
-          legend_value: false
-          in_header: false
+        data_generator: >-
+          return (await window.energyManagerOverviewSocV236?.points?.(hass, start, end, 'ev_soc')) ?? [];
         color: '#16a34a'
       yaxis:
       - min: 0
         max: 100
         decimals: 0
+
 - title: Planning
   path: planning
   icon: mdi:calendar-clock
-  cards:
-  - type: custom:energymanager-day-chart
-    header:
-      show: true
-      title: 7 days · AC power · actual / planned
-      show_states: false
-    graph_span: 7d
-    span:
-      start: minute
-    now:
-      show: true
-      label: Now
-    update_interval: 1min
-    apex_config:
-      chart:
-        height: 300
-      legend:
+  type: sections
+  max_columns: 2
+  sections:
+  - type: grid
+    column_span: 2
+    cards:
+    - type: custom:energymanager-day-chart
+      grid_options:
+        columns: full
+        rows: auto
+      header:
         show: true
-        showForSingleSeries: true
-      tooltip:
-        shared: true
-        x:
-          format: dd MMM HH:mm
-      xaxis:
-        type: datetime
-        labels:
-          datetimeFormatter:
-            year: yyyy
-            month: dd MMM yyyy
-            day: dd MMM
-            hour: HH:mm
-            minute: HH:mm
-            second: HH:mm:ss
-      yaxis:
-        decimalsInFloat: 0
-    series:
-    - entity: sensor.energy_manager_plan_day_1
-      name: Grid
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
-    - entity: sensor.energy_manager_plan_day_2
-      name: Grid · 2
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
-    - entity: sensor.energy_manager_plan_day_3
-      name: Grid · 3
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
-    - entity: sensor.energy_manager_plan_day_4
-      name: Grid · 4
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
-    - entity: sensor.energy_manager_plan_day_5
-      name: Grid · 5
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
-    - entity: sensor.energy_manager_plan_day_6
-      name: Grid · 6
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
-    - entity: sensor.energy_manager_plan_day_7
-      name: Grid · 7
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.grid_w)]);
-    - entity: sensor.energy_manager_plan_day_1
-      name: ESS
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
-    - entity: sensor.energy_manager_plan_day_2
-      name: ESS · 2
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
-    - entity: sensor.energy_manager_plan_day_3
-      name: ESS · 3
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
-    - entity: sensor.energy_manager_plan_day_4
-      name: ESS · 4
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
-    - entity: sensor.energy_manager_plan_day_5
-      name: ESS · 5
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
-    - entity: sensor.energy_manager_plan_day_6
-      name: ESS · 6
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
-    - entity: sensor.energy_manager_plan_day_7
-      name: ESS · 7
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_w)]);
-    - entity: sensor.energy_manager_plan_day_1
-      name: AC PV
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
-    - entity: sensor.energy_manager_plan_day_2
-      name: AC PV · 2
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
-    - entity: sensor.energy_manager_plan_day_3
-      name: AC PV · 3
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
-    - entity: sensor.energy_manager_plan_day_4
-      name: AC PV · 4
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
-    - entity: sensor.energy_manager_plan_day_5
-      name: AC PV · 5
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
-    - entity: sensor.energy_manager_plan_day_6
-      name: AC PV · 6
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
-    - entity: sensor.energy_manager_plan_day_7
-      name: AC PV · 7
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.pv_ac_w)]);
-    - entity: sensor.energy_manager_grid_power
-      name: Grid · actual
-      type: line
-      extend_to: false
-      stroke_width: 2
-      group_by:
-        duration: 15min
-        func: avg
-      show:
-        legend_value: false
-        in_header: false
-      color: '#ef4444'
-    - entity: sensor.energy_manager_ess_power
-      name: ESS · actual
-      type: line
-      extend_to: false
-      stroke_width: 2
-      group_by:
-        duration: 15min
-        func: avg
-      show:
-        legend_value: false
-        in_header: false
-      color: '#7c3aed'
-    - entity: sensor.energy_manager_pv_solax_power
-      name: AC PV · actual
-      type: line
-      extend_to: false
-      stroke_width: 2
-      group_by:
-        duration: 15min
-        func: avg
-      show:
-        legend_value: false
-        in_header: false
-      color: '#eab308'
-  - type: custom:energymanager-day-chart
-    header:
-      show: true
-      title: 7 days · SoC · actual / planned
-      show_states: false
-    graph_span: 7d
-    span:
-      start: minute
-    now:
-      show: true
-      label: Now
-    update_interval: 1min
-    apex_config:
-      chart:
-        height: 300
-      legend:
+        title: 7 days · AC power · actual / planned
+        show_states: false
+      graph_span: 7d
+      span:
+        start: minute
+      now:
         show: true
-        showForSingleSeries: true
-      tooltip:
-        shared: true
-        x:
-          format: dd MMM HH:mm
-      xaxis:
-        type: datetime
-        labels:
-          datetimeFormatter:
-            year: yyyy
-            month: dd MMM yyyy
-            day: dd MMM
-            hour: HH:mm
-            minute: HH:mm
-            second: HH:mm:ss
+        label: Now
+      apex_config:
+        chart:
+          height: 440
+          toolbar:
+            show: false
+        grid:
+          borderColor: var(--divider-color)
+        legend:
+          show: true
+          showForSingleSeries: true
+        tooltip:
+          shared: true
+          intersect: false
+          custom: "EVAL:function (params) { return window.energyManagerPlanningV232?.tooltip?.(params, 'W') ?? ''; }"
+        xaxis:
+          type: datetime
+          labels:
+            datetimeFormatter:
+              year: yyyy
+              month: dd MMM yyyy
+              day: dd MMM
+              hour: HH:mm
+              minute: HH:mm
+              second: HH:mm:ss
+        yaxis:
+          decimalsInFloat: 0
+          title:
+            text: W
+        stroke:
+          curve: straight
+          dashArray: [0, 0, 0, 0, 0, 6]
+      series:
+      - entity: sensor.energy_manager_plan_day_1
+        name: Grid
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "if (!window.energyManagerPlanningV232 && !window.energyManagerPlanningHelperWarning) { window.energyManagerPlanningHelperWarning = true; console.error('[EnergyManager Dashboard] Planning charts: JS helper missing. Expected v2.33. Check /local/energymanager-timeline-card.js?v=233 and reload.'); } return (await window.energyManagerPlanningV232?.points?.(hass, start, end, 'grid')) ?? [];"
+        color: '#dc2626'
+      - entity: sensor.energy_manager_plan_day_1
+        name: ESS
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "return (await window.energyManagerPlanningV232?.points?.(hass, start, end, 'ess')) ?? [];"
+        color: '#007AC2'
+      - entity: sensor.energy_manager_plan_day_1
+        name: Solar
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "return (await window.energyManagerPlanningV232?.points?.(hass, start, end, 'solar')) ?? [];"
+        color: '#eab308'
+      - entity: sensor.energy_manager_plan_day_1
+        name: Load
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "return (await window.energyManagerPlanningV232?.points?.(hass, start, end, 'load')) ?? [];"
+        color: '#16a34a'
+      - entity: sensor.energy_manager_plan_day_1
+        name: Background
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "return (await window.energyManagerPlanningV232?.points?.(hass, start, end, 'background')) ?? [];"
+        color: '#a855f7'
+      - entity: sensor.energy_manager_capacity_tariff_status
+        name: Peak (15 min)
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "return (await window.energyManagerPlanningV232?.points?.(hass, start, end, 'peak')) ?? [];"
+        color: '#dc2626'
+    - type: custom:energymanager-planning-tasks-card
+      grid_options:
+        columns: full
+        rows: auto
+      mode: timeline
+    - type: custom:energymanager-day-chart
+      grid_options:
+        columns: full
+        rows: auto
+      header:
+        show: true
+        title: 7 days · SoC · actual / planned
+        show_states: false
+      graph_span: 7d
+      span:
+        start: minute
+      now:
+        show: true
+        label: Now
+      apex_config:
+        chart:
+          height: 300
+          toolbar:
+            show: false
+        grid:
+          borderColor: var(--divider-color)
+        legend:
+          show: true
+          showForSingleSeries: true
+        tooltip:
+          shared: true
+          intersect: false
+          custom: "EVAL:function (params) { return window.energyManagerPlanningV232?.tooltip?.(params, '%') ?? ''; }"
+        xaxis:
+          type: datetime
+          labels:
+            datetimeFormatter:
+              year: yyyy
+              month: dd MMM yyyy
+              day: dd MMM
+              hour: HH:mm
+              minute: HH:mm
+              second: HH:mm:ss
+        yaxis:
+          decimalsInFloat: 0
+        stroke:
+          curve: straight
+      series:
+      - entity: sensor.energy_manager_plan_day_1
+        name: ESS SoC
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "return (await window.energyManagerPlanningV232?.points?.(hass, start, end, 'ess_soc')) ?? [];"
+        color: '#007AC2'
+      - entity: sensor.energy_manager_plan_day_1
+        name: EV SoC
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "return (await window.energyManagerPlanningV232?.points?.(hass, start, end, 'ev_soc')) ?? [];"
+        color: '#16a34a'
       yaxis:
-        decimalsInFloat: 0
-    series:
-    - entity: sensor.energy_manager_plan_day_1
-      name: ESS
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
-    - entity: sensor.energy_manager_plan_day_2
-      name: ESS · 2
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
-    - entity: sensor.energy_manager_plan_day_3
-      name: ESS · 3
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
-    - entity: sensor.energy_manager_plan_day_4
-      name: ESS · 4
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
-    - entity: sensor.energy_manager_plan_day_5
-      name: ESS · 5
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
-    - entity: sensor.energy_manager_plan_day_6
-      name: ESS · 6
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
-    - entity: sensor.energy_manager_plan_day_7
-      name: ESS · 7
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ess_soc)]);
-    - entity: sensor.energy_manager_plan_day_1
-      name: EV
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
-    - entity: sensor.energy_manager_plan_day_2
-      name: EV · 2
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
-    - entity: sensor.energy_manager_plan_day_3
-      name: EV · 3
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
-    - entity: sensor.energy_manager_plan_day_4
-      name: EV · 4
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
-    - entity: sensor.energy_manager_plan_day_5
-      name: EV · 5
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
-    - entity: sensor.energy_manager_plan_day_6
-      name: EV · 6
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
-    - entity: sensor.energy_manager_plan_day_7
-      name: EV · 7
-      type: line
-      stroke_width: 2
-      extend_to: end
-      show:
-        legend_value: false
-        in_header: false
-      data_generator: return (entity.attributes.intervals || []).map(p => [new Date(p.start).getTime(), Number(p.ev_soc)]);
-    - entity: sensor.energy_manager_ess_soc
-      name: ESS · actual
-      type: line
-      extend_to: false
-      stroke_width: 2
-      group_by:
-        duration: 15min
-        func: avg
-      statistics:
-        type: mean
-        period: 5minute
-        align: start
-      show:
-        legend_value: false
-        in_header: false
-      color: '#ea580c'
-    - entity: sensor.energy_manager_ev_soc
-      name: EV · actual
-      type: line
-      extend_to: false
-      stroke_width: 2
-      group_by:
-        duration: 15min
-        func: avg
-      statistics:
-        type: mean
-        period: 5minute
-        align: start
-      show:
-        legend_value: false
-        in_header: false
-      color: '#16a34a'
-    yaxis:
-    - min: 0
-      max: 100
-      decimals: 0
-  - type: entities
-    title: Forecast details · next 24 h
-    show_header_toggle: false
-    entities:
-    - entity: sensor.energy_manager_shadow_plan_next_24_hours_net_deficit_energy
-      name: Net deficit
-    - entity: sensor.energy_manager_background_load_forecast_next_24_hours_energy
-      name: Background load
-  - type: entities
-    title: Tasks and plan status
-    show_header_toggle: false
-    entities:
-    - entity: sensor.energy_manager_shadow_plan_status
-      name: Plan status
-    - sensor.energy_manager_task_status
-    - sensor.energy_manager_actuator_status
-    - sensor.energy_manager_plan_cost_status
-    - sensor.energy_manager_capacity_tariff_status
-  - type: entities
-    title: Schedule source — 7 days
-    show_header_toggle: false
-    entities:
-    - sensor.energy_manager_plan_day_1
-    - sensor.energy_manager_plan_day_2
-    - sensor.energy_manager_plan_day_3
-    - sensor.energy_manager_plan_day_4
-    - sensor.energy_manager_plan_day_5
-    - sensor.energy_manager_plan_day_6
-    - sensor.energy_manager_plan_day_7
+      - min: 0
+        max: 100
+        decimals: 0
+    - type: custom:energymanager-planning-tasks-card
+      grid_options:
+        columns: full
+        rows: auto
+      mode: list
+    - type: entities
+      grid_options:
+        columns: 12
+        rows: auto
+      title: Forecast details · next 24 h
+      show_header_toggle: false
+      entities:
+      - entity: sensor.energy_manager_shadow_plan_next_24_hours_net_deficit_energy
+        name: Net deficit
+      - entity: sensor.energy_manager_background_load_forecast_next_24_hours_energy
+        name: Background load
 - title: Performance
   path: performance
   icon: mdi:chart-line
   cards:
-  - type: markdown
-    content: '## Recorded actual operation
-
-      This initial view shows actual Home Assistant history. Historical plan-versus-actual overlays require an InfluxDB 3
-      history-query bridge and verification of stored snapshots.'
-  - type: history-graph
-    title: Actual power — last 24 hours
-    hours_to_show: 24
-    refresh_interval: 60
-    entities:
-    - sensor.energy_manager_grid_power
-    - sensor.energy_manager_house_load_power
-    - sensor.energy_manager_pv_total_power
-    - sensor.energy_manager_ess_power
-    - sensor.energy_manager_ev_charging_power
-  - type: history-graph
-    title: ESS / EV SoC — last 48 hours
-    hours_to_show: 48
-    refresh_interval: 60
-    entities:
-    - sensor.energy_manager_ess_soc
-    - sensor.energy_manager_ev_soc
   - type: entities
-    title: Forecast quality and persistence
+    title: Background-load forecast accuracy
     show_header_toggle: false
     entities:
-    - sensor.energy_manager_background_load_backtest
-    - sensor.energy_manager_database_status
-    - sensor.energy_manager_input_health
-    - sensor.energy_manager_plan_cost_status
-  - type: markdown
-    content: '**Not yet available:** auditable historical plan comparisons, actual-versus-baseline cost, and 15-minute peak
-      attribution. These will need data-access and calculation work rather than invented dashboard values.'
+    - entity: sensor.energy_manager_background_load_backtest
+      name: 24-hour energy forecast error · MAE
 - title: Diagnostics
   path: diagnostics
   icon: mdi:clipboard-text-clock
   cards:
+  - type: entities
+    title: Data availability
+    show_header_toggle: false
+    entities:
+    - sensor.energy_manager_database_status
+    - sensor.energy_manager_input_health
+  - type: entities
+    title: Planner diagnostics · technical
+    show_header_toggle: false
+    entities:
+    - entity: sensor.energy_manager_shadow_plan_status
+      name: Plan calculated
+    - entity: sensor.energy_manager_task_status
+      name: Task requirements available
+    - entity: sensor.energy_manager_actuator_status
+      name: Device catalog available
+    - entity: sensor.energy_manager_plan_cost_status
+      name: Estimated plan cost · 24 h
+    - entity: sensor.energy_manager_capacity_tariff_status
+      name: Observed monthly capacity peak
   - type: entities
     title: Live control health
     entities:
@@ -1531,13 +1232,4 @@ views:
     - sensor.energy_manager_ev_control_status
     - sensor.energy_manager_notification_status
     - sensor.energy_manager_fast_dispatch_status
-  - type: markdown
-    title: Recent notification events
-    content: '{% set events = state_attr(''sensor.energy_manager_notification_status'', ''recent_events'') or [] %} {% if
-      not events %} No events recorded since the current EnergyManager startup. {% else %} | Time (UTC) | Event | Health |
-      Reason | |:--|:--|:--|:--| {% for e in events | reverse %} | {{ e.time[:19] }} | {{ e.event }} | {{ e.health }} | {{
-      (e.reason or ''-'') | replace(''|'',''/'') }} | {% endfor %} {% endif %}'
-  - type: markdown
-    content: The list shows the last 30 notification-manager events from the running add-on, including suppressed/pending
-      alerts. It is not yet a durable historical event database. Short-lived health changes remain visible here without sending
-      phone notifications.
+  - type: custom:energymanager-notification-events-card
