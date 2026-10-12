@@ -80,3 +80,27 @@ def test_connected_not_charging_alert_does_not_disable_ev_command_path() -> None
     assert health.ev_available is True
     assert "ev:connected_not_charging" in health.reasons
     assert health.replan_required is False
+
+
+def test_ev_held_inputs_do_not_trigger_degraded_health() -> None:
+    state = _state()
+    reading = state.reading("ev.soc")
+    assert reading.hold_last_valid("upstream unavailable", observed_at_utc=_NOW + timedelta(minutes=5),
+                                   grace=timedelta(minutes=10))
+    state.reading("ev.connected").set_valid(True, unit=None,
+        observed_at_utc=_NOW + timedelta(minutes=5), source_last_updated=None)
+    health = evaluate_control_health(state, now_utc=_NOW + timedelta(minutes=5),
+                                     ess_control_enabled=False, ev_control_enabled=True)
+    assert health.state == "healthy"
+    assert "ev.soc" in health.held_inputs
+    assert health.replan_required is False
+
+
+def test_configured_charger_power_invalid_causes_degraded_health_when_connected() -> None:
+    state = _state()
+    state.ensure_input("ev.charging_power", "sensor.ev_power")
+    health = evaluate_control_health(state, now_utc=_NOW, ess_control_enabled=True, ev_control_enabled=True)
+    assert health.state == "degraded"
+    assert health.ess_available is True
+    assert health.ev_available is False
+    assert "ev.charging_power" in health.unavailable_inputs

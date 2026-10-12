@@ -13,7 +13,7 @@ from .control_health import ControlHealth
 
 _LOGGER = logging.getLogger(__name__)
 NOTIFICATION_STATUS_ENTITY = "sensor.energy_manager_notification_status"
-NOTIFICATION_STATUS_VERSION = "2026-10-10-control-notifications-v3"
+NOTIFICATION_STATUS_VERSION = "2026-10-12-control-notifications-v4"
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +37,7 @@ class ControlNotificationManager:
         self._startup_complete = False
         self._startup_suppressed_count = 0
         self._active_alert = False
+        self._active_signature: tuple[Any, ...] | None = None
         self._last_queued_at: dict[tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...]], datetime] = {}
         self._queue: asyncio.Queue[_NotificationEvent | None] = asyncio.Queue()
         self._worker_task: asyncio.Task[None] | None = None
@@ -76,11 +77,14 @@ class ControlNotificationManager:
                 self._enqueue(_NotificationEvent("armed", health.state, "", "", False, now))
             return
 
-        # Require persistent health failure before sending a phone notification.
-        # Brief transitions remain visible in the diagnostics event history.
+        # Persist fault for 15 s. One event per fault episode, even when cooldown suppresses it.
         signature = (health.state, health.reasons, health.stale_inputs, health.unavailable_inputs)
-        if alertworthy and not self._active_alert:
-            if self._pending_signature != signature:
+        if alertworthy:
+            if signature == self._active_signature:
+                self._pending_signature = None
+                self._pending_fault_since = None
+                return
+            if signature != self._pending_signature:
                 self._pending_signature = signature
                 self._pending_fault_since = now
                 self._enqueue(
@@ -88,31 +92,22 @@ class ControlNotificationManager:
                 )
                 return
             if self._pending_fault_since is not None and (now - self._pending_fault_since).total_seconds() >= 15:
-                self._active_alert = self._queue_failure(health, now)
-            return
-        if not alertworthy:
-            self._pending_signature = None
-            self._pending_fault_since = None
-
-        same_signature = (
-            previous.state == health.state
-            and previous.reasons == health.reasons
-            and previous.stale_inputs == health.stale_inputs
-            and previous.unavailable_inputs == health.unavailable_inputs
-        )
-        if same_signature:
+                self._queue_failure(health, now)
+                self._active_alert = True  # A cooldown suppression still handles this fault episode.
+                self._active_signature = signature
+                self._pending_signature = None
+                self._pending_fault_since = None
             return
 
-        if alertworthy:
-            return
-
+        self._pending_signature = None
+        self._pending_fault_since = None
         if self._active_alert:
             title, message = _recovery_message(health)
-            self._enqueue(_NotificationEvent("recovered", health.state, title, message, True, now))
+            self._enqueue(_NotificationEvent("recovered", health.state, title, message, False, now))
             self._active_alert = False
-            return
-
-        self._enqueue(_NotificationEvent("health_changed", health.state, "", "", False, now))
+            self._active_signature = None
+        elif previous != health:
+            self._enqueue(_NotificationEvent("health_changed", health.state, "", "", False, now))
 
     def complete_startup(self, *, now_utc: datetime | None = None) -> None:
         """Arm notifications after the initial planning attempt reaches a terminal outcome."""
@@ -124,7 +119,11 @@ class ControlNotificationManager:
         if current is not None:
             if _is_alertworthy_failure(current):
                 self._last_health = current
-                self._active_alert = self._queue_failure(current, now_utc or datetime.now(UTC))
+                self._queue_failure(current, now_utc or datetime.now(UTC))
+                self._active_alert = True
+                self._active_signature = (
+                    current.state, current.reasons, current.stale_inputs, current.unavailable_inputs
+                )
             else:
                 self.observe(current, now_utc=now_utc)
         else:

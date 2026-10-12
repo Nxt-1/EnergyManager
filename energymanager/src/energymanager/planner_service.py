@@ -80,6 +80,7 @@ class PlannerService:
         self._fast_dispatch_task: asyncio.Task[None] | None = None
         self._solve_task: asyncio.Task[None] | None = None
         self._fast_dispatch_sequence = 0
+        self._fast_dispatch_failed = False
         self._last_control_health_signature: tuple[object, ...] | None = None
 
     @property
@@ -355,18 +356,24 @@ class PlannerService:
     async def _fast_dispatch_loop(self) -> None:
         loop = asyncio.get_running_loop()
         next_run = loop.time()
-        try:
-            while True:
-                delay = next_run - loop.time()
-                if delay > 0.0:
-                    await asyncio.sleep(delay)
-                started = loop.time()
+        while True:
+            delay = next_run - loop.time()
+            if delay > 0.0:
+                await asyncio.sleep(delay)
+            started = loop.time()
+            try:
                 await self._run_fast_dispatch_once()
-                next_run = max(next_run + _FAST_DISPATCH_INTERVAL_SECONDS, started + _FAST_DISPATCH_INTERVAL_SECONDS)
-        except asyncio.CancelledError:
-            raise
-        except Exception:  # noqa: BLE001 - fast dispatch must restart after an unexpected diagnostic failure.
-            _LOGGER.exception("Fast dispatch loop stopped unexpectedly")
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001 - keep the loop alive across transient HA/API failures.
+                if not self._fast_dispatch_failed:
+                    _LOGGER.exception("Fast dispatch cycle failed; retrying on next cycle")
+                self._fast_dispatch_failed = True
+            else:
+                if self._fast_dispatch_failed:
+                    _LOGGER.info("Fast dispatch recovered after transient failure")
+                self._fast_dispatch_failed = False
+            next_run = max(next_run + _FAST_DISPATCH_INTERVAL_SECONDS, started + _FAST_DISPATCH_INTERVAL_SECONDS)
 
     async def _run_fast_dispatch_once(self) -> None:
         house_state = self._latest_house_state
@@ -404,19 +411,26 @@ class PlannerService:
             live_control=self._ess_control_enabled,
         )
         self._fast_dispatch_sequence += 1
-        await publish_fast_dispatch(
-            self._ha_client,
-            result,
-            control_interval_seconds=_FAST_DISPATCH_INTERVAL_SECONDS,
-            dispatch_sequence=self._fast_dispatch_sequence,
-            milp_solve_in_progress=self.solve_in_progress,
-            control_enabled=self._ess_control_enabled,
-            hardware_writes=self._ess_control_enabled,
-        )
+        # Diagnostics must never block the device commands for this cycle.
+        try:
+            await publish_fast_dispatch(
+                self._ha_client,
+                result,
+                control_interval_seconds=_FAST_DISPATCH_INTERVAL_SECONDS,
+                dispatch_sequence=self._fast_dispatch_sequence,
+                milp_solve_in_progress=self.solve_in_progress,
+                control_enabled=self._ess_control_enabled,
+                hardware_writes=self._ess_control_enabled,
+            )
+        except Exception as exc:  # noqa: BLE001 - telemetry must not block live hardware control.
+            _LOGGER.debug("Unable to publish fast dispatch diagnostics: %s", exc)
         if self._ess_controller is not None:
             await self._ess_controller.apply_dispatch(result)
         if self._ev_controller is not None:
-            if health.ev_available:
+            if health.ev_available and any(key.startswith("ev.") for key in health.held_inputs):
+                # Keep existing charger settings, but do not write new commands using held inputs.
+                pass
+            elif health.ev_available:
                 await self._ev_controller.apply_dispatch(result)
             else:
                 await self._ev_controller.safe_stop("control_health_ev_unavailable")
@@ -428,7 +442,7 @@ class PlannerService:
         else:
             await self._diagnostics.publish_actuator_command_status(result.command_results)
 
-        if self._ev_controller is not None:
+        if self._ev_controller is not None and not any(key.startswith("ev.") for key in health.held_inputs):
             self._ev_controller.observe_charging(house_state)
         post_health = self._evaluate_control_health(house_state, datetime.now(UTC))
         post_health_changed = self._record_control_health(post_health)
@@ -475,20 +489,23 @@ class PlannerService:
         )
 
     async def _publish_control_health(self, health: ControlHealth) -> None:
-        await publish_control_health(
-            self._ha_client,
-            health,
-            ess_control_enabled=self._ess_control_enabled,
-            ev_control_enabled=self._ev_control_enabled,
-            ess_write_failures=(
-                self._ess_controller.consecutive_failures if self._ess_controller is not None else 0
-            ),
-            ev_write_failures=(
-                self._ev_controller.consecutive_failures if self._ev_controller is not None else 0
-            ),
-            ess_last_error=self._ess_controller.last_error if self._ess_controller is not None else None,
-            ev_last_error=self._ev_controller.last_error if self._ev_controller is not None else None,
-        )
+        try:
+            await publish_control_health(
+                self._ha_client,
+                health,
+                ess_control_enabled=self._ess_control_enabled,
+                ev_control_enabled=self._ev_control_enabled,
+                ess_write_failures=(
+                    self._ess_controller.consecutive_failures if self._ess_controller is not None else 0
+                ),
+                ev_write_failures=(
+                    self._ev_controller.consecutive_failures if self._ev_controller is not None else 0
+                ),
+                ess_last_error=self._ess_controller.last_error if self._ess_controller is not None else None,
+                ev_last_error=self._ev_controller.last_error if self._ev_controller is not None else None,
+            )
+        except Exception as exc:  # noqa: BLE001 - status publishing must not block control.
+            _LOGGER.debug("Unable to publish control health diagnostics: %s", exc)
         if self._notification_manager is not None:
             self._notification_manager.observe(health)
 

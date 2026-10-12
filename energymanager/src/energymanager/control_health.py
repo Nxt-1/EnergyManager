@@ -8,7 +8,7 @@ from typing import Any
 
 from .house_state import HouseState, InputStatus
 
-CONTROL_HEALTH_VERSION = "2026-10-10-control-health-v1"
+CONTROL_HEALTH_VERSION = "2026-10-12-control-health-v2"
 CONTROL_HEALTH_STATUS_ENTITY = "sensor.energy_manager_control_health"
 _INPUT_FRESHNESS = timedelta(seconds=45)
 
@@ -24,6 +24,7 @@ class ControlHealth:
     unavailable_inputs: tuple[str, ...]
     reasons: tuple[str, ...]
     replan_required: bool
+    held_inputs: tuple[str, ...] = ()
 
 
 async def publish_control_health(
@@ -48,6 +49,7 @@ async def publish_control_health(
         "input_freshness_seconds": int(_INPUT_FRESHNESS.total_seconds()),
         "stale_inputs": list(health.stale_inputs),
         "unavailable_inputs": list(health.unavailable_inputs),
+        "held_inputs": list(health.held_inputs),
         "reasons": list(health.reasons),
         "replan_required": health.replan_required,
         "ess_write_failures": ess_write_failures,
@@ -75,6 +77,7 @@ def evaluate_control_health(
 
     ess_available = True
     ev_available = True
+    held = tuple(sorted(key for key, reading in house_state.readings.items() if reading.held_reason is not None))
 
     if ess_control_enabled:
         for key in ("grid.import_power", "grid.export_power", "ess.soc", "ess.power"):
@@ -99,6 +102,15 @@ def evaluate_control_health(
                 unavailable.append(key)
                 ev_available = False
         connected = house_state.value("ev.connected")
+        charging_power = house_state.readings.get("ev.charging_power")
+        if connected is True and charging_power is not None and charging_power.entity_id is not None:
+            quality = _input_quality(house_state, "ev.charging_power", now_utc)
+            if quality == "stale":
+                stale.append("ev.charging_power")
+                ev_available = False
+            elif quality != "valid":
+                unavailable.append("ev.charging_power")
+                ev_available = False
         if connected is False:
             ev_available = False
             reasons.append("ev:disconnected")
@@ -128,6 +140,7 @@ def evaluate_control_health(
         stale_inputs=tuple(stale),
         unavailable_inputs=tuple(unavailable),
         reasons=tuple(reasons),
+        held_inputs=held,
         replan_required=(
             (ess_control_enabled and not ess_available)
             or (ev_control_enabled and not ev_available)

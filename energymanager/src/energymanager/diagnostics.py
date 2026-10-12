@@ -119,6 +119,8 @@ class DiagnosticsPublisher:
             "input_status": reading.status.value,
             "observed_at_utc": _iso(reading.observed_at_utc),
             "source_last_updated": reading.source_last_updated,
+            "last_valid_at_utc": _iso(reading.last_valid_at_utc),
+            "held_last_valid": reading.held_reason is not None,
             "last_update_utc": datetime.now(UTC).isoformat(),
         }
         if unit is not None:

@@ -270,6 +270,15 @@ Home Assistant measurement inputs are event-driven and also reconciled every 30 
 configured measurement inputs degrade `sensor.energy_manager_input_health`. PV forecast health is deliberately separate in
 `sensor.energy_manager_pv_forecast_status` because an external weather API failure must not invalidate local measurements.
 
+Version 0.31.9 retains the last valid EV SoC, EV connection and charging-power values for a maximum of ten minutes if
+Home Assistant temporarily reports `unknown` or `unavailable`. Held readings have a `held_last_valid` diagnostic attribute,
+and `sensor.energy_manager_control_health` exposes `held_inputs`. During the hold, live EV charge settings are not changed;
+valid explicit disconnection is acted on immediately. On expiration, the affected input becomes unavailable and the EV
+controller falls back safely. This grace does **not** apply to grid or ESS safety inputs or to EV write acknowledgements.
+
+A failed HA diagnostic update no longer terminates fast dispatch. Recovery events remain in Diagnostics but do not send
+phone notifications. A recurring identical fault is suppressed once per confirmed episode while its cooldown applies.
+
 ## Safety
 
 Actuator capability models and a dry-run command path exist, but hardware writes remain disabled. The planner can evaluate

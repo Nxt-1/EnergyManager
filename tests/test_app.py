@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from energymanager.app import EnergyManagerApp
@@ -126,3 +127,53 @@ def test_legacy_diagnostic_cleanup_is_requested() -> None:
     assert "sensor.energy_manager_observed_grid_power" in client.deleted
     assert "sensor.energy_manager_pv_day_ahead_today_energy" in client.deleted
     assert "sensor.energy_manager_pv_day_ahead_tomorrow_energy" in client.deleted
+
+
+def test_ev_inputs_are_held_during_short_outage_then_expire() -> None:
+    app, _ = _configured_app()
+    start = datetime(2026, 10, 12, 18, 0, tzinfo=UTC)
+    app._process_entity_state("sensor.ev_soc", _state("58", "%"), observed_at_utc=start)
+    app._process_entity_state("binary_sensor.ev_connected", _state("on", None), observed_at_utc=start)
+    app._process_entity_state("sensor.ev_power", _state("1800"), observed_at_utc=start)
+    for entity, missing in (
+        ("sensor.ev_soc", _state("unavailable", "%")),
+        ("binary_sensor.ev_connected", _state("unavailable", None)),
+        ("sensor.ev_power", _state("unknown")),
+    ):
+        app._process_entity_state(entity, missing, observed_at_utc=start + timedelta(minutes=5))
+
+    for key, expected in (("ev.soc", 58.0), ("ev.connected", True), ("ev.charging_power", 1800.0)):
+        reading = app.house_state.reading(key)
+        assert app.house_state.value(key) == expected
+        assert reading.held_reason is not None
+        assert reading.last_valid_at_utc == start
+
+    app._process_entity_state("sensor.ev_soc", _state("unavailable", "%"),
+                              observed_at_utc=start + timedelta(minutes=10))
+    assert app.house_state.value("ev.soc") is None
+    assert app.house_state.reading("ev.soc").held_reason is None
+
+
+def test_explicit_ev_disconnect_applies_during_grace() -> None:
+    app, _ = _configured_app()
+    start = datetime(2026, 10, 12, 18, 0, tzinfo=UTC)
+    app._process_entity_state("binary_sensor.ev_connected", _state("on", None), observed_at_utc=start)
+    app._process_entity_state("binary_sensor.ev_connected", _state("unavailable", None),
+                              observed_at_utc=start + timedelta(minutes=1))
+    assert app.house_state.value("ev.connected") is True
+    app._process_entity_state("binary_sensor.ev_connected", _state("off", None),
+                              observed_at_utc=start + timedelta(minutes=2))
+    assert app.house_state.value("ev.connected") is False
+    assert app.house_state.reading("ev.connected").held_reason is None
+
+
+def test_ev_rest_failure_uses_grace_and_recovers_without_transition() -> None:
+    app, _ = _configured_app()
+    start = datetime(2026, 10, 12, 18, 0, tzinfo=UTC)
+    app._process_entity_state("sensor.ev_soc", _state("42", "%"), observed_at_utc=start)
+    app._mark_entity_invalid("sensor.ev_soc", "502 Bad Gateway", observed_at_utc=start + timedelta(seconds=30))
+    assert app.house_state.value("ev.soc") == 42
+    app._process_entity_state("sensor.ev_soc", _state("43", "%"),
+                              observed_at_utc=start + timedelta(seconds=45))
+    assert app.house_state.value("ev.soc") == 43
+    assert app.house_state.reading("ev.soc").held_reason is None

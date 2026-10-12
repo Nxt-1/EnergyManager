@@ -34,7 +34,7 @@ def _health(state: str, *, ev_available: bool = True, reasons: tuple[str, ...] =
     )
 
 
-def test_notification_manager_sends_failure_once_and_recovery_once() -> None:
+def test_notification_manager_sends_failure_and_logs_recovery_without_phone() -> None:
     client = FakeClient()
     manager = ControlNotificationManager(
         client,
@@ -57,13 +57,13 @@ def test_notification_manager_sends_failure_once_and_recovery_once() -> None:
 
     asyncio.run(scenario())
 
-    assert len(client.calls) == 2
+    assert len(client.calls) == 1
     assert client.calls[0][0:2] == ("notify", "mobile_app_phone")
     assert "EV control is unavailable" in str(client.calls[0][2]["message"])
-    assert "returned to healthy" in str(client.calls[1][2]["message"])
     status = client.states[NOTIFICATION_STATUS_ENTITY]
-    assert status["state"] == "sent"
-    assert status["attributes"]["sent_count"] == 2
+    assert status["attributes"]["sent_count"] == 1
+    assert status["attributes"]["recent_events"][-1]["event"] == "recovered"
+    assert status["attributes"]["recent_events"][-1]["notification_requested"] is False
 
 
 def test_notification_manager_suppresses_repeated_failure_inside_cooldown() -> None:
@@ -86,7 +86,7 @@ def test_notification_manager_suppresses_repeated_failure_inside_cooldown() -> N
 
     asyncio.run(scenario())
 
-    assert len(client.calls) == 2
+    assert len(client.calls) == 1
     status = client.states[NOTIFICATION_STATUS_ENTITY]
     assert status["attributes"]["suppressed_count"] == 1
 
@@ -145,6 +145,37 @@ def test_persistent_startup_fault_is_reported_on_completion() -> None:
         await manager.shutdown()
 
     asyncio.run(scenario())
-    assert len(client.calls) == 2
+    assert len(client.calls) == 1
     assert "safe fallback" in str(client.calls[0][2]["title"])
-    assert "recovered" in str(client.calls[1][2]["title"])
+    assert client.states[NOTIFICATION_STATUS_ENTITY]["attributes"]["last_event"] == "recovered"
+
+
+def test_cooldown_suppression_is_once_per_episode_and_ess_escalation_is_reported() -> None:
+    client = FakeClient()
+    manager = ControlNotificationManager(
+        client, NotificationSettings(enabled=True, service="notify.mobile_app_phone", cooldown_seconds=300)
+    )
+    ev_fault = _health("degraded", ev_available=False, reasons=("ev:write_fault",))
+    ess_fault = ControlHealth(
+        state="safe_fallback", ess_available=False, ev_available=False,
+        stale_inputs=("ess.soc",), unavailable_inputs=(), reasons=("stale_inputs",), replan_required=True,
+    )
+
+    async def scenario() -> None:
+        manager.observe(_health("healthy"), now_utc=_NOW)
+        manager.complete_startup(now_utc=_NOW)
+        manager.observe(ev_fault, now_utc=_NOW + timedelta(seconds=1))
+        manager.observe(ev_fault, now_utc=_NOW + timedelta(seconds=17))
+        manager.observe(_health("healthy"), now_utc=_NOW + timedelta(seconds=18))
+        manager.observe(ev_fault, now_utc=_NOW + timedelta(seconds=20))
+        for seconds in range(36, 95):
+            manager.observe(ev_fault, now_utc=_NOW + timedelta(seconds=seconds))
+        manager.observe(ess_fault, now_utc=_NOW + timedelta(seconds=100))
+        manager.observe(ess_fault, now_utc=_NOW + timedelta(seconds=116))
+        await manager.shutdown()
+
+    asyncio.run(scenario())
+    assert len(client.calls) == 2  # Original EV fault and genuinely new ESS fault.
+    events = client.states[NOTIFICATION_STATUS_ENTITY]["attributes"]["recent_events"]
+    assert len([event for event in events if event["event"] == "suppressed"]) == 1
+    assert manager._suppressed_count == 1

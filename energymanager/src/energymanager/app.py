@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 _REFRESH_INTERVAL = 30.0
 _STALE_AFTER = timedelta(seconds=90)
+_EV_INPUT_GRACE = timedelta(minutes=10)
 
 
 class EnergyManagerApp:
@@ -50,6 +51,8 @@ class EnergyManagerApp:
         self._specs = build_input_specs(settings)
         self._specs_by_entity: dict[str, list[InputSpec]] = defaultdict(list)
         self._last_status: tuple[str, str | None] | None = None
+        self._reported_invalid_inputs: set[str] = set()
+        self._reported_held_inputs: set[str] = set()
 
         for spec in self._specs:
             self._house_state.ensure_input(spec.key, spec.entity_id)
@@ -190,14 +193,20 @@ class EnergyManagerApp:
             try:
                 value = spec.parser(state)
             except PowerStateError as exc:
+                if spec.key.startswith("ev.") and reading.hold_last_valid(
+                    str(exc), observed_at_utc=observed_at, grace=_EV_INPUT_GRACE
+                ):
+                    self._log_held_ev_input(spec.key)
+                    continue
                 reading.set_invalid(
                     str(exc),
                     observed_at_utc=observed_at,
                     source_last_updated=source_last_updated,
                 )
-                _LOGGER.warning("Input %s (%s) is unavailable: %s", spec.key, entity_id, exc)
+                self._log_invalid_input(spec.key, entity_id, str(exc))
                 continue
 
+            self._log_recovered_input(spec.key)
             reading.set_valid(
                 value,
                 unit=spec.unit,
@@ -208,8 +217,30 @@ class EnergyManagerApp:
 
     def _mark_entity_invalid(self, entity_id: str, reason: str, *, observed_at_utc: datetime) -> None:
         for spec in self._specs_by_entity.get(entity_id, ()):
-            self._house_state.reading(spec.key).set_invalid(reason, observed_at_utc=observed_at_utc)
-        _LOGGER.warning("Unable to refresh %s: %s", entity_id, reason)
+            reading = self._house_state.reading(spec.key)
+            if spec.key.startswith("ev.") and reading.hold_last_valid(
+                reason, observed_at_utc=observed_at_utc, grace=_EV_INPUT_GRACE
+            ):
+                self._log_held_ev_input(spec.key)
+                continue
+            reading.set_invalid(reason, observed_at_utc=observed_at_utc)
+            self._log_invalid_input(spec.key, entity_id, reason)
+
+    def _log_held_ev_input(self, key: str) -> None:
+        if key not in self._reported_held_inputs:
+            _LOGGER.info("EV input %s unavailable; holding its last valid value for up to 10 minutes", key)
+            self._reported_held_inputs.add(key)
+
+    def _log_invalid_input(self, key: str, entity_id: str, reason: str) -> None:
+        if key not in self._reported_invalid_inputs:
+            _LOGGER.warning("Input %s (%s) is unavailable: %s", key, entity_id, reason)
+            self._reported_invalid_inputs.add(key)
+
+    def _log_recovered_input(self, key: str) -> None:
+        if key in self._reported_invalid_inputs:
+            _LOGGER.info("Input %s recovered", key)
+        self._reported_invalid_inputs.discard(key)
+        self._reported_held_inputs.discard(key)
 
     async def _publish_energy_monitor(self) -> None:
         try:

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.31.9
+- Retain the last valid EV SoC, connection and charging-power inputs for up to 10 minutes during brief outages.
+  Explicit EV disconnection still takes effect immediately. Hold EV commands during the grace period; ESS remains active.
+- Treat configured EV charging-power loss as an EV availability fault after grace expires while connected.
+- Isolate fast-dispatch and control-health diagnostic HTTP failures from hardware commands and retry failed dispatch cycles.
+- Fix cooldown event spam; suppress repeat alerts once per episode and record recoveries without phone notifications.
+- No MILP objective, database schema, dashboard, tariffs or configured hardware-limit changes.
+
+
 ## 0.31.8
 - Add optional daily energy monitoring and two P1 capacity-peak inputs.
 - Read configured daily or cumulative counters; use a persisted power-derived estimate when absent.

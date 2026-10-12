@@ -28,6 +28,8 @@ class InputReading:
     observed_at_utc: datetime | None = None
     source_last_updated: str | None = None
     error: str | None = None
+    last_valid_at_utc: datetime | None = None
+    held_reason: str | None = None
 
     @property
     def valid(self) -> bool:
@@ -39,6 +41,8 @@ class InputReading:
         self.observed_at_utc = None
         self.source_last_updated = None
         self.error = None
+        self.last_valid_at_utc = None
+        self.held_reason = None
         self.status = InputStatus.INVALID if entity_id else InputStatus.NOT_CONFIGURED
         if entity_id:
             self.error = "Waiting for first valid observation"
@@ -56,7 +60,23 @@ class InputReading:
         self.status = InputStatus.VALID
         self.observed_at_utc = observed_at_utc
         self.source_last_updated = source_last_updated
+        self.last_valid_at_utc = observed_at_utc
+        self.held_reason = None
         self.error = None
+
+    def hold_last_valid(self, reason: str, *, observed_at_utc: datetime, grace: timedelta) -> bool:
+        """Temporarily retain a valid EV value while its upstream entity is unavailable."""
+        if (
+            self.status is not InputStatus.VALID
+            or self.value is None
+            or self.last_valid_at_utc is None
+            or observed_at_utc - self.last_valid_at_utc >= grace
+        ):
+            return False
+        self.observed_at_utc = observed_at_utc
+        self.held_reason = reason
+        self.error = f"Holding last valid input: {reason}"
+        return True
 
     def set_invalid(
         self,
@@ -66,6 +86,7 @@ class InputReading:
         source_last_updated: str | None = None,
     ) -> None:
         self.value = None
+        self.held_reason = None
         self.status = InputStatus.INVALID
         self.observed_at_utc = observed_at_utc
         self.source_last_updated = source_last_updated
