@@ -158,9 +158,8 @@ def evaluate_plan_milp(
     capacity_state: CapacityPeakState,
     *,
     tie_break_max_time_seconds: float | None = None,
-    solver_threads: int = 1,
 ) -> MilpEvaluation:
-    """Solve the authoritative EV+ESS MILP plan (optional benchmark-only limit override)."""
+    """Solve the authoritative EV+ESS MILP plan with a configurable tie-break limit."""
     ess = find_ess_actuator(reference_plan.actuator_snapshots)
     ev = find_ev_actuator(reference_plan.actuator_snapshots)
     active_tasks = tuple(
@@ -201,7 +200,6 @@ def evaluate_plan_milp(
         return _solve_model(
             highspy, reference_plan, profile, capacity_state, ess, ev, active_tasks,
             tie_break_max_time_seconds=tie_break_max_time_seconds,
-            solver_threads=solver_threads,
         )
     except Exception as exc:  # pragma: no cover - runtime safety around the optional diagnostic solver
         result = _empty_result(
@@ -337,14 +335,11 @@ def _solve_model(
     active_tasks: tuple[PlanningTask, ...],
     *,
     tie_break_max_time_seconds: float | None = None,
-    solver_threads: int = 1,
 ) -> MilpEvaluation:
     model = highspy.Highs()
     model.setOptionValue("output_flag", False)
-    if solver_threads not in (1, 2, 4):
-        raise ValueError("solver_threads must be 1, 2 or 4")
-    model.setOptionValue("threads", solver_threads)
-    model.setOptionValue("parallel", "on" if solver_threads > 1 else "off")
+    model.setOptionValue("threads", 1)
+    model.setOptionValue("parallel", "off")
     model.setOptionValue("time_limit", MILP_ECONOMIC_TIME_LIMIT_SECONDS)
     model.setOptionValue("mip_rel_gap", MILP_RELATIVE_GAP)
 
@@ -391,7 +386,6 @@ def _solve_model(
             estimated_improvement_eur=None,
             economic_solve_time_seconds=economic_solve_time,
             economic_time_limit_seconds=MILP_ECONOMIC_TIME_LIMIT_SECONDS,
-            solver_threads=solver_threads,
             validation_status="not_run",
             reference_cost=reference_cost,
             adoption_ready=False,
@@ -412,7 +406,7 @@ def _solve_model(
             max(0.0, MILP_TOTAL_TIME_BUDGET_SECONDS - economic_solve_time),
         )
     else:
-        # Explicit runtime setting or frozen-input benchmark override.
+        # User-configured secondary solve time limit.
         tie_break_time_limit = min(120.0, max(0.0, float(tie_break_max_time_seconds)))
     if tie_break_time_limit >= 0.5:
         tie_break_started = perf_counter()
@@ -515,7 +509,6 @@ def _solve_model(
         economic_stage_accounting=economic_accounting,
         selected_stage_accounting=selected_accounting,
         economic_accounting_delta=_accounting_delta(economic_accounting, selected_accounting),
-        solver_threads=solver_threads,
         economic_stage_mip_gap=_finite_optional(getattr(stage1_info, "mip_gap", None)),
         economic_stage_status=_status_from_model(stage1_model_status, has_solution=True),
         economic_stage_variable_count=economic_stage_variable_count,

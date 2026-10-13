@@ -59,28 +59,21 @@ def test_stage_accounting_matches_monetary_objective_and_delta() -> None:
     assert delta["economic_objective_eur"] == pytest.approx(0.3)
 
 
-def test_planner_defaults_and_optional_thread_benchmark(tmp_path) -> None:
+def test_planner_defaults_and_custom_time_limit(tmp_path) -> None:
     path = tmp_path / "options.json"
     defaults = Settings.load(path)
     assert defaults.planner.tie_break_seconds == 30
-    assert defaults.planner.solver_threads == 1
-    assert defaults.benchmark_milp_threads_once is False
-    assert defaults.as_options()["planner"] == {"tie_break_seconds": 30, "solver_threads": 1}
+    assert defaults.as_options()["planner"] == {"tie_break_seconds": 30}
 
-    path.write_text(json.dumps({
-        "planner": {"tie_break_seconds": 60, "solver_threads": 4},
-        "benchmark_milp_threads_once": True,
-    }))
+    path.write_text(json.dumps({"planner": {"tie_break_seconds": 60}}))
     settings = Settings.load(path)
-    assert (settings.planner.tie_break_seconds, settings.planner.solver_threads) == (60, 4)
-    assert settings.as_options()["benchmark_milp_threads_once"] is True
+    assert settings.planner.tie_break_seconds == 60
+    assert settings.as_options()["planner"] == {"tie_break_seconds": 60}
 
 
 @pytest.mark.parametrize("planner", [
     {"tie_break_seconds": 0},
     {"tie_break_seconds": 121},
-    {"solver_threads": 3},
-    {"solver_threads": 0},
 ])
 def test_invalid_planner_limits_rejected(tmp_path, planner) -> None:
     path = tmp_path / "options.json"
@@ -89,8 +82,15 @@ def test_invalid_planner_limits_rejected(tmp_path, planner) -> None:
         Settings.load(path)
 
 
-def test_benchmark_modes_cannot_be_enabled_together(tmp_path) -> None:
+def test_removed_benchmark_settings_are_ignored_for_older_saved_options(tmp_path) -> None:
     path = tmp_path / "options.json"
-    path.write_text('{"benchmark_milp_once":true,"benchmark_milp_threads_once":true}')
-    with pytest.raises(ConfigurationError, match="one MILP benchmark"):
-        Settings.load(path)
+    path.write_text(json.dumps({
+        "benchmark_milp_once": True,
+        "benchmark_milp_threads_once": True,
+        "planner": {"tie_break_seconds": 45, "solver_threads": 4},
+    }))
+    settings = Settings.load(path)
+    assert settings.planner.tie_break_seconds == 45
+    assert settings.as_options()["planner"] == {"tie_break_seconds": 45}
+    assert "benchmark_milp_once" not in settings.as_options()
+    assert "benchmark_milp_threads_once" not in settings.as_options()

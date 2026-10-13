@@ -25,7 +25,6 @@ from .ev_control import EvHardwareController
 from .fast_dispatch import evaluate_fast_dispatch, publish_fast_dispatch
 from .house_state import HouseState
 from .load_service import BackgroundLoadService
-from .milp_benchmark import run_milp_benchmark
 from .milp_planner import MilpEvaluation, evaluate_plan_milp, publish_milp_evaluation
 from .planner import EnergyPlan, PlanBuilder
 from .pv_service import PvForecastService
@@ -58,10 +57,7 @@ class PlannerService:
         notification_manager: ControlNotificationManager | None = None,
         store: EnergyManagerStore | None = None,
         planner: PlanBuilder | None = None,
-        benchmark_once: bool = False,
-        benchmark_threads_once: bool = False,
         tie_break_seconds: int = 30,
-        solver_threads: int = 1,
     ) -> None:
         self._ha_client = ha_client
         self._diagnostics = DiagnosticsPublisher(ha_client)
@@ -82,11 +78,7 @@ class PlannerService:
         self._last_task_signature: tuple[tuple[object, ...], ...] | None = None
         self._last_actuator_signature: tuple[tuple[object, ...], ...] | None = None
         self._latest_house_state: HouseState | None = None
-        self._benchmark_once = benchmark_once
-        self._benchmark_threads_once = benchmark_threads_once
         self._tie_break_seconds = tie_break_seconds
-        self._solver_threads = solver_threads
-        self._benchmark_task: asyncio.Task[None] | None = None
         self._fast_dispatch_task: asyncio.Task[None] | None = None
         self._solve_task: asyncio.Task[None] | None = None
         self._fast_dispatch_sequence = 0
@@ -223,12 +215,11 @@ class PlannerService:
         )
 
     def _evaluate(self, frame, profile, capacity_state) -> MilpEvaluation:
-        """Keep the live solver configuration separate from read-only benchmark overrides."""
-        if self._tie_break_seconds == 30 and self._solver_threads == 1:
+        """Evaluate the plan with the configured secondary time limit."""
+        if self._tie_break_seconds == 30:
             return evaluate_plan_milp(frame, profile, capacity_state)
         return evaluate_plan_milp(
-            frame, profile, capacity_state,
-            tie_break_max_time_seconds=float(self._tie_break_seconds), solver_threads=self._solver_threads,
+            frame, profile, capacity_state, tie_break_max_time_seconds=float(self._tie_break_seconds)
         )
 
     async def _run_replan(
@@ -308,14 +299,6 @@ class PlannerService:
                 live_control=self._ess_control_enabled,
             )
             _log_plan(plan, actuators, tasks, cost_evaluation, fast_result.command_results)
-            if (self._benchmark_once or self._benchmark_threads_once) and self._benchmark_task is None:
-                # Freeze the actual planner inputs once. Diagnostic child never changes the adopted plan.
-                mode = "threads" if self._benchmark_threads_once else "limits"
-                self._benchmark_task = asyncio.create_task(
-                    run_milp_benchmark(
-                        self._ha_client, frame, economics.current_profile, economics.capacity_state, mode=mode
-                    )
-                )
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 - planning failure must not terminate the live controller.
@@ -365,11 +348,11 @@ class PlannerService:
 
     async def shutdown(self) -> None:
         """Stop runtime tasks and leave the ESS setpoint neutral on a clean exit."""
-        for task in (self._fast_dispatch_task, self._solve_task, self._benchmark_task):
+        for task in (self._fast_dispatch_task, self._solve_task):
             if task is not None and not task.done():
                 task.cancel()
         pending = tuple(
-            task for task in (self._fast_dispatch_task, self._solve_task, self._benchmark_task) if task is not None
+            task for task in (self._fast_dispatch_task, self._solve_task) if task is not None
         )
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)

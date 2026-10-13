@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.31.15
+- Remove one-off MILP limit/thread benchmarks, their add-on options, background worker and diagnostic sensor publishing.
+- Revert HiGHS to a fixed single-thread setting based on the 1/2/4-thread benchmark results.
+- Retain configurable MILP tie-break time, seven-day accounting comparisons and the v0.31.14 EV safety protections.
+- No EV or ESS control logic changes.
+
 ## 0.31.14
 - Verify EV charging is stopped using go-e power measurements before sending a phase-mode change.
 - Wait 10 seconds after a phase-mode change before resuming charging, and block another physical change for 10 minutes.

@@ -250,10 +250,7 @@ async def _run_app(
                 ev_controller=ev_controller,
                 notification_manager=notification_manager,
                 store=store,
-                benchmark_once=settings.benchmark_milp_once,
-                benchmark_threads_once=settings.benchmark_milp_threads_once,
                 tie_break_seconds=settings.planner.tie_break_seconds,
-                solver_threads=settings.planner.solver_threads,
             )
             app = EnergyManagerApp(
                 settings,
@@ -278,10 +275,7 @@ async def _run_app(
         ev_controller=ev_controller,
         notification_manager=notification_manager,
         store=store,
-        benchmark_once=settings.benchmark_milp_once,
-        benchmark_threads_once=settings.benchmark_milp_threads_once,
         tie_break_seconds=settings.planner.tie_break_seconds,
-        solver_threads=settings.planner.solver_threads,
     )
     app = EnergyManagerApp(
         settings,
