@@ -13,7 +13,7 @@ from .control_health import ControlHealth
 
 _LOGGER = logging.getLogger(__name__)
 NOTIFICATION_STATUS_ENTITY = "sensor.energy_manager_notification_status"
-NOTIFICATION_STATUS_VERSION = "2026-10-12-control-notifications-v4"
+NOTIFICATION_STATUS_VERSION = "2026-10-13-control-notifications-v5"
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,7 +55,7 @@ class ControlNotificationManager:
         return self._settings.enabled and self._settings.service is not None
 
     def observe(self, health: ControlHealth, *, now_utc: datetime | None = None) -> None:
-        """Queue notifications for alert-worthy failures and their recovery."""
+        """Queue only fault events; healthy transitions update internal episode tracking."""
         now = (now_utc or datetime.now(UTC)).astimezone(UTC)
         previous = self._last_health
         self._last_health = health
@@ -102,11 +102,9 @@ class ControlNotificationManager:
         self._pending_signature = None
         self._pending_fault_since = None
         if self._active_alert:
-            title, message = _recovery_message(health)
-            self._enqueue(_NotificationEvent("recovered", health.state, title, message, False, now))
             self._active_alert = False
             self._active_signature = None
-        elif previous != health:
+        elif previous != health and health.state != "healthy":
             self._enqueue(_NotificationEvent("health_changed", health.state, "", "", False, now))
 
     def complete_startup(self, *, now_utc: datetime | None = None) -> None:
@@ -243,17 +241,6 @@ def _is_alertworthy_failure(health: ControlHealth) -> bool:
         return True
     meaningful = tuple(reason for reason in health.reasons if reason != "ev:disconnected")
     return bool(meaningful) or health.state == "safe_fallback"
-
-
-def _recovery_message(health: ControlHealth) -> tuple[str, str]:
-    if health.state == "healthy":
-        return "Energy Manager recovered", "Energy Manager live control returned to healthy operation."
-    if health.reasons == ("ev:disconnected",):
-        return (
-            "Energy Manager failure cleared",
-            "The control failure cleared. The EV remains disconnected; ESS control remains active.",
-        )
-    return "Energy Manager failure cleared", "The previously reported live-control failure cleared."
 
 
 def _failure_message(health: ControlHealth) -> tuple[str, str]:

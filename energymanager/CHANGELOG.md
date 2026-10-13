@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.31.14
+- Verify EV charging is stopped using go-e power measurements before sending a phase-mode change.
+- Wait 10 seconds after a phase-mode change before resuming charging, and block another physical change for 10 minutes.
+- Hold the current phase at a safe current where possible during the lockout; otherwise stop charging.
+- Prevent a new planner output from reversing an in-progress phase transition.
+- Remove user-facing recovery events and healthy-transition messages while retaining internal fault state tracking.
+- No MILP objective, ESS controller, dashboard or data schema changes.
+
 ## 0.31.13
 - Shift the secondary MILP preferences toward delaying discretionary grid imports, while retaining EV session consolidation.
 - Set default secondary solve limit to 30 seconds, with configurable 5–120 seconds; keep 30-second economic solve.

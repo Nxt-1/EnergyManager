@@ -11,9 +11,11 @@ from .config import EvSettings
 from .ha_client import HomeAssistantError
 
 _LOGGER = logging.getLogger(__name__)
-EV_CONTROL_VERSION = "2026-10-10-ev-control-v3"
+EV_CONTROL_VERSION = "2026-10-13-ev-control-v4"
 EV_CONTROL_STATUS_ENTITY = "sensor.energy_manager_ev_control_status"
-_PHASE_SWITCH_DELAY_SECONDS = 3.0
+_PHASE_SWITCH_DELAY_SECONDS = 10.0
+_PHASE_ZERO_CONFIRM_SECONDS = 3.0
+_PHASE_MIN_INTERVAL_SECONDS = 600.0
 _FORCE_DONT_CHARGE = "1"
 _FORCE_CHARGE = "2"
 _PHASE_SINGLE = "1"
@@ -41,6 +43,8 @@ class EvHardwareController:
         self._phase_switch_delay_seconds = max(0.0, float(phase_switch_delay_seconds))
         self._phase_switch_target: str | None = None
         self._phase_switch_until_utc: datetime | None = None
+        self._phase_switch_stopped_at_utc: datetime | None = None
+        self._last_phase_switch_utc: datetime | None = None
         self._service_write_count = 0
         self._phase_switch_count = 0
         self._last_write_utc: datetime | None = None
@@ -89,6 +93,8 @@ class EvHardwareController:
             self._settings.min_charge_current_a,
             self._settings.max_charge_current_a,
         )
+        if self._settings.charging_power_entity is None:
+            _LOGGER.warning("EV phase changes require a configured ev.charging_power_entity")
         await self.safe_stop("startup_safe_stop", force=True)
 
     async def shutdown(self) -> None:
@@ -186,6 +192,8 @@ class EvHardwareController:
         self._clear_expired_fault()
         self._phase_switch_target = None
         self._phase_switch_until_utc = None
+        self._phase_switch_stopped_at_utc = None
+        self._requested_charge_power_w = 0.0
         if not self.enabled:
             await self._publish_status("disabled", reason="control_disabled")
             return
@@ -271,82 +279,103 @@ class EvHardwareController:
             )
             return
 
+        # Finish a physical transition before accepting another phase-mode request.
+        # New planner outputs must not reverse the phase switch while the charger is paused.
+        tracking_reason = "planner_command"
         if self._phase_switch_target is not None:
-            if target_phase != self._phase_switch_target:
-                await self._start_phase_switch(
-                    target_phase,
-                    desired_phase_count,
-                    target_current,
-                    requested_power_w,
-                    accepted_power_w,
-                    observed_current,
-                    observed_phase,
-                    observed_force,
-                    now,
-                )
-                return
-            if self._phase_switch_until_utc is not None and now < self._phase_switch_until_utc:
-                if not _force_is_off(observed_force):
-                    error = await self._write_select(
-                        self._settings.force_state_entity,
-                        _FORCE_DONT_CHARGE,
-                        "phase_switch_force_off",
+            pending = self._phase_switch_target
+            pending_phase_count = 1 if pending == _PHASE_SINGLE else 3
+            if self._phase_switch_until_utc is None:
+                # The EVSE is stopped. Require a pause and zero-power feedback.
+                # Never change phase mode just because Home Assistant acknowledged Force Off.
+                stopped_at = self._phase_switch_stopped_at_utc or now
+                if (
+                    (now - stopped_at).total_seconds() < _PHASE_ZERO_CONFIRM_SECONDS
+                    or not _force_is_off(observed_force)
+                ):
+                    await self._publish_status(
+                        "phase_switch_wait", reason="await_stop_before_phase_change",
+                        requested_power_w=requested_power_w, accepted_power_w=accepted_power_w,
+                        desired_phase_count=pending_phase_count, desired_current_a=target_current,
+                        observed_current_a=observed_current, observed_phase_mode=observed_phase,
+                        observed_force_state=observed_force, acknowledged=False,
                     )
-                    if error is not None:
-                        await self._publish_write_error(
-                            "phase_switch_force_off",
-                            error,
-                            requested_power_w,
-                            accepted_power_w,
-                            desired_phase_count,
-                            target_current,
-                            observed_current,
-                            observed_phase,
-                            observed_force,
-                        )
-                        return
+                    return
+                if not await self._charging_power_is_zero():
+                    await self._publish_status(
+                        "phase_switch_wait", reason="await_zero_charging_power",
+                        requested_power_w=requested_power_w, accepted_power_w=accepted_power_w,
+                        desired_phase_count=pending_phase_count, desired_current_a=target_current,
+                        observed_current_a=observed_current, observed_phase_mode=observed_phase,
+                        observed_force_state=observed_force, acknowledged=False,
+                    )
+                    return
+                error = await self._write_select(self._settings.phase_mode_entity, pending, "phase_switch")
+                if error is not None:
+                    await self._publish_write_error(
+                        "phase_switch", error, requested_power_w, accepted_power_w,
+                        pending_phase_count, target_current, observed_current, observed_phase, observed_force,
+                    )
+                    return
+                self._last_phase_switch_utc = now
+                self._phase_switch_count += 1
+                self._phase_switch_until_utc = now + timedelta(seconds=self._phase_switch_delay_seconds)
                 await self._publish_status(
-                    "phase_switch_wait",
-                    reason="phase_change",
-                    requested_power_w=requested_power_w,
-                    accepted_power_w=accepted_power_w,
-                    desired_phase_count=desired_phase_count,
-                    desired_current_a=target_current,
-                    observed_current_a=observed_current,
-                    observed_phase_mode=observed_phase,
-                    observed_force_state=observed_force,
-                    acknowledged=False,
+                    "phase_switch_wait", reason="phase_change_settle",
+                    requested_power_w=requested_power_w, accepted_power_w=accepted_power_w,
+                    desired_phase_count=pending_phase_count, desired_current_a=target_current,
+                    observed_current_a=observed_current, observed_phase_mode=observed_phase,
+                    observed_force_state=observed_force, write_performed=True, acknowledged=False,
                 )
                 return
-            if not _phase_matches(observed_phase, target_phase):
-                await self._start_phase_switch(
-                    target_phase,
-                    desired_phase_count,
-                    target_current,
-                    requested_power_w,
-                    accepted_power_w,
-                    observed_current,
-                    observed_phase,
-                    observed_force,
-                    now,
+            if now < self._phase_switch_until_utc:
+                await self._publish_status(
+                    "phase_switch_wait", reason="phase_change_settle",
+                    requested_power_w=requested_power_w, accepted_power_w=accepted_power_w,
+                    desired_phase_count=pending_phase_count, desired_current_a=target_current,
+                    observed_current_a=observed_current, observed_phase_mode=observed_phase,
+                    observed_force_state=observed_force, acknowledged=False,
                 )
+                return
+            if not _phase_matches(observed_phase, pending):
+                # HA has not acknowledged the requested phase. Never spam phase writes.
+                await self.safe_stop("phase_mode_not_acknowledged")
                 return
             self._phase_switch_target = None
             self._phase_switch_until_utc = None
+            self._phase_switch_stopped_at_utc = None
+            # If the planner changed its mind, the new physical phase must remain
+            # in place until its ten-minute dwell expires.
+            observed_phase = pending
 
         if not _phase_matches(observed_phase, target_phase):
-            await self._start_phase_switch(
-                target_phase,
-                desired_phase_count,
-                target_current,
-                requested_power_w,
-                accepted_power_w,
-                observed_current,
-                observed_phase,
-                observed_force,
-                now,
-            )
-            return
+            if self._last_phase_switch_utc is not None and (
+                now - self._last_phase_switch_utc
+            ).total_seconds() < _PHASE_MIN_INTERVAL_SECONDS:
+                # Avoid phase reversal. Keep charging in the existing mode when the
+                # requested power can be delivered without exceeding it.
+                if not any(_phase_matches(observed_phase, mode) for mode in (_PHASE_SINGLE, _PHASE_THREE)):
+                    await self.safe_stop("phase_mode_unrecognized_during_dwell")
+                    return
+                held_phase_count = 1 if _phase_matches(observed_phase, _PHASE_SINGLE) else 3
+                held_current = min(
+                    math.floor(self._settings.max_charge_current_a),
+                    math.floor(accepted_power_w / (self._settings.nominal_voltage_v * held_phase_count)),
+                )
+                if held_current < math.ceil(self._settings.min_charge_current_a):
+                    await self.safe_stop("phase_change_dwell_insufficient_power")
+                    return
+                _LOGGER.debug("EV phase dwell active: retaining %s phases at %s A", held_phase_count, held_current)
+                target_phase = observed_phase if observed_phase is not None else target_phase
+                target_current = held_current
+                desired_phase_count = held_phase_count
+                tracking_reason = "phase_change_dwell_hold"
+            else:
+                await self._start_phase_switch(
+                    target_phase, desired_phase_count, target_current, requested_power_w,
+                    accepted_power_w, observed_current, observed_phase, observed_force, now,
+                )
+                return
 
         write_performed = False
         if observed_current is None or not math.isclose(
@@ -400,7 +429,7 @@ class EvHardwareController:
             self._reset_failure_tracking()
         await self._publish_status(
             "tracking" if acknowledged else "write_sent",
-            reason="planner_command",
+            reason=tracking_reason,
             requested_power_w=requested_power_w,
             accepted_power_w=accepted_power_w,
             desired_phase_count=desired_phase_count,
@@ -424,57 +453,39 @@ class EvHardwareController:
         observed_force: str | None,
         now: datetime,
     ) -> None:
+        """Stop charging first; a later dispatch verifies zero power and changes phase."""
         if not _force_is_off(observed_force):
             error = await self._write_select(
-                self._settings.force_state_entity,
-                _FORCE_DONT_CHARGE,
-                "phase_switch_force_off",
+                self._settings.force_state_entity, _FORCE_DONT_CHARGE, "phase_switch_force_off",
             )
             if error is not None:
                 await self._publish_write_error(
-                    "phase_switch_force_off",
-                    error,
-                    requested_power_w,
-                    accepted_power_w,
-                    desired_phase_count,
-                    target_current,
-                    observed_current,
-                    observed_phase,
-                    observed_force,
+                    "phase_switch_force_off", error, requested_power_w, accepted_power_w,
+                    desired_phase_count, target_current, observed_current, observed_phase, observed_force,
                 )
                 return
-
-        error = await self._write_select(self._settings.phase_mode_entity, target_phase, "phase_switch")
-        if error is not None:
-            await self._publish_write_error(
-                "phase_switch",
-                error,
-                requested_power_w,
-                accepted_power_w,
-                desired_phase_count,
-                target_current,
-                observed_current,
-                observed_phase,
-                observed_force,
-            )
-            return
-
-        self._phase_switch_count += 1
         self._phase_switch_target = target_phase
-        self._phase_switch_until_utc = now + timedelta(seconds=self._phase_switch_delay_seconds)
+        self._phase_switch_stopped_at_utc = now
+        self._phase_switch_until_utc = None
         await self._publish_status(
-            "phase_switch_wait",
-            reason="phase_change",
-            requested_power_w=requested_power_w,
-            accepted_power_w=accepted_power_w,
-            desired_phase_count=desired_phase_count,
-            desired_current_a=target_current,
-            observed_current_a=observed_current,
-            observed_phase_mode=observed_phase,
-            observed_force_state=observed_force,
-            write_performed=True,
+            "phase_switch_wait", reason="await_zero_charging_power",
+            requested_power_w=requested_power_w, accepted_power_w=accepted_power_w,
+            desired_phase_count=desired_phase_count, desired_current_a=target_current,
+            observed_current_a=observed_current, observed_phase_mode=observed_phase,
+            observed_force_state=observed_force, write_performed=not _force_is_off(observed_force),
             acknowledged=False,
         )
+
+    async def _charging_power_is_zero(self) -> bool:
+        """Fail closed when the charger power reading is missing or not numeric."""
+        if self._settings.charging_power_entity is None:
+            return False
+        try:
+            state = await self._client.get_state(self._settings.charging_power_entity)
+            watts = float(state.get("state"))
+        except (HomeAssistantError, OSError, TimeoutError, ValueError, TypeError):
+            return False
+        return math.isfinite(watts) and 0 <= watts < _CHARGING_POWER_MIN_W
 
     async def _read_control_state(self) -> tuple[float | None, str | None, str | None, str | None]:
         current_entity = self._settings.current_entity
@@ -683,6 +694,14 @@ class EvHardwareController:
             "min_charge_current_a": self._settings.min_charge_current_a,
             "max_charge_current_a": self._settings.max_charge_current_a,
             "phase_switch_delay_seconds": self._phase_switch_delay_seconds,
+            "phase_quiet_seconds": _PHASE_ZERO_CONFIRM_SECONDS,
+            "phase_min_interval_seconds": _PHASE_MIN_INTERVAL_SECONDS,
+            "last_phase_switch_utc": (
+                self._last_phase_switch_utc.isoformat() if self._last_phase_switch_utc else None
+            ),
+            "phase_switch_stopped_at_utc": (
+                self._phase_switch_stopped_at_utc.isoformat() if self._phase_switch_stopped_at_utc else None
+            ),
             "reason": reason,
             "requested_power_w": _round_optional(requested_power_w),
             "accepted_power_w": _round_optional(accepted_power_w),

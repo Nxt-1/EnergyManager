@@ -2,6 +2,20 @@
 
 Energy Manager runs an authoritative MILP planner with live ESS and EV hardware control. The forecast and planning diagnostics are published to Home Assistant.
 
+## EV phase-switch safety (v0.31.14)
+
+When Energy Manager controls the go-e phase mode, it first requests Don't charge. A phase command is sent only
+once the charger has been commanded off for at least three seconds **and** `ev.charging_power_entity` reports
+less than 100 W. The controller then leaves charging disabled for 10 seconds before resuming. Physical phase-mode
+changes are separated by at least 10 minutes; ordinary current changes are not subject to this interval. A plan
+that requests another phase during the 10-minute interval is served at a safe current in the existing phase when
+possible, otherwise charging is stopped. The wait is reflected in `sensor.energy_manager_ev_control_status`.
+
+A configured, working go-e charging-power sensor is therefore required for automatic phase switching. Disabling
+EV control during an unresolved vehicle charging error remains recommended: these safeguards cannot clear or
+diagnose the Ford's internal error. Health monitoring continues, but healthy/recovery transitions are no longer
+published as user-facing notification events.
+
 ## Configuration
 
 Entity IDs remain runtime configuration and are not hardcoded. Existing Grid, ESS, PV and EV configuration is preserved.

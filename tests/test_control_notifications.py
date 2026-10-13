@@ -34,7 +34,7 @@ def _health(state: str, *, ev_available: bool = True, reasons: tuple[str, ...] =
     )
 
 
-def test_notification_manager_sends_failure_and_logs_recovery_without_phone() -> None:
+def test_notification_manager_sends_failure_without_recovery_event() -> None:
     client = FakeClient()
     manager = ControlNotificationManager(
         client,
@@ -62,8 +62,7 @@ def test_notification_manager_sends_failure_and_logs_recovery_without_phone() ->
     assert "EV control is unavailable" in str(client.calls[0][2]["message"])
     status = client.states[NOTIFICATION_STATUS_ENTITY]
     assert status["attributes"]["sent_count"] == 1
-    assert status["attributes"]["recent_events"][-1]["event"] == "recovered"
-    assert status["attributes"]["recent_events"][-1]["notification_requested"] is False
+    assert not any(event["event"] == "recovered" for event in status["attributes"]["recent_events"])
 
 
 def test_notification_manager_suppresses_repeated_failure_inside_cooldown() -> None:
@@ -147,7 +146,8 @@ def test_persistent_startup_fault_is_reported_on_completion() -> None:
     asyncio.run(scenario())
     assert len(client.calls) == 1
     assert "safe fallback" in str(client.calls[0][2]["title"])
-    assert client.states[NOTIFICATION_STATUS_ENTITY]["attributes"]["last_event"] == "recovered"
+    events = client.states[NOTIFICATION_STATUS_ENTITY]["attributes"]["recent_events"]
+    assert not any(event["event"] == "recovered" for event in events)
 
 
 def test_cooldown_suppression_is_once_per_episode_and_ess_escalation_is_reported() -> None:
