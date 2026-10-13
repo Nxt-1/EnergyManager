@@ -359,3 +359,23 @@ maximum EV SoC, and grid-import energy. `economic_stage_status` and
 `economic_stage_mip_gap` describe the first solve separately from the tie-break.
 The tie-break is limited to 10 seconds; the total planning budget remains 30 seconds.
 EV session-start variables are created only for the second solve.
+
+## v0.31.13 MILP scheduling and solver diagnostics
+
+The economic MILP remains the primary objective. Within its €0.01 near-optimal band, the second stage favors postponing
+unnecessary grid purchases, consolidating EV charging, and then earlier EV charging when affordable grid imports are not
+pulled forward. The weighted preference is deliberately not a hard ban on early grid imports; hard deadlines, changing
+prices and capacity-tariff opportunities retain priority.
+
+Under **Planner**, `tie_break_seconds` defaults to 30 (range 5–120) and `solver_threads` defaults to 1 (choose 1, 2 or 4).
+HiGHS parallel MIP is experimental; leave `solver_threads` at 1 until benchmarking supports a change. The main MILP
+uses a 30-second economic-stage limit and up to the configured tie-break limit in a background thread.
+
+The MILP status sensor now includes `economic_stage_accounting`, `selected_stage_accounting`, and
+`economic_accounting_delta`: seven-day grid purchases, exports, peak charges, EV preferred-target penalties and credited
+terminal ESS energy, calculated from the same internal terms as the economic MILP objective.
+
+For a read-only thread-count comparison, disable `benchmark_milp_once` and enable `benchmark_milp_threads_once`. Restart
+the add-on; `sensor.energy_manager_milp_benchmark` then shows 1/2/4-thread results with a 30-second tie-break limit, each
+in a separate child process to avoid reuse of the HiGHS global thread scheduler. Disable the option when complete. The
+benchmark never issues hardware commands and normal planning keeps its configured thread count.

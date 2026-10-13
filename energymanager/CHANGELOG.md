@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.31.13
+- Shift the secondary MILP preferences toward delaying discretionary grid imports, while retaining EV session consolidation.
+- Set default secondary solve limit to 30 seconds, with configurable 5–120 seconds; keep 30-second economic solve.
+- Compare seven-day monetary accounting for economic and selected solutions, including import/export and ESS terminal value.
+- Offer an isolated 1/2/4-thread HiGHS benchmark with a fixed 30-second secondary solve; live default remains single-threaded.
+
 ## 0.31.12
 - Add an opt-in, one-shot benchmark of MILP tie-break limits at 10, 30, 60 and 120 seconds.
 - Run the fixed planning snapshot in a separate, terminate-on-shutdown process and report the four outcomes.

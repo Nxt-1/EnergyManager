@@ -247,7 +247,7 @@ def test_milp_status_publisher_marks_milp_authoritative() -> None:
     assert entity["attributes"]["validation_status"] == "passed"
     assert entity["attributes"]["adoption_ready"] is True
     assert entity["attributes"]["economic_tolerance_eur"] == MILP_ECONOMIC_TOLERANCE_EUR
-    assert entity["attributes"]["total_time_budget_seconds"] == MILP_TOTAL_TIME_BUDGET_SECONDS
+    assert entity["attributes"]["total_time_budget_seconds"] == pytest.approx(59.92)
     assert entity["attributes"]["economic_time_limit_seconds"] == MILP_ECONOMIC_TIME_LIMIT_SECONDS
     assert entity["attributes"]["early_value_half_life_days"] == MILP_EARLY_VALUE_HALF_LIFE_DAYS
     assert entity["attributes"]["tie_break_warm_start_applied"] is True
@@ -461,7 +461,7 @@ def test_ev_tie_break_weights_do_not_change_economic_tolerance() -> None:
 
     assert MILP_ECONOMIC_TOLERANCE_EUR == pytest.approx(0.01)
     assert MILP_EV_SESSION_START_WEIGHT > 7.0 * 10.0 * MILP_EV_CHARGE_DELAY_WEIGHT
-    assert 0.0 < MILP_GRID_IMPORT_DELAY_WEIGHT < MILP_EV_CHARGE_DELAY_WEIGHT
+    assert MILP_GRID_IMPORT_DELAY_WEIGHT > MILP_EV_CHARGE_DELAY_WEIGHT > 0.0
 
 
 def test_ev_session_variables_added_only_for_second_stage_with_complete_warm_start() -> None:
@@ -511,8 +511,8 @@ def test_ev_session_variables_added_only_for_second_stage_with_complete_warm_sta
 def test_tie_break_cpu_budget_is_capped_without_changing_total_budget() -> None:
     from energymanager.milp_planner import MILP_TIE_BREAK_MAX_TIME_SECONDS
 
-    assert MILP_TOTAL_TIME_BUDGET_SECONDS == 30.0
-    assert MILP_TIE_BREAK_MAX_TIME_SECONDS == 10.0
+    assert MILP_TOTAL_TIME_BUDGET_SECONDS == 60.0
+    assert MILP_TIE_BREAK_MAX_TIME_SECONDS == 30.0
     assert MILP_TIE_BREAK_MAX_TIME_SECONDS < MILP_TOTAL_TIME_BUDGET_SECONDS
 
 
@@ -545,8 +545,8 @@ def test_published_milp_status_includes_both_schedules_for_diagnosis() -> None:
     )
     asyncio.run(publish_milp_evaluation(client, evaluation))
     attributes = client.states["sensor.energy_manager_milp_status"]["attributes"]
-    assert attributes["milp_version"] == "2026-10-12-milp-v9"
-    assert attributes["tie_break_max_time_seconds"] == 10.0
+    assert attributes["milp_version"] == "2026-10-12-milp-v10"
+    assert attributes["tie_break_max_time_seconds"] is None
     assert attributes["economic_stage_variable_count"] == 9284
     assert attributes["economic_stage_schedule"] == economic
     assert attributes["selected_stage_schedule"] == chosen

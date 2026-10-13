@@ -59,6 +59,9 @@ class PlannerService:
         store: EnergyManagerStore | None = None,
         planner: PlanBuilder | None = None,
         benchmark_once: bool = False,
+        benchmark_threads_once: bool = False,
+        tie_break_seconds: int = 30,
+        solver_threads: int = 1,
     ) -> None:
         self._ha_client = ha_client
         self._diagnostics = DiagnosticsPublisher(ha_client)
@@ -80,6 +83,9 @@ class PlannerService:
         self._last_actuator_signature: tuple[tuple[object, ...], ...] | None = None
         self._latest_house_state: HouseState | None = None
         self._benchmark_once = benchmark_once
+        self._benchmark_threads_once = benchmark_threads_once
+        self._tie_break_seconds = tie_break_seconds
+        self._solver_threads = solver_threads
         self._benchmark_task: asyncio.Task[None] | None = None
         self._fast_dispatch_task: asyncio.Task[None] | None = None
         self._solve_task: asyncio.Task[None] | None = None
@@ -216,6 +222,15 @@ class PlannerService:
             )
         )
 
+    def _evaluate(self, frame, profile, capacity_state) -> MilpEvaluation:
+        """Keep the live solver configuration separate from read-only benchmark overrides."""
+        if self._tie_break_seconds == 30 and self._solver_threads == 1:
+            return evaluate_plan_milp(frame, profile, capacity_state)
+        return evaluate_plan_milp(
+            frame, profile, capacity_state,
+            tie_break_max_time_seconds=float(self._tie_break_seconds), solver_threads=self._solver_threads,
+        )
+
     async def _run_replan(
         self,
         reason: str,
@@ -237,7 +252,7 @@ class PlannerService:
                 tasks=tasks,
             )
             evaluation = await asyncio.to_thread(
-                evaluate_plan_milp,
+                self._evaluate,
                 frame,
                 economics.current_profile,
                 economics.capacity_state,
@@ -293,10 +308,13 @@ class PlannerService:
                 live_control=self._ess_control_enabled,
             )
             _log_plan(plan, actuators, tasks, cost_evaluation, fast_result.command_results)
-            if self._benchmark_once and self._benchmark_task is None:
+            if (self._benchmark_once or self._benchmark_threads_once) and self._benchmark_task is None:
                 # Freeze the actual planner inputs once. Diagnostic child never changes the adopted plan.
+                mode = "threads" if self._benchmark_threads_once else "limits"
                 self._benchmark_task = asyncio.create_task(
-                    run_milp_benchmark(self._ha_client, frame, economics.current_profile, economics.capacity_state)
+                    run_milp_benchmark(
+                        self._ha_client, frame, economics.current_profile, economics.capacity_state, mode=mode
+                    )
                 )
         except asyncio.CancelledError:
             raise

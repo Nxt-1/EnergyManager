@@ -55,3 +55,39 @@ def test_benchmark_setting_disabled_by_default() -> None:
     settings = Settings()
     assert settings.benchmark_milp_once is False
     assert settings.as_options()["benchmark_milp_once"] is False
+
+
+def test_thread_benchmark_uses_single_case_and_provides_thread_count(monkeypatch) -> None:
+    reference = object()
+    profile = object()
+    capacity = object()
+    calls = []
+
+    def fake_solve(frame, price, capacity_state, *, tie_break_max_time_seconds, solver_threads):
+        calls.append((frame, price, capacity_state, tie_break_max_time_seconds, solver_threads))
+        return SimpleNamespace(
+            plan=object(),
+            economic_stage_summary={"ev_session_count": 9},
+            selected_stage_summary={"ev_session_count": 6},
+            economic_stage_accounting={"grid_import_kwh": 20.0},
+            selected_stage_accounting={"grid_import_kwh": 20.0},
+            economic_accounting_delta={"grid_import_kwh": 0.0},
+            economic_solve_time_seconds=2.0,
+            tie_break_solve_time_seconds=30.0,
+            economic_stage_status="optimal",
+            tie_break_status="feasible_time_limit",
+            selected_solution_stage="tie_break",
+            mip_gap=0.05,
+            validation_status="passed",
+            first_stage_objective_eur=1.0,
+            milp_objective_eur=1.01,
+        )
+
+    monkeypatch.setattr(milp_benchmark, "evaluate_plan_milp", fake_solve)
+    monkeypatch.setattr(milp_benchmark.os, "nice", lambda increment: 0)
+    queue = FakeQueue()
+    milp_benchmark._benchmark_worker(queue, reference, profile, capacity, solver_threads=4)
+    assert calls == [(reference, profile, capacity, 30.0, 4)]
+    assert queue.items[0]["threads"] == 4
+    assert queue.items[0]["economic_accounting_delta"] == {"grid_import_kwh": 0.0}
+    assert queue.items[-1] == {"complete": True}

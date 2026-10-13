@@ -178,11 +178,21 @@ class NotificationSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class PlannerSettings:
+    """Secondary MILP time budget and experimental parallelism."""
+
+    tie_break_seconds: int = 30
+    solver_threads: int = 1
+
+
+@dataclass(frozen=True, slots=True)
 class Settings:
     """Runtime settings exposed by the Home Assistant app configuration."""
 
     log_level: str = "info"
     benchmark_milp_once: bool = False
+    benchmark_milp_threads_once: bool = False
+    planner: PlannerSettings = PlannerSettings()
     grid: GridSettings = GridSettings()
     ess: EssSettings = EssSettings()
     pv: PvSettings = PvSettings()
@@ -219,6 +229,11 @@ class Settings:
         return {
             "log_level": self.log_level,
             "benchmark_milp_once": self.benchmark_milp_once,
+            "benchmark_milp_threads_once": self.benchmark_milp_threads_once,
+            "planner": {
+                "tie_break_seconds": self.planner.tie_break_seconds,
+                "solver_threads": self.planner.solver_threads,
+            },
             "grid": _without_none(
                 {
                     "import_power_entity": self.grid.import_power_entity,
@@ -330,6 +345,18 @@ class Settings:
             allowed = ", ".join(sorted(_VALID_LOG_LEVELS))
             raise ConfigurationError(f"log_level must be one of: {allowed}")
         benchmark_milp_once = _bool_option(raw.get("benchmark_milp_once", False), "benchmark_milp_once")
+        benchmark_milp_threads_once = _bool_option(
+            raw.get("benchmark_milp_threads_once", False), "benchmark_milp_threads_once"
+        )
+        planner_raw = _mapping(raw.get("planner"), "planner")
+        tie_break_seconds = _nonnegative_int(planner_raw.get("tie_break_seconds", 30), "planner.tie_break_seconds")
+        solver_threads = _nonnegative_int(planner_raw.get("solver_threads", 1), "planner.solver_threads")
+        if not 5 <= tie_break_seconds <= 120:
+            raise ConfigurationError("planner.tie_break_seconds must be between 5 and 120")
+        if solver_threads not in (1, 2, 4):
+            raise ConfigurationError("planner.solver_threads must be 1, 2, or 4")
+        if benchmark_milp_once and benchmark_milp_threads_once:
+            raise ConfigurationError("Enable only one MILP benchmark mode at a time")
         grid_raw = _mapping(raw.get("grid"), "grid")
         ess_raw = _mapping(raw.get("ess"), "ess")
         pv_raw = _mapping(raw.get("pv"), "pv")
@@ -496,6 +523,8 @@ class Settings:
         return cls(
             log_level=log_level,
             benchmark_milp_once=benchmark_milp_once,
+            benchmark_milp_threads_once=benchmark_milp_threads_once,
+            planner=PlannerSettings(tie_break_seconds=tie_break_seconds, solver_threads=solver_threads),
             grid=GridSettings(import_power_entity=grid_import, export_power_entity=grid_export),
             ess=EssSettings(
                 soc_entity=_optional_entity_id(ess_raw.get("soc_entity"), "ess.soc_entity"),
