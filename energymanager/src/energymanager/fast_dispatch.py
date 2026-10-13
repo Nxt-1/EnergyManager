@@ -54,11 +54,13 @@ async def publish_fast_dispatch(
     milp_solve_in_progress: bool = False,
     control_enabled: bool = False,
     hardware_writes: bool = False,
+    plan_id: str | None = None,
 ) -> None:
     """Publish the current fast-dispatch correction into Home Assistant."""
     attributes: dict[str, Any] = {
         "friendly_name": "Energy Manager Fast Dispatch Status",
         "fast_dispatch_version": FAST_DISPATCH_VERSION,
+        "plan_id": plan_id,
         "shadow_mode": not control_enabled,
         "control_enabled": control_enabled,
         "hardware_writes": hardware_writes,
@@ -112,6 +114,8 @@ def evaluate_fast_dispatch(
     *,
     now_utc: datetime,
     live_control: bool = False,
+    grid_import_limit_w: float | None = None,
+    grid_export_limit_w: float | None = None,
 ) -> FastDispatchResult:
     """Calculate the ESS correction needed to track the current MILP grid target.
 
@@ -182,6 +186,8 @@ def evaluate_fast_dispatch(
         assert measured_ev is not None
         uncontrolled_with_planned_ev = measured_grid + measured_ess - measured_ev + planned_ev
         requested_ess = uncontrolled_with_planned_ev - planned_grid
+    if grid_export_limit_w is not None:
+        requested_ess = min(requested_ess, uncontrolled_with_planned_ev + grid_export_limit_w)
     requests = [ActuatorPowerRequest(actuator_id="ess", requested_power_w=requested_ess)]
     if planned_ev > 0.0 or (measured_ev is not None and measured_ev > 0.0):
         requests.append(ActuatorPowerRequest(actuator_id="ev", requested_power_w=planned_ev))
@@ -213,12 +219,23 @@ def evaluate_fast_dispatch(
             command_results=command_results,
         )
 
+    grid_limited = False
+    if grid_import_limit_w is not None:
+        uncontrolled_without_ev = measured_grid + measured_ess - (measured_ev or 0.0)
+        ev_ceiling = max(0.0, grid_import_limit_w - uncontrolled_without_ev + ess_result.accepted_power_w)
+        if measured_ev is None:
+            ev_ceiling = 0.0  # Do not increase an unobserved load near an electrical limit.
+        requested_ev = min(planned_ev, ev_ceiling)
+        if requested_ev < planned_ev:
+            grid_limited = True
+            requests = [ActuatorPowerRequest("ess", requested_ess), ActuatorPowerRequest("ev", requested_ev)]
+            command_results = actuator_registry.evaluate_commands(tuple(requests), house_state)
     projected_grid = uncontrolled_with_planned_ev - ess_result.accepted_power_w
     residual = projected_grid - planned_grid
-    replan_required = abs(residual) >= _REPLAN_RESIDUAL_W
+    replan_required = abs(residual) >= _REPLAN_RESIDUAL_W or grid_limited
     if replan_required:
         status = "residual_requires_replan"
-        replan_reason = "ess_correction_limit"
+        replan_reason = "grid_import_limit" if grid_limited else "ess_correction_limit"
     elif ess_result.limited:
         status = "tracking_limited"
         replan_reason = None
@@ -244,8 +261,8 @@ def evaluate_fast_dispatch(
         ess_correction_from_plan_w=ess_result.accepted_power_w - planned_ess,
         projected_grid_power_w=projected_grid,
         residual_to_plan_w=residual,
-        command_limited=ess_result.limited,
-        command_reason=ess_result.reason,
+        command_limited=ess_result.limited or grid_limited,
+        command_reason="grid_import_limit" if grid_limited else ess_result.reason,
         replan_required=replan_required,
         replan_reason=replan_reason,
         command_results=command_results,
@@ -256,9 +273,6 @@ def _current_interval(plan: EnergyPlan, now_utc: datetime) -> PlanInterval | Non
     for item in plan.intervals:
         start_utc = item.period_start_local.astimezone(UTC)
         if start_utc <= now_utc < start_utc + _INTERVAL:
-            return item
-    for item in plan.intervals:
-        if item.period_start_local.astimezone(UTC) > now_utc:
             return item
     return None
 

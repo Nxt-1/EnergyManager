@@ -1,4 +1,4 @@
-# EnergyManager Dashboard v2.38 — resource /local/energymanager-timeline-card.js?v=238
+# EnergyManager Dashboard V3 preview — resource /local/energymanager-timeline-card.js?v=300b1
 title: EnergyManager
 views:
 - title: Overview
@@ -1232,3 +1232,8 @@ views:
     - sensor.energy_manager_notification_status
     - sensor.energy_manager_fast_dispatch_status
   - type: custom:energymanager-notification-events-card
+- title: Decision details
+  path: decision-details
+  icon: mdi:clipboard-text-search
+  cards:
+  - type: custom:energymanager-decision-details

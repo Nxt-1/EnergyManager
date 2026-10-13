@@ -47,8 +47,8 @@ async def async_main() -> int:
     logger.info(
         "Starting Energy Manager %s; ESS hardware control=%s, EV hardware control=%s",
         __version__,
-        "enabled" if settings.ess.control_enabled else "disabled",
-        "enabled" if settings.ev.control_enabled else "disabled",
+        "enabled" if settings.ess.control_enabled and not settings.planner.shadow_mode else "disabled",
+        "enabled" if settings.ev.control_enabled and not settings.planner.shadow_mode else "disabled",
     )
     logger.info(
         "Control notifications=%s%s",
@@ -78,8 +78,8 @@ async def async_main() -> int:
                 "effective_integer_options": effective_integer_option_diagnostics(settings),
             },
         )
-        ess_controller = EssHardwareController(client, settings.ess)
-        ev_controller = EvHardwareController(client, settings.ev)
+        ess_controller = EssHardwareController(client, settings.ess, shadow_mode=settings.planner.shadow_mode)
+        ev_controller = EvHardwareController(client, settings.ev, shadow_mode=settings.planner.shadow_mode)
         await ess_controller.initialize()
         await ev_controller.initialize()
         try:
@@ -251,6 +251,7 @@ async def _run_app(
                 notification_manager=notification_manager,
                 store=store,
                 tie_break_seconds=settings.planner.tie_break_seconds,
+                planner_settings=settings.planner,
             )
             app = EnergyManagerApp(
                 settings,
@@ -276,6 +277,7 @@ async def _run_app(
         notification_manager=notification_manager,
         store=store,
         tie_break_seconds=settings.planner.tie_break_seconds,
+        planner_settings=settings.planner,
     )
     app = EnergyManagerApp(
         settings,

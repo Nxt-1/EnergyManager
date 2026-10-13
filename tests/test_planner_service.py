@@ -202,7 +202,7 @@ def test_planner_service_uses_ten_minute_periodic_cadence(monkeypatch) -> None:
     client = FakeHomeAssistantClient()
     calls = 0
 
-    def fake_solver(frame, profile, capacity_state):
+    def fake_solver(frame, profile, capacity_state, **kwargs):
         nonlocal calls
         calls += 1
         return _solved_evaluation(frame)
@@ -242,7 +242,7 @@ def test_planner_service_returns_while_milp_worker_is_still_solving(monkeypatch)
     load, pv = _forecasts(start)
     client = FakeHomeAssistantClient()
 
-    def slow_solver(frame, profile, capacity_state):
+    def slow_solver(frame, profile, capacity_state, **kwargs):
         time.sleep(0.15)
         return _solved_evaluation(frame)
 

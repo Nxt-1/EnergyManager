@@ -138,3 +138,38 @@ configuration:
       password:
         name: Legacy InfluxDB password
         description: Password for the configured legacy InfluxDB 1.x user.
+
+  planner:
+    name: Planner and explainability
+    description: V3 hierarchy, hardware authority and bounded decision archive.
+    fields:
+      shadow_mode:
+        name: Shadow mode
+        description: Blocks all actuator hardware writes including startup, fallback and charger reset. Defaults to true.
+      tie_break_seconds:
+        name: Refinement time budget
+        description: Total seconds for robustness, operating quality, stability and deterministic refinement.
+      economic_tolerance_eur:
+        name: Economic tolerance eur
+        description: V3 policy limit in EUR; see V3 documentation for the exact definition.
+      robustness_tolerance_kwh:
+        name: Robustness tolerance kwh
+        description: V3 policy limit in weighted kWh; see V3 documentation for the exact definition.
+      operations_tolerance_events:
+        name: Operations tolerance events
+        description: V3 policy limit in events; see V3 documentation for the exact definition.
+      stability_tolerance_kwh:
+        name: Stability tolerance kwh
+        description: V3 policy limit in kWh; see V3 documentation for the exact definition.
+      grid_import_limit_kw:
+        name: Grid import limit kw
+        description: V3 policy limit in kW; see V3 documentation for the exact definition.
+      grid_export_limit_kw:
+        name: Grid export limit kw
+        description: V3 policy limit in kW; see V3 documentation for the exact definition.
+      archive_max_mb:
+        name: Archive max mb
+        description: V3 policy limit in MiB; see V3 documentation for the exact definition.
+      archive_keep:
+        name: Archive keep
+        description: V3 policy limit in records; see V3 documentation for the exact definition.

@@ -1,3 +1,17 @@
+## 3.0.0b1 — V3 shadow preview
+
+- Replace weighted scheduling refinement with bounded economic, robustness, operating-quality,
+  stability and deterministic stages; retain the electrical model and fast safety controls.
+- Add structured EV requirement provenance, generic jobs/storage, checksummed snapshots, decision
+  diffs, offline replay/counterfactual CLI and focused dashboard evidence/session inspection.
+- Default to global shadow mode, including startup/fallback/reset writes. Existing live flags alone
+  no longer grant hardware authority. Preserve phase-switch, stale-input and fault safeguards.
+- Separate unspecified departure minimum from preferred terminal target. Configure an explicit
+  minimum during migration; neither target is a physical maximum.
+- Add bounded decision retention, configurable tolerances/grid limits and additive plan IDs in
+  historic interval records. Existing telemetry remains intact.
+- Add V3 regression tests and a real seven-day benchmark with saved quantitative counterfactuals.
+
 # Changelog
 
 ## 0.31.16 — Optional one-shot go-e charger reset

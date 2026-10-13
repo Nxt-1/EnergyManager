@@ -6,6 +6,7 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
+from test_fast_dispatch import _plan
 
 from energymanager.actuators import ActuatorRegistry
 from energymanager.config import Settings
@@ -57,7 +58,7 @@ def _service(ess: FakeController | None = None, ev: FakeController | None = None
         ess_controller=ess,  # type: ignore[arg-type]
         ev_controller=ev,  # type: ignore[arg-type]
     )
-    service._plan = object()  # type: ignore[assignment]
+    service._plan = _plan(planned_grid_w=0, planned_ess_w=0, planned_ev_w=0)
     service._latest_house_state = HouseState()
     return service
 

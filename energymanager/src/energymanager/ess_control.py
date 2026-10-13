@@ -16,6 +16,7 @@ from .actuators import (
 )
 from .config import EssSettings, Settings
 from .ha_client import HomeAssistantError
+from .hardware_authority import HardwareAuthority
 
 _LOGGER = logging.getLogger(__name__)
 ESS_CONTROL_VERSION = "2026-10-10-ess-control-v3"
@@ -31,8 +32,8 @@ class ControlAwareActuatorRegistry(ActuatorRegistry):
 
     def __init__(self, settings: Settings) -> None:
         super().__init__(settings)
-        self._ess_control_enabled = settings.ess.control_enabled
-        self._ev_control_enabled = settings.ev.control_enabled
+        self._ess_control_enabled = settings.ess.control_enabled and not settings.planner.shadow_mode
+        self._ev_control_enabled = settings.ev.control_enabled and not settings.planner.shadow_mode
 
     def snapshots(self, house_state):
         snapshots = super().snapshots(house_state)
@@ -49,8 +50,9 @@ class ControlAwareActuatorRegistry(ActuatorRegistry):
 class EssHardwareController:
     """Translate canonical ESS power requests into Victron HA number writes."""
 
-    def __init__(self, client, settings: EssSettings) -> None:
-        self._client = client
+    def __init__(self, client, settings: EssSettings, *, shadow_mode: bool = False) -> None:
+        self._client = HardwareAuthority(client, shadow=shadow_mode)
+        self._shadow_mode = shadow_mode
         self._settings = settings
         self._write_count = 0
         self._last_write_utc: datetime | None = None
@@ -61,7 +63,7 @@ class EssHardwareController:
 
     @property
     def enabled(self) -> bool:
-        return self._settings.control_enabled and self._settings.setpoint_entity is not None
+        return not self._shadow_mode and self._settings.control_enabled and self._settings.setpoint_entity is not None
 
     @property
     def fault_active(self) -> bool:

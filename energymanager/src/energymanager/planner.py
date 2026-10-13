@@ -8,9 +8,10 @@ from datetime import UTC, datetime, timedelta
 from .actuators import ActuatorSnapshot, EssCapabilities, find_ess_actuator
 from .load_forecast import FORECAST_INTERVAL_MINUTES, BackgroundLoadForecast
 from .pv_forecast import PvForecast
+from .requirements import FlexibleJob, Requirement, StorageResource
 from .tasks import PlanningTask
 
-PLANNER_VERSION = "2026-10-10-planner-v12"
+PLANNER_VERSION = "3.0-preview.1"
 PLANNER_HORIZON_HOURS = 168
 _INTERVAL_HOURS = FORECAST_INTERVAL_MINUTES / 60.0
 
@@ -33,9 +34,13 @@ class PlanInterval:
     curtailed_dc_pv_w: float | None = None
     projected_ev_soc_percent: float | None = None
 
+    resource_energy_kwh: tuple[tuple[str, float], ...] = ()
+    flexible_load_w: float = 0.0
+    job_power_w: tuple[tuple[str, float], ...] = ()
+
     @property
     def total_load_w(self) -> float:
-        return self.background_load_w + self.scheduled_load_w
+        return self.background_load_w + self.scheduled_load_w + self.flexible_load_w
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +63,12 @@ class EnergyPlan:
     preferred_ev_shortfall_kwh: float = 0.0
     preferred_ev_shortfall_penalty_eur: float = 0.0
 
+    requirements: tuple[Requirement, ...] = ()
+    jobs: tuple[FlexibleJob, ...] = ()
+    plan_id: str | None = None
+    resources: tuple[StorageResource, ...] = ()
+    generic_penalty_eur: float = 0.0
+
     def summary(self, hours: int) -> dict[str, float | int | str | None]:
         """Return compact energy/peak statistics for the first requested hours."""
         count = min(len(self.intervals), max(0, hours * 60 // FORECAST_INTERVAL_MINUTES))
@@ -68,6 +79,7 @@ class EnergyPlan:
                 "intervals": 0,
                 "background_load_kwh": 0.0,
                 "scheduled_load_kwh": 0.0,
+                "flexible_load_kwh": 0.0,
                 "pv_potential_kwh": 0.0,
                 "pv_ac_potential_kwh": 0.0,
                 "pv_dc_potential_kwh": 0.0,
@@ -103,6 +115,7 @@ class EnergyPlan:
             "intervals": len(intervals),
             "background_load_kwh": background,
             "scheduled_load_kwh": scheduled,
+            "flexible_load_kwh": sum(i.flexible_load_w for i in intervals) * _INTERVAL_HOURS / 1000,
             "pv_potential_kwh": pv_ac + pv_dc,
             "pv_ac_potential_kwh": pv_ac,
             "pv_dc_potential_kwh": pv_dc,

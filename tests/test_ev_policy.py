@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from energymanager.actuators import ActuatorRegistry
-from energymanager.config import ConfigurationError, EvSettings, Settings
+from energymanager.config import EvSettings, Settings
 from energymanager.house_state import HouseState
 from energymanager.tasks import TaskRegistry
 
@@ -49,11 +49,12 @@ def _settings(**overrides: object) -> EvSettings:
     return EvSettings(**values)  # type: ignore[arg-type]
 
 
-def test_minimum_soc_defaults_to_existing_target_semantics() -> None:
+def test_unconfigured_minimum_does_not_promote_preference_to_hard_deadline() -> None:
     task = _task(_settings(), soc=60.0)
-    assert task.minimum_soc_percent == pytest.approx(80.0)
+    assert task.minimum_soc_percent == pytest.approx(0.0)
     assert task.target_soc_percent == pytest.approx(80.0)
-    assert task.required_energy_kwh == pytest.approx(task.preferred_energy_kwh)
+    assert task.required_energy_kwh == 0.0
+    assert task.preferred_energy_kwh > 0.0
 
 
 def test_ev_task_separates_hard_minimum_from_soft_preferred_target() -> None:
@@ -88,11 +89,10 @@ def test_ev_minimum_soc_config_is_loaded_and_preserved(tmp_path: Path) -> None:
     assert settings.as_options()["ev"]["minimum_soc_percent"] == pytest.approx(45.0)
 
 
-def test_ev_minimum_soc_cannot_exceed_preferred_target(tmp_path: Path) -> None:
+def test_departure_minimum_is_independent_of_terminal_preference(tmp_path: Path) -> None:
     path = tmp_path / "options.json"
     path.write_text(
         json.dumps({"ev": {"minimum_soc_percent": 85, "target_soc_percent": 80}}),
         encoding="utf-8",
     )
-    with pytest.raises(ConfigurationError):
-        Settings.load(path)
+    assert Settings.load(path).ev.minimum_soc_percent == 85

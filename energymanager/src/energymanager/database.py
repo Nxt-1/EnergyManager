@@ -387,6 +387,8 @@ class EnergyManagerStore:
             ):
                 if value is not None:
                     fields.append(f"{key}={value:.3f}")
+            if plan.plan_id is not None:
+                fields.append(f'plan_id="{_escape_string(plan.plan_id)}"')
             lines.append(f"milp_plan_interval,interval_index={index} {','.join(fields)} {issued_ns + index}")
         await _write_in_batches(self._client, lines)
 

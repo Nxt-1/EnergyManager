@@ -6,6 +6,7 @@ import asyncio
 import logging
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from .actuators import (
     ActuatorCommandResult,
@@ -15,9 +16,12 @@ from .actuators import (
     EvActuatorSnapshot,
     find_ess_actuator,
 )
+from .config import PlannerSettings
 from .control_health import ControlHealth, evaluate_control_health, publish_control_health
 from .control_notifications import ControlNotificationManager
 from .database import EnergyManagerStore
+from .decision_records import input_changes, observation_records, plan_changes, publish_decision
+from .decision_store import DecisionStore, PlanningSnapshot
 from .diagnostics import DiagnosticsPublisher
 from .economics import EconomicsService, PlanCostEvaluation
 from .ess_control import EssHardwareController
@@ -28,6 +32,7 @@ from .load_service import BackgroundLoadService
 from .milp_planner import MilpEvaluation, evaluate_plan_milp, publish_milp_evaluation
 from .planner import EnergyPlan, PlanBuilder
 from .pv_service import PvForecastService
+from .requirements import explain_ev_tasks
 from .task_diagnostics import publish_task_status
 from .tasks import PlanningTask, TaskRegistry
 
@@ -58,7 +63,18 @@ class PlannerService:
         store: EnergyManagerStore | None = None,
         planner: PlanBuilder | None = None,
         tie_break_seconds: int = 30,
+        planner_settings: PlannerSettings | None = None,
+        decision_store: DecisionStore | None = None,
     ) -> None:
+        self._settings = planner_settings or PlannerSettings(tie_break_seconds=tie_break_seconds)
+        self._decision_store = decision_store
+        if planner_settings is not None and decision_store is None:
+            self._decision_store = DecisionStore(Path("/data/planner-v3"),
+                                                 max_bytes=planner_settings.archive_max_mb * 1024 * 1024,
+                                                 keep=planner_settings.archive_keep)
+        self._pending_replan = None
+        self._inputs_unavailable = False
+        self._solving_signature = None
         self._ha_client = ha_client
         self._diagnostics = DiagnosticsPublisher(ha_client)
         self._load_service = load_service
@@ -72,6 +88,7 @@ class PlannerService:
         self._notification_manager = notification_manager
         self._store = store
         self._plan: EnergyPlan | None = None
+        self._dispatch_previous_plan: EnergyPlan | None = None
         self._last_plan_at_utc: datetime | None = None
         self._last_attempt_at_utc: datetime | None = None
         self._last_forecast_signature: tuple[str, str] | None = None
@@ -105,7 +122,9 @@ class PlannerService:
         self._ensure_fast_dispatch_loop()
 
         context = await self._planning_context(house_state, now, publish_diagnostics=True)
+        self._inputs_unavailable = context is None
         if context is None:
+            self._plan = None
             return
         load_forecast, pv_forecast, economics, local_tz, actuators, tasks = context
         reason = self._replan_reason(
@@ -191,8 +210,16 @@ class PlannerService:
         actuators: tuple[ActuatorSnapshot, ...],
         tasks: tuple[PlanningTask, ...],
     ) -> None:
+        signature = (_forecast_signature(load_forecast.generated_at_utc, pv_forecast.generated_at_utc),
+                     _task_signature(tasks), _actuator_signature(actuators),
+                     tuple((a.actuator_id, None if a.soc_percent is None else round(a.soc_percent / 3))
+                           for a in actuators), economics.current_profile, economics.capacity_state)
         if self.solve_in_progress:
+            if signature != self._solving_signature:
+                self._pending_replan = (reason, house_state, now, load_forecast, pv_forecast,
+                                        economics, local_tz, actuators, tasks)
             return
+        self._solving_signature = signature
         if (
             reason != "control_health_change"
             and self._last_attempt_at_utc is not None
@@ -215,12 +242,8 @@ class PlannerService:
         )
 
     def _evaluate(self, frame, profile, capacity_state) -> MilpEvaluation:
-        """Evaluate the plan with the configured secondary time limit."""
-        if self._tie_break_seconds == 30:
-            return evaluate_plan_milp(frame, profile, capacity_state)
-        return evaluate_plan_milp(
-            frame, profile, capacity_state, tie_break_max_time_seconds=float(self._tie_break_seconds)
-        )
+        return evaluate_plan_milp(frame, profile, capacity_state,
+                                  policy=self._settings.hierarchy_policy(), previous_plan=self._plan)
 
     async def _run_replan(
         self,
@@ -242,12 +265,65 @@ class PlannerService:
                 actuators=actuators,
                 tasks=tasks,
             )
+            frame = replace(frame, requirements=explain_ev_tasks(tasks, actuators, now))
+            snapshot = PlanningSnapshot.create(
+                frame, economics.current_profile, economics.capacity_state, self._settings.hierarchy_policy(),
+                previous_plan=self._plan, observations=observation_records(house_state),
+                forecast_revisions=(load_forecast.generated_at_utc, pv_forecast.generated_at_utc),
+                ev_settings=self._task_registry.settings, forecasts=(load_forecast, pv_forecast),
+            )
+            previous_plan = self._plan
             evaluation = await asyncio.to_thread(
                 self._evaluate,
                 frame,
                 economics.current_profile,
                 economics.capacity_state,
             )
+            disposition = "accepted" if evaluation.adoption_ready else "rejected"
+            if self._pending_replan is not None or self._inputs_unavailable:
+                disposition = "superseded"
+            if evaluation.plan is not None:
+                evaluation = replace(evaluation, plan=replace(evaluation.plan, plan_id=snapshot.snapshot_id))
+            if disposition == "accepted" and evaluation.plan is not None:
+                # A replan begins on the next complete quarter-hour. Preserve the
+                # previously validated current interval; never execute a future slot early.
+                if self._plan is not None and self._plan.intervals[0].period_start_local.astimezone(UTC) <= now:
+                    self._dispatch_previous_plan = self._plan
+                self._plan = evaluation.plan
+                self._last_plan_at_utc = now
+                self._last_forecast_signature = _forecast_signature(
+                    load_forecast.generated_at_utc, pv_forecast.generated_at_utc
+                )
+                self._last_task_signature = _task_signature(tasks)
+                self._last_actuator_signature = _actuator_signature(actuators)
+            # Disk IO runs on a separate thread. Failure is diagnostic, never hardware authority.
+            persisted = False
+            if self._decision_store is not None:
+                try:
+                    await asyncio.to_thread(
+                        self._decision_store.save,
+                        snapshot,
+                        evaluation,
+                        disposition=disposition,
+                        changes={
+                            "trigger": reason,
+                            "previous_plan_id": (previous_plan.plan_id if previous_plan else None),
+                            "schedule": plan_changes(previous_plan, evaluation.plan),
+                            "inputs": input_changes(previous_plan, frame),
+                            "requirements_changed": (
+                                previous_plan is None or _task_signature(previous_plan.tasks) != _task_signature(tasks)
+                            ),
+                        },
+                    )
+                    persisted = True
+                except Exception:
+                    _LOGGER.exception("V3 decision archive failed")
+            try:
+                await publish_decision(self._ha_client, snapshot, evaluation, disposition, persisted)
+            except Exception:
+                _LOGGER.exception("V3 decision diagnostics unavailable")
+            if disposition == "superseded":
+                return
             await publish_milp_evaluation(self._ha_client, evaluation)
             _LOGGER.info("MILP planner: trigger=%s, %s", reason, _milp_log(evaluation))
 
@@ -276,15 +352,6 @@ class PlannerService:
                 return
 
             plan = evaluation.plan
-            self._plan = plan
-            self._last_plan_at_utc = now
-            self._last_forecast_signature = _forecast_signature(
-                load_forecast.generated_at_utc,
-                pv_forecast.generated_at_utc,
-            )
-            self._last_task_signature = _task_signature(tasks)
-            self._last_actuator_signature = _actuator_signature(actuators)
-
             await self._diagnostics.publish_plan(plan)
             if self._store is not None:
                 # Never delay a control cycle or invalidate a valid plan due to history storage.
@@ -297,6 +364,8 @@ class PlannerService:
                 self._actuator_registry,
                 now_utc=datetime.now(UTC),
                 live_control=self._ess_control_enabled,
+                grid_import_limit_w=self._settings.grid_import_limit_kw * 1000,
+                grid_export_limit_w=self._settings.grid_export_limit_kw * 1000,
             )
             _log_plan(plan, actuators, tasks, cost_evaluation, fast_result.command_results)
         except asyncio.CancelledError:
@@ -304,6 +373,11 @@ class PlannerService:
         except Exception:  # noqa: BLE001 - planning failure must not terminate the live controller.
             _LOGGER.exception("Unexpected asynchronous MILP planner failure")
         finally:
+            if self._pending_replan is not None:
+                pending, self._pending_replan = self._pending_replan, None
+                self._solve_task = None
+                self._last_attempt_at_utc = None
+                self._request_replan(*pending)
             if reason == "startup" and self._notification_manager is not None:
                 self._notification_manager.complete_startup()
 
@@ -348,6 +422,7 @@ class PlannerService:
 
     async def shutdown(self) -> None:
         """Stop runtime tasks and leave the ESS setpoint neutral on a clean exit."""
+        self._pending_replan = None
         for task in (self._fast_dispatch_task, self._solve_task):
             if task is not None and not task.done():
                 task.cancel()
@@ -391,6 +466,12 @@ class PlannerService:
         if house_state is None:
             return
         now = datetime.now(UTC)
+        if plan is not None and plan.intervals[0].period_start_local.astimezone(UTC) > now:
+            previous = self._dispatch_previous_plan
+            if (previous is not None and now - previous.generated_at_utc <= _RETAIN_PLAN_MAX_AGE
+                    and any(i.period_start_local.astimezone(UTC) <= now
+                            < i.period_start_local.astimezone(UTC) + _INTERVAL for i in previous.intervals)):
+                plan = previous
         if plan is None:
             if self._ess_controller is not None and self._ess_controller.enabled:
                 await self._ess_controller.safe_zero("no_active_plan")
@@ -419,21 +500,10 @@ class PlannerService:
             self._actuator_registry,
             now_utc=now,
             live_control=self._ess_control_enabled,
+            grid_import_limit_w=self._settings.grid_import_limit_kw * 1000,
+            grid_export_limit_w=self._settings.grid_export_limit_kw * 1000,
         )
         self._fast_dispatch_sequence += 1
-        # Diagnostics must never block the device commands for this cycle.
-        try:
-            await publish_fast_dispatch(
-                self._ha_client,
-                result,
-                control_interval_seconds=_FAST_DISPATCH_INTERVAL_SECONDS,
-                dispatch_sequence=self._fast_dispatch_sequence,
-                milp_solve_in_progress=self.solve_in_progress,
-                control_enabled=self._ess_control_enabled,
-                hardware_writes=self._ess_control_enabled,
-            )
-        except Exception as exc:  # noqa: BLE001 - telemetry must not block live hardware control.
-            _LOGGER.debug("Unable to publish fast dispatch diagnostics: %s", exc)
         if self._ess_controller is not None:
             await self._ess_controller.apply_dispatch(result)
         if self._ev_controller is not None:
@@ -444,6 +514,21 @@ class PlannerService:
                 await self._ev_controller.apply_dispatch(result)
             else:
                 await self._ev_controller.safe_stop("control_health_ev_unavailable")
+        # Diagnostics must never block the device commands for this cycle.
+        try:
+            async with asyncio.timeout(0.2):
+                await publish_fast_dispatch(
+                    self._ha_client,
+                    result,
+                    control_interval_seconds=_FAST_DISPATCH_INTERVAL_SECONDS,
+                    dispatch_sequence=self._fast_dispatch_sequence,
+                    milp_solve_in_progress=self.solve_in_progress,
+                    control_enabled=self._ess_control_enabled,
+                    hardware_writes=self._ess_control_enabled,
+                    plan_id=plan.plan_id,
+                )
+        except Exception as exc:  # noqa: BLE001 - telemetry must not block live hardware control.
+            _LOGGER.debug("Unable to publish fast dispatch diagnostics: %s", exc)
         if self._ess_controller is not None:
             await self._ess_controller.publish_command_status(
                 result.command_results,
@@ -558,6 +643,16 @@ class PlannerService:
             return False
         if now_utc - self._last_plan_at_utc > _RETAIN_PLAN_MAX_AGE:
             return False
+        if self._latest_house_state is not None:
+            current = self._actuator_registry.snapshots(self._latest_house_state)
+            if _actuator_signature(current) != self._last_actuator_signature:
+                return False
+            if _ess_soc_deviates(self._plan, current, now_utc):
+                return False
+            zone = self._plan.intervals[0].period_start_local.tzinfo
+            tasks = self._task_registry.snapshots(current, now_utc=now_utc, local_tz=zone)
+            if _task_signature(tasks) != self._last_task_signature:
+                return False
         return trigger in {"periodic", "forecast_update"}
 
 

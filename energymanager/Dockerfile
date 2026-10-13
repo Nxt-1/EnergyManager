@@ -18,9 +18,12 @@ ENV \
 
 WORKDIR /app
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# Optional enterprise/cloud proxy CA: mounted only during installation, never baked into the image.
+RUN --mount=type=secret,id=pip_ca \
+    if [ -f /run/secrets/pip_ca ]; then export PIP_CERT=/run/secrets/pip_ca; fi; \
+    pip install --no-cache-dir -r /app/requirements.txt
 
 COPY src /app/src
-RUN python -c "import energymanager.app, energymanager.database, energymanager.economics, energymanager.legacy_influx, energymanager.load_backtest, energymanager.load_forecast, energymanager.load_service, energymanager.milp_planner, energymanager.planner, energymanager.planner_service, energymanager.pv_forecast, energymanager.pv_service"
+RUN python -c "import energymanager.app, energymanager.database, energymanager.economics, energymanager.legacy_influx, energymanager.load_backtest, energymanager.load_forecast, energymanager.load_service, energymanager.milp_planner, energymanager.planner, energymanager.planner_service, energymanager.pv_forecast, energymanager.pv_service, energymanager.hierarchy, energymanager.replay, energymanager.jobs"
 
 CMD ["python", "-m", "energymanager"]

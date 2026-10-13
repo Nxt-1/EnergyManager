@@ -555,6 +555,7 @@ class DiagnosticsPublisher:
             "mode": "forecast_balance_with_actuator_projection",
             "horizon_hours": PLANNER_HORIZON_HOURS,
             "generated_at_utc": plan.generated_at_utc.isoformat(),
+            "plan_id": plan.plan_id,
             "ess_projection_status": plan.ess_projection_status,
             "actuator_ids": [item.actuator_id for item in plan.actuator_snapshots],
             "task_ids": [item.task_id for item in plan.tasks],
@@ -600,6 +601,7 @@ class DiagnosticsPublisher:
             attributes = {
                 "friendly_name": f"Energy Manager Plan Day {day + 1}",
                 "generated_at_utc": plan.generated_at_utc.isoformat(),
+            "plan_id": plan.plan_id,
                 "first_interval": day * 96,
                 "interval_minutes": 15,
                 "interval_count": len(slots),
@@ -717,6 +719,7 @@ class DiagnosticsPublisher:
         await self._client.set_state(PLAN_TIMELINE_ENTITY, len(segments), {
             "friendly_name": "Energy Manager Plan Timeline",
             "generated_at_utc": plan.generated_at_utc.isoformat(),
+            "plan_id": plan.plan_id,
             "horizon_hours": PLANNER_HORIZON_HOURS,
             "interval_minutes": 15,
             "segment_count": len(segments),

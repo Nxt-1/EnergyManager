@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, timedelta
 from time import perf_counter
 from typing import Any
@@ -19,10 +19,12 @@ from .economics import (
     evaluate_plan_objective,
 )
 from .ha_client import HomeAssistantClient
+from .hierarchy import HierarchyPolicy, StageRecord, refine, validate_primal
+from .jobs import add_jobs
 from .planner import EnergyPlan, PlanInterval
 from .tasks import PlanningTask
 
-MILP_EVALUATION_VERSION = "2026-10-12-milp-v10"
+MILP_EVALUATION_VERSION = "3.0-preview.1"
 MILP_STATUS_ENTITY = "sensor.energy_manager_milp_status"
 MILP_TOTAL_TIME_BUDGET_SECONDS = 60.0
 MILP_TIE_BREAK_MAX_TIME_SECONDS = 30.0
@@ -32,12 +34,6 @@ MILP_RELATIVE_GAP = 0.01
 MILP_REFRESH_MINUTES = 10
 MILP_ECONOMIC_TOLERANCE_EUR = 0.01
 MILP_EARLY_VALUE_HALF_LIFE_DAYS = 3.0
-# These weights apply ONLY inside the economic €0.01 near-optimality band, never to monetary costs.
-# Discourage pulling discretionary grid imports forward merely to eliminate EV starts.
-# The monetary optimum and departure constraints remain dominant over all these weights.
-MILP_EV_SESSION_START_WEIGHT = 60.0
-MILP_EV_CHARGE_DELAY_WEIGHT = 0.2
-MILP_GRID_IMPORT_DELAY_WEIGHT = 60.0
 _VALIDATION_POWER_TOLERANCE_W = 5.0
 _INTERVAL_HOURS = 0.25
 _INTERVAL_DELTA = timedelta(minutes=15)
@@ -129,6 +125,7 @@ class MilpEvaluation:
     fallback_to_reference: bool = True
     plan: EnergyPlan | None = None
     reason: str | None = None
+    stages: tuple[StageRecord, ...] = ()
 
 
 @dataclass(slots=True)
@@ -150,6 +147,12 @@ class _MilpVariables:
     ev_stored_energy_kwh: list[Any]
     ev_preferred_shortfall_kwh: Any | None
     capacity_peak_kw: dict[str, Any]
+    job_powers: dict[str, list[Any]] = field(default_factory=dict)
+    flexible_kw: list[Any] = field(default_factory=list)
+    ev_three_on: dict[int, Any] = field(default_factory=dict)
+    generic_states: dict[str, list[Any]] = field(default_factory=dict)
+    generic_penalty: Any = 0.0
+    generic_shortfalls: list[Any] = field(default_factory=list)
 
 
 def evaluate_plan_milp(
@@ -158,6 +161,9 @@ def evaluate_plan_milp(
     capacity_state: CapacityPeakState,
     *,
     tie_break_max_time_seconds: float | None = None,
+    policy: HierarchyPolicy | None = None,
+    previous_plan: EnergyPlan | None = None,
+    restrictions: tuple[tuple[str, int, int], ...] = (),
 ) -> MilpEvaluation:
     """Solve the authoritative EV+ESS MILP plan with a configurable tie-break limit."""
     ess = find_ess_actuator(reference_plan.actuator_snapshots)
@@ -168,6 +174,7 @@ def evaluate_plan_milp(
         if task.planning_available
         and (
             task.kind == "ev_terminal_soc_target"
+            or task.minimum_soc_percent is not None
             or (task.required_energy_kwh is not None and task.required_energy_kwh > 0.0)
             or (task.preferred_energy_kwh is not None and task.preferred_energy_kwh > 0.0)
             or (task.expected_trip_energy_kwh is not None and task.expected_trip_energy_kwh > 0.0)
@@ -200,13 +207,14 @@ def evaluate_plan_milp(
         return _solve_model(
             highspy, reference_plan, profile, capacity_state, ess, ev, active_tasks,
             tie_break_max_time_seconds=tie_break_max_time_seconds,
+            policy=policy, previous_plan=previous_plan, restrictions=restrictions,
         )
     except Exception as exc:  # pragma: no cover - runtime safety around the optional diagnostic solver
         result = _empty_result(
             reference_plan,
             active_tasks,
             reference_objective,
-            status="error",
+            status="infeasible" if str(exc).startswith("infeasible job") else "error",
             reason=f"{type(exc).__name__}: {exc}",
         )
         return _replace_solver_version(result, _solver_version(highspy))
@@ -303,6 +311,17 @@ def _validate_inputs(
 ) -> str | None:
     if not plan.intervals:
         return "empty_plan"
+    if len(plan.intervals) > 672:
+        return "horizon_exceeds_672_intervals"
+    for i, slot in enumerate(plan.intervals):
+        if slot.period_start_local.tzinfo is None:
+            return "naive_forecast_timestamp"
+        if i and (slot.period_start_local.astimezone(UTC)
+                  - plan.intervals[i - 1].period_start_local.astimezone(UTC)) != _INTERVAL_DELTA:
+            return "nonuniform_forecast_grid"
+        if any(not math.isfinite(v) or v < 0 for v in
+               (slot.background_load_w, slot.pv_ac_power_w, slot.pv_dc_power_w)):
+            return "invalid_forecast_value"
     if ess is None or not ess.planning_available or ess.soc_percent is None:
         return "ess_unavailable"
     if not capacity_state.history_complete or capacity_state.observed_peak_kw is None:
@@ -315,7 +334,7 @@ def _validate_inputs(
         return "ev_unavailable"
     if ev.capabilities.battery_capacity_kwh is None:
         return "ev_battery_capacity_unavailable"
-    last_interval_end_utc = (plan.intervals[-1].period_start_local + _INTERVAL_DELTA).astimezone(UTC)
+    last_interval_end_utc = (plan.intervals[-1].period_start_local.astimezone(UTC) + _INTERVAL_DELTA)
     for task in tasks:
         if task.actuator_id != ev.actuator_id or task.kind not in {"energy_by_deadline", "ev_terminal_soc_target"}:
             return "unsupported_task_type"
@@ -335,13 +354,19 @@ def _solve_model(
     active_tasks: tuple[PlanningTask, ...],
     *,
     tie_break_max_time_seconds: float | None = None,
+    policy: HierarchyPolicy | None = None,
+    previous_plan: EnergyPlan | None = None,
+    restrictions: tuple[tuple[str, int, int], ...] = (),
 ) -> MilpEvaluation:
+    total_started = perf_counter()
+    policy = policy or HierarchyPolicy()
     model = highspy.Highs()
     model.setOptionValue("output_flag", False)
     model.setOptionValue("threads", 1)
     model.setOptionValue("parallel", "off")
-    model.setOptionValue("time_limit", MILP_ECONOMIC_TIME_LIMIT_SECONDS)
-    model.setOptionValue("mip_rel_gap", MILP_RELATIVE_GAP)
+    model.setOptionValue("time_limit", policy.economic_seconds)
+    model.setOptionValue("mip_rel_gap", policy.relative_gap)
+    model.setOptionValue("random_seed", 0)
 
     variables, integer_count = _build_variables(
         model,
@@ -353,10 +378,26 @@ def _solve_model(
         profile,
         capacity_state,
     )
+    (variables.job_powers, variables.flexible_kw, variables.generic_states,
+     variables.generic_penalty, variables.generic_shortfalls) = add_jobs(model, highspy, reference_plan)
+    integer_count = sum(int(kind) == 1 for kind in model.getLp().integrality_)
     _add_constraints(model, reference_plan, ess, ev, active_tasks, variables)
+    for i in range(len(reference_plan.intervals)):
+        model.addConstr(variables.grid_import_kw[i] <= policy.grid_import_limit_kw)
+        model.addConstr(variables.grid_export_kw[i] <= policy.grid_export_limit_kw)
+    from .counterfactual import constrain
+    constrain(model, variables, restrictions, len(reference_plan.intervals))
     economic_expression = _economic_objective_expression(reference_plan, ess, ev, profile, variables)
+    sunk_capacity = sum(_capacity_baseline_kw(month, profile, capacity_state)
+                        for month in variables.capacity_peak_kw) * profile.capacity_tariff_eur_per_kw_month
+    reserve_credit = (ess.capabilities.capacity_kwh * ess.capabilities.min_soc_percent / 100
+                      * ess.capabilities.discharge_efficiency * profile.import_energy_eur_per_kwh)
+    economic_offset = reserve_credit - sunk_capacity
+    economic_expression += economic_offset
     model.setObjective(economic_expression, sense=highspy.ObjSense.kMinimize)
 
+    model.setOptionValue("time_limit", min(policy.economic_seconds,
+                                           max(0.001, policy.total_seconds - (perf_counter() - total_started))))
     economic_started = perf_counter()
     model.run()
     economic_solve_time = perf_counter() - economic_started
@@ -391,70 +432,99 @@ def _solve_model(
             adoption_ready=False,
             fallback_to_reference=False,
             reason="solver_returned_no_primal_solution",
+            stages=(StageRecord("economics", "EUR", stage1_model_status, None,
+                                _finite_optional(getattr(stage1_info, "mip_dual_bound", None)),
+                                _finite_optional(getattr(stage1_info, "mip_gap", None)),
+                                economic_solve_time, policy.economic_tolerance_eur, False),),
         )
 
-    stage1_values = list(stage1_solution.col_value)
+    def normalize(values):
+        return _canonicalize_auxiliaries(reference_plan, ev, active_tasks, profile, capacity_state, variables, values)
+
+    stage1_values = normalize(list(stage1_solution.col_value))
     economic_stage_variable_count = int(model.getNumCol())
     economic_stage_constraint_count = int(model.getNumRow())
     stage1_plan = _solution_plan(reference_plan, ess, ev, profile, variables, stage1_values)
     stage1_objective = _objective(stage1_plan, profile, capacity_state)
-    stage1_internal_objective = _economic_objective_value(ess, ev, profile, variables, stage1_values)
+    stage1_internal_objective = _economic_objective_value(ess, ev, profile, variables, stage1_values) + economic_offset
 
-    if tie_break_max_time_seconds is None:
-        tie_break_time_limit = min(
-            MILP_TIE_BREAK_MAX_TIME_SECONDS,
-            max(0.0, MILP_TOTAL_TIME_BUDGET_SECONDS - economic_solve_time),
-        )
-    else:
-        # User-configured secondary solve time limit.
-        tie_break_time_limit = min(120.0, max(0.0, float(tie_break_max_time_seconds)))
-    if tie_break_time_limit >= 0.5:
-        tie_break_started = perf_counter()
-        warm_start_applied = False
-        warm_start_status = "not_attempted"
-        try:
-            model.addConstr(economic_expression <= stage1_internal_objective + MILP_ECONOMIC_TOLERANCE_EUR)
-            # Session-start variables only affect the secondary objective, not electricity costs.
-            tie_break_values = _add_ev_session_start_variables(model, ev, variables, stage1_values)
-            tie_break_expression = _ev_schedule_tie_break_expression(reference_plan, ev, variables)
-            model.setObjective(tie_break_expression, sense=highspy.ObjSense.kMinimize)
-            warm_start_applied, warm_start_status = _set_primal_warm_start(model, highspy, tie_break_values)
-            model.setOptionValue("time_limit", tie_break_time_limit)
-            model.run()
-            tie_break_solve_time = perf_counter() - tie_break_started
-            stage2_model_status = model.modelStatusToString(model.getModelStatus())
-            stage2_info = model.getInfo()
-            stage2_solution = model.getSolution()
-            stage2_has_solution = _has_solution(highspy, stage2_info)
-            tie_break_status = _status_from_model(stage2_model_status, has_solution=stage2_has_solution)
-        except Exception as exc:
-            # A failed scheduling preference must never invalidate a sound economic plan.
-            tie_break_solve_time = perf_counter() - tie_break_started
-            stage2_model_status = stage1_model_status
-            stage2_info = stage1_info
-            stage2_solution = stage1_solution
-            stage2_has_solution = False
-            tie_break_status = f"error:{type(exc).__name__}:{exc}"
-    else:
-        warm_start_applied = False
-        warm_start_status = "skipped_no_budget"
-        tie_break_solve_time = 0.0
-        stage2_model_status = stage1_model_status
-        stage2_info = stage1_info
-        stage2_solution = stage1_solution
-        stage2_has_solution = False
-        tie_break_status = "skipped_no_budget"
+    tie_break_time_limit = min(
+        policy.total_seconds - (perf_counter() - total_started),
+        tie_break_max_time_seconds if tie_break_max_time_seconds is not None else policy.total_seconds,
+    )
+    # The exact economic expression is bounded before any scheduling preferences.
+    model.addConstr(economic_expression <= stage1_internal_objective + policy.economic_tolerance_eur)
+    warm_values = _add_ev_session_start_variables(model, ev, variables, stage1_values)
+    operations = sum(variables.ev_session_start.values())
+    # Continuity of an already active session is distinct from the seven-day start count.
+    if ev is not None and (ev.current_power_w or 0.0) >= 100.0:
+        operations += 1.0 - variables.ev_active.get(0, 0.0)
+    for i, three in sorted(variables.ev_three_on.items()):
+        if i - 1 not in variables.ev_three_on:
+            continue
+        previous = variables.ev_three_on[i - 1]
+        switch = model.addVariable(lb=0, ub=1)
+        model.addConstr(switch >= three - previous)
+        model.addConstr(switch >= previous - three)
+        model.addConstr(switch <= three + previous)
+        model.addConstr(switch <= 2 - three - previous)
+        warm_values.append(abs(_value(three, stage1_values) - _value(previous, stage1_values)))
+        operations += switch
+    stability = 0.0
+    old = {i.period_start_local.astimezone(UTC): i for i in previous_plan.intervals} if previous_plan else {}
+    for i, slot in enumerate(reference_plan.intervals[:policy.near_term_hours * 4]):
+        previous = old.get(slot.period_start_local.astimezone(UTC))
+        if previous is None:
+            continue
+        for expr, target in (
+            (_ev_power_expression(ev, variables, i), previous.scheduled_load_w / 1000),
+            (variables.grid_import_kw[i] - variables.grid_export_kw[i],
+             (previous.grid_power_after_ess_w or 0) / 1000),
+        ):
+            deviation = model.addVariable(lb=0)
+            model.addConstr(deviation >= expr - target)
+            model.addConstr(deviation >= target - expr)
+            warm_values.append(abs(highspy.Highs.internal_get_value(stage1_values, expr) - target)
+                               if not isinstance(expr, (float, int)) else abs(expr - target))
+            stability += 0.25 * deviation
+    deterministic = sum(
+        (i + 1) * 0.25 * _ev_power_expression(ev, variables, i)
+        + (i + 1) / len(reference_plan.intervals) * 0.25 * variables.ac_charge_kw[i]
+        for i in range(len(reference_plan.intervals))
+    )
+    def describe(v):
+        p = _solution_plan(reference_plan, ess, ev, profile, variables, v)
+        metrics = {"objective_eur": float(_objective(p, profile, capacity_state)),
+                   "ev_sessions": float(_ev_session_count(reference_plan, variables, v)),
+                   "weighted_import_kwh": _time_weighted_grid_import_value(variables, v)}
+        cost = _cost_breakdown(p, profile, capacity_state)
+        if cost is not None:
+            metrics.update({"net_energy_cost_eur": cost.net_energy_cost_eur,
+                            "incremental_capacity_cost_eur": cost.incremental_capacity_cost_eur,
+                            "terminal_ess_value_eur": cost.terminal_ess_value_eur,
+                            "preferred_shortfall_penalty_eur": p.preferred_ev_shortfall_penalty_eur})
+        return p, metrics
 
-    if stage2_has_solution:
-        values = list(stage2_solution.col_value)
-        selected_model_status = stage2_model_status
-        selected_info = stage2_info
-        selected_solution_stage = "tie_break"
-    else:
-        values = stage1_values
-        selected_model_status = stage1_model_status
-        selected_info = stage1_info
-        selected_solution_stage = "economic"
+    values, selected_info, selected_model_status, refinements, tie_break_solve_time = refine(
+        model, highspy,
+        (("robustness", "weighted_kWh", _time_weighted_grid_import_expression(reference_plan, variables),
+          policy.robustness_tolerance_kwh),
+         ("operations", "events", operations, policy.operations_tolerance_events),
+         ("stability", "kWh", stability, policy.stability_tolerance_kwh),
+         ("deterministic", "slot_weighted_kWh", deterministic, 0.0)),
+        warm_values, seconds=max(0, min(tie_break_time_limit, policy.total_seconds - (perf_counter() - total_started))),
+        describe=describe, normalize=normalize,
+    )
+    economic_plan, economic_metrics = describe(stage1_values)
+    stages = (StageRecord(
+        "economics", "EUR", stage1_model_status, stage1_objective,
+        _finite_optional(getattr(stage1_info, "mip_dual_bound", None)),
+        _finite_optional(getattr(stage1_info, "mip_gap", None)), economic_solve_time,
+        policy.economic_tolerance_eur, True, economic_plan, tuple(economic_metrics.items()),
+    ),) + refinements
+    selected_solution_stage = "tie_break" if any(r.accepted for r in refinements) else "economic"
+    warm_start_applied, warm_start_status = True, "complete_primal"
+    tie_break_status = _status_from_model(selected_model_status, has_solution=True)
 
     milp_plan = _solution_plan(reference_plan, ess, ev, profile, variables, values)
     milp_objective = _objective(milp_plan, profile, capacity_state)
@@ -471,15 +541,25 @@ def _solve_model(
         ev,
         active_tasks,
     )
+    validation_errors += validate_primal(model, values)
     validation_status = "passed" if not validation_errors else "failed"
     selected_status = _status_from_model(selected_model_status, has_solution=True)
+    if any("time" in stage.status.lower() for stage in stages):
+        selected_status = "feasible_time_limit"
     adoption_ready = not validation_errors and selected_status in {"optimal", "feasible", "feasible_time_limit"}
     reason = None if not validation_errors else "; ".join(validation_errors[:4])
-    total_solve_time = economic_solve_time + tie_break_solve_time
+    total_solve_time = perf_counter() - total_started
     economic_accounting = _economic_stage_accounting(ess, ev, profile, variables, stage1_values)
     selected_accounting = _economic_stage_accounting(ess, ev, profile, variables, values)
 
+    for accounting in (economic_accounting, selected_accounting):
+        accounting["sunk_capacity_baseline_eur"] = sunk_capacity
+        accounting["incremental_capacity_cost_eur"] = accounting["capacity_cost_eur"] - sunk_capacity
+        accounting["terminal_reserve_credit_eur"] = reserve_credit
+        accounting["incremental_objective_eur"] = accounting["economic_objective_eur"] + economic_offset
     return MilpEvaluation(
+        stages=stages,
+        economic_tolerance_eur=policy.economic_tolerance_eur,
         status="invalid_solution" if validation_errors else selected_status,
         model_status=selected_model_status,
         solver_version=_solver_version(highspy),
@@ -554,6 +634,8 @@ def _add_ev_session_start_variables(
         start = model.addVariable(lb=0.0, ub=1.0, name=f"ev_session_start_{index}")
         variables.ev_session_start[index] = start
         model.addConstr(start >= active - predecessor_active)
+        model.addConstr(start <= active)
+        model.addConstr(start <= 1.0 - predecessor_active)
         # append in variable-index order: HiGHS requires one warm-start value per column
         if start.index != len(warm_start):
             raise ValueError("EV session warm-start column indexing mismatch")
@@ -674,6 +756,7 @@ def _build_variables(
     ev_three: dict[int, Any] = {}
     ev_active: dict[int, Any] = {}
     ev_session_start: dict[int, Any] = {}
+    ev_three_on: dict[int, Any] = {}
     ev_stored_energy: list[Any] = []
     preferred_shortfall = None
     if tasks and ev is not None and ev.capabilities.battery_capacity_kwh is not None and ev.soc_percent is not None:
@@ -706,6 +789,7 @@ def _build_variables(
                     type=integer_type,
                     name=f"ev_three_on_{index}",
                 )
+                ev_three_on[index] = three_on
                 ev_three[index] = model.addVariable(
                     lb=0.0,
                     ub=float(max_current),
@@ -762,6 +846,7 @@ def _build_variables(
             ev_three_phase_a=ev_three,
             ev_active=ev_active,
             ev_session_start=ev_session_start,
+            ev_three_on=ev_three_on,
             ev_stored_energy_kwh=ev_stored_energy,
             ev_preferred_shortfall_kwh=preferred_shortfall,
             capacity_peak_kw=month_peaks,
@@ -793,6 +878,7 @@ def _add_constraints(
             + variables.dc_to_ac_kw[index]
             - variables.ac_charge_kw[index]
             - ev_power
+            - (variables.flexible_kw[index] if variables.flexible_kw else 0.0)
         )
         model.addConstr(ac_balance == (item.background_load_w - item.pv_ac_power_w) / 1000.0)
         model.addConstr(
@@ -873,7 +959,7 @@ def _economic_objective_expression(
     profile: TariffProfile,
     variables: _MilpVariables,
 ) -> Any:
-    objective: Any = 0.0
+    objective: Any = variables.generic_penalty
     for index in range(len(plan.intervals)):
         objective = objective + _INTERVAL_HOURS * profile.import_energy_eur_per_kwh * variables.grid_import_kw[index]
         objective = objective - _INTERVAL_HOURS * profile.export_energy_eur_per_kwh * variables.grid_export_kw[index]
@@ -901,7 +987,7 @@ def _economic_objective_value(
     variables: _MilpVariables,
     values: list[float],
 ) -> float:
-    objective = 0.0
+    objective = highspy_value(variables.generic_penalty, values)
     for grid_import, grid_export in zip(variables.grid_import_kw, variables.grid_export_kw, strict=True):
         objective += _INTERVAL_HOURS * profile.import_energy_eur_per_kwh * _value(grid_import, values)
         objective -= _INTERVAL_HOURS * profile.export_energy_eur_per_kwh * _value(grid_export, values)
@@ -955,8 +1041,10 @@ def _economic_stage_accounting(
         "capacity_cost_eur": round(capacity_cost, 5),
         "preferred_ev_shortfall_penalty_eur": round(preferred_penalty, 5),
         "terminal_ess_credit_eur": round(terminal_value, 5),
+        "generic_penalty_eur": highspy_value(variables.generic_penalty, values),
         "economic_objective_eur": round(
-            import_cost - export_revenue + capacity_cost + preferred_penalty - terminal_value, 5
+            import_cost - export_revenue + capacity_cost + preferred_penalty - terminal_value
+            + highspy_value(variables.generic_penalty, values), 5
         ),
     }
 
@@ -964,29 +1052,6 @@ def _economic_stage_accounting(
 def _accounting_delta(before: dict[str, float], after: dict[str, float]) -> dict[str, float]:
     """Positive means the scheduling refinement increases that term."""
     return {key: round(after[key] - original, 5) for key, original in before.items()}
-
-
-def _ev_schedule_tie_break_expression(
-    plan: EnergyPlan,
-    ev: EvActuatorSnapshot | None,
-    variables: _MilpVariables,
-) -> Any:
-    """Delay discretionary grid imports, consolidate EV sessions, then prefer early energy use.
-
-    Economic near-optimality is enforced as a separate hard bound. Grid-import timing
-    outweighs modest session savings, while still encouraging consolidation when the
-    purchase timing is similar. This is a heuristic weighted preference, not a hard
-    rule against grid imports for deadlines or cheaper price opportunities.
-    """
-    objective: Any = MILP_GRID_IMPORT_DELAY_WEIGHT * _time_weighted_grid_import_expression(plan, variables)
-    for index, start in variables.ev_session_start.items():
-        objective += MILP_EV_SESSION_START_WEIGHT * start
-        delay_days = index / 96.0
-        objective += (
-            MILP_EV_CHARGE_DELAY_WEIGHT * delay_days * _INTERVAL_HOURS
-            * _ev_power_expression(ev, variables, index)
-        )
-    return objective
 
 
 def _ev_session_count(plan: EnergyPlan, variables: _MilpVariables, values: list[float]) -> int:
@@ -1065,16 +1130,22 @@ def _solution_plan(
             ev_energy_after = _value(variables.ev_stored_energy_kwh[index + 1], values)
             ev_soc = 100.0 * ev_energy_after / ev.capabilities.battery_capacity_kwh
         scheduled_w = max(0.0, ev_kw * 1000.0)
+        flexible_w = sum(highspy_value(p[index], values) for p in variables.job_powers.values()) * 1000
         intervals.append(
             PlanInterval(
                 period_start_local=item.period_start_local,
                 background_load_w=item.background_load_w,
                 scheduled_load_w=scheduled_w,
+                resource_energy_kwh=tuple((k, _value(v[index + 1], values))
+                                          for k, v in variables.generic_states.items()),
+                flexible_load_w=flexible_w,
+                job_power_w=tuple((k, highspy_value(p[index], values) * 1000)
+                                  for k, p in variables.job_powers.items()),
                 pv_ac_power_w=item.pv_ac_power_w,
                 pv_dc_power_w=item.pv_dc_power_w,
                 pv_power_w=item.pv_power_w,
                 net_power_before_control_w=(
-                    item.background_load_w + scheduled_w - item.pv_ac_power_w - item.pv_dc_power_w
+                    item.background_load_w + scheduled_w + flexible_w - item.pv_ac_power_w - item.pv_dc_power_w
                 ),
                 ess_ac_power_w=(battery_discharge_kw + dc_to_ac_kw - ac_charge_kw) * 1000.0,
                 battery_energy_delta_kwh=stored_after - stored_before,
@@ -1096,6 +1167,8 @@ def _solution_plan(
     )
     preferred_penalty_eur = preferred_shortfall_kwh * profile.import_energy_eur_per_kwh
     return EnergyPlan(
+        requirements=reference_plan.requirements, jobs=reference_plan.jobs, plan_id=reference_plan.plan_id,
+        resources=reference_plan.resources, generic_penalty_eur=highspy_value(variables.generic_penalty, values),
         generated_at_utc=reference_plan.generated_at_utc,
         intervals=tuple(intervals),
         ess_projection_status="projected",
@@ -1176,7 +1249,7 @@ def _eligible_indexes(
         index
         for index, item in enumerate(plan.intervals)
         if item.period_start_local.astimezone(UTC) >= earliest_utc
-        and (item.period_start_local + _INTERVAL_DELTA).astimezone(UTC) <= latest_utc
+        and (item.period_start_local.astimezone(UTC) + _INTERVAL_DELTA) <= latest_utc
         and not _interval_is_unavailable(item.period_start_local, unavailable)
     ]
 
@@ -1196,20 +1269,20 @@ def _ev_unavailable_windows_utc(
 
 def _interval_is_unavailable(period_start_local: Any, windows: tuple[tuple[Any, Any], ...]) -> bool:
     start_utc = period_start_local.astimezone(UTC)
-    return any(window_start <= start_utc < window_end for window_start, window_end in windows)
+    return any(window_start < start_utc + _INTERVAL_DELTA and window_end > start_utc
+               for window_start, window_end in windows)
 
 
 def _ev_state_index(plan: EnergyPlan, moment: Any) -> int | None:
-    if moment is None:
+    if moment is None or not plan.intervals:
         return None
-    target_utc = moment.astimezone(UTC)
-    for index, item in enumerate(plan.intervals):
-        if abs((item.period_start_local.astimezone(UTC) - target_utc).total_seconds()) < 1.0:
-            return index
-    final_end = (plan.intervals[-1].period_start_local + _INTERVAL_DELTA).astimezone(UTC)
-    if abs((final_end - target_utc).total_seconds()) < 1.0:
-        return len(plan.intervals)
-    return None
+    target = moment.astimezone(UTC)
+    boundaries = [i.period_start_local.astimezone(UTC) for i in plan.intervals]
+    boundaries.append(boundaries[-1] + _INTERVAL_DELTA)
+    if target < boundaries[0] or target > boundaries[-1]:
+        return None
+    # Partial charging slots are not credited before a deadline inside a quarter-hour.
+    return max(i for i, boundary in enumerate(boundaries) if boundary <= target)
 
 
 def _ev_trip_energy_at_start(period_start_local: Any, tasks: tuple[PlanningTask, ...]) -> float:
@@ -1287,7 +1360,7 @@ def _validate_solution_plan(
             errors.append(f"interval_{index}_ess_discharge_limit")
         if ess_power < -resource.max_charge_power_w - _VALIDATION_POWER_TOLERANCE_W:
             errors.append(f"interval_{index}_ess_charge_limit")
-        expected_grid_w = item.background_load_w + item.scheduled_load_w - item.pv_ac_power_w - ess_power
+        expected_grid_w = item.total_load_w - item.pv_ac_power_w - ess_power
         if abs(float(grid_power) - expected_grid_w) > _VALIDATION_POWER_TOLERANCE_W:
             errors.append(f"interval_{index}_ac_balance_mismatch")
         if item.curtailed_dc_pv_w is None or item.curtailed_dc_pv_w < -_VALIDATION_POWER_TOLERANCE_W:
@@ -1342,7 +1415,7 @@ def _validate_solution_plan(
                 item.scheduled_load_w
                 for item in plan.intervals
                 if deadline_utc is not None
-                and (item.period_start_local + _INTERVAL_DELTA).astimezone(UTC) > deadline_utc
+                and (item.period_start_local.astimezone(UTC) + _INTERVAL_DELTA) > deadline_utc
             )
             * _INTERVAL_HOURS
             / 1000.0
@@ -1379,24 +1452,11 @@ def _validate_solution_plan(
     return tuple(dict.fromkeys(errors)), tuple(task_checks)
 
 
-def _ev_soc_at_deadline(
-    plan: EnergyPlan,
-    ev: EvActuatorSnapshot,
-    deadline: Any,
-) -> float | None:
-    if deadline is None or not plan.intervals:
+def _ev_soc_at_deadline(plan: EnergyPlan, ev: EvActuatorSnapshot, deadline: Any) -> float | None:
+    index = _ev_state_index(plan, deadline)
+    if index is None:
         return None
-    target_utc = deadline.astimezone(UTC)
-    first_start = plan.intervals[0].period_start_local.astimezone(UTC)
-    if abs((first_start - target_utc).total_seconds()) < 1.0:
-        return ev.soc_percent
-    for index, item in enumerate(plan.intervals[1:], start=1):
-        if abs((item.period_start_local.astimezone(UTC) - target_utc).total_seconds()) < 1.0:
-            return plan.intervals[index - 1].projected_ev_soc_percent
-    final_end = (plan.intervals[-1].period_start_local + _INTERVAL_DELTA).astimezone(UTC)
-    if abs((final_end - target_utc).total_seconds()) < 1.0:
-        return plan.intervals[-1].projected_ev_soc_percent
-    return None
+    return ev.soc_percent if index == 0 else plan.intervals[index - 1].projected_ev_soc_percent
 
 
 def _ev_power_step_valid(power_w: float, ev: EvActuatorSnapshot) -> bool:
@@ -1537,10 +1597,8 @@ async def publish_milp_evaluation(client: HomeAssistantClient, evaluation: MilpE
         "tie_break_warm_start_applied": evaluation.tie_break_warm_start_applied,
         "tie_break_warm_start_status": evaluation.tie_break_warm_start_status,
         "selected_solution_stage": evaluation.selected_solution_stage,
-        "tie_break_objective": "grid_import_delay_then_ev_consolidation_then_early_use",
-        "ev_session_start_weight": MILP_EV_SESSION_START_WEIGHT,
-        "ev_charge_delay_weight": MILP_EV_CHARGE_DELAY_WEIGHT,
-        "grid_import_delay_weight": MILP_GRID_IMPORT_DELAY_WEIGHT,
+        "tie_break_objective": "v3_explicit_priority_bounds",
+        "selected_hierarchy_stage": next((s.name for s in reversed(evaluation.stages) if s.accepted), None),
         "ev_session_count": evaluation.ev_session_count,
         "ev_charge_delay_score_kwh_days": _round_optional(evaluation.ev_charge_delay_score_kwh_days, 4),
         "early_value_half_life_days": evaluation.early_value_half_life_days,
@@ -1614,3 +1672,36 @@ def _round_optional(value: object, digits: int) -> float | None:
     if value is None or isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     return round(float(value), digits)
+
+
+def highspy_value(expression, values):
+    import highspy
+    if isinstance(expression, (float, int)):
+        return float(expression)
+    return float(highspy.Highs.internal_get_value(values, expression))
+
+
+def _canonicalize_auxiliaries(plan, ev, tasks, profile, capacity_state, variables, values):
+    """Remove artificial import/export cycles and slack without changing physical commands.
+
+    With import price above export price these changes only improve economics and
+    robustness, preserving every later-stage bound. Validate the full primal afterwards.
+    """
+    values = list(values)
+    peaks = {month: _capacity_baseline_kw(month, profile, capacity_state)
+             for month in variables.capacity_peak_kw}
+    for i, slot in enumerate(plan.intervals):
+        imp, exp = variables.grid_import_kw[i], variables.grid_export_kw[i]
+        net = _value(imp, values) - _value(exp, values)
+        values[imp.index], values[exp.index] = max(0.0, net), max(0.0, -net)
+        month = slot.period_start_local.strftime("%Y-%m")
+        peaks[month] = max(peaks[month], max(0.0, net))
+    for month, var in variables.capacity_peak_kw.items():
+        values[var.index] = peaks[month]
+    if variables.ev_preferred_shortfall_kwh is not None and ev is not None:
+        target = ev.capabilities.battery_capacity_kwh * (_preferred_soc_percent(tasks) or 0.0) / 100
+        values[variables.ev_preferred_shortfall_kwh.index] = max(
+            0, target - _value(variables.ev_stored_energy_kwh[-1], values))
+    for shortfall, stored, target in variables.generic_shortfalls:
+        values[shortfall.index] = max(0.0, target - _value(stored, values))
+    return values

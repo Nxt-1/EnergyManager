@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, tzinfo
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 
 from .actuators import ActuatorSnapshot, EvActuatorSnapshot, find_ev_actuator
 from .config import EvSettings, EvWeeklyScheduleEntry
@@ -58,6 +58,10 @@ class TaskRegistry:
     def __init__(self, ev_settings: EvSettings) -> None:
         self._ev = ev_settings
 
+    @property
+    def settings(self) -> EvSettings:
+        return self._ev
+
     def snapshots(
         self,
         actuators: tuple[ActuatorSnapshot, ...],
@@ -82,7 +86,7 @@ def _ev_weekly_tasks(
 ) -> tuple[PlanningTask, ...]:
     actuator = find_ev_actuator(actuators)
     now_local = now_utc.astimezone(local_tz)
-    horizon_end = now_local + _EV_SCHEDULE_HORIZON
+    horizon_end = (now_utc.astimezone(UTC) + _EV_SCHEDULE_HORIZON).astimezone(local_tz)
     occurrences = _schedule_occurrences(settings.weekly_schedule, now_local, horizon_end)
     unavailable = _unavailable_windows(occurrences, now_local, horizon_end, actuator)
     placeholder = _weekly_placeholder(settings, actuator, now_local, horizon_end, unavailable)
@@ -257,13 +261,13 @@ def _available_hours(
 ) -> float:
     if end <= start:
         return 0.0
-    total = (end - start).total_seconds() / 3600.0
+    total = (end.astimezone(UTC) - start.astimezone(UTC)).total_seconds() / 3600.0
     blocked = 0.0
     for window_start, window_end in unavailable:
         overlap_start = max(start, window_start)
         overlap_end = min(end, window_end)
         if overlap_start < overlap_end:
-            blocked += (overlap_end - overlap_start).total_seconds() / 3600.0
+            blocked += (overlap_end.astimezone(UTC) - overlap_start.astimezone(UTC)).total_seconds() / 3600.0
     return max(0.0, total - blocked)
 
 
@@ -273,7 +277,8 @@ def _window_contains(windows: tuple[tuple[datetime, datetime], ...], moment: dat
 
 def _combine_local(value: date, configured_time: str, zone: tzinfo | None) -> datetime:
     hour, minute = (int(part) for part in configured_time.split(":", maxsplit=1))
-    return datetime.combine(value, time(hour, minute), tzinfo=zone)
+    candidate = datetime.combine(value, time(hour, minute), tzinfo=zone)
+    return candidate.astimezone(UTC).astimezone(zone)
 
 
 def _ev_charge_task(
@@ -288,8 +293,8 @@ def _ev_charge_task(
     deadline = _next_local_deadline(now_local, settings.departure_time_local)
     minimum_soc = settings.minimum_soc_percent
     if minimum_soc is None:
-        minimum_soc = settings.target_soc_percent
-    preferred_soc = max(minimum_soc, settings.target_soc_percent)
+        minimum_soc = 0.0  # Unspecified hard minimum is not the preferred terminal target.
+    preferred_soc = settings.target_soc_percent
     common = {
         "task_id": "ev_charge",
         "kind": "energy_by_deadline",
@@ -309,7 +314,7 @@ def _ev_charge_task(
             required_energy_kwh=None,
             battery_energy_required_kwh=None,
         )
-    if actuator.connected is False:
+    if actuator.connected is not True:
         return PlanningTask(
             **common,
             status="waiting_for_connection",
@@ -352,7 +357,7 @@ def _ev_charge_task(
         if hard_ac_energy > 0.0 and maximum_power_w > 0.0
         else 0.0
     )
-    available_hours = max(0.0, (deadline - now_local).total_seconds() / 3600.0)
+    available_hours = max(0.0, (deadline.astimezone(UTC) - now_local.astimezone(UTC)).total_seconds() / 3600.0)
     feasible = minimum_runtime <= available_hours + 1e-9
 
     if hard_delta_soc <= 0.0 and preferred_delta_soc <= 0.0:
@@ -392,7 +397,7 @@ def _maximum_ev_power_w(actuator: EvActuatorSnapshot) -> float:
 
 def _next_local_deadline(now_local: datetime, configured_time: str) -> datetime:
     hour, minute = (int(part) for part in configured_time.split(":", maxsplit=1))
-    candidate = datetime.combine(now_local.date(), time(hour, minute), tzinfo=now_local.tzinfo)
+    candidate = _combine_local(now_local.date(), configured_time, now_local.tzinfo)
     if candidate <= now_local:
-        candidate += timedelta(days=1)
+        candidate = _combine_local(now_local.date() + timedelta(days=1), configured_time, now_local.tzinfo)
     return candidate

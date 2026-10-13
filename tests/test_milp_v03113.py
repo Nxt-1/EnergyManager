@@ -9,23 +9,31 @@ import pytest
 
 from energymanager.config import ConfigurationError, Settings
 from energymanager.milp_planner import (
-    MILP_EV_CHARGE_DELAY_WEIGHT,
-    MILP_EV_SESSION_START_WEIGHT,
-    MILP_GRID_IMPORT_DELAY_WEIGHT,
     _accounting_delta,
     _economic_objective_value,
     _economic_stage_accounting,
 )
 
 
-def test_grid_purchase_uncertainty_outweighs_three_session_savings() -> None:
-    """Observed v0.31.11 pathological trade-off must not be preferred purely by tie-break weights."""
-    economic_score = (8 * MILP_EV_SESSION_START_WEIGHT + 14.49471 * MILP_GRID_IMPORT_DELAY_WEIGHT
-                      + 237.5121 * MILP_EV_CHARGE_DELAY_WEIGHT)
-    aggressive_score = (5 * MILP_EV_SESSION_START_WEIGHT + 19.37491 * MILP_GRID_IMPORT_DELAY_WEIGHT
-                        + 213.5933 * MILP_EV_CHARGE_DELAY_WEIGHT)
-    assert economic_score < aggressive_score
-    assert 5 * MILP_EV_SESSION_START_WEIGHT < 8 * MILP_EV_SESSION_START_WEIGHT
+def test_grid_purchase_uncertainty_is_a_bound_not_a_session_weight() -> None:
+    import highspy
+
+    from energymanager.hierarchy import refine
+
+    model = highspy.Highs()
+    model.setOptionValue("output_flag", False)
+    model.setOptionValue("threads", 1)
+    choice = model.addVariable(lb=0, ub=1, type=highspy.HighsVarType.kInteger)
+    model.setObjective(choice)
+    model.run()
+    values, _, _, stages, _ = refine(
+        model, highspy,
+        (("robustness", "weighted_kWh", 14.49471 + (19.37491 - 14.49471) * choice, .05),
+         ("operations", "events", 8 - 3 * choice, 0)),
+        [0.0], seconds=1, describe=lambda values: (None, {}),
+    )
+    assert values[0] == 0  # Three fewer sessions cannot consume another 4.88 weighted kWh.
+    assert stages[-1].objective == 8
 
 
 def test_stage_accounting_matches_monetary_objective_and_delta() -> None:
@@ -33,6 +41,7 @@ def test_stage_accounting_matches_monetary_objective_and_delta() -> None:
         return SimpleNamespace(index=index)
 
     variables = SimpleNamespace(
+        generic_penalty=0.0,
         grid_import_kw=[var(0)],
         grid_export_kw=[var(1)],
         stored_energy_kwh=[var(3)],
@@ -63,12 +72,12 @@ def test_planner_defaults_and_custom_time_limit(tmp_path) -> None:
     path = tmp_path / "options.json"
     defaults = Settings.load(path)
     assert defaults.planner.tie_break_seconds == 30
-    assert defaults.as_options()["planner"] == {"tie_break_seconds": 30}
+    assert defaults.as_options()["planner"]["tie_break_seconds"] == 30
 
     path.write_text(json.dumps({"planner": {"tie_break_seconds": 60}}))
     settings = Settings.load(path)
     assert settings.planner.tie_break_seconds == 60
-    assert settings.as_options()["planner"] == {"tie_break_seconds": 60}
+    assert settings.as_options()["planner"]["tie_break_seconds"] == 60
 
 
 @pytest.mark.parametrize("planner", [
@@ -91,6 +100,6 @@ def test_removed_benchmark_settings_are_ignored_for_older_saved_options(tmp_path
     }))
     settings = Settings.load(path)
     assert settings.planner.tie_break_seconds == 45
-    assert settings.as_options()["planner"] == {"tie_break_seconds": 45}
+    assert settings.as_options()["planner"]["tie_break_seconds"] == 45
     assert "benchmark_milp_once" not in settings.as_options()
     assert "benchmark_milp_threads_once" not in settings.as_options()

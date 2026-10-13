@@ -1,3 +1,18 @@
+# V3 decision evidence preview
+
+Retains the existing Overview, Planning, Performance and Diagnostics behavior and adds a focused
+Decision details view. Update the resource to `/local/energymanager-timeline-card.js?v=300b1`.
+Select a latest requirement to inspect structured provenance and stage tolerances. For complete
+session/stage evidence, import an archived decision JSON from the CLI; select a session for its
+counterfactual command. Import the resulting comparison JSON to inspect quantitative differences.
+Files are processed locally in the browser. This preview does not expose a new network service.
+
+See [the V3 guide](../docs/V3.md) for export/replay commands, limitations and installation instructions.
+Browser integration requires validation in the target HA installation; JavaScript/YAML checks and
+existing history/graph data tests run locally.
+
+## Retained dashboard history
+
 # EnergyManager Dashboard v2.37 — SoC colors and notification diagnostics
 
 Dashboard-only update based on v2.36. No EnergyManager add-on changes.

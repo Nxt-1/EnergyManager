@@ -32,6 +32,7 @@ def _ready_ev_settings(**overrides: object) -> EvSettings:
         "battery_capacity_kwh": 70.0,
         "charge_efficiency": 0.90,
         "target_soc_percent": 80.0,
+        "minimum_soc_percent": 80.0,
         "departure_time_local": "07:00",
     }
     values.update(overrides)
@@ -86,6 +87,7 @@ def test_ev_task_marks_deadline_infeasible_if_required_energy_exceeds_available_
     settings = _ready_ev_settings(
         battery_capacity_kwh=100.0,
         target_soc_percent=100.0,
+        minimum_soc_percent=100.0,
         departure_time_local="21:00",
         supports_single_phase=True,
         supports_three_phase=False,

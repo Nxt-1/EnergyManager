@@ -803,7 +803,7 @@ def evaluate_plan_objective(
     terminal_value = terminal_usable_ac_kwh * profile.import_energy_eur_per_kwh
     soft_preference_penalty = 0.0
     if hours * 4 >= len(plan.intervals):
-        soft_preference_penalty = plan.preferred_ev_shortfall_penalty_eur
+        soft_preference_penalty = plan.preferred_ev_shortfall_penalty_eur + plan.generic_penalty_eur
     return EconomicObjectiveEvaluation(
         horizon_hours=hours,
         marginal_cost_eur=accounting.total_marginal_cost_eur,

@@ -1339,7 +1339,7 @@ if (!customElements.get('energymanager-notification-events-card')) {
 
 // Module resource/version verification (logged once per script evaluation).
 // The Planning helper retains its v2.32 name to keep the existing chart API stable.
-window.energyManagerDashboardVersion = '2.38';
+window.energyManagerDashboardVersion = '3.0.0b1';
 window.energyManagerDashboardInfo = {
   version: '2.38',
   loadedAt: new Date().toISOString(),
@@ -1350,4 +1350,113 @@ window.energyManagerDashboardInfo = {
   notificationEventsCardReady: Boolean(customElements.get('energymanager-notification-events-card')),
   observedTaskHistoryReady: typeof window.energyManagerObservedTasksV238?.get === 'function'
 };
-console.info('[EnergyManager Dashboard] JavaScript v2.38 loaded', window.energyManagerDashboardInfo);
+console.info('[EnergyManager Dashboard] JavaScript V3 preview loaded', window.energyManagerDashboardInfo);
+
+// V3 evidence viewer: local archive files never leave the browser.
+class EnergyManagerDecisionDetails extends HTMLElement {
+  setConfig(config) { this._config = config; }
+  set hass(hass) {
+    this._hass = hass;
+    const id = hass.states['sensor.energy_manager_v3_decision']?.attributes?.snapshot_id;
+    if (!this._built) { this.build(); this.renderDetails(); }
+    if (!this._document && id !== this._id) { this._id = id; this.renderDetails(); }
+  }
+  getCardSize() { return 5; }
+  build() {
+    this._built = true;
+    this.innerHTML = `<ha-card header="V3 decision evidence"><div style="padding:16px">
+      <p data-status></p><label>Inspect requirement <select data-requirement></select></label>
+      <pre data-detail style="white-space:pre-wrap;max-height:480px;overflow:auto"></pre>
+      <p>Open an archived decision or CLI counterfactual JSON file. Processing stays in this browser.</p>
+      <input type="file" accept="application/json,.json" aria-label="Open V3 evidence JSON">
+      <button data-live>Latest decision</button><pre data-stages style="white-space:pre-wrap"></pre>
+      <p data-cmd style="overflow-wrap:anywhere"></p></div></ha-card>`;
+    this.querySelector('[data-requirement]').onchange = () => this.showRequirement();
+    this.querySelector('[data-live]').onclick = () => { this._document = null; this.renderDetails(); };
+    this.querySelector('input').onchange = async event => {
+      try {
+        const file = event.target.files[0];
+        if (!file || file.size > 32 * 1024 * 1024) throw new Error('Select JSON below 32 MiB');
+        const data = JSON.parse(await file.text());
+        if (!data.snapshot_id) throw new Error('Missing snapshot ID');
+        this._document = data; this.renderDetails();
+      } catch (error) { this.querySelector('[data-status]').textContent = String(error); }
+    };
+  }
+  renderDetails() {
+    const live = this._hass?.states['sensor.energy_manager_v3_decision']?.attributes || {};
+    const doc = this._document;
+    const evaluation = doc?.evaluation || doc?.alternative || live;
+    this._requirements = doc?.snapshot?.frame?.requirements || doc?.alternative?.plan?.requirements || live.requirements || [];
+    const select = this.querySelector('[data-requirement]');
+    select.replaceChildren();
+    for (const [i, requirement] of this._requirements.entries()) {
+      const option = document.createElement('option'); option.value = i;
+      option.textContent = `${requirement.requirement_id}: ${requirement.hard ? 'hard' : 'preferred'}`;
+      select.appendChild(option);
+    }
+    this.querySelector('[data-status]').textContent =
+      `${doc?.snapshot_id || live.snapshot_id || 'No decision available'} · ` +
+      `${doc?.disposition || evaluation.status || live.solver_status || 'waiting'}`;
+    this.querySelector('[data-stages]').textContent = JSON.stringify({
+      stages: (evaluation.stages || []).map(({plan, ...stage}) => stage),
+      quantitative_difference: doc?.delta, infeasibility: doc?.infeasibility,
+      attribution: doc?.attribution || doc?.interpretation || live.attribution,
+    }, null, 2);
+    this.querySelector('[data-cmd]').textContent = live.details_command || '';
+    this.showRequirement();
+  }
+  showRequirement() {
+    const index = Number(this.querySelector('[data-requirement]').value);
+    this.querySelector('[data-detail]').textContent = JSON.stringify(this._requirements[index] ||
+      {status: 'No requirement evidence available'}, null, 2);
+  }
+}
+if (!customElements.get('energymanager-decision-details')) {
+  customElements.define('energymanager-decision-details', EnergyManagerDecisionDetails);
+}
+
+// Augment the focused evidence panel with actual archived EV session selection.
+const energyManagerRenderDecision = EnergyManagerDecisionDetails.prototype.renderDetails;
+EnergyManagerDecisionDetails.prototype.renderDetails = function () {
+  energyManagerRenderDecision.call(this);
+  const old = this.querySelector('[data-sessions]');
+  if (old) old.remove();
+  const doc = this._document;
+  const plan = doc?.evaluation?.plan || doc?.alternative?.plan;
+  if (!plan?.intervals) return;
+  const container = document.createElement('div'); container.dataset.sessions = '';
+  container.style.padding = '16px';
+  const label = document.createElement('label'); label.textContent = 'Inspect scheduled EV session ';
+  const select = document.createElement('select'); label.appendChild(select); container.appendChild(label);
+  const detail = document.createElement('pre');
+  detail.style.whiteSpace = 'pre-wrap'; container.appendChild(detail);
+  const sessions = [];
+  let active = null;
+  plan.intervals.forEach((slot, index) => {
+    if (slot.scheduled_load_w > 1) {
+      if (!active) {
+        active = {start_index: index, end_index: index, energy_kwh: 0, slots: []};
+        sessions.push(active);
+      }
+      active.end_index = index + 1;
+      active.energy_kwh += slot.scheduled_load_w * 0.25 / 1000;
+      active.slots.push({start: slot.period_start_local, power_w: slot.scheduled_load_w});
+    } else active = null;
+  });
+  sessions.forEach((session, index) => {
+    const option = document.createElement('option'); option.value = index;
+    option.textContent = `Slots ${session.start_index}–${session.end_index} · ${session.energy_kwh.toFixed(2)} kWh`;
+    select.appendChild(option);
+  });
+  const update = () => {
+    const session = sessions[Number(select.value)];
+    detail.textContent = session ? JSON.stringify({
+      ...session, evidence: 'Compare recorded stage plans above; timing causation is not established by correlation.',
+      counterfactual_command: `python -m energymanager.replay counterfactual ${doc.snapshot_id} forbid_ev ` +
+        `${session.start_index} ${session.end_index}`,
+    }, null, 2) : 'No scheduled charging sessions';
+  };
+  select.onchange = update; update();
+  this.querySelector('ha-card').appendChild(container);
+};

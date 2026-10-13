@@ -1,5 +1,5 @@
 name: Energy Manager
-version: "0.31.16"
+version: "3.0.0b1"
 slug: energy_manager
 description: Predictive home energy manager for Home Assistant
 url: https://github.com/Nxt-1/EnergyManager
@@ -14,6 +14,15 @@ options:
   log_level: info
   planner:
     tie_break_seconds: 30
+    shadow_mode: true
+    economic_tolerance_eur: 0.01
+    robustness_tolerance_kwh: 0.05
+    operations_tolerance_events: 0.0
+    stability_tolerance_kwh: 0.01
+    grid_import_limit_kw: 25.0
+    grid_export_limit_kw: 25.0
+    archive_max_mb: 256
+    archive_keep: 500
   grid: {}
   ess:
     power_positive_means: discharge
@@ -42,6 +51,15 @@ schema:
   log_level: list(debug|info|warning|error)
   planner:
     tie_break_seconds: int
+    shadow_mode: bool?
+    economic_tolerance_eur: float?
+    robustness_tolerance_kwh: float?
+    operations_tolerance_events: float?
+    stability_tolerance_kwh: float?
+    grid_import_limit_kw: float?
+    grid_export_limit_kw: float?
+    archive_max_mb: int?
+    archive_keep: int?
   grid:
     import_power_entity: str?
     export_power_entity: str?

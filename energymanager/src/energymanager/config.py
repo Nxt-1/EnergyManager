@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -186,6 +186,26 @@ class PlannerSettings:
     """Secondary MILP time budget."""
 
     tie_break_seconds: int = 30
+    shadow_mode: bool = True
+    economic_tolerance_eur: float = 0.01
+    robustness_tolerance_kwh: float = 0.05
+    operations_tolerance_events: float = 0.0
+    stability_tolerance_kwh: float = 0.01
+    grid_import_limit_kw: float = 25.0
+    grid_export_limit_kw: float = 25.0
+    archive_max_mb: int = 256
+    archive_keep: int = 500
+
+    def hierarchy_policy(self):
+        from .hierarchy import HierarchyPolicy
+        return HierarchyPolicy(
+            economic_tolerance_eur=self.economic_tolerance_eur,
+            robustness_tolerance_kwh=self.robustness_tolerance_kwh,
+            operations_tolerance_events=self.operations_tolerance_events,
+            stability_tolerance_kwh=self.stability_tolerance_kwh,
+            total_seconds=30.0 + self.tie_break_seconds,
+            grid_import_limit_kw=self.grid_import_limit_kw, grid_export_limit_kw=self.grid_export_limit_kw,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -229,9 +249,7 @@ class Settings:
         """Return normalized nested options suitable for writing back to Supervisor."""
         return {
             "log_level": self.log_level,
-            "planner": {
-                "tie_break_seconds": self.planner.tie_break_seconds,
-            },
+            "planner": asdict(self.planner),
             "grid": _without_none(
                 {
                     "import_power_entity": self.grid.import_power_entity,
@@ -350,6 +368,22 @@ class Settings:
         tie_break_seconds = _nonnegative_int(planner_raw.get("tie_break_seconds", 30), "planner.tie_break_seconds")
         if not 5 <= tie_break_seconds <= 120:
             raise ConfigurationError("planner.tie_break_seconds must be between 5 and 120")
+        planner_values = {"tie_break_seconds": tie_break_seconds,
+                          "shadow_mode": _bool_option(planner_raw.get("shadow_mode", True), "planner.shadow_mode")}
+        defaults = PlannerSettings()
+        for key in ("economic_tolerance_eur", "robustness_tolerance_kwh", "operations_tolerance_events",
+                    "stability_tolerance_kwh", "grid_import_limit_kw", "grid_export_limit_kw"):
+            planner_values[key] = _nonnegative_float(planner_raw.get(key, getattr(defaults, key)), "planner." + key)
+        planner_values["archive_max_mb"] = _bounded_int(planner_raw.get("archive_max_mb", 256),
+                                                       "planner.archive_max_mb", 16, 4096)
+        planner_values["archive_keep"] = _bounded_int(planner_raw.get("archive_keep", 500),
+                                                     "planner.archive_keep", 1, 10000)
+        planner_settings = PlannerSettings(**planner_values)
+        try:
+            planner_settings.hierarchy_policy()
+        except ValueError as exc:
+            raise ConfigurationError(str(exc)) from exc
+
         grid_raw = _mapping(raw.get("grid"), "grid")
         ess_raw = _mapping(raw.get("ess"), "ess")
         pv_raw = _mapping(raw.get("pv"), "pv")
@@ -444,8 +478,6 @@ class Settings:
             if ev_minimum_soc_raw is None or str(ev_minimum_soc_raw).strip() == ""
             else _percentage(ev_minimum_soc_raw, "ev.minimum_soc_percent")
         )
-        if ev_minimum_soc is not None and ev_minimum_soc > ev_target_soc:
-            raise ConfigurationError("ev.minimum_soc_percent must not exceed ev.target_soc_percent")
         ev_departure_time = _local_time_option(ev_raw.get("departure_time_local", "07:00"), "ev.departure_time_local")
         ev_weekly_schedule = _ev_weekly_schedule(ev_raw.get("weekly_schedule", []))
 
@@ -528,7 +560,7 @@ class Settings:
 
         return cls(
             log_level=log_level,
-            planner=PlannerSettings(tie_break_seconds=tie_break_seconds),
+            planner=planner_settings,
             grid=GridSettings(import_power_entity=grid_import, export_power_entity=grid_export),
             ess=EssSettings(
                 soc_entity=_optional_entity_id(ess_raw.get("soc_entity"), "ess.soc_entity"),

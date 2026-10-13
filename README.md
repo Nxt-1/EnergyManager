@@ -6,25 +6,16 @@ guest.
 
 The project is being developed as a Home Assistant app.
 
-## Architecture direction
+## V3 preview
 
-The intended high-level architecture is:
+Version **3.0.0b1** implements explainable hierarchical planning and defaults to **shadow mode**.
+Observations and forecasts become immutable requirements and snapshots; HiGHS solves explicit
+priority stages; validated schedules feed the existing independent safety/dispatch loop.
+Every decision can be archived, replayed and compared with a read-only counterfactual.
 
-```text
-Independent predictors
-        ↓
-Load manager / task generator
-        ↓
-Planner
-        ↕
-Actuators
-        ↕
-Controllable devices
-```
-
-The planner owns both forward scheduling and management of unplanned conditions. Actuators own device-specific control
-behaviour and report their actual state and dynamic capability back to the planner. Actuators do not coordinate directly
-with one another.
+See [V3 architecture, migration, replay and shadow installation](docs/V3.md) and
+[validation results](docs/V3-validation.md). Existing installations must explicitly configure
+an EV departure minimum; an omitted minimum no longer inherits the preferred terminal target.
 
 ## Repository layout
 
@@ -43,18 +34,12 @@ matching GHCR image. Home Assistant can then show the new version as an availabl
 
 Normal commits that do not change `energymanager/config.yaml` run CI but do not publish a deployable image.
 
-## First installation
+## Development and installation
 
-1. Push this repository to `https://github.com/Nxt-1/EnergyManager`.
-2. Confirm the `Publish app image` GitHub Action completes successfully for version `0.1.0`.
-3. Confirm the GHCR package can be pulled anonymously. If GitHub created it as private, change the package visibility to
-   public once. Home Assistant must be able to pull the image without registry credentials.
-4. In Home Assistant, add `https://github.com/Nxt-1/EnergyManager` as a custom app repository.
-5. Install **Energy Manager**.
-6. In the app configuration, set `grid_power_entity` to a numeric Home Assistant entity representing net grid power.
-7. Start the app and inspect its logs.
+Use Python 3.13 and install `requirements-dev.txt` in a virtual environment. Run
+`ruff check energymanager/src tests tools` and `pytest`. A reproducible synthetic benchmark is
+available through `PYTHONPATH=energymanager/src python tools/benchmark_v3.py`.
 
-The app creates temporary diagnostic states through the Home Assistant REST API:
-
-- `sensor.energy_manager_status`
-- `sensor.energy_manager_observed_grid_power`
+The preview has not been published. Follow the shadow-only local installation procedure in
+[the V3 guide](docs/V3.md#shadow-only-installation-then-deliberate-activation) after review and
+explicit deployment approval. Do not enable device control merely to inspect planning diagnostics.
