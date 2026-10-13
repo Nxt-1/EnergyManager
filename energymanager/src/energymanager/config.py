@@ -84,6 +84,10 @@ class EvSettings:
     current_entity: str | None = None
     phase_mode_entity: str | None = None
     force_state_entity: str | None = None
+    reset_button_entity: str | None = None
+    automatic_fault_reset: bool = False
+    fault_reset_delay_seconds: int = 60
+    max_reset_attempts: int = 1
     control_enabled: bool = False
     min_charge_current_a: float = 6.0
     max_charge_current_a: float = 16.0
@@ -265,6 +269,10 @@ class Settings:
                     "current_entity": self.ev.current_entity,
                     "phase_mode_entity": self.ev.phase_mode_entity,
                     "force_state_entity": self.ev.force_state_entity,
+                    "reset_button_entity": self.ev.reset_button_entity,
+                    "automatic_fault_reset": self.ev.automatic_fault_reset,
+                    "fault_reset_delay_seconds": self.ev.fault_reset_delay_seconds,
+                    "max_reset_attempts": self.ev.max_reset_attempts,
                     "control_enabled": self.ev.control_enabled,
                     "min_charge_current_a": self.ev.min_charge_current_a,
                     "max_charge_current_a": self.ev.max_charge_current_a,
@@ -398,6 +406,19 @@ class Settings:
             raise ConfigurationError("ev.phase_mode_entity must be a Home Assistant select entity")
         if ev_force_state_entity is not None and not ev_force_state_entity.startswith("select."):
             raise ConfigurationError("ev.force_state_entity must be a Home Assistant select entity")
+        ev_reset_power = _optional_entity_id(ev_raw.get("charging_power_entity"), "ev.charging_power_entity")
+        ev_reset_button = _optional_entity_id(ev_raw.get("reset_button_entity"), "ev.reset_button_entity")
+        if ev_reset_button is not None and not ev_reset_button.startswith("button."):
+            raise ConfigurationError("ev.reset_button_entity must be a Home Assistant button entity")
+        ev_auto_reset = _bool_option(ev_raw.get("automatic_fault_reset", False), "ev.automatic_fault_reset")
+        ev_reset_delay = _bounded_int(
+            ev_raw.get("fault_reset_delay_seconds", 60), "ev.fault_reset_delay_seconds", 0, 3600,
+        )
+        ev_reset_attempts = _bounded_int(ev_raw.get("max_reset_attempts", 1), "ev.max_reset_attempts", 0, 1)
+        if ev_auto_reset and (ev_reset_button is None or ev_reset_attempts == 0 or ev_reset_power is None):
+            raise ConfigurationError(
+                "ev.automatic_fault_reset requires charging power feedback, a button, and one allowed attempt"
+            )
         ev_control_enabled = _bool_option(ev_raw.get("control_enabled", False), "ev.control_enabled")
         if ev_control_enabled and None in (ev_current_entity, ev_phase_mode_entity, ev_force_state_entity):
             raise ConfigurationError(
@@ -531,12 +552,14 @@ class Settings:
             ev=EvSettings(
                 soc_entity=_optional_entity_id(ev_raw.get("soc_entity"), "ev.soc_entity"),
                 connected_entity=_optional_entity_id(ev_raw.get("connected_entity"), "ev.connected_entity"),
-                charging_power_entity=_optional_entity_id(
-                    ev_raw.get("charging_power_entity"), "ev.charging_power_entity"
-                ),
+                charging_power_entity=ev_reset_power,
                 current_entity=ev_current_entity,
                 phase_mode_entity=ev_phase_mode_entity,
                 force_state_entity=ev_force_state_entity,
+                reset_button_entity=ev_reset_button,
+                automatic_fault_reset=ev_auto_reset,
+                fault_reset_delay_seconds=ev_reset_delay,
+                max_reset_attempts=ev_reset_attempts,
                 control_enabled=ev_control_enabled,
                 min_charge_current_a=ev_min_charge_current,
                 max_charge_current_a=ev_max_charge_current,
@@ -774,6 +797,13 @@ def _nonnegative_int(value: object, option_name: str) -> int:
         raise ConfigurationError(f"{option_name} must be a whole number")
     if number < 0:
         raise ConfigurationError(f"{option_name} must be zero or greater")
+    return number
+
+
+def _bounded_int(value: object, option_name: str, minimum: int, maximum: int) -> int:
+    number = _nonnegative_int(value, option_name)
+    if not minimum <= number <= maximum:
+        raise ConfigurationError(f"{option_name} must be between {minimum} and {maximum}")
     return number
 
 

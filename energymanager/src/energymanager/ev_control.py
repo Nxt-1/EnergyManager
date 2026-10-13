@@ -11,7 +11,7 @@ from .config import EvSettings
 from .ha_client import HomeAssistantError
 
 _LOGGER = logging.getLogger(__name__)
-EV_CONTROL_VERSION = "2026-10-13-ev-control-v4"
+EV_CONTROL_VERSION = "2026-10-13-ev-control-v5"
 EV_CONTROL_STATUS_ENTITY = "sensor.energy_manager_ev_control_status"
 _PHASE_SWITCH_DELAY_SECONDS = 10.0
 _PHASE_ZERO_CONFIRM_SECONDS = 3.0
@@ -26,6 +26,9 @@ _MAX_WRITE_ERRORS = 3
 _FAULT_COOLDOWN_SECONDS = 10.0
 _CHARGE_START_CONFIRM_SECONDS = 90.0
 _CHARGING_POWER_MIN_W = 100.0
+_RESET_RESTART_WAIT_SECONDS = 30.0
+_RESET_RESTART_TIMEOUT_SECONDS = 150.0
+_RECOVERY_SUCCESS_CONFIRM_SECONDS = 20.0
 
 
 class EvHardwareController:
@@ -55,8 +58,20 @@ class EvHardwareController:
         self._fault_until_utc: datetime | None = None
         self._last_error: str | None = None
         self._requested_charge_power_w = 0.0
+        self._charge_enable_requested = False
         self._charge_wait_since: datetime | None = None
         self._delivery_error: str | None = None
+        self._recovery_state: str | None = None
+        self._recovery_started_utc: datetime | None = None
+        self._reset_issued_utc: datetime | None = None
+        self._reset_attempts = 0
+        self._reset_total_count = 0
+        self._last_reset_utc: datetime | None = None
+        self._last_reset_outcome: str | None = None
+        self._test_charging_since: datetime | None = None
+        self._charge_confirm_since: datetime | None = None
+        self._connected_observed = False
+        self._power_observed_w: float | None = None
 
     @property
     def enabled(self) -> bool:
@@ -103,20 +118,48 @@ class EvHardwareController:
             await self.safe_stop("shutdown_safe_stop", force=True)
 
     def observe_charging(self, house_state, *, now_utc: datetime | None = None) -> None:
-        """Detect sustained absence of measured power while plugged in and commanded to charge."""
+        """Track actual power and retain a confirmed charge failure across planner idling."""
         now = now_utc or datetime.now(UTC)
         connected = house_state.value("ev.connected")
         measured = house_state.value("ev.charging_power")
-        charge_commanded = self._requested_charge_power_w >= 500 and self._phase_switch_target is None
-        if connected is not True or not charge_commanded or self.fault_active:
+        self._connected_observed = connected is True
+        self._power_observed_w = (
+            float(measured) if isinstance(measured, (int, float)) and math.isfinite(measured) else None
+        )
+        if self._recovery_state == "manual_intervention":
+            return
+        charge_commanded = (
+            self._charge_enable_requested
+            and self._requested_charge_power_w >= 500
+            and self._phase_switch_target is None
+        )
+        if self._recovery_state == "test_charging":
+            if connected is not True or not charge_commanded or self._power_observed_w is None:
+                self._test_charging_since = None
+                self._charge_confirm_since = None
+                return
+            if connected is True and charge_commanded and self._power_observed_w is not None:
+                if self._power_observed_w >= _CHARGING_POWER_MIN_W:
+                    if self._charge_confirm_since is None:
+                        self._charge_confirm_since = now
+                    if (now - self._charge_confirm_since).total_seconds() >= _RECOVERY_SUCCESS_CONFIRM_SECONDS:
+                        _LOGGER.info("EV charging confirmed after go-e reset; recovery attempt succeeded")
+                        self._last_reset_outcome = "verified_charging"
+                        self._clear_delivery_recovery()
+                else:
+                    self._charge_confirm_since = None
+                    if self._test_charging_since is None:
+                        self._test_charging_since = now
+                    elif (now - self._test_charging_since).total_seconds() >= _CHARGE_START_CONFIRM_SECONDS:
+                        self._latch_delivery_fault("charging_failed_after_reset")
+            return
+        if self._recovery_state is not None:
+            return
+        if connected is not True or not charge_commanded or self.fault_active or self._power_observed_w is None:
             self._charge_wait_since = None
             self._delivery_error = None
             return
-        if not isinstance(measured, (int, float)) or not math.isfinite(measured):
-            self._charge_wait_since = None
-            self._delivery_error = None
-            return
-        if measured >= _CHARGING_POWER_MIN_W:
+        if self._power_observed_w >= _CHARGING_POWER_MIN_W:
             self._charge_wait_since = None
             self._delivery_error = None
             return
@@ -124,6 +167,98 @@ class EvHardwareController:
             self._charge_wait_since = now
         if (now - self._charge_wait_since).total_seconds() >= _CHARGE_START_CONFIRM_SECONDS:
             self._delivery_error = "connected_not_charging"
+            self._recovery_started_utc = now
+            self._recovery_state = "waiting_reset" if self._settings.automatic_fault_reset else "manual_intervention"
+            if self._recovery_state == "manual_intervention":
+                self._latch_delivery_fault("charging_fault_manual_intervention")
+            else:
+                _LOGGER.warning("EV charging not detected for 90 seconds; waiting to reset go-e once")
+
+    def _clear_delivery_recovery(self) -> None:
+        self._delivery_error = None
+        self._recovery_state = None
+        self._recovery_started_utc = None
+        self._charge_wait_since = None
+        self._test_charging_since = None
+        self._charge_confirm_since = None
+        self._reset_issued_utc = None
+        self._reset_attempts = 0
+
+    def _latch_delivery_fault(self, reason: str) -> None:
+        self._recovery_state = "manual_intervention"
+        self._delivery_error = "charging_fault_latched"
+        self._charge_confirm_since = None
+        self._last_error = reason
+        if self._reset_attempts:
+            self._last_reset_outcome = reason
+        _LOGGER.error("EV charging fault latched: %s; automatic charging stopped", reason)
+
+    async def _handle_delivery_recovery(self, now: datetime) -> bool:
+        """Return True if the recovery state prevents normal charging dispatch."""
+        if self._recovery_state is None:
+            return False
+        if self._recovery_state == "manual_intervention":
+            await self.safe_stop("charging_fault_latched")
+            return True
+        if self._recovery_state == "waiting_reset":
+            await self.safe_stop("charging_fault_waiting_reset")
+            if not self._connected_observed or self._recovery_started_utc is None:
+                return True
+            if (now - self._recovery_started_utc).total_seconds() < self._settings.fault_reset_delay_seconds:
+                return True
+            if (
+                self._settings.reset_button_entity is None
+                or self._reset_attempts >= self._settings.max_reset_attempts
+            ):
+                self._latch_delivery_fault("automatic_reset_unavailable")
+                return True
+            observed = await self._read_control_state()
+            if observed[3] is not None or not _force_is_off(observed[2]):
+                return True
+            if not await self._charging_power_is_zero():
+                return True
+            self._reset_attempts += 1  # Count before the write; never repeatedly press on errors.
+            self._reset_total_count += 1
+            self._last_reset_utc = now
+            self._last_reset_outcome = "requested"
+            try:
+                await self._client.call_service(
+                    "button", "press", {"entity_id": self._settings.reset_button_entity},
+                )
+            except (HomeAssistantError, OSError, TimeoutError) as exc:
+                self._latch_delivery_fault(f"charger_reset_failed:{exc}")
+                return True
+            self._service_write_count += 1
+            self._last_write_utc = now
+            self._last_action = "charger_fault_reset"
+            self._reset_issued_utc = now
+            self._recovery_state = "waiting_restart"
+            _LOGGER.warning("EV go-e reset button pressed once; waiting for charger restart")
+            await self._publish_status("reset_sent", reason="charger_fault_reset")
+            return True
+        if self._recovery_state == "waiting_restart":
+            await self._publish_status("reset_wait", reason="await_charger_restart")
+            if self._reset_issued_utc is None:
+                self._latch_delivery_fault("charger_reset_timing_missing")
+                return True
+            elapsed = (now - self._reset_issued_utc).total_seconds()
+            if elapsed > _RESET_RESTART_TIMEOUT_SECONDS:
+                self._latch_delivery_fault("charger_unavailable_after_reset")
+                return True
+            if elapsed < _RESET_RESTART_WAIT_SECONDS:
+                return True
+            observed = await self._read_control_state()
+            if observed[3] is not None:
+                return True
+            if not _force_is_off(observed[2]):
+                await self.safe_stop("reset_restart_hold_off")
+                return True
+            self._recovery_state = "test_charging"
+            self._test_charging_since = None
+            self._charge_confirm_since = None
+            _LOGGER.info("EV go-e responsive after reset; verifying actual charging before clearing fault")
+            return False
+        return False  # test_charging: allow one controlled charging attempt.
 
     @property
     def delivery_error(self) -> str | None:
@@ -143,6 +278,8 @@ class EvHardwareController:
                 requested_power_w=None if ev_result is None else ev_result.requested_power_w,
                 accepted_power_w=None if ev_result is None else ev_result.accepted_power_w,
             )
+            return
+        if await self._handle_delivery_recovery(datetime.now(UTC)):
             return
         self._requested_charge_power_w = 0.0 if ev_result is None else max(0.0, ev_result.accepted_power_w)
         if ev_result is None:
@@ -194,6 +331,7 @@ class EvHardwareController:
         self._phase_switch_until_utc = None
         self._phase_switch_stopped_at_utc = None
         self._requested_charge_power_w = 0.0
+        self._charge_enable_requested = False
         if not self.enabled:
             await self._publish_status("disabled", reason="control_disabled")
             return
@@ -234,10 +372,10 @@ class EvHardwareController:
                 return
             write_performed = True
 
-        if _force_is_off(force_state) and not write_performed:
+        if _force_is_off(force_state) and not write_performed and self._recovery_state is None:
             self._reset_failure_tracking()
         await self._publish_status(
-            "stopped",
+            "fault_latched" if self._recovery_state == "manual_intervention" else "stopped",
             reason=reason,
             requested_power_w=requested_power_w,
             accepted_power_w=accepted_power_w,
@@ -425,6 +563,7 @@ class EvHardwareController:
             and math.isclose(observed_current, float(target_current), abs_tol=_CURRENT_TOLERANCE_A)
             and _force_is_on(observed_force)
         )
+        self._charge_enable_requested = True
         if acknowledged:
             self._reset_failure_tracking()
         await self._publish_status(
@@ -454,6 +593,7 @@ class EvHardwareController:
         now: datetime,
     ) -> None:
         """Stop charging first; a later dispatch verifies zero power and changes phase."""
+        self._charge_enable_requested = False
         if not _force_is_off(observed_force):
             error = await self._write_select(
                 self._settings.force_state_entity, _FORCE_DONT_CHARGE, "phase_switch_force_off",
@@ -533,6 +673,7 @@ class EvHardwareController:
         return current, phase, force, "; ".join(errors) or None
 
     async def _best_effort_force_off(self) -> None:
+        self._charge_enable_requested = False
         if self.fault_active:
             return
         await self._write_select(self._settings.force_state_entity, _FORCE_DONT_CHARGE, "fail_safe_force_off")
@@ -597,6 +738,7 @@ class EvHardwareController:
             self._command_attempts = 1
 
     async def _trip_fault(self, error: str) -> None:
+        self._charge_enable_requested = False
         self._last_error = error
         self._fault_until_utc = datetime.now(UTC) + timedelta(seconds=_FAULT_COOLDOWN_SECONDS)
         force_entity = self._settings.force_state_entity
@@ -728,6 +870,17 @@ class EvHardwareController:
             "fault_until_utc": self._fault_until_utc.isoformat() if self._fault_until_utc else None,
             "last_error": self._last_error,
             "delivery_error": self._delivery_error,
+            "charge_enable_requested": self._charge_enable_requested,
+            "reset_button_entity": self._settings.reset_button_entity,
+            "automatic_fault_reset": self._settings.automatic_fault_reset,
+            "fault_reset_delay_seconds": self._settings.fault_reset_delay_seconds,
+            "max_reset_attempts": self._settings.max_reset_attempts,
+            "recovery_state": self._recovery_state,
+            "reset_attempts": self._reset_attempts,
+            "reset_total_count": self._reset_total_count,
+            "last_reset_utc": self._last_reset_utc.isoformat() if self._last_reset_utc else None,
+            "last_reset_outcome": self._last_reset_outcome,
+            "reset_issued_utc": self._reset_issued_utc.isoformat() if self._reset_issued_utc else None,
             "charge_wait_seconds": (
                 round((datetime.now(UTC) - self._charge_wait_since).total_seconds(), 1)
                 if self._charge_wait_since is not None else 0

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.31.16 — Optional one-shot go-e charger reset
+
+- Optional EV charging-fault reset after a confirmed no-power episode; reset at most once before a supervised charging retry.
+- Persistent charging failure prevents further automated retries; no recovery notification is emitted.
+- All reset settings are in the existing EV configuration group.
+- Removed the two obsolete MILP benchmark files so CI no longer runs their stale tests.
+
 ## 0.31.15
 - Remove one-off MILP limit/thread benchmarks, their add-on options, background worker and diagnostic sensor publishing.
 - Revert HiGHS to a fixed single-thread setting based on the 1/2/4-thread benchmark results.

@@ -388,3 +388,14 @@ The MILP status sensor now includes `economic_stage_accounting`, `selected_stage
 `economic_accounting_delta`: seven-day grid purchases, exports, peak charges, EV preferred-target penalties and credited
 terminal ESS energy, calculated from the same internal terms as the economic MILP objective.
 
+
+### EV charging-fault recovery (optional)
+
+Configure `ev.reset_button_entity` (a Home Assistant `button.*` entity) and explicitly enable
+`ev.automatic_fault_reset`. The delay defaults to 60 seconds after a 90-second confirmed
+connected-but-not-charging fault. The controller forces charging off, checks measured charger
+power and HA feedback, presses the reset button at most once, waits for the charger to come
+back, and verifies sustained charging before clearing its fault state. If the retry fails,
+a latched fault stops automated charging until the add-on is restarted after manual inspection.
+Automatic resets are disabled by default. Resetting the charger cannot diagnose or repair
+electrical safety faults or Ford vehicle faults. A reset may briefly disconnect go-e sensors.

@@ -174,15 +174,16 @@ def test_connected_ev_not_charging_diagnostic_requires_sustained_zero_power() ->
     controller = EvHardwareController(FakeClient(), _settings())
     start = datetime(2026, 10, 10, 20, tzinfo=UTC)
     controller._requested_charge_power_w = 1380.0
+    controller._charge_enable_requested = True
     controller.observe_charging(State(True, 0.0), now_utc=start)
     controller.observe_charging(State(True, 0.0), now_utc=start + timedelta(seconds=89))
     assert controller.delivery_error is None
     controller.observe_charging(State(True, 0.0), now_utc=start + timedelta(seconds=91))
-    assert controller.delivery_error == "connected_not_charging"
+    assert controller.delivery_error == "charging_fault_latched"
     controller.observe_charging(State(True, 1380.0), now_utc=start + timedelta(seconds=92))
-    assert controller.delivery_error is None
+    assert controller.delivery_error == "charging_fault_latched"
     controller.observe_charging(State(False, 0.0), now_utc=start + timedelta(seconds=100))
-    assert controller.delivery_error is None
+    assert controller.delivery_error == "charging_fault_latched"
 
 
 def test_phase_switch_waits_for_zero_power_and_does_not_reverse_within_ten_minutes() -> None:

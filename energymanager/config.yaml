@@ -1,5 +1,5 @@
 name: Energy Manager
-version: "0.31.15"
+version: "0.31.16"
 slug: energy_manager
 description: Predictive home energy manager for Home Assistant
 url: https://github.com/Nxt-1/EnergyManager
@@ -21,6 +21,9 @@ options:
   pv: {}
   ev:
     control_enabled: false
+    automatic_fault_reset: false
+    fault_reset_delay_seconds: 60
+    max_reset_attempts: 1
     weekly_schedule: []
   economics:
     enabled: false
@@ -66,6 +69,10 @@ schema:
     current_entity: str?
     phase_mode_entity: str?
     force_state_entity: str?
+    reset_button_entity: str?
+    automatic_fault_reset: bool
+    fault_reset_delay_seconds: int
+    max_reset_attempts: int
     control_enabled: bool
     min_charge_current_a: int?
     max_charge_current_a: int?
