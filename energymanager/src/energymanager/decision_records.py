@@ -66,6 +66,10 @@ async def publish_decision(client, snapshot, result, disposition, persisted):
                     "tolerance": s.tolerance,
                     "gap": s.gap,
                     "bound": s.bound,
+                    "objective_before": s.objective_before,
+                    "objective_improvement": (s.objective_before - s.objective
+                                              if s.objective_before is not None and s.objective is not None else None),
+                    "metrics": dict(s.metrics),
                     "runtime_seconds": s.runtime_seconds,
                     "accepted": s.accepted,
                 }

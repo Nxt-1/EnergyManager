@@ -24,6 +24,6 @@ RUN --mount=type=secret,id=pip_ca \
     pip install --no-cache-dir -r /app/requirements.txt
 
 COPY src /app/src
-RUN python -c "import energymanager.app, energymanager.database, energymanager.economics, energymanager.legacy_influx, energymanager.load_backtest, energymanager.load_forecast, energymanager.load_service, energymanager.milp_planner, energymanager.planner, energymanager.planner_service, energymanager.pv_forecast, energymanager.pv_service, energymanager.hierarchy, energymanager.replay, energymanager.jobs"
+RUN python -c "import energymanager.app, energymanager.database, energymanager.economics, energymanager.legacy_influx, energymanager.load_backtest, energymanager.load_forecast, energymanager.load_service, energymanager.milp_planner, energymanager.planner, energymanager.planner_service, energymanager.pv_forecast, energymanager.pv_service, energymanager.hierarchy, energymanager.replay, energymanager.jobs, energymanager.explanation_api, energymanager.explanation_worker"
 
 CMD ["python", "-m", "energymanager"]

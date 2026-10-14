@@ -53,6 +53,9 @@ class StageRecord:
     accepted: bool
     plan: Any = None
     metrics: tuple[tuple[str, float], ...] = ()
+    objective_before: float | None = None
+    node_count: int | None = None
+    warm_start_status: str | None = None
 
 
 def expression_value(highspy, expression, values) -> float:
@@ -61,7 +64,8 @@ def expression_value(highspy, expression, values) -> float:
     return float(highspy.Highs.internal_get_value(values, expression))
 
 
-def refine(model, highspy, stages, values, *, seconds, describe, normalize=lambda values: values):
+def refine(model, highspy, stages, values, *, seconds, describe, normalize=lambda values: values,
+           warm_start=True, allocate_nonconstant=False):
     """Retain the last validated incumbent on timeout/error; never release a prior bound."""
     records = []
     bounds = []
@@ -93,8 +97,14 @@ def refine(model, highspy, stages, values, *, seconds, describe, normalize=lambd
             )
             continue
         model.setObjective(expr, sense=highspy.ObjSense.kMinimize)
-        model.setSolution(len(selected), np.arange(len(selected), dtype=np.int32), np.asarray(selected))
-        model.setOptionValue("time_limit", remaining / (len(stages) - position))
+        initial_objective = expression_value(highspy, expr, selected)
+        warm_status = "disabled_for_benchmark"
+        if warm_start:
+            warm_status = str(model.setSolution(len(selected), np.arange(len(selected), dtype=np.int32),
+                                               np.asarray(selected)))
+        count = (sum(not isinstance(s[2], (int, float)) for s in stages[position:])
+                 if allocate_nonconstant else len(stages) - position)
+        model.setOptionValue("time_limit", remaining / count)
         before = perf_counter()
         model.run()
         elapsed = perf_counter() - before
@@ -127,6 +137,9 @@ def refine(model, highspy, stages, values, *, seconds, describe, normalize=lambd
                 accepted,
                 plan,
                 tuple(metrics.items()),
+                initial_objective,
+                int(info.mip_node_count),
+                warm_status,
             )
         )
         # Even a timeout incumbent has an inspectable bound for subsequent stages.

@@ -1,6 +1,6 @@
 # Energy Manager
 
-Energy Manager V3 (3.0.0b2) runs one hierarchical MILP planner and directly replaces V2.
+Energy Manager V3 (3.0.0b3) runs one hierarchical MILP planner and directly replaces V2.
 `ess.control_enabled` and `ev.control_enabled` govern each device at the final hardware service-call
 boundary, including startup, fallback, shutdown and reset. Both default false.
 
@@ -13,7 +13,7 @@ If omitted, V3 does not turn the preferred `target_soc_percent` into a hard depa
 The preferred target is a soft terminal state and never a physical SoC cap.
 
 Complete decisions are stored in `/data/planner-v3` (default 30 days, capped at 10,000 records / 1 GiB compressed). Compact evidence is
-published as `sensor.energy_manager_v3_decision`; use the Decision details dashboard or the offline
+published as `sensor.energy_manager_v3_decision`; use the Overview/Planning explanation cards (see [GUI guide](../docs/V3-GUI.md)) or the offline
 `python -m energymanager.replay` CLI for full provenance, stage schedules and counterfactuals.
 Additional planner settings: economic/robustness/operations/stability tolerances, grid import/export
 limits and archive retention. `tie_break_seconds` is the shared budget for the four refinement stages.

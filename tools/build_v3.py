@@ -15,7 +15,7 @@ def main():
     root = Path(__file__).resolve().parents[1]
     environment = os.environ.copy()
     environment.setdefault("DOCKER_CONFIG", str(root / ".v3-evidence/docker"))
-    command = ["docker", "build", "--build-arg", "BUILD_VERSION=3.0.0b2", "--build-arg", "BUILD_ARCH=amd64"]
+    command = ["docker", "build", "--build-arg", "BUILD_VERSION=3.0.0b3", "--build-arg", "BUILD_ARCH=amd64"]
     hosts = set()
     for variable in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"):
         if environment.get(variable):

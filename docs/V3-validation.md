@@ -1,9 +1,62 @@
-# V3 focused correction validation
+# V3 GUI and optimization-quality validation (3.0.0b3)
+
+Local development builds on `60174c3` on `development/energymanager-v3`. This task does not push,
+merge, publish or deploy. The per-device hardware permissions remain unchanged; no alternate mode exists.
+
+## Current results
+
+- Full automated suite: **311 passed**, zero failures/skips, using real HiGHS 1.15.1.
+- Ruff, Python compilation, YAML/configuration/schema checks and dashboard JavaScript checks passed.
+- Node GUI-to-HTTP integration traverses history, selection and real subprocess counterfactual execution.
+- Chromium checks passed on both the two-hour and 672-interval archives with no page errors.
+  The browser, backend, archive and worker are real; Supervisor session discovery is mocked.
+- Auth/CSRF rejection, historical pagination, generic job/resource selections, concurrent submissions,
+  live-solver priority, cooldown, worker timeout/expiry, archive corruption and worker failure are tested.
+- The local Alpine container builds and imports the new backend/worker. Offline in-container diagnostic
+  validation is recorded in `.v3-evidence/gui-container-check.log`.
+- Existing predictors, HA contracts, ESS/EV controls, interlocks, faults, archives and replay tests pass.
+
+Production Home Assistant ingress permissions, browser theming in the installed dashboard and physical
+hardware have not been exercised. Deployment/activation still require approval, configuration and
+permission verification, and the documented rollback procedure.
+
+## Functionality and evidence
+
+[GUI guide](V3-GUI.md) describes the primary dashboard workflow, ingress authentication, resource limits,
+configuration and failure behavior. [Optimization report](V3-optimization-quality.md) contains the
+30/60/120-second comparison and targeted experiments, with full compact stage records committed beside it.
+Defaults remain 60 seconds total: 120 seconds gave no practical benefit over 60 on the measured scenario.
+
+New modules: `explanation_api.py` (ingress/worker lifecycle), `explanation_worker.py` (isolated diagnostic
+process), `explanations.py` (recorded evidence presentation). The existing dashboard card, main lifecycle,
+counterfactual restrictions, stage telemetry and diagnostic tools are extended. Add-on configuration
+adds internal ingress on 8099 with no published host port; there are no new control-permission options.
+The dashboard resource version is `300b3`.
+
+Remaining limits: exact timing causation can remain indeterminate, lower-priority optimality may be
+unproven, legacy records lack some new stage metrics, and diagnostic jobs share host CPU despite lower
+priority. The backend is designed for standard Supervisor ingress, not arbitrary reverse proxies.
+
+```sh
+source .venv/bin/activate
+ruff check energymanager/src tests tools
+pytest
+node tools/check_v3_dashboard.cjs
+python tools/build_v3.py
+# Optional development browser check: install playwright and system Chromium first.
+PYTHONPATH=energymanager/src python tools/check_gui_browser.py c5c3db64aa41a99a1bc0e3850696bfaf
+```
+
+The earlier focused-correction evidence below remains applicable to retained functionality.
+
+---
+
+# Earlier V3 focused correction validation
 
 Correction branch: `development/energymanager-v3`, based on `e16db32`.
 Version: **3.0.0b2**, corrected model `3.0-preview.2`.
 This correction task does not push, merge, publish, deploy or activate hardware control.
-The previously approved initial V3 commit remains on `main` until these corrections are separately approved.
+This section records the earlier correction validation; `60174c3` was subsequently approved and pushed to `main`.
 
 ## Corrections and relevant files
 

@@ -1,0 +1,2004 @@
+[
+  {
+    "budget": 30,
+    "fragmentation": {
+      "minimum_session_minutes": 15,
+      "sessions": 10,
+      "short_sessions_under_hour": 4
+    },
+    "objective_eur": 14.9305582668276,
+    "snapshot_id": "2bc910e15f7ed5609b380821b48eb3a7",
+    "stages": [
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 14.918622050899877,
+        "gap": 0.0001297683299256844,
+        "metrics": [
+          [
+            "objective_eur",
+            14.920558266827719
+          ],
+          [
+            "ev_sessions",
+            9.0
+          ],
+          [
+            "weighted_import_kwh",
+            25.963474646497456
+          ],
+          [
+            "three_phase_transitions",
+            6.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.916224933494385
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.004333333333332708
+          ]
+        ],
+        "name": "economics",
+        "node_count": null,
+        "objective": 14.920558266827719,
+        "objective_before": null,
+        "plan": null,
+        "runtime_seconds": 1.8665229569960502,
+        "status": "Optimal",
+        "tolerance": 0.01,
+        "unit": "EUR",
+        "warm_start_status": null
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 23.97435114947963,
+        "gap": 0.00590238211246768,
+        "metrics": [
+          [
+            "objective_eur",
+            14.9305582668276
+          ],
+          [
+            "ev_sessions",
+            10.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.11669711112029
+          ],
+          [
+            "three_phase_transitions",
+            10.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.770256336068275
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0007185974260011108
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.1595833333333232
+          ]
+        ],
+        "name": "robustness",
+        "node_count": 0,
+        "objective": 24.11669711112029,
+        "objective_before": 25.963474646497456,
+        "plan": null,
+        "runtime_seconds": 6.951523161995283,
+        "status": "Time limit reached",
+        "tolerance": 0.05,
+        "unit": "weighted_kWh",
+        "warm_start_status": "HighsStatus.kOk"
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 6.0,
+        "gap": 0.7,
+        "metrics": [
+          [
+            "objective_eur",
+            14.9305582668276
+          ],
+          [
+            "ev_sessions",
+            10.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.11669711112029
+          ],
+          [
+            "three_phase_transitions",
+            10.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.770256336068275
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0007185974260011108
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.1595833333333232
+          ]
+        ],
+        "name": "operations",
+        "node_count": 0,
+        "objective": 20.0,
+        "objective_before": 20.0,
+        "plan": null,
+        "runtime_seconds": 6.957095290003053,
+        "status": "Time limit reached",
+        "tolerance": 0.0,
+        "unit": "events",
+        "warm_start_status": "HighsStatus.kOk"
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 0.0,
+        "gap": 0.0,
+        "metrics": [
+          [
+            "objective_eur",
+            14.9305582668276
+          ],
+          [
+            "ev_sessions",
+            10.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.11669711112029
+          ],
+          [
+            "three_phase_transitions",
+            10.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.770256336068275
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0007185974260011108
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.1595833333333232
+          ]
+        ],
+        "name": "stability",
+        "node_count": null,
+        "objective": 0.0,
+        "objective_before": null,
+        "plan": null,
+        "runtime_seconds": 0.0,
+        "status": "constant",
+        "tolerance": 0.01,
+        "unit": "kWh",
+        "warm_start_status": null
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 22734.358609332186,
+        "gap": 0.01724185918693248,
+        "metrics": [
+          [
+            "objective_eur",
+            14.9305582668276
+          ],
+          [
+            "ev_sessions",
+            10.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.11669711112029
+          ],
+          [
+            "three_phase_transitions",
+            10.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.770256336068275
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0007185974260011108
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.1595833333333232
+          ]
+        ],
+        "name": "deterministic",
+        "node_count": 4,
+        "objective": 23133.21830183296,
+        "objective_before": 23133.21830183296,
+        "plan": null,
+        "runtime_seconds": 13.786748047998117,
+        "status": "Time limit reached",
+        "tolerance": 0.0,
+        "unit": "slot_weighted_kWh",
+        "warm_start_status": "HighsStatus.kOk"
+      }
+    ],
+    "status": "feasible_time_limit",
+    "validation": "passed",
+    "variant": "baseline",
+    "wall_seconds": 30.070072896000056
+  },
+  {
+    "budget": 60,
+    "fragmentation": {
+      "minimum_session_minutes": 15,
+      "sessions": 7,
+      "short_sessions_under_hour": 1
+    },
+    "objective_eur": 14.930558266827568,
+    "snapshot_id": "2bc910e15f7ed5609b380821b48eb3a7",
+    "stages": [
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 14.918622050899877,
+        "gap": 0.0001297683299256844,
+        "metrics": [
+          [
+            "objective_eur",
+            14.920558266827719
+          ],
+          [
+            "ev_sessions",
+            9.0
+          ],
+          [
+            "weighted_import_kwh",
+            25.963474646497456
+          ],
+          [
+            "three_phase_transitions",
+            6.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.916224933494385
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.004333333333332708
+          ]
+        ],
+        "name": "economics",
+        "node_count": null,
+        "objective": 14.920558266827719,
+        "objective_before": null,
+        "plan": null,
+        "runtime_seconds": 1.6329489729978377,
+        "status": "Optimal",
+        "tolerance": 0.01,
+        "unit": "EUR",
+        "warm_start_status": null
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 23.982577086995693,
+        "gap": 0.0025946951901382512,
+        "metrics": [
+          [
+            "objective_eur",
+            14.930558266827568
+          ],
+          [
+            "ev_sessions",
+            7.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.044966445779593
+          ],
+          [
+            "three_phase_transitions",
+            4.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.787039565451545
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0011853680426909818
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.14233333333333084
+          ]
+        ],
+        "name": "robustness",
+        "node_count": 12,
+        "objective": 24.044966445779593,
+        "objective_before": 25.963474646497456,
+        "plan": null,
+        "runtime_seconds": 14.497284736993606,
+        "status": "Time limit reached",
+        "tolerance": 0.05,
+        "unit": "weighted_kWh",
+        "warm_start_status": "HighsStatus.kOk"
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 6.0,
+        "gap": 0.45454545454545453,
+        "metrics": [
+          [
+            "objective_eur",
+            14.930558266827568
+          ],
+          [
+            "ev_sessions",
+            7.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.044966445779593
+          ],
+          [
+            "three_phase_transitions",
+            4.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.787039565451545
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0011853680426909818
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.14233333333333084
+          ]
+        ],
+        "name": "operations",
+        "node_count": 0,
+        "objective": 11.0,
+        "objective_before": 11.0,
+        "plan": null,
+        "runtime_seconds": 14.493750194000313,
+        "status": "Time limit reached",
+        "tolerance": 0.0,
+        "unit": "events",
+        "warm_start_status": "HighsStatus.kOk"
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 0.0,
+        "gap": 0.0,
+        "metrics": [
+          [
+            "objective_eur",
+            14.930558266827568
+          ],
+          [
+            "ev_sessions",
+            7.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.044966445779593
+          ],
+          [
+            "three_phase_transitions",
+            4.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.787039565451545
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0011853680426909818
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.14233333333333084
+          ]
+        ],
+        "name": "stability",
+        "node_count": null,
+        "objective": 0.0,
+        "objective_before": null,
+        "plan": null,
+        "runtime_seconds": 0.0,
+        "status": "constant",
+        "tolerance": 0.01,
+        "unit": "kWh",
+        "warm_start_status": null
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 22841.20525596704,
+        "gap": 0.017856717581011657,
+        "metrics": [
+          [
+            "objective_eur",
+            14.930558266827568
+          ],
+          [
+            "ev_sessions",
+            7.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.044966445779593
+          ],
+          [
+            "three_phase_transitions",
+            4.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.787039565451545
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0011853680426909818
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.14233333333333084
+          ]
+        ],
+        "name": "deterministic",
+        "node_count": 5,
+        "objective": 23256.489826728604,
+        "objective_before": 23256.489826728604,
+        "plan": null,
+        "runtime_seconds": 28.935837691002234,
+        "status": "Time limit reached",
+        "tolerance": 0.0,
+        "unit": "slot_weighted_kWh",
+        "warm_start_status": "HighsStatus.kOk"
+      }
+    ],
+    "status": "feasible_time_limit",
+    "validation": "passed",
+    "variant": "baseline",
+    "wall_seconds": 60.06474944300135
+  },
+  {
+    "budget": 120,
+    "fragmentation": {
+      "minimum_session_minutes": 15,
+      "sessions": 7,
+      "short_sessions_under_hour": 1
+    },
+    "objective_eur": 14.930558266827568,
+    "snapshot_id": "2bc910e15f7ed5609b380821b48eb3a7",
+    "stages": [
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 14.918622050899877,
+        "gap": 0.0001297683299256844,
+        "metrics": [
+          [
+            "objective_eur",
+            14.920558266827719
+          ],
+          [
+            "ev_sessions",
+            9.0
+          ],
+          [
+            "weighted_import_kwh",
+            25.963474646497456
+          ],
+          [
+            "three_phase_transitions",
+            6.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.916224933494385
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.004333333333332708
+          ]
+        ],
+        "name": "economics",
+        "node_count": null,
+        "objective": 14.920558266827719,
+        "objective_before": null,
+        "plan": null,
+        "runtime_seconds": 1.6258990940041258,
+        "status": "Optimal",
+        "tolerance": 0.01,
+        "unit": "EUR",
+        "warm_start_status": null
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 24.01226616413313,
+        "gap": 0.0013599637046780896,
+        "metrics": [
+          [
+            "objective_eur",
+            14.930558266827568
+          ],
+          [
+            "ev_sessions",
+            7.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.044966445779593
+          ],
+          [
+            "three_phase_transitions",
+            4.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.787039565451545
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0011853680426909818
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.14233333333333084
+          ]
+        ],
+        "name": "robustness",
+        "node_count": 217,
+        "objective": 24.044966445779593,
+        "objective_before": 25.963474646497456,
+        "plan": null,
+        "runtime_seconds": 29.503333385000587,
+        "status": "Time limit reached",
+        "tolerance": 0.05,
+        "unit": "weighted_kWh",
+        "warm_start_status": "HighsStatus.kOk"
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 6.0,
+        "gap": 0.45454545454545453,
+        "metrics": [
+          [
+            "objective_eur",
+            14.930558266827568
+          ],
+          [
+            "ev_sessions",
+            7.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.044966445779593
+          ],
+          [
+            "three_phase_transitions",
+            4.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.787039565451545
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0011853680426909818
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.14233333333333084
+          ]
+        ],
+        "name": "operations",
+        "node_count": 2,
+        "objective": 11.0,
+        "objective_before": 11.0,
+        "plan": null,
+        "runtime_seconds": 29.553197940003884,
+        "status": "Time limit reached",
+        "tolerance": 0.0,
+        "unit": "events",
+        "warm_start_status": "HighsStatus.kOk"
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 0.0,
+        "gap": 0.0,
+        "metrics": [
+          [
+            "objective_eur",
+            14.930558266827568
+          ],
+          [
+            "ev_sessions",
+            7.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.044966445779593
+          ],
+          [
+            "three_phase_transitions",
+            4.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.787039565451545
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0011853680426909818
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.14233333333333084
+          ]
+        ],
+        "name": "stability",
+        "node_count": null,
+        "objective": 0.0,
+        "objective_before": null,
+        "plan": null,
+        "runtime_seconds": 0.0,
+        "status": "constant",
+        "tolerance": 0.01,
+        "unit": "kWh",
+        "warm_start_status": null
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 22841.74507611083,
+        "gap": 0.017833505989416742,
+        "metrics": [
+          [
+            "objective_eur",
+            14.930558266827568
+          ],
+          [
+            "ev_sessions",
+            7.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.044966445779593
+          ],
+          [
+            "three_phase_transitions",
+            4.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.787039565451545
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0011853680426909818
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.14233333333333084
+          ]
+        ],
+        "name": "deterministic",
+        "node_count": 256,
+        "objective": 23256.489826728604,
+        "objective_before": 23256.489826728604,
+        "plan": null,
+        "runtime_seconds": 58.87799077099771,
+        "status": "Time limit reached",
+        "tolerance": 0.0,
+        "unit": "slot_weighted_kWh",
+        "warm_start_status": "HighsStatus.kOk"
+      }
+    ],
+    "status": "feasible_time_limit",
+    "validation": "passed",
+    "variant": "baseline",
+    "wall_seconds": 120.07199255900196
+  },
+  {
+    "budget": 30,
+    "fragmentation": {
+      "minimum_session_minutes": 15,
+      "sessions": 7,
+      "short_sessions_under_hour": 1
+    },
+    "objective_eur": 14.929801786364804,
+    "snapshot_id": "2bc910e15f7ed5609b380821b48eb3a7",
+    "stages": [
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 14.918622050899877,
+        "gap": 0.0001297683299256844,
+        "metrics": [
+          [
+            "objective_eur",
+            14.920558266827719
+          ],
+          [
+            "ev_sessions",
+            9.0
+          ],
+          [
+            "weighted_import_kwh",
+            25.963474646497456
+          ],
+          [
+            "three_phase_transitions",
+            6.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.916224933494385
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.004333333333332708
+          ]
+        ],
+        "name": "economics",
+        "node_count": null,
+        "objective": 14.920558266827719,
+        "objective_before": null,
+        "plan": null,
+        "runtime_seconds": 1.69979523299844,
+        "status": "Optimal",
+        "tolerance": 0.01,
+        "unit": "EUR",
+        "warm_start_status": null
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 23.979354017773225,
+        "gap": 0.003685971150434112,
+        "metrics": [
+          [
+            "objective_eur",
+            14.930558266827587
+          ],
+          [
+            "ev_sessions",
+            10.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.068068222889476
+          ],
+          [
+            "three_phase_transitions",
+            6.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.787039565451543
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0011853680427122981
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.14233333333333084
+          ]
+        ],
+        "name": "robustness",
+        "node_count": 0,
+        "objective": 24.068068222889476,
+        "objective_before": 25.963474646497456,
+        "plan": null,
+        "runtime_seconds": 9.32022413300001,
+        "status": "Time limit reached",
+        "tolerance": 0.05,
+        "unit": "weighted_kWh",
+        "warm_start_status": "HighsStatus.kOk"
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 7.0,
+        "gap": 0.0,
+        "metrics": [
+          [
+            "objective_eur",
+            14.929801786364804
+          ],
+          [
+            "ev_sessions",
+            7.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.118068232889478
+          ],
+          [
+            "three_phase_transitions",
+            0.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.804718453031475
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.125083333333329
+          ]
+        ],
+        "name": "operations",
+        "node_count": 1,
+        "objective": 7.0,
+        "objective_before": 16.0,
+        "plan": null,
+        "runtime_seconds": 8.537950493999233,
+        "status": "Optimal",
+        "tolerance": 0.0,
+        "unit": "events",
+        "warm_start_status": "HighsStatus.kOk"
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 0.0,
+        "gap": 0.0,
+        "metrics": [
+          [
+            "objective_eur",
+            14.929801786364804
+          ],
+          [
+            "ev_sessions",
+            7.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.118068232889478
+          ],
+          [
+            "three_phase_transitions",
+            0.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.804718453031475
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.125083333333329
+          ]
+        ],
+        "name": "stability",
+        "node_count": null,
+        "objective": 0.0,
+        "objective_before": null,
+        "plan": null,
+        "runtime_seconds": 0.0,
+        "status": "constant",
+        "tolerance": 0.01,
+        "unit": "kWh",
+        "warm_start_status": null
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 22721.85719440476,
+        "gap": 0.022188333577775252,
+        "metrics": [
+          [
+            "objective_eur",
+            14.929801786364804
+          ],
+          [
+            "ev_sessions",
+            7.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.118068232889478
+          ],
+          [
+            "three_phase_transitions",
+            0.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.804718453031475
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.125083333333329
+          ]
+        ],
+        "name": "deterministic",
+        "node_count": 0,
+        "objective": 23237.45765638404,
+        "objective_before": 23237.45765638404,
+        "plan": null,
+        "runtime_seconds": 10.012401590000081,
+        "status": "Time limit reached",
+        "tolerance": 0.0,
+        "unit": "slot_weighted_kWh",
+        "warm_start_status": "HighsStatus.kOk"
+      }
+    ],
+    "status": "feasible_time_limit",
+    "validation": "passed",
+    "variant": "nonconstant_budget",
+    "wall_seconds": 30.062397740999586
+  },
+  {
+    "budget": 30,
+    "fragmentation": {
+      "minimum_session_minutes": 15,
+      "sessions": 12,
+      "short_sessions_under_hour": 1
+    },
+    "objective_eur": 14.93055826682679,
+    "snapshot_id": "2bc910e15f7ed5609b380821b48eb3a7",
+    "stages": [
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 14.918622050899877,
+        "gap": 0.0001297683299256844,
+        "metrics": [
+          [
+            "objective_eur",
+            14.920558266827719
+          ],
+          [
+            "ev_sessions",
+            9.0
+          ],
+          [
+            "weighted_import_kwh",
+            25.963474646497456
+          ],
+          [
+            "three_phase_transitions",
+            6.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.916224933494385
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.004333333333332708
+          ]
+        ],
+        "name": "economics",
+        "node_count": null,
+        "objective": 14.920558266827719,
+        "objective_before": null,
+        "plan": null,
+        "runtime_seconds": 1.6164158530009445,
+        "status": "Optimal",
+        "tolerance": 0.01,
+        "unit": "EUR",
+        "warm_start_status": null
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 23.974049062704893,
+        "gap": 0.006277423362318595,
+        "metrics": [
+          [
+            "objective_eur",
+            14.930558266827601
+          ],
+          [
+            "ev_sessions",
+            10.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.125495008700007
+          ],
+          [
+            "three_phase_transitions",
+            8.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.770545127160904
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0004298063331553692
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.1595833333335411
+          ]
+        ],
+        "name": "robustness",
+        "node_count": 0,
+        "objective": 24.125495008700007,
+        "objective_before": 25.963474646497456,
+        "plan": null,
+        "runtime_seconds": 7.000501771995914,
+        "status": "Time limit reached",
+        "tolerance": 0.05,
+        "unit": "weighted_kWh",
+        "warm_start_status": "HighsStatus.kOk"
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 6.0,
+        "gap": 0.6666666666666666,
+        "metrics": [
+          [
+            "objective_eur",
+            14.930558266827601
+          ],
+          [
+            "ev_sessions",
+            10.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.125495008700007
+          ],
+          [
+            "three_phase_transitions",
+            8.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.770545127160904
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0004298063331553692
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.1595833333335411
+          ]
+        ],
+        "name": "operations",
+        "node_count": 0,
+        "objective": 18.0,
+        "objective_before": 18.0,
+        "plan": null,
+        "runtime_seconds": 7.010945241992886,
+        "status": "Time limit reached",
+        "tolerance": 0.0,
+        "unit": "events",
+        "warm_start_status": "HighsStatus.kOk"
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 0.0,
+        "gap": 0.0,
+        "metrics": [
+          [
+            "objective_eur",
+            14.930558266827601
+          ],
+          [
+            "ev_sessions",
+            10.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.125495008700007
+          ],
+          [
+            "three_phase_transitions",
+            8.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.770545127160904
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0004298063331553692
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.1595833333335411
+          ]
+        ],
+        "name": "stability",
+        "node_count": null,
+        "objective": 0.0,
+        "objective_before": null,
+        "plan": null,
+        "runtime_seconds": 0.0,
+        "status": "constant",
+        "tolerance": 0.01,
+        "unit": "kWh",
+        "warm_start_status": null
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 22684.28779317635,
+        "gap": 0.004547535828525513,
+        "metrics": [
+          [
+            "objective_eur",
+            14.93055826682679
+          ],
+          [
+            "ev_sessions",
+            12.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.175102033157632
+          ],
+          [
+            "three_phase_transitions",
+            0.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.753724933495585
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.17683333333120524
+          ]
+        ],
+        "name": "deterministic",
+        "node_count": 0,
+        "objective": 22787.9166606481,
+        "objective_before": 23109.085708854742,
+        "plan": null,
+        "runtime_seconds": 13.929425008995167,
+        "status": "Time limit reached",
+        "tolerance": 0.0,
+        "unit": "slot_weighted_kWh",
+        "warm_start_status": "HighsStatus.kOk"
+      }
+    ],
+    "status": "feasible_time_limit",
+    "validation": "passed",
+    "variant": "integer_starts",
+    "wall_seconds": 30.056205444001534
+  },
+  {
+    "budget": 30,
+    "fragmentation": {
+      "minimum_session_minutes": 15,
+      "sessions": 10,
+      "short_sessions_under_hour": 4
+    },
+    "objective_eur": 14.9305582668276,
+    "snapshot_id": "2bc910e15f7ed5609b380821b48eb3a7",
+    "stages": [
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 14.918622050899877,
+        "gap": 0.0001297683299256844,
+        "metrics": [
+          [
+            "objective_eur",
+            14.920558266827719
+          ],
+          [
+            "ev_sessions",
+            9.0
+          ],
+          [
+            "weighted_import_kwh",
+            25.963474646497456
+          ],
+          [
+            "three_phase_transitions",
+            6.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.916224933494385
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.004333333333332708
+          ]
+        ],
+        "name": "economics",
+        "node_count": null,
+        "objective": 14.920558266827719,
+        "objective_before": null,
+        "plan": null,
+        "runtime_seconds": 1.6302052669998375,
+        "status": "Optimal",
+        "tolerance": 0.01,
+        "unit": "EUR",
+        "warm_start_status": null
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 23.97268329908369,
+        "gap": 0.005971539608962949,
+        "metrics": [
+          [
+            "objective_eur",
+            14.9305582668276
+          ],
+          [
+            "ev_sessions",
+            10.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.11669711112029
+          ],
+          [
+            "three_phase_transitions",
+            10.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.770256336068275
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0007185974260011108
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.1595833333333232
+          ]
+        ],
+        "name": "robustness",
+        "node_count": 0,
+        "objective": 24.11669711112029,
+        "objective_before": 25.963474646497456,
+        "plan": null,
+        "runtime_seconds": 7.028291671005718,
+        "status": "Time limit reached",
+        "tolerance": 0.05,
+        "unit": "weighted_kWh",
+        "warm_start_status": "disabled_for_benchmark"
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": false,
+        "bound": 5.0,
+        "gap": null,
+        "metrics": [
+          [
+            "objective_eur",
+            14.9305582668276
+          ],
+          [
+            "ev_sessions",
+            10.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.11669711112029
+          ],
+          [
+            "three_phase_transitions",
+            10.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.770256336068275
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0007185974260011108
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.1595833333333232
+          ]
+        ],
+        "name": "operations",
+        "node_count": 0,
+        "objective": 20.0,
+        "objective_before": 20.0,
+        "plan": null,
+        "runtime_seconds": 6.9806909860053565,
+        "status": "no_incumbent:Time limit reached",
+        "tolerance": 0.0,
+        "unit": "events",
+        "warm_start_status": "disabled_for_benchmark"
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 0.0,
+        "gap": 0.0,
+        "metrics": [
+          [
+            "objective_eur",
+            14.9305582668276
+          ],
+          [
+            "ev_sessions",
+            10.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.11669711112029
+          ],
+          [
+            "three_phase_transitions",
+            10.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.770256336068275
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0007185974260011108
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.1595833333333232
+          ]
+        ],
+        "name": "stability",
+        "node_count": null,
+        "objective": 0.0,
+        "objective_before": null,
+        "plan": null,
+        "runtime_seconds": 0.0,
+        "status": "constant",
+        "tolerance": 0.01,
+        "unit": "kWh",
+        "warm_start_status": null
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": false,
+        "bound": 22695.3403379859,
+        "gap": null,
+        "metrics": [
+          [
+            "objective_eur",
+            14.9305582668276
+          ],
+          [
+            "ev_sessions",
+            10.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.11669711112029
+          ],
+          [
+            "three_phase_transitions",
+            10.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.770256336068275
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0007185974260011108
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.1595833333333232
+          ]
+        ],
+        "name": "deterministic",
+        "node_count": 3,
+        "objective": 23133.21830183296,
+        "objective_before": 23133.21830183296,
+        "plan": null,
+        "runtime_seconds": 13.933000069002446,
+        "status": "no_incumbent:Time limit reached",
+        "tolerance": 0.0,
+        "unit": "slot_weighted_kWh",
+        "warm_start_status": "disabled_for_benchmark"
+      }
+    ],
+    "status": "feasible_time_limit",
+    "validation": "passed",
+    "variant": "cold_refinement",
+    "wall_seconds": 30.059045709000202
+  },
+  {
+    "budget": 30,
+    "fragmentation": {
+      "minimum_session_minutes": 15,
+      "sessions": 9,
+      "short_sessions_under_hour": 3
+    },
+    "objective_eur": 14.930558266827578,
+    "snapshot_id": "2bc910e15f7ed5609b380821b48eb3a7",
+    "stages": [
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 14.918622050899877,
+        "gap": 0.0001297683299256844,
+        "metrics": [
+          [
+            "objective_eur",
+            14.920558266827719
+          ],
+          [
+            "ev_sessions",
+            9.0
+          ],
+          [
+            "weighted_import_kwh",
+            25.963474646497456
+          ],
+          [
+            "three_phase_transitions",
+            6.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.916224933494385
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.0
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.004333333333332708
+          ]
+        ],
+        "name": "economics",
+        "node_count": null,
+        "objective": 14.920558266827719,
+        "objective_before": null,
+        "plan": null,
+        "runtime_seconds": 1.616542217998358,
+        "status": "Optimal",
+        "tolerance": 0.01,
+        "unit": "EUR",
+        "warm_start_status": null
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 23.947125106462952,
+        "gap": 0.004799649262801579,
+        "metrics": [
+          [
+            "objective_eur",
+            14.930558266827578
+          ],
+          [
+            "ev_sessions",
+            9.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.062617229509645
+          ],
+          [
+            "three_phase_transitions",
+            4.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.803202386601653
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.002272546892594818
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.12508333333333135
+          ]
+        ],
+        "name": "robustness",
+        "node_count": 1,
+        "objective": 24.062617229509645,
+        "objective_before": 25.963474646497456,
+        "plan": null,
+        "runtime_seconds": 7.003371765000338,
+        "status": "Time limit reached",
+        "tolerance": 0.05,
+        "unit": "weighted_kWh",
+        "warm_start_status": "HighsStatus.kOk"
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 4.403804847392974,
+        "gap": 0.6612457809697714,
+        "metrics": [
+          [
+            "objective_eur",
+            14.930558266827578
+          ],
+          [
+            "ev_sessions",
+            9.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.062617229509645
+          ],
+          [
+            "three_phase_transitions",
+            4.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.803202386601653
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.002272546892594818
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.12508333333333135
+          ]
+        ],
+        "name": "operations",
+        "node_count": 0,
+        "objective": 13.0,
+        "objective_before": 13.0,
+        "plan": null,
+        "runtime_seconds": 7.157272150005156,
+        "status": "Time limit reached",
+        "tolerance": 0.0,
+        "unit": "events",
+        "warm_start_status": "HighsStatus.kOk"
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 0.0,
+        "gap": 0.0,
+        "metrics": [
+          [
+            "objective_eur",
+            14.930558266827578
+          ],
+          [
+            "ev_sessions",
+            9.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.062617229509645
+          ],
+          [
+            "three_phase_transitions",
+            4.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.803202386601653
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.002272546892594818
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.12508333333333135
+          ]
+        ],
+        "name": "stability",
+        "node_count": null,
+        "objective": 0.0,
+        "objective_before": null,
+        "plan": null,
+        "runtime_seconds": 0.0,
+        "status": "constant",
+        "tolerance": 0.01,
+        "unit": "kWh",
+        "warm_start_status": null
+      },
+      {
+        "$type": "StageRecord",
+        "accepted": true,
+        "bound": 22764.173153407686,
+        "gap": 0.020853463133482648,
+        "metrics": [
+          [
+            "objective_eur",
+            14.930558266827578
+          ],
+          [
+            "ev_sessions",
+            9.0
+          ],
+          [
+            "weighted_import_kwh",
+            24.062617229509645
+          ],
+          [
+            "three_phase_transitions",
+            4.0
+          ],
+          [
+            "near_term_stability_kwh",
+            0
+          ],
+          [
+            "net_energy_cost_eur",
+            14.803202386601653
+          ],
+          [
+            "incremental_capacity_cost_eur",
+            0.002272546892594818
+          ],
+          [
+            "terminal_ess_value_eur",
+            0.0
+          ],
+          [
+            "preferred_shortfall_penalty_eur",
+            0.12508333333333135
+          ]
+        ],
+        "name": "deterministic",
+        "node_count": 4,
+        "objective": 23248.9952180784,
+        "objective_before": 23248.9952180784,
+        "plan": null,
+        "runtime_seconds": 13.774521089995687,
+        "status": "Time limit reached",
+        "tolerance": 0.0,
+        "unit": "slot_weighted_kWh",
+        "warm_start_status": "HighsStatus.kOk"
+      }
+    ],
+    "status": "feasible_time_limit",
+    "validation": "passed",
+    "variant": "presolve_off",
+    "wall_seconds": 30.064409664002596
+  }
+]
