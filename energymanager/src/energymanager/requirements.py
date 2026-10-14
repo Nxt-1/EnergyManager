@@ -44,8 +44,13 @@ class StorageResource:
     charge_efficiency: float
     max_input_kw: float = 2.0
     withdrawals_kwh: tuple[float, ...] = ()
+    # None permits charging throughout the horizon; an empty tuple permits none.
+    charging_windows: tuple[tuple[datetime, datetime], ...] | None = None
 
     def __post_init__(self) -> None:
+        for start, end in self.charging_windows or ():
+            if start.tzinfo is None or end.tzinfo is None or end.astimezone(UTC) <= start.astimezone(UTC):
+                raise ValueError("invalid storage charging window")
         if self.max_input_kw <= 0 or any(w < 0 for w in self.withdrawals_kwh):
             raise ValueError("invalid resource power/withdrawal")
         if not 0 <= self.reserve_kwh <= self.initial_kwh <= self.capacity_kwh or not 0 < self.charge_efficiency <= 1:

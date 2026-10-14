@@ -11,7 +11,7 @@ from .pv_forecast import PvForecast
 from .requirements import FlexibleJob, Requirement, StorageResource
 from .tasks import PlanningTask
 
-PLANNER_VERSION = "3.0-preview.1"
+PLANNER_VERSION = "3.0-preview.2"
 PLANNER_HORIZON_HOURS = 168
 _INTERVAL_HOURS = FORECAST_INTERVAL_MINUTES / 60.0
 

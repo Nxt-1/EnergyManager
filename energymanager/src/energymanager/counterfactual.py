@@ -37,6 +37,50 @@ def constrain(model, variables, restrictions, count):
                 model.addConstr(variables.ev_active[i] == 1)
 
 
+def economic_evidence(result):
+    stage = next((s for s in result.stages if s.name == "economics"), None)
+    return {
+        "status": stage.status if stage else "not_run",
+        "incumbent_eur": stage.objective if stage else None,
+        "lower_bound_eur": stage.bound if stage else None,
+        "mip_gap": stage.gap if stage else None,
+        "validated": result.adoption_ready,
+        "selected_objective_eur": result.milp_objective_eur,
+        "hierarchy_complete": len(result.stages) == 5 and all(
+            s.accepted and s.status in {"Optimal", "constant"} for s in result.stages
+        )
+            if stage else False,
+    }
+
+
+def confidence(baseline, alternative):
+    before, after = economic_evidence(baseline), economic_evidence(alternative)
+    # For minimization L <= optimum <= U, using the economic stage rather than
+    # the selected schedule, which may spend the configured economic tolerance.
+    lower = upper = None
+    if before["validated"] and after["validated"]:
+        if after["lower_bound_eur"] is not None and before["incumbent_eur"] is not None:
+            lower = after["lower_bound_eur"] - before["incumbent_eur"]
+        if after["incumbent_eur"] is not None and before["lower_bound_eur"] is not None:
+            upper = after["incumbent_eur"] - before["lower_bound_eur"]
+    # Solver arithmetic can reverse equal bounds by a few ulps.
+    if lower is not None and upper is not None and lower > upper and lower - upper <= 1e-6:
+        lower, upper = upper, lower
+    conclusion = "incomplete"
+    if before["validated"] and after["validated"]:
+        conclusion = "feasible_incumbents_only"
+        if lower is not None and lower > 1e-6:
+            conclusion = "alternative_more_expensive_proven_by_bounds"
+        elif upper is not None and upper < -1e-6:
+            conclusion = "alternative_cheaper_proven_by_bounds"
+        elif lower is not None and upper is not None and max(abs(lower), abs(upper)) <= 1e-6:
+            conclusion = "economically_equivalent_within_numerical_tolerance"
+    return {"baseline": before, "alternative": after,
+            "optimal_difference_bounds_eur": {"lower": lower, "upper": upper},
+            "conclusion": conclusion,
+            "scope": "Frozen model intervention; no real-world or unique causal attribution."}
+
+
 def compare(snapshot, request: CounterfactualRequest):
     data = snapshot.inputs()
     if len(data["frame"].intervals) > 672 or data["policy"].total_seconds > 60:
@@ -69,7 +113,9 @@ def compare(snapshot, request: CounterfactualRequest):
         "baseline": baseline,
         "alternative": alternative,
         "delta": delta,
-        "interpretation": "Measured differences under one frozen intervention; not a unique causal explanation.",
+        "economic_confidence": confidence(baseline, alternative),
+        "interpretation": ("Selected feasible schedule differences, not necessarily optimal cost differences; "
+                           "consult economic_confidence."),
         "infeasibility": (
             "Joint constraints infeasible; no minimal conflicting subset was computed."
             if alternative.status == "infeasible"

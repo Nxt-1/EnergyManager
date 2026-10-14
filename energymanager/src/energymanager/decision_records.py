@@ -52,7 +52,7 @@ async def publish_decision(client, snapshot, result, disposition, persisted):
         {
             "friendly_name": "Energy Manager V3 Decision",
             "snapshot_id": snapshot.snapshot_id,
-            "model_version": "3.0-preview.1",
+            "model_version": "3.0-preview.2",
             "persisted": persisted,
             "validation": result.validation_status,
             "solver_status": result.status,
@@ -65,6 +65,7 @@ async def publish_decision(client, snapshot, result, disposition, persisted):
                     "unit": s.unit,
                     "tolerance": s.tolerance,
                     "gap": s.gap,
+                    "bound": s.bound,
                     "runtime_seconds": s.runtime_seconds,
                     "accepted": s.accepted,
                 }

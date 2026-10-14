@@ -1,23 +1,23 @@
 # Energy Manager
 
-Energy Manager V3 (3.0.0b1) runs an explicit hierarchical MILP planner and defaults to **shadow mode**.
-All actuator hardware writes, including startup and reset, are blocked while `planner.shadow_mode` is true.
-Existing `ess.control_enabled` and `ev.control_enabled` flags do not override shadow mode.
+Energy Manager V3 (3.0.0b2) runs one hierarchical MILP planner and directly replaces V2.
+`ess.control_enabled` and `ev.control_enabled` govern each device at the final hardware service-call
+boundary, including startup, fallback, shutdown and reset. Both default false.
 
 See the repository's [V3 guide](../docs/V3.md)
-for architecture, archive/replay commands, tolerances and shadow-installation instructions. This local
+for architecture, archive/replay commands, tolerances and direct-replacement and rollback instructions. This local
 preview branch must be reviewed before publication; the local guide is `docs/V3.md`.
 
 **Migration:** configure `ev.minimum_soc_percent` explicitly for a mandatory single departure minimum.
 If omitted, V3 does not turn the preferred `target_soc_percent` into a hard departure requirement.
 The preferred target is a soft terminal state and never a physical SoC cap.
 
-Complete decisions are stored in `/data/planner-v3` (default 500 records / 256 MiB). Compact evidence is
+Complete decisions are stored in `/data/planner-v3` (default 30 days, capped at 10,000 records / 1 GiB compressed). Compact evidence is
 published as `sensor.energy_manager_v3_decision`; use the Decision details dashboard or the offline
 `python -m energymanager.replay` CLI for full provenance, stage schedules and counterfactuals.
 Additional planner settings: economic/robustness/operations/stability tolerances, grid import/export
 limits and archive retention. `tie_break_seconds` is the shared budget for the four refinement stages.
-The sections below describe retained integrations and safety behavior; V3 shadow authority takes precedence.
+The sections below describe retained integrations and safety behavior; per-device hardware permissions apply.
 
 ## EV phase-switch safety (v0.31.14)
 
@@ -250,7 +250,7 @@ Home Assistant diagnostics:
 - `sensor.energy_manager_shadow_plan_next_24_hours_grid_import_energy`
 
 The status attributes include compact 24-hour and 48-hour summaries plus the next three hours of 15-minute intervals.
-The planner remains hard-coded shadow mode and cannot write to the ESS, EVSE or any other device.
+These legacy entity IDs are retained for dashboard compatibility; they do not select an operating mode.
 
 ## Background-load backtesting
 

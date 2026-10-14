@@ -59,7 +59,16 @@ def add_jobs(model, highspy, plan):
             raise ValueError("duplicate or reserved generic resource ID")
         if resource.withdrawals_kwh and len(resource.withdrawals_kwh) != len(plan.intervals):
             raise ValueError("resource withdrawals must cover the frozen horizon")
-        charge = [model.addVariable(lb=0, ub=resource.max_input_kw) for _ in plan.intervals]
+        # Requirement.earliest_start describes a state requirement, not hardware availability.
+        # Only explicit resource windows restrict input; every charged slot must fit wholly.
+        charge = []
+        for slot in plan.intervals:
+            start = slot.period_start_local.astimezone(UTC)
+            allowed = resource.charging_windows is None or any(
+                start >= a.astimezone(UTC) and start + timedelta(minutes=15) <= b.astimezone(UTC)
+                for a, b in resource.charging_windows
+            )
+            charge.append(model.addVariable(lb=0, ub=resource.max_input_kw if allowed else 0))
         energy = [model.addVariable(lb=resource.initial_kwh, ub=resource.initial_kwh)]
         for i in range(len(plan.intervals)):
             energy.append(model.addVariable(lb=resource.reserve_kwh, ub=resource.capacity_kwh))
@@ -73,6 +82,10 @@ def add_jobs(model, highspy, plan):
             continue  # Native resources retain their existing specialized electrical constraints.
         if requirement.resource_id not in states or requirement.unit != "kWh" or requirement.deadline is None:
             raise ValueError("unsupported generic state requirement")
+        if requirement.earliest_start is not None and (
+            requirement.earliest_start.astimezone(UTC) > requirement.deadline.astimezone(UTC)
+        ):
+            raise ValueError("state requirement starts after deadline")
         boundaries = [i.period_start_local.astimezone(UTC) for i in plan.intervals]
         boundaries.append(boundaries[-1] + timedelta(minutes=15))
         indexes = [i for i, at in enumerate(boundaries) if at <= requirement.deadline.astimezone(UTC)]

@@ -43,6 +43,14 @@ vm.runInThisContext(source.slice(source.indexOf('// V3 evidence viewer:')));
   assert.match(card.querySelector('[data-status]').textContent, /bbbb/);
   const sessionPanel = card.querySelector('ha-card').children.at(-1);
   assert.match(sessionPanel.children.at(-1).textContent, /forbid_ev.*0 2/);
+  const comparison = {snapshot_id: 'c'.repeat(32), delta: {objective_eur: 1},
+    baseline: {stages: [{name: 'economics', bound: 2, gap: .1}]},
+    alternative: {stages: [{name: 'economics', bound: 1, gap: .5}]},
+    economic_confidence: {conclusion: 'feasible_incumbents_only'}};
+  await card.querySelector('input').onchange({target: {files: [{size: 1000,
+    text: async () => JSON.stringify(comparison)}]}});
+  assert.match(card.querySelector('[data-stages]').textContent, /feasible_incumbents_only/);
+  assert.match(card.querySelector('[data-stages]').textContent, /baseline_stages/);
   await card.querySelector('input').onchange({target: {files: [{size: 40 * 1024 * 1024}]}});
   assert.match(card.querySelector('[data-status]').textContent, /below 32 MiB/);
   console.log('V3 dashboard DOM contracts passed');

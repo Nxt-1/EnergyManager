@@ -100,7 +100,7 @@ def main():
     store.save(counter_snapshot, comparison["baseline"], disposition="counterfactual_baseline")
     (root / "counterfactual.json").write_text(canonical(comparison) + "\n")
     report = {
-        "model": "3.0-preview.1",
+        "model": "3.0-preview.2",
         "solver": result.solver_version,
         "threads": 1,
         "seven_day_snapshot_id": frozen.snapshot_id,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import gzip
 import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -191,10 +192,10 @@ def test_snapshot_corruption_and_unsupported_schema_are_explicit(tmp_path):
     frozen = snapshot()
     store = DecisionStore(tmp_path)
     store.save(frozen, frozen.solve(), disposition="accepted")
-    path = tmp_path / (frozen.snapshot_id + ".json")
-    data = json.loads(path.read_text())
+    path = tmp_path / (frozen.snapshot_id + ".json.gz")
+    data = json.loads(gzip.decompress(path.read_bytes()))
     data["snapshot"]["frame"]["intervals"][0]["background_load_w"] = 987
-    path.write_text(json.dumps(data))
+    path.write_bytes(gzip.compress(json.dumps(data).encode()))
     with pytest.raises(ValueError, match="checksum"):
         store.read(frozen.snapshot_id)
     with pytest.raises(ValueError, match="invalid snapshot ID"):
@@ -229,7 +230,7 @@ def test_dst_physical_elapsed_hours_and_nonexistent_deadline_policy():
     assert decode(encode(autumn)) == autumn
 
 
-def test_v3_config_roundtrip_enables_shadow_even_on_legacy_control_config(tmp_path):
+def test_v3_config_roundtrip_preserves_explicit_device_permissions(tmp_path):
     path = tmp_path / "options.json"
     path.write_text(
         json.dumps(
@@ -245,7 +246,7 @@ def test_v3_config_roundtrip_enables_shadow_even_on_legacy_control_config(tmp_pa
         )
     )
     settings = Settings.load(path)
-    assert settings.planner.shadow_mode
+    assert settings.ess.control_enabled and settings.ev.control_enabled
     path.write_text(json.dumps(settings.as_options()))
     assert Settings.load(path) == settings
     assert PlannerSettings().hierarchy_policy().economic_tolerance_eur == 0.01
@@ -265,7 +266,7 @@ def test_invalid_hierarchy_tolerances_rejected(kwargs):
         HierarchyPolicy(**kwargs)
 
 
-def test_shadow_blocks_startup_fallback_private_writes_reset_and_shutdown():
+def test_disabled_devices_block_startup_fallback_private_writes_reset_and_shutdown():
     from energymanager.config import EssSettings
     from energymanager.ess_control import EssHardwareController
     from energymanager.ev_control import EvHardwareController
@@ -281,19 +282,18 @@ def test_shadow_blocks_startup_fallback_private_writes_reset_and_shutdown():
 
     client = Client()
     ess = EssHardwareController(
-        client, EssSettings(control_enabled=True, setpoint_entity="number.test"), shadow_mode=True
+        client, EssSettings(control_enabled=False, setpoint_entity="number.test")
     )
     ev = EvHardwareController(
         client,
         EvSettings(
-            control_enabled=True,
+            control_enabled=False,
             current_entity="number.test",
             phase_mode_entity="select.phase",
             force_state_entity="select.force",
             automatic_fault_reset=True,
             reset_button_entity="button.reset",
         ),
-        shadow_mode=True,
     )
 
     async def run():

@@ -1,124 +1,126 @@
-# V3 preview validation
+# V3 focused correction validation
 
-Local branch: `development/energymanager-v3`, based on `c6ae5f1` (add-on 0.31.16).
-Preview: 3.0.0b1. No branch push, PR, merge, image publication or deployment was performed.
+Correction branch: `development/energymanager-v3`, based on `e16db32`.
+Version: **3.0.0b2**, corrected model `3.0-preview.2`.
+This correction task does not push, merge, publish, deploy or activate hardware control.
+The previously approved initial V3 commit remains on `main` until these corrections are separately approved.
+
+## Corrections and relevant files
+
+- `milp_planner.py`: trip withdrawals use UTC half-open intervals rather than exact-start equality.
+  Departure constraints credit only complete prior slots. Earlier trips in the same slot reduce the
+  energy available for a later departure, both in model constraints and independent validation.
+- `requirements.py`, `jobs.py`: generic storage has explicit `charging_windows`. State requirement
+  `earliest_start` does not prohibit precharging; deadlines, efficiency, withdrawals and reserves
+  remain part of the same physical model.
+- `counterfactual.py`, `decision_records.py`, dashboard: economic status, incumbent, bound and gap
+  are exposed. Bounds, rather than status labels or selected-schedule deltas, determine whether a
+  cost direction is proven. Both complete hierarchical stage records remain available.
+- `decision_store.py`: gzip archives, whole-decision checksums, bounded decompression and legacy
+  preview reads. Defaults are 30 days, 10,000 records, 1 GiB compressed. Retention and stale temporary
+  cleanup run during background saves, never in store construction or read-only replay.
+- `hardware_authority.py`, controllers, registry, startup and configuration: removed global mode;
+  only each device's existing control flag authorizes service calls. Defaults remain false.
+  Obsolete preview options are explicitly rejected pending permission review.
+- Configuration/schema/translations, documentation, focused regression tests and dashboard contracts
+  were updated. There is one planner and no parallel V2 path or replacement simulation mode.
 
 ## Automated verification
 
-- Python 3.13.5; HiGHS/highspy 1.15.1; one solver thread, fixed seed.
-- Full pytest run: **280 passed**, no skips (8.85 seconds on this cloud instance).
-  This includes real HiGHS integration and 38 V3 acceptance cases.
-- Ruff passed for `energymanager/src`, `tests` and `tools`.
-- Python compilation, YAML parsing, default configuration loading and HA schema-field coverage passed.
-- JavaScript syntax and the focused V3 dashboard DOM-contract checks passed. The latter checks
-  unavailable data, requirement rendering without HTML injection, archived session selection and file-size rejection.
-- Docker Alpine/Python 3.13 image built successfully as local `energymanager:v3-review`.
-  The image's imports and replay CLI were exercised. A real frozen HiGHS replay inside the image
-  with networking disabled returned `optimal`, validation `passed`, objective **−EUR 0.73025**.
-  The temporary build CA was confirmed absent from the image.
+Python 3.13.5; real HiGHS/highspy 1.15.1; one solver thread and fixed seed.
 
-The regression suite retains actuator current/phase limits, stop/zero verification, phase reversal,
-settling/minimum interval, stale/held sensors, guarded charger reset, latched faults and notification
-suppression. V3 tests add shadow startup/private-write/reset/shutdown blocking, latest-solve supersession,
-failed storage, checksummed replay, mixed generic jobs and thermal storage, physical-resource occupancy,
-DST, non-quarter deadlines, hard infeasibility, economic reconciliation, priority bounds, stability,
-unknown peak rejection, counterfactuals, live grid-headroom limiting, and quarter-boundary dispatch
-continuity without executing future intervals early. Existing HA outage and fast-loop
-recovery tests continue to pass. No skipped solver suite was used as evidence.
+- Full pytest: **304 passed** in 10.75 seconds, no failures or skips. See `.v3-evidence/corrections-tests.log`.
+- Ruff, Python compilation, YAML parsing, default configuration/schema round-trip checks passed.
+- Dashboard JavaScript syntax and DOM-contract checks passed, including confidence and baseline
+  stage rendering. This is not a live browser/HA integration test.
+- Local Docker image `energymanager:v3-review` built with verified TLS. Offline replay inside the
+  image passed physical validation. No image was pushed or hardware client started.
 
-## Seven-day benchmark and replay
+Regression coverage includes 07:00, 07:05, 07:10 and 07:15 departures; successive trips and away
+windows; two departures within one slot; DST folds; conservative minima and full SoC trajectories;
+storage charging permissions and efficiency; counterfactual optimal/time-limit/infeasible/error
+reports; archive rotation, age, bytes, corruption, legacy read/replay, interrupted-write cleanup and
+bounded decompression; independent ESS/EV hardware permissions; startup/shutdown/private fallback
+and reset blocking when disabled. Existing phase switching, fault recovery, health, HA outage,
+latest-request supersession and failed-storage tests continue to pass.
 
-`PYTHONPATH=energymanager/src .venv/bin/python tools/benchmark_v3.py` creates synthetic, non-personal
-inputs with 672 intervals, five weekly EV departures/trips, diurnal PV, varying household load, ESS,
-flat tariffs and a known monthly peak. The benchmark deliberately uses a 30-second total budget
-(15 seconds maximum for economics), rather than the normal 60-second total default.
+Intermediate runs caught an archive test expecting an uncompressed filename and a diagnostic test
+expecting the prior model-version string. Both expectations were updated to the corrected contracts;
+the final complete suite has no failures.
 
-Measured run:
+## Seven-day archived scenario
+
+`PYTHONPATH=energymanager/src .venv/bin/python tools/benchmark_v3.py` creates synthetic inputs:
+672 intervals, five weekday departures, PV, load, ESS, flat tariffs and known monthly peak.
+The benchmark uses a 30-second total budget, with at most 15 seconds for economics.
 
 | Metric | Result |
 |---|---:|
-| Wall time, including model construction/validation | 30.33 s |
-| Economic incumbent objective | EUR 14.920558 |
+| Wall time | 30.35 s |
+| Economic incumbent | EUR 14.920558 |
 | Selected objective | EUR 14.930558 |
-| Applied economic tolerance | EUR 0.01 |
-| Selected EV sessions | 10 |
+| Economic degradation allowance | EUR 0.01 |
+| EV sessions | 10 |
 | Physical validation | passed |
 | Overall status | feasible_time_limit |
 
-Economics completed in 1.74 s, solver status `Optimal`, gap 0.0001298.
-Robustness used 7.01 s (gap 0.00590); operating quality used 6.97 s (event objective 20, gap 0.70);
-stability was constant because there was no previous accepted plan; deterministic selection used
-13.84 s (gap 0.01724). The last three nonconstant stages timed out with feasible incumbents.
-**Lower-priority optimality was not established.** The large operating-stage gap is visible evidence,
-not hidden by a success label. Session consolidation can improve with a larger configured budget.
+Economics completed in 1.71 s, status `Optimal`, gap 0.0001298. Robustness used 6.99 s with gap
+0.00590; operating quality used 6.96 s with gap 0.70; stability was constant; deterministic selection
+used 13.90 s with gap 0.01724. **Lower-priority optimality is unproven.** A separate archive CLI replay
+passed validation and returned the same EUR 14.930558 objective and 10 sessions. Time-limited schedules
+are not guaranteed to reproduce every slot across machines or CPU loads.
 
-A separate CLI replay of the archived seven-day snapshot passed validation, returned the same
-EUR 14.930558 objective and 10 sessions, and had zero EV-energy difference over the first four hours.
-Small completed-solve replay tests also compare the entire EV schedule. Time-limited runs are not
-promised to reproduce every slot across machines or loads; compare economic tolerance and physical
-validation, then inspect recorded stage metrics.
+Snapshot: `2bc910e15f7ed5609b380821b48eb3a7`. Its decision compressed from 2,586,371 bytes to
+150,906 bytes (about 17× smaller). At a ten-minute cadence, 4,320 such records occupy approximately
+622 MiB for 30 days, within the default 1 GiB cap. Larger/event-driven records may shorten retention;
+limits are configurable and pending atomic writes temporarily add one record. Compression preserves
+self-contained snapshots and reduces repeated arrays without introducing cross-record dependencies.
 
-The earlier validation bottleneck (repeated conversion of HiGHS sparse arrays) was removed. Sparse
-arrays are cached once during independent primal validation. There is no GPU or multi-thread speedup claim.
+## Counterfactual confidence
 
-## Quantitative counterfactual
-
-A separate saved two-hour snapshot has PV in its first hour and an EV departure minimum at hour two.
-The CLI intervention `forbid_ev 0 4` excludes charging in the first four frozen slots. Both baseline
-and alternative are feasible and independently validated with identical observations, forecasts,
-requirements, tariffs, peak baseline, policy and resource constraints.
+Snapshot `c5c3db64aa41a99a1bc0e3850696bfaf` uses an EV deadline at hour two and PV in hour one.
+The intervention `forbid_ev 0 4` excludes charging during that first hour.
 
 | Metric | Baseline | Alternative |
 |---|---:|---:|
+| Economic incumbent / lower bound | −EUR 0.74025 | EUR 0.26975 |
+| Economic status / gap | Optimal / 0 | Optimal / 0 |
+| Selected objective after hierarchy | −EUR 0.73025 | EUR 0.27975 |
 | Grid import | 0.05012 kWh | 3.89750 kWh |
-| Net energy cash cost | EUR 0.01428 | EUR 1.06952 |
 | Incremental capacity cost | EUR 0 | EUR 0.28 |
-| Terminal usable ESS value | EUR 0.74453 | EUR 1.06977 |
-| Total objective | −EUR 0.73025 | EUR 0.27975 |
 | EV sessions | 1 | 1 |
 
-The objective increases **EUR 1.01**, import increases **3.84738 kWh**, and the first EV start shifts
-**four slots (one hour)** later. First-window EV energy decreases **5.2325 kWh**. Session count is
-unchanged. Cash cost and terminal stored-energy value are reported separately; the negative baseline
-objective is not a claim of realized negative cash expenditure. This is comparative evidence under
-a specific intervention, not proof that PV uniquely caused every original charging slot.
+Both plans validate. The economic difference bounds coincide at **EUR 1.01** within numerical
+precision, proving the alternative is more expensive under this frozen model. The selected schedule
+also differs by EUR 1.01, with 3.84738 kWh more imports and the first EV start one hour later.
+This does not establish real-world causation or uniquely attribute the original schedule to PV.
+Tests with overlapping bounds explicitly report only feasible incumbent comparisons, including when
+HiGHS labels economics `Optimal` within a nonzero MIP gap. Missing/invalid solves report incomplete.
 
-Ignored, local review artifacts are in `.v3-evidence/`: full snapshots under `archive/`,
-`benchmark.json`, `seven-day-replay.json`, `counterfactual.json`, pytest and Docker logs. They contain
-synthetic inputs only. Regenerate them with the benchmark and CLI commands in [V3.md](V3.md).
+## Review and readiness
 
-## Build networking
+The corrections are ready for source review and offline validation. Deployment and hardware activation
+remain unapproved. Installation-specific entity mappings, actual electrical limits, hardware ownership,
+control permissions and a documented rollback procedure must be verified before deployment approval.
+Follow [direct replacement and rollback](V3.md#direct-replacement-configuration-verification-and-rollback).
+There is no required parallel installation or preliminary operating mode.
 
-Initial Docker package downloads failed because the container could not resolve the platform proxy;
-after resolving that hostname, TLS correctly rejected the untrusted proxy certificate. The final build
-passes the existing platform CA as the optional `pip_ca` BuildKit secret. Verification remains enabled;
-no CA or credentials are committed/baked into the image. `python tools/build_v3.py` reproduces this
-local build using the current environment's supplied proxy/CA, if present. Ordinary CI does not require
-those optional settings. The script never pushes an image.
-
-## Scope limits and review
-
-No live hardware, live HA API, production database or installed browser dashboard was accessed.
-Generic appliances/thermal resources have planning models, not new actuator integrations. Robustness
-is a documented timing heuristic, current tariffs remain flat-profile inputs, and no minimal conflicting
-constraint set or EV-specific grid-source attribution is claimed. Quarter-hour planning does not simulate
-every second of charger settling; existing actuator interlocks remain authoritative. Time-limited
-lower-priority stages can remain far from proven optimal.
-
-Review locally with:
+No live Home Assistant, hardware, production database or installed dashboard was accessed. Generic
+thermal/appliance models have no new hardware integration. Robustness remains a timing heuristic;
+minimal infeasible subsets and EV-specific grid-source attribution remain unsupported. Physical
+charger behavior still requires approved installation-specific validation.
 
 ```sh
 git switch development/energymanager-v3
-git log --oneline -3
-git diff c6ae5f1..HEAD --stat
-git diff c6ae5f1..HEAD
+git diff e16db32..HEAD --stat
+git diff e16db32..HEAD
 source .venv/bin/activate
 ruff check energymanager/src tests tools
 pytest
 node tools/check_v3_dashboard.cjs
+python tools/build_v3.py
 ```
 
-See [V3.md](V3.md#shadow-only-installation-then-deliberate-activation) for migration, archive handling,
-precise shadow-only installation and later deliberate activation. Publishing or deploying requires
-separate approval. The preview must first be evaluated with explicit EV minima, actual installation
-limits and `planner.shadow_mode: true`.
+Local ignored evidence is in `.v3-evidence/`: `corrections-tests.log`, `corrections-build.log`,
+`benchmark.json`, `corrections-seven-day-replay.json`, `corrections-counterfactual.json` and compressed
+archives. Export a JSON document for the dashboard using the CLI `show` command in [V3.md](V3.md).

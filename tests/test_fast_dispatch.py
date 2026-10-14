@@ -96,7 +96,7 @@ def test_fast_dispatch_requests_replan_when_ess_cannot_absorb_deviation() -> Non
     assert result.replan_reason == "ess_correction_limit"
 
 
-def test_fast_dispatch_substitutes_planned_ev_for_shadow_actual_ev() -> None:
+def test_fast_dispatch_substitutes_planned_ev_for_uncontrolled_actual_ev() -> None:
     plan = _plan(planned_grid_w=2000.0, planned_ess_w=2000.0, planned_ev_w=3000.0)
     state = _state(grid_w=500.0, ess_w=500.0, ev_w=0.0)
 

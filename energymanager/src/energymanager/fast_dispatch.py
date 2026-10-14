@@ -61,13 +61,12 @@ async def publish_fast_dispatch(
         "friendly_name": "Energy Manager Fast Dispatch Status",
         "fast_dispatch_version": FAST_DISPATCH_VERSION,
         "plan_id": plan_id,
-        "shadow_mode": not control_enabled,
         "control_enabled": control_enabled,
         "hardware_writes": hardware_writes,
         "tracking_strategy": (
             "milp_grid_target_with_live_grid_feedback"
             if control_enabled
-            else "milp_grid_target_with_shadow_ev_substitution"
+            else "milp_grid_target_with_planned_ev_substitution"
         ),
         "control_deadband_w": _LIVE_CONTROL_DEADBAND_W if control_enabled else 0.0,
         "deadband_active": (
@@ -119,7 +118,7 @@ def evaluate_fast_dispatch(
 ) -> FastDispatchResult:
     """Calculate the ESS correction needed to track the current MILP grid target.
 
-    Shadow evaluation substitutes the MILP-planned EV load for measured EV power.
+    Evaluation without ESS control substitutes the MILP-planned EV load for measured EV power.
     Real ESS control instead follows the actual P1 grid deviation, so an EV still
     controlled elsewhere cannot create a fictitious ESS correction.
     """

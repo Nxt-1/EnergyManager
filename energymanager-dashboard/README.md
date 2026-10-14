@@ -1,7 +1,7 @@
 # V3 decision evidence preview
 
 Retains the existing Overview, Planning, Performance and Diagnostics behavior and adds a focused
-Decision details view. Update the resource to `/local/energymanager-timeline-card.js?v=300b1`.
+Decision details view. Update the resource to `/local/energymanager-timeline-card.js?v=300b2`.
 Select a latest requirement to inspect structured provenance and stage tolerances. For complete
 session/stage evidence, import an archived decision JSON from the CLI; select a session for its
 counterfactual command. Import the resulting comparison JSON to inspect quantitative differences.

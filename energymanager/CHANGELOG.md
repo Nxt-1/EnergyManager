@@ -1,11 +1,19 @@
-## 3.0.0b1 — V3 shadow preview
+## 3.0.0b2 — Focused V3 corrections
+
+- Correct non-quarter-hour trip withdrawals; keep conservative departure constraints.
+- Add explicit storage charging windows separate from state requirements.
+- Report economic counterfactual bounds, gaps and incomplete-solve limitations.
+- Compress archives with whole-decision checksums and default 30-day / 1 GiB retention.
+- Use only per-device hardware permissions at the final service boundary. Reject obsolete preview
+  configuration until device permissions are reviewed. Document direct replacement and rollback.
+
+## 3.0.0b1 — Initial V3 preview
 
 - Replace weighted scheduling refinement with bounded economic, robustness, operating-quality,
   stability and deterministic stages; retain the electrical model and fast safety controls.
 - Add structured EV requirement provenance, generic jobs/storage, checksummed snapshots, decision
   diffs, offline replay/counterfactual CLI and focused dashboard evidence/session inspection.
-- Default to global shadow mode, including startup/fallback/reset writes. Existing live flags alone
-  no longer grant hardware authority. Preserve phase-switch, stale-input and fault safeguards.
+- Initial preview hardware authorization was superseded by the per-device permissions in 3.0.0b2.
 - Separate unspecified departure minimum from preferred terminal target. Configure an explicit
   minimum during migration; neither target is a physical maximum.
 - Add bounded decision retention, configurable tolerances/grid limits and additive plan IDs in

@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 import dataclasses
+import gzip
 import hashlib
 import json
 import os
 import re
 import tempfile
 import time
+import zlib
 from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 SCHEMA_VERSION = 1
-MODEL_VERSION = "3.0-preview.1"
+MODEL_VERSION = "3.0-preview.2"
 _ID = re.compile(r"^[a-f0-9]{32}$")
 
 
@@ -110,7 +112,8 @@ class PlanningSnapshot:
 
     def inputs(self):
         raw = json.loads(self.payload)
-        if raw.get("schema_version") != SCHEMA_VERSION or raw.get("model_version") != MODEL_VERSION:
+        if (raw.get("schema_version") != SCHEMA_VERSION
+                or raw.get("model_version") not in ("3.0-preview.1", MODEL_VERSION)):
             raise ValueError("unsupported snapshot schema/model; replay with the matching release")
         if hashlib.sha256(self.payload.encode()).hexdigest()[:32] != self.snapshot_id:
             raise ValueError("snapshot checksum mismatch")
@@ -144,14 +147,10 @@ class PlanningSnapshot:
 
 
 class DecisionStore:
-    def __init__(self, root: Path, *, max_bytes: int = 256 * 1024 * 1024, keep: int = 500):
-        self.root, self.max_bytes, self.keep = root, max_bytes, keep
-        if max_bytes < 1024 or keep < 1:
+    def __init__(self, root: Path, *, max_bytes: int = 1024 * 1024 * 1024, keep: int = 10000, days: int = 30):
+        self.root, self.max_bytes, self.keep, self.days = root, max_bytes, keep, days
+        if max_bytes < 1024 or keep < 1 or days < 1:
             raise ValueError("invalid archive bounds")
-        # Incomplete atomic writes are never replayed. Clean only stale files we own.
-        for path in root.glob(".pending-*"):
-            if path.is_file() and time.time() - path.stat().st_mtime > 86400:
-                path.unlink()
 
     def _path(self, identity: str) -> Path:
         if not _ID.fullmatch(identity):
@@ -170,11 +169,14 @@ class DecisionStore:
             "attribution": "Stage comparisons are facts; individual causal attribution is indeterminate "
             "without a counterfactual. Near-equivalent schedules may exist.",
         }
-        body = canonical(document).encode()
-        if len(body) > min(self.max_bytes, 32 * 1024 * 1024):
+        document["decision_schema_version"] = 2
+        document["decision_checksum"] = hashlib.sha256(canonical(document).encode()).hexdigest()
+        raw = canonical(document).encode()
+        body = gzip.compress(raw, compresslevel=6, mtime=0)
+        if len(raw) > 32 * 1024 * 1024 or len(body) > self.max_bytes:
             raise ValueError("decision exceeds archive byte limit")
         self.root.mkdir(parents=True, exist_ok=True)
-        target = self._path(snapshot.snapshot_id)
+        target = self._path(snapshot.snapshot_id).with_suffix(".json.gz")
         descriptor, temp = tempfile.mkstemp(prefix=".pending-", dir=self.root)
         try:
             with os.fdopen(descriptor, "wb") as handle:
@@ -185,27 +187,60 @@ class DecisionStore:
         finally:
             if os.path.exists(temp):
                 os.unlink(temp)
-        files = sorted(self.root.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        # Incomplete atomic writes are never replayed. Clean only stale files we own.
+        for path in self.root.glob(".pending-*"):
+            if path.is_file() and time.time() - path.stat().st_mtime > 86400:
+                path.unlink()
+
+        legacy = self._path(snapshot.snapshot_id)
+        if legacy.exists():
+            legacy.unlink()
+        files = self._files()
         total = 0
         for index, path in enumerate(files):
             total += path.stat().st_size
-            if index >= self.keep or total > self.max_bytes:
+            if index >= self.keep or total > self.max_bytes or time.time() - path.stat().st_mtime > self.days * 86400:
                 path.unlink()
 
     def read(self, identity: str):
         path = self._path(identity)
+        compressed = path.with_suffix(".json.gz")
+        if compressed.exists():
+            path = compressed
         if path.stat().st_size > 32 * 1024 * 1024:
             raise ValueError("oversized decision")
-        document = json.loads(path.read_text())
+        try:
+            opener = gzip.open if path.suffix == ".gz" else open
+            with opener(path, "rb") as handle:
+                raw = handle.read(32 * 1024 * 1024 + 1)
+            if len(raw) > 32 * 1024 * 1024:
+                raise ValueError("oversized decompressed decision")
+            document = json.loads(raw)
+        except (OSError, EOFError, zlib.error, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("corrupt decision archive") from exc
+        if document.get("decision_schema_version", 1) not in (1, 2):
+            raise ValueError("unsupported decision schema")
+        if document.get("decision_schema_version") == 2:
+            expected = document.pop("decision_checksum", None)
+            actual = hashlib.sha256(canonical(document).encode()).hexdigest()
+            document["decision_checksum"] = expected
+            if expected != actual:
+                raise ValueError("decision checksum mismatch")
+        if document.get("snapshot_id") != identity:
+            raise ValueError("decision identity mismatch")
         if document.get("schema_version") != SCHEMA_VERSION:
             raise ValueError("unsupported decision schema")
         snapshot = PlanningSnapshot(identity, canonical(document["snapshot"]))
         snapshot.inputs()
         return snapshot, document
 
+    def _files(self):
+        return sorted(
+            (p for p in self.root.iterdir()
+             if p.is_file() and (p.name.endswith(".json") or p.name.endswith(".json.gz"))
+             and _ID.fullmatch(p.name.removesuffix(".gz").removesuffix(".json"))),
+            key=lambda p: p.stat().st_mtime, reverse=True,
+        ) if self.root.exists() else []
+
     def list_ids(self):
-        return tuple(
-            p.stem
-            for p in sorted(self.root.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-            if _ID.fullmatch(p.stem)
-        )
+        return tuple(dict.fromkeys(p.name.split(".")[0] for p in self._files()))

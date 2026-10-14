@@ -1339,7 +1339,7 @@ if (!customElements.get('energymanager-notification-events-card')) {
 
 // Module resource/version verification (logged once per script evaluation).
 // The Planning helper retains its v2.32 name to keep the existing chart API stable.
-window.energyManagerDashboardVersion = '3.0.0b1';
+window.energyManagerDashboardVersion = '3.0.0b2';
 window.energyManagerDashboardInfo = {
   version: '2.38',
   loadedAt: new Date().toISOString(),
@@ -1401,6 +1401,8 @@ class EnergyManagerDecisionDetails extends HTMLElement {
     this.querySelector('[data-stages]').textContent = JSON.stringify({
       stages: (evaluation.stages || []).map(({plan, ...stage}) => stage),
       quantitative_difference: doc?.delta, infeasibility: doc?.infeasibility,
+      economic_confidence: doc?.economic_confidence,
+      baseline_stages: doc?.baseline?.stages?.map(({plan, ...stage}) => stage),
       attribution: doc?.attribution || doc?.interpretation || live.attribution,
     }, null, 2);
     this.querySelector('[data-cmd]').textContent = live.details_command || '';

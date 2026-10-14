@@ -74,7 +74,7 @@ def _ess() -> EssActuatorSnapshot:
     )
 
 
-def test_shadow_planner_builds_neutral_milp_input_frame() -> None:
+def test_planner_builds_neutral_milp_input_frame() -> None:
     start = datetime(2026, 10, 8, 12, 0, tzinfo=_LOCAL)
     plan = PlanBuilder().build(
         _load_forecast(start, [1000.0] * 4),
@@ -94,7 +94,7 @@ def test_shadow_planner_builds_neutral_milp_input_frame() -> None:
     assert all(item.net_power_before_control_w == pytest.approx(500.0) for item in plan.intervals)
 
 
-def test_shadow_plan_summary_keeps_ac_and_dc_pv_separate() -> None:
+def test_plan_summary_keeps_ac_and_dc_pv_separate() -> None:
     start = datetime(2026, 10, 8, 12, 0, tzinfo=_LOCAL)
     plan = PlanBuilder().build(
         _load_forecast(start, [1000.0] * 4),
@@ -110,7 +110,7 @@ def test_shadow_plan_summary_keeps_ac_and_dc_pv_separate() -> None:
     assert summary["net_deficit_kwh"] == pytest.approx(0.5)
 
 
-def test_shadow_planner_accepts_full_seven_day_horizon() -> None:
+def test_planner_accepts_full_seven_day_horizon() -> None:
     start = datetime(2026, 10, 8, 0, 0, tzinfo=_LOCAL)
     intervals = 7 * 24 * 4
     plan = PlanBuilder().build(
@@ -123,7 +123,7 @@ def test_shadow_planner_accepts_full_seven_day_horizon() -> None:
     assert plan.summary(168)["intervals"] == intervals
 
 
-def test_shadow_planner_rejects_naive_now() -> None:
+def test_planner_rejects_naive_now() -> None:
     start = datetime(2026, 10, 8, 12, 0, tzinfo=_LOCAL)
     with pytest.raises(ValueError):
         PlanBuilder().build(

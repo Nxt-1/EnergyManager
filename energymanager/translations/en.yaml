@@ -27,19 +27,19 @@ configuration:
         description: Select how positive values from the configured ESS power entity should be interpreted.
       capacity_kwh:
         name: ESS nominal capacity
-        description: Nominal battery capacity in kWh used by the shadow planner. Defaults to 15 kWh when omitted.
+        description: Nominal battery capacity in kWh used by the planner. Defaults to 15 kWh when omitted.
       min_soc_percent:
         name: Minimum planning SoC
-        description: Lower SoC reserve used by the shadow planner. Defaults to 10 percent when omitted.
+        description: Lower SoC reserve used by the planner. Defaults to 10 percent when omitted.
       max_soc_percent:
         name: Maximum planning SoC
-        description: Upper SoC limit used by the shadow planner. Defaults to 100 percent when omitted.
+        description: Upper SoC limit used by the planner. Defaults to 100 percent when omitted.
       max_charge_power_w:
         name: Maximum planning charge power
-        description: Aggregate battery charging limit in W used by the shadow planner. Defaults to 2000 W when omitted.
+        description: Aggregate battery charging limit in W used by the planner. Defaults to 2000 W when omitted.
       max_discharge_power_w:
         name: Maximum planning discharge power
-        description: ESS AC discharge/inverter limit in W used by the shadow planner. Defaults to 2000 W when omitted.
+        description: ESS AC discharge/inverter limit in W used by the planner. Defaults to 2000 W when omitted.
       charge_efficiency:
         name: Planning charge efficiency
         description: Fraction from 0 to 1 retained while charging. Defaults to 0.95 when omitted.
@@ -143,12 +143,6 @@ configuration:
     name: Planner and explainability
     description: V3 hierarchy, hardware authority and bounded decision archive.
     fields:
-      shadow_mode:
-        name: Shadow mode
-        description: Blocks all actuator hardware writes including startup, fallback and charger reset. Defaults to true.
-      tie_break_seconds:
-        name: Refinement time budget
-        description: Total seconds for robustness, operating quality, stability and deterministic refinement.
       economic_tolerance_eur:
         name: Economic tolerance eur
         description: V3 policy limit in EUR; see V3 documentation for the exact definition.
@@ -170,6 +164,9 @@ configuration:
       archive_max_mb:
         name: Archive max mb
         description: V3 policy limit in MiB; see V3 documentation for the exact definition.
+      archive_days:
+        name: Archive retention days
+        description: Retain up to 30 days by default, subject to compressed byte and record limits.
       archive_keep:
         name: Archive keep
         description: V3 policy limit in records; see V3 documentation for the exact definition.

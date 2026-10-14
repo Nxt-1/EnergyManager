@@ -493,7 +493,7 @@ def test_published_milp_status_includes_both_schedules_for_diagnosis() -> None:
     )
     asyncio.run(publish_milp_evaluation(client, evaluation))
     attributes = client.states["sensor.energy_manager_milp_status"]["attributes"]
-    assert attributes["milp_version"] == "3.0-preview.1"
+    assert attributes["milp_version"] == "3.0-preview.2"
     assert attributes["tie_break_max_time_seconds"] is None
     assert attributes["economic_stage_variable_count"] == 9284
     assert attributes["economic_stage_schedule"] == economic

@@ -32,8 +32,8 @@ class ControlAwareActuatorRegistry(ActuatorRegistry):
 
     def __init__(self, settings: Settings) -> None:
         super().__init__(settings)
-        self._ess_control_enabled = settings.ess.control_enabled and not settings.planner.shadow_mode
-        self._ev_control_enabled = settings.ev.control_enabled and not settings.planner.shadow_mode
+        self._ess_control_enabled = settings.ess.control_enabled
+        self._ev_control_enabled = settings.ev.control_enabled
 
     def snapshots(self, house_state):
         snapshots = super().snapshots(house_state)
@@ -50,9 +50,8 @@ class ControlAwareActuatorRegistry(ActuatorRegistry):
 class EssHardwareController:
     """Translate canonical ESS power requests into Victron HA number writes."""
 
-    def __init__(self, client, settings: EssSettings, *, shadow_mode: bool = False) -> None:
-        self._client = HardwareAuthority(client, shadow=shadow_mode)
-        self._shadow_mode = shadow_mode
+    def __init__(self, client, settings: EssSettings) -> None:
+        self._client = HardwareAuthority(client, enabled=lambda: self._settings.control_enabled)
         self._settings = settings
         self._write_count = 0
         self._last_write_utc: datetime | None = None
@@ -63,7 +62,7 @@ class EssHardwareController:
 
     @property
     def enabled(self) -> bool:
-        return not self._shadow_mode and self._settings.control_enabled and self._settings.setpoint_entity is not None
+        return self._settings.control_enabled and self._settings.setpoint_entity is not None
 
     @property
     def fault_active(self) -> bool:
@@ -165,11 +164,10 @@ class EssHardwareController:
         attributes: dict[str, Any] = {
             "friendly_name": "Energy Manager Actuator Command Status",
             "command_version": ACTUATOR_COMMAND_VERSION,
-            "shadow_mode": not hardware_actuators,
             "control_enabled": bool(hardware_actuators),
             "hardware_writes": bool(hardware_actuators),
             "hardware_write_actuators": hardware_actuators,
-            "shadow_only_actuators": [
+            "control_disabled_actuators": [
                 item.actuator_id for item in results if item.actuator_id not in hardware_actuators
             ],
             "command_count": len(results),

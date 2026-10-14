@@ -186,15 +186,15 @@ class PlannerSettings:
     """Secondary MILP time budget."""
 
     tie_break_seconds: int = 30
-    shadow_mode: bool = True
     economic_tolerance_eur: float = 0.01
     robustness_tolerance_kwh: float = 0.05
     operations_tolerance_events: float = 0.0
     stability_tolerance_kwh: float = 0.01
     grid_import_limit_kw: float = 25.0
     grid_export_limit_kw: float = 25.0
-    archive_max_mb: int = 256
-    archive_keep: int = 500
+    archive_max_mb: int = 1024
+    archive_keep: int = 10000
+    archive_days: int = 30
 
     def hierarchy_policy(self):
         from .hierarchy import HierarchyPolicy
@@ -368,16 +368,22 @@ class Settings:
         tie_break_seconds = _nonnegative_int(planner_raw.get("tie_break_seconds", 30), "planner.tie_break_seconds")
         if not 5 <= tie_break_seconds <= 120:
             raise ConfigurationError("planner.tie_break_seconds must be between 5 and 120")
-        planner_values = {"tie_break_seconds": tie_break_seconds,
-                          "shadow_mode": _bool_option(planner_raw.get("shadow_mode", True), "planner.shadow_mode")}
+        if "shadow_mode" in planner_raw:
+            raise ConfigurationError(
+                "Remove obsolete planner.shadow_mode after reviewing ess.control_enabled and ev.control_enabled; "
+                "set both false before migration if hardware authority was previously blocked."
+            )
+        planner_values = {"tie_break_seconds": tie_break_seconds}
         defaults = PlannerSettings()
         for key in ("economic_tolerance_eur", "robustness_tolerance_kwh", "operations_tolerance_events",
                     "stability_tolerance_kwh", "grid_import_limit_kw", "grid_export_limit_kw"):
             planner_values[key] = _nonnegative_float(planner_raw.get(key, getattr(defaults, key)), "planner." + key)
-        planner_values["archive_max_mb"] = _bounded_int(planner_raw.get("archive_max_mb", 256),
+        planner_values["archive_max_mb"] = _bounded_int(planner_raw.get("archive_max_mb", 1024),
                                                        "planner.archive_max_mb", 16, 4096)
-        planner_values["archive_keep"] = _bounded_int(planner_raw.get("archive_keep", 500),
+        planner_values["archive_keep"] = _bounded_int(planner_raw.get("archive_keep", 10000),
                                                      "planner.archive_keep", 1, 10000)
+        planner_values["archive_days"] = _bounded_int(planner_raw.get("archive_days", 30),
+                                                     "planner.archive_days", 1, 365)
         planner_settings = PlannerSettings(**planner_values)
         try:
             planner_settings.hierarchy_policy()

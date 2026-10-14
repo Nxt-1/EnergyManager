@@ -41,10 +41,8 @@ class EvHardwareController:
         settings: EvSettings,
         *,
         phase_switch_delay_seconds: float = _PHASE_SWITCH_DELAY_SECONDS,
-        shadow_mode: bool = False,
     ) -> None:
-        self._client = HardwareAuthority(client, shadow=shadow_mode)
-        self._shadow_mode = shadow_mode
+        self._client = HardwareAuthority(client, enabled=lambda: self._settings.control_enabled)
         self._settings = settings
         self._phase_switch_delay_seconds = max(0.0, float(phase_switch_delay_seconds))
         self._phase_switch_target: str | None = None
@@ -78,7 +76,7 @@ class EvHardwareController:
 
     @property
     def enabled(self) -> bool:
-        return not self._shadow_mode and self._settings.control_enabled and all(
+        return self._settings.control_enabled and all(
             (
                 self._settings.current_entity,
                 self._settings.phase_mode_entity,

@@ -24,7 +24,7 @@ from .jobs import add_jobs
 from .planner import EnergyPlan, PlanInterval
 from .tasks import PlanningTask
 
-MILP_EVALUATION_VERSION = "3.0-preview.1"
+MILP_EVALUATION_VERSION = "3.0-preview.2"
 MILP_STATUS_ENTITY = "sensor.energy_manager_milp_status"
 MILP_TOTAL_TIME_BUDGET_SECONDS = 60.0
 MILP_TIE_BREAK_MAX_TIME_SECONDS = 30.0
@@ -933,7 +933,8 @@ def _add_constraints(
                 state_index = _ev_state_index(plan, task.latest_end_local)
                 if state_index is None:
                     raise ValueError(f"EV task deadline is not aligned to the planner grid: {task.task_id}")
-                required_stored = ev_capacity * task.minimum_soc_percent / 100.0
+                required_stored = (ev_capacity * task.minimum_soc_percent / 100.0
+                                   + _ev_trip_energy_before_deadline(plan, task.latest_end_local, tasks))
                 model.addConstr(variables.ev_stored_energy_kwh[state_index] >= required_stored)
                 continue
             required_kwh = float(task.required_energy_kwh or 0.0)
@@ -1285,13 +1286,25 @@ def _ev_state_index(plan: EnergyPlan, moment: Any) -> int | None:
     return max(i for i, boundary in enumerate(boundaries) if boundary <= target)
 
 
+def _ev_trip_energy_before_deadline(plan, deadline, tasks):
+    """Withdrawals earlier in the same slot cannot count toward a later departure minimum."""
+    index = _ev_state_index(plan, deadline)
+    if index is None or index == len(plan.intervals):
+        return 0.0
+    start = plan.intervals[index].period_start_local.astimezone(UTC)
+    end = deadline.astimezone(UTC)
+    return sum(float(task.expected_trip_energy_kwh or 0.0) for task in tasks
+               if task.kind == "energy_by_deadline" and task.latest_end_local is not None
+               and start <= task.latest_end_local.astimezone(UTC) < end)
+
+
 def _ev_trip_energy_at_start(period_start_local: Any, tasks: tuple[PlanningTask, ...]) -> float:
     start_utc = period_start_local.astimezone(UTC)
     total = 0.0
     for task in tasks:
         if task.kind != "energy_by_deadline" or task.latest_end_local is None:
             continue
-        if abs((task.latest_end_local.astimezone(UTC) - start_utc).total_seconds()) < 1.0:
+        if start_utc <= task.latest_end_local.astimezone(UTC) < start_utc + _INTERVAL_DELTA:
             total += float(task.expected_trip_energy_kwh or 0.0)
     return total
 
@@ -1456,7 +1469,11 @@ def _ev_soc_at_deadline(plan: EnergyPlan, ev: EvActuatorSnapshot, deadline: Any)
     index = _ev_state_index(plan, deadline)
     if index is None:
         return None
-    return ev.soc_percent if index == 0 else plan.intervals[index - 1].projected_ev_soc_percent
+    before = ev.soc_percent if index == 0 else plan.intervals[index - 1].projected_ev_soc_percent
+    if before is None or not ev.capabilities.battery_capacity_kwh:
+        return None
+    withdrawn = _ev_trip_energy_before_deadline(plan, deadline, plan.tasks)
+    return before - 100 * withdrawn / ev.capabilities.battery_capacity_kwh
 
 
 def _ev_power_step_valid(power_w: float, ev: EvActuatorSnapshot) -> bool:

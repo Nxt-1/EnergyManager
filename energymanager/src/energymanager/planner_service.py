@@ -71,7 +71,7 @@ class PlannerService:
         if planner_settings is not None and decision_store is None:
             self._decision_store = DecisionStore(Path("/data/planner-v3"),
                                                  max_bytes=planner_settings.archive_max_mb * 1024 * 1024,
-                                                 keep=planner_settings.archive_keep)
+                                                 keep=planner_settings.archive_keep, days=planner_settings.archive_days)
         self._pending_replan = None
         self._inputs_unavailable = False
         self._solving_signature = None
