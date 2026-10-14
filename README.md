@@ -8,10 +8,11 @@ The project is being developed as a Home Assistant app.
 
 ## V3 preview
 
-Version **3.0.0b2** implements explainable hierarchical planning with per-device hardware permissions.
+Version **3.0.0b3** implements explainable hierarchical planning with per-device hardware permissions.
 Observations and forecasts become immutable requirements and snapshots; HiGHS solves explicit
 priority stages; validated schedules feed the existing independent safety/dispatch loop.
-Every decision can be archived, replayed and compared with a read-only counterfactual.
+Overview and Planning now expose historical evidence and read-only counterfactuals directly through
+authenticated Home Assistant ingress. Offline replay remains available for diagnostics.
 
 See [V3 architecture, migration, replay and direct replacement](docs/V3.md) and
 [validation results](docs/V3-validation.md). Existing installations must explicitly configure
@@ -40,6 +41,6 @@ Use Python 3.13 and install `requirements-dev.txt` in a virtual environment. Run
 `ruff check energymanager/src tests tools` and `pytest`. A reproducible synthetic benchmark is
 available through `PYTHONPATH=energymanager/src python tools/benchmark_v3.py`.
 
-The 3.0.0b2 corrections are local and unpublished. Follow the direct replacement and rollback procedure in
+The 3.0.0b3 corrections are local and unpublished. Follow the direct replacement and rollback procedure in
 [the V3 guide](docs/V3.md#direct-replacement-configuration-verification-and-rollback) after review and
 explicit deployment approval. Do not enable device control merely to inspect planning diagnostics.

@@ -1,3 +1,13 @@
+## 3.0.0b3 — Dashboard explanations and measured planning quality
+
+- Integrate archived history, EV/ESS/requirement/job selection, stage schedules, input changes and
+  energy/cost evidence into Overview and Planning through authenticated Home Assistant ingress.
+- Add isolated, bounded GUI counterfactual jobs, including ESS charging/discharging restrictions;
+  preserve per-device control permissions and prevent diagnostics from changing live plans.
+- Record objective improvements, solver node counts, warm-start results and stage quality metrics.
+- Benchmark identical inputs at 30/60/120 seconds and targeted formulation/budget variants.
+  Keep production timing defaults unchanged: no demonstrated practical gain at the default budget.
+
 ## 3.0.0b2 — Focused V3 corrections
 
 - Correct non-quarter-hour trip withdrawals; keep conservative departure constraints.

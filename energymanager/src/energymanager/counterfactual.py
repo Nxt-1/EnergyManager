@@ -21,12 +21,17 @@ def constrain(model, variables, restrictions, count):
     for kind, start, end in restrictions:
         if not isinstance(start, int) or not isinstance(end, int) or not 0 <= start < end <= count:
             raise ValueError("counterfactual window outside snapshot")
-        if kind not in {"forbid_ev", "continuous_ev", "no_grid_import"}:
+        if kind not in {"forbid_ev", "continuous_ev", "no_grid_import", "forbid_ess_charge", "forbid_ess_discharge"}:
             raise ValueError("unsupported counterfactual; source-specific EV grid attribution is not identifiable")
         for i in range(start, end):
             if kind == "no_grid_import":
                 # Deliberately stronger than 'grid-powered EV': AC energy is fungible.
                 model.addConstr(variables.grid_import_kw[i] == 0)
+            elif kind == "forbid_ess_charge":
+                model.addConstr(variables.ac_charge_kw[i] == 0)
+                model.addConstr(variables.dc_charge_kw[i] == 0)
+            elif kind == "forbid_ess_discharge":
+                model.addConstr(variables.battery_discharge_kw[i] == 0)
             elif kind == "forbid_ev":
                 for currents in (variables.ev_single_phase_a, variables.ev_three_phase_a):
                     if i in currents:

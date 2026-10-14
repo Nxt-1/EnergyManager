@@ -1,17 +1,14 @@
-# V3 decision evidence preview
+# V3 dashboard explanations
 
-Retains the existing Overview, Planning, Performance and Diagnostics behavior and adds a focused
-Decision details view. Update the resource to `/local/energymanager-timeline-card.js?v=300b2`.
-Select a latest requirement to inspect structured provenance and stage tolerances. For complete
-session/stage evidence, import an archived decision JSON from the CLI; select a session for its
-counterfactual command. Import the resulting comparison JSON to inspect quantitative differences.
-Files are processed locally in the browser. This preview does not expose a new network service.
+Overview and Planning include **Understand this plan** cards for history, requirements, EV sessions,
+ESS actions, generic jobs, stage comparisons and GUI counterfactuals. They use authenticated Home
+Assistant ingress; exporting JSON or running a CLI is not required. Existing charts and notification
+behavior are retained. Use resource `/local/energymanager-timeline-card.js?v=300b3`.
 
-See [the V3 guide](../docs/V3.md) for export/replay commands, limitations and installation instructions.
-Browser integration requires validation in the target HA installation; JavaScript/YAML checks and
-existing history/graph data tests run locally.
+See [GUI setup and permissions](../docs/V3-GUI.md), [validation](../docs/V3-validation.md), and the
+current V3 installation notes below. Production HA ingress still requires approved installation-specific verification.
 
-## Retained dashboard history
+## Retained dashboard history (historical release notes)
 
 # EnergyManager Dashboard v2.37 — SoC colors and notification diagnostics
 
@@ -26,7 +23,7 @@ Dashboard-only update based on v2.36. No EnergyManager add-on changes.
 - Remove both standalone explanatory Markdown cards from Diagnostics.
 - Preserve all Overview navigation, chart statistics, Planning and Performance behavior.
 
-## Installation
+## Historical v2.37 installation (superseded by V3 below)
 1. Replace the dashboard YAML and `/config/www/energymanager-timeline-card.js`.
 2. Set the dashboard resource URL to `/local/energymanager-timeline-card.js?v=237`.
 3. Hard refresh Home Assistant (`Ctrl+F5`).
@@ -40,3 +37,16 @@ Dashboard-only update based on v2.36. No EnergyManager add-on changes.
 
 ## Offline validation
 YAML parsed and expected views / series / card verified; JavaScript syntax and event grouping/clear handling validated in a Node mock. Live Home Assistant verification remains necessary.
+
+## V3 explanations in Overview and Planning
+
+The `energymanager-decision-details` card is included in both existing views. Install the reviewed
+3.0.0b3 add-on and update the JS resource to `?v=300b3`; refresh the browser. The card automatically
+finds a single installed Energy Manager add-on. If more than one is registered, set `addon:` to the
+approved installation's full Supervisor slug in each card. Do not run parallel controllers.
+
+Use the decision selector and Newer/Older buttons for history; select a session, ESS action,
+requirement, job or interval to inspect recorded evidence. Choose From/Until and Calculate alternative
+for EV/ESS/grid counterfactuals. Results never change the active plan or hardware permissions.
+A Supervisor-authorized Home Assistant account is required; no token, public port or JSON file is needed.
+See [GUI and ingress](../docs/V3-GUI.md) and [validation](../docs/V3-validation.md).

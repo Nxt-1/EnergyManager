@@ -22,6 +22,7 @@ from .diagnostics import DiagnosticsPublisher
 from .economics import EconomicsService
 from .ess_control import ControlAwareActuatorRegistry, EssHardwareController
 from .ev_control import EvHardwareController
+from .explanation_api import explanation_server
 from .ha_client import HomeAssistantClient
 from .legacy_influx import LegacyInfluxBackfill, LegacyInfluxClient, LegacyInfluxError
 from .load_service import BackgroundLoadHistory, BackgroundLoadService
@@ -261,7 +262,8 @@ async def _run_app(
                 planner_service=planner_service,
             )
             try:
-                await app.run(stop_event)
+                async with explanation_server(settings.planner, planner_service):
+                    await app.run(stop_event)
             finally:
                 await planner_service.shutdown()
         return
@@ -286,7 +288,8 @@ async def _run_app(
         planner_service=planner_service,
     )
     try:
-        await app.run(stop_event)
+        async with explanation_server(settings.planner, planner_service):
+            await app.run(stop_event)
     finally:
         await planner_service.shutdown()
 

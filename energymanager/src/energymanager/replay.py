@@ -16,7 +16,8 @@ def main():
         child = sub.add_parser(command)
         child.add_argument("snapshot_id")
         if command == "counterfactual":
-            child.add_argument("kind", choices=("forbid_ev", "continuous_ev", "no_grid_import"))
+            child.add_argument("kind", choices=("forbid_ev", "continuous_ev", "no_grid_import",
+                                           "forbid_ess_charge", "forbid_ess_discharge"))
             child.add_argument("start", type=int)
             child.add_argument("end", type=int)
     args = parser.parse_args()

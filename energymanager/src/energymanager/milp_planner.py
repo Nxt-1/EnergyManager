@@ -497,6 +497,16 @@ def _solve_model(
         metrics = {"objective_eur": float(_objective(p, profile, capacity_state)),
                    "ev_sessions": float(_ev_session_count(reference_plan, variables, v)),
                    "weighted_import_kwh": _time_weighted_grid_import_value(variables, v)}
+        metrics["three_phase_transitions"] = sum(
+            abs(_value(three, v) - _value(variables.ev_three_on[i - 1], v))
+            for i, three in variables.ev_three_on.items() if i - 1 in variables.ev_three_on
+        )
+        metrics["near_term_stability_kwh"] = sum(
+            .25 / 1000 * (abs(slot.scheduled_load_w - old[slot.period_start_local.astimezone(UTC)].scheduled_load_w)
+                         + abs((slot.grid_power_after_ess_w or 0)
+                               - (old[slot.period_start_local.astimezone(UTC)].grid_power_after_ess_w or 0)))
+            for slot in p.intervals[:policy.near_term_hours * 4] if slot.period_start_local.astimezone(UTC) in old
+        )
         cost = _cost_breakdown(p, profile, capacity_state)
         if cost is not None:
             metrics.update({"net_energy_cost_eur": cost.net_energy_cost_eur,
