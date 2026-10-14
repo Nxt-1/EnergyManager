@@ -1,4 +1,4 @@
-# EnergyManager Dashboard V3 preview — resource /local/energymanager-timeline-card.js?v=300b2
+# EnergyManager Dashboard V3 popup fix — resource /local/energymanager-timeline-card.js?v=300b3p1
 title: EnergyManager
 views:
 - title: Overview
@@ -10,6 +10,10 @@ views:
   - type: grid
     column_span: 2
     cards:
+    - type: custom:energymanager-decision-details
+      grid_options:
+        columns: full
+        rows: auto
     - type: vertical-stack
       grid_options:
         columns: 12
@@ -995,6 +999,10 @@ views:
   - type: grid
     column_span: 2
     cards:
+    - type: custom:energymanager-decision-details
+      grid_options:
+        columns: full
+        rows: auto
     - type: custom:energymanager-day-chart
       grid_options:
         columns: full
@@ -1232,8 +1240,3 @@ views:
     - sensor.energy_manager_notification_status
     - sensor.energy_manager_fast_dispatch_status
   - type: custom:energymanager-notification-events-card
-- title: Decision details
-  path: decision-details
-  icon: mdi:clipboard-text-search
-  cards:
-  - type: custom:energymanager-decision-details

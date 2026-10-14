@@ -187,6 +187,44 @@ const energyManagerObservedTasksV238 = (() => {
 })();
 window.energyManagerObservedTasksV238 = energyManagerObservedTasksV238;
 
+// Preserve a task button from pointer-down through click. Home Assistant can publish a new
+// state between those events; replacing the button would silently cancel the click.
+function energyManagerProtectTaskClick(card) {
+  if (card._taskClickProtected) return;
+  card._taskClickProtected = true;
+  const isTaskButton = event => Boolean(event.target?.closest?.('button[data-idx],button[data-index]'));
+  const release = () => {
+    if (!card._taskPressActive) return;
+    clearTimeout(card._taskReleaseTimer);
+    // Click is dispatched after pointerup; never rebuild the DOM before that click.
+    card._taskReleaseTimer = setTimeout(() => {
+      card._taskPressActive = false;
+      if (card._taskRenderPending && !card.querySelector('dialog[open]')) {
+        card._taskRenderPending = false;
+        card.render();
+      }
+    }, 250);
+  };
+  card.addEventListener('pointerdown', event => {
+    if (!isTaskButton(event)) return;
+    card._taskPressActive = true;
+    clearTimeout(card._taskReleaseTimer);
+    // Also recover if the pointer is released outside this card/window.
+    card._taskReleaseTimer = setTimeout(release, 3000);
+  }, true);
+  card.addEventListener('pointerup', release, true);
+  card.addEventListener('pointercancel', release, true);
+  card.addEventListener('click', event => { if (isTaskButton(event)) release(); }, true);
+  card.addEventListener('keydown', event => {
+    if (isTaskButton(event) && (event.key === 'Enter' || event.key === ' ')) {
+      card._taskPressActive = true;
+      clearTimeout(card._taskReleaseTimer);
+      card._taskReleaseTimer = setTimeout(release, 3000);
+    }
+  }, true);
+  card.addEventListener('keyup', event => { if (isTaskButton(event)) release(); }, true);
+}
+
 class EnergyManagerTimelineCard extends HTMLElement {
   setConfig(config) {
     if (!config?.entity) throw new Error('EnergyManager timeline requires an entity');
@@ -194,8 +232,19 @@ class EnergyManagerTimelineCard extends HTMLElement {
   }
   set hass(hass) {
     this._hass = hass;
-    // Do not overwrite an open dialog during HA state refresh.
-    if (!this.querySelector('dialog[open]')) this.render();
+    if (!this.config) return;
+    const source = hass.states[this.config.entity];
+    const sourceVersion = source?.last_updated || null;
+    const minute = Math.floor(Date.now() / 60000);
+    const offset = this.config.fixed_day_window ? energyManagerOverviewNavigation.hours : null;
+    // Unrelated HA entity updates must not destroy buttons being pressed.
+    if (this._sourceVersion === sourceVersion && this._renderMinute === minute &&
+        this._renderOffset === offset && this._renderObserved === this._observedSegments) return;
+    if (this._taskPressActive || this.querySelector('dialog[open]')) {
+      this._taskRenderPending = true;
+      return;
+    }
+    this.render();
   }
   _loadObservedTasks(begin, end) {
     const cutoff = Math.floor(Math.min(Date.now(), end) / 300000) * 300000;
@@ -206,16 +255,20 @@ class EnergyManagerTimelineCard extends HTMLElement {
     energyManagerObservedTasksV238.get(this._hass, begin, end).then(segments => {
       if (this._observedKey !== key) return;
       this._observedSegments = segments;
-      if (this.isConnected && !this.querySelector('dialog[open]')) this.render();
+      if (!this.isConnected) return;
+      if (this._taskPressActive || this.querySelector('dialog[open]')) this._taskRenderPending = true;
+      else this.render();
     }).catch(() => { /* The future planned timeline is still useful if Recorder is offline. */ });
   }
   connectedCallback() {
+    energyManagerProtectTaskClick(this);
     this._onPlotBounds = () => this._scheduleAlignment();
     this._onNavigation = () => {
       if (this._navRenderTimer !== null && this._navRenderTimer !== undefined) return;
       this._navRenderTimer = setTimeout(() => {
         this._navRenderTimer = null;
-        if (!this.querySelector('dialog[open]')) this.render();
+        if (this._taskPressActive || this.querySelector('dialog[open]')) this._taskRenderPending = true;
+        else this.render();
       }, 90);
     };
     window.addEventListener('energymanager-power-plot-bounds', this._onPlotBounds);
@@ -286,6 +339,11 @@ class EnergyManagerTimelineCard extends HTMLElement {
   render() {
     if (!this._hass || !this.config) return;
     const entity = this._hass.states[this.config.entity];
+    this._sourceVersion = entity?.last_updated || null;
+    this._renderMinute = Math.floor(Date.now() / 60000);
+    this._renderOffset = this.config.fixed_day_window ? energyManagerOverviewNavigation.hours : null;
+    this._renderObserved = this._observedSegments;
+    this._taskRenderPending = false;
     const segments = Array.isArray(entity?.attributes?.segments) ? entity.attributes.segments : [];
     const hours = Math.max(1, Math.min(168, Number(this.config.hours || 24)));
     const now = Date.now();
@@ -360,6 +418,9 @@ class EnergyManagerTimelineCard extends HTMLElement {
       dialog.showModal();
     }));
     dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+    dialog.addEventListener('close', () => {
+      if (this._taskRenderPending && !this._taskPressActive) this.render();
+    });
     this._scheduleAlignment();
   }
 }
@@ -1013,11 +1074,15 @@ class EnergyManagerPlanningTasksCard extends HTMLElement {
     const timeline = hass.states['sensor.energy_manager_plan_timeline'];
     const requirements = hass.states['sensor.energy_manager_task_status'];
     const key = `${timeline?.last_updated || ''}/${requirements?.last_updated || ''}/${Math.floor(Date.now() / 60000)}`;
-    if (key === this._renderKey || this.querySelector('dialog[open]')) return;
-    this._renderKey = key;
+    if (key === this._renderKey) return;
+    if (this._taskPressActive || this.querySelector('dialog[open]')) {
+      this._taskRenderPending = true;
+      return;
+    }
     this.render();
   }
   connectedCallback() {
+    energyManagerProtectTaskClick(this);
     if (this._config?.mode === 'timeline') {
       this._onBounds = () => this._align();
       window.addEventListener('energymanager-planning-power-plot-bounds', this._onBounds);
@@ -1177,6 +1242,10 @@ class EnergyManagerPlanningTasksCard extends HTMLElement {
   }
   render() {
     if (!this._hass || !this._config || !this.isConnected) return;
+    const timeline = this._hass.states['sensor.energy_manager_plan_timeline'];
+    const requirements = this._hass.states['sensor.energy_manager_task_status'];
+    this._renderKey = `${timeline?.last_updated || ''}/${requirements?.last_updated || ''}/${Math.floor(Date.now() / 60000)}`;
+    this._taskRenderPending = false;
     const model = this._model();
     this.innerHTML = this._config.mode === 'timeline' ? this._timeline(model) : this._list(model);
     if (this._config.mode !== 'timeline') return;
@@ -1194,6 +1263,9 @@ class EnergyManagerPlanningTasksCard extends HTMLElement {
       dlg.showModal();
     }));
     dlg.addEventListener('click', event => { if (event.target === dlg) dlg.close(); });
+    dlg.addEventListener('close', () => {
+      if (this._taskRenderPending && !this._taskPressActive) this.render();
+    });
     requestAnimationFrame(() => this._align());
   }
 }
@@ -1339,7 +1411,7 @@ if (!customElements.get('energymanager-notification-events-card')) {
 
 // Module resource/version verification (logged once per script evaluation).
 // The Planning helper retains its v2.32 name to keep the existing chart API stable.
-window.energyManagerDashboardVersion = '3.0.0b2';
+window.energyManagerDashboardVersion = '3.0.0b3-popup1';
 window.energyManagerDashboardInfo = {
   version: '2.38',
   loadedAt: new Date().toISOString(),
@@ -1350,115 +1422,290 @@ window.energyManagerDashboardInfo = {
   notificationEventsCardReady: Boolean(customElements.get('energymanager-notification-events-card')),
   observedTaskHistoryReady: typeof window.energyManagerObservedTasksV238?.get === 'function'
 };
-console.info('[EnergyManager Dashboard] JavaScript V3 preview loaded', window.energyManagerDashboardInfo);
+console.info('[EnergyManager Dashboard] JavaScript V3 popup fix loaded', window.energyManagerDashboardInfo);
 
-// V3 evidence viewer: local archive files never leave the browser.
+// V3 evidence viewer: authenticated HA ingress; diagnostics never mutate the live plan.
 class EnergyManagerDecisionDetails extends HTMLElement {
   setConfig(config) { this._config = config; }
   set hass(hass) {
     this._hass = hass;
-    const id = hass.states['sensor.energy_manager_v3_decision']?.attributes?.snapshot_id;
-    if (!this._built) { this.build(); this.renderDetails(); }
-    if (!this._document && id !== this._id) { this._id = id; this.renderDetails(); }
+    if (!this._built) { this.build(); this.history(0); }
   }
-  getCardSize() { return 5; }
+  disconnectedCallback() { clearTimeout(this._pollTimer); }
+  connectedCallback() { if (this._resumePoll) this._resumePoll(); }
+  getCardSize() { return 8; }
   build() {
     this._built = true;
-    this.innerHTML = `<ha-card header="V3 decision evidence"><div style="padding:16px">
-      <p data-status></p><label>Inspect requirement <select data-requirement></select></label>
-      <pre data-detail style="white-space:pre-wrap;max-height:480px;overflow:auto"></pre>
-      <p>Open an archived decision or CLI counterfactual JSON file. Processing stays in this browser.</p>
-      <input type="file" accept="application/json,.json" aria-label="Open V3 evidence JSON">
-      <button data-live>Latest decision</button><pre data-stages style="white-space:pre-wrap"></pre>
-      <p data-cmd style="overflow-wrap:anywhere"></p></div></ha-card>`;
-    this.querySelector('[data-requirement]').onchange = () => this.showRequirement();
-    this.querySelector('[data-live]').onclick = () => { this._document = null; this.renderDetails(); };
-    this.querySelector('input').onchange = async event => {
-      try {
-        const file = event.target.files[0];
-        if (!file || file.size > 32 * 1024 * 1024) throw new Error('Select JSON below 32 MiB');
-        const data = JSON.parse(await file.text());
-        if (!data.snapshot_id) throw new Error('Missing snapshot ID');
-        this._document = data; this.renderDetails();
-      } catch (error) { this.querySelector('[data-status]').textContent = String(error); }
-    };
+    this.innerHTML = `<style>
+      energymanager-decision-details button, energymanager-decision-details select {
+        font:inherit;max-width:100%;padding:8px;margin:4px 0;border:1px solid var(--divider-color,#aaa);
+        border-radius:6px;background:var(--card-background-color,white);color:var(--primary-text-color,#222);}
+      energymanager-decision-details button {cursor:pointer;color:var(--primary-color,#007ac2)}
+      energymanager-decision-details button:disabled {opacity:.5;cursor:default}
+      energymanager-decision-details summary {cursor:pointer;padding:6px 0}
+      energymanager-decision-details td {border-bottom:1px solid var(--divider-color,#ddd)}
+      </style><ha-card header="Understand this plan"><div style="padding:16px">
+      <p data-status role="status" aria-live="polite">Connecting to Home Assistant…</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button data-latest>Latest decisions</button><button data-newer>Newer</button><button data-older>Older</button>
+        <label>Decision <select data-history aria-label="Historical decision"></select></label>
+      </div>
+      <p data-quality></p><div data-stages style="overflow:auto"></div>
+      <label>Inspect <select data-selection aria-label="Session, ESS action, requirement, job or interval"></select></label>
+      <div data-selected></div><p data-limitation></p>
+      <details><summary>Compare with the previous schedule and changed inputs</summary><div data-changes></div></details>
+      <details><summary>Measurements, constraints and tariffs</summary><div data-inputs></div></details>
+      <h3>Investigate an alternative</h3>
+      <p>Choose a time window below. Postponing charging means prohibiting EV charging until the selected end time;
+      the original departure requirements remain in force. This calculation cannot change the active plan.</p>
+      <label>Alternative <select data-kind>
+        <option value="forbid_ev">Postpone / prohibit EV charging in this window</option>
+        <option value="continuous_ev">Require continuous EV charging in this window</option>
+        <option value="forbid_ess_charge">No ESS charging in this window</option>
+        <option value="forbid_ess_discharge">No ESS discharging in this window</option>
+        <option value="no_grid_import">No grid import in this window</option>
+      </select></label>
+      <label>From <select data-start></select></label><label>Until <select data-end></select></label>
+      <button data-run>Calculate alternative</button>
+      <p data-job role="status" aria-live="polite"></p><div data-result></div>
+      </div></ha-card>`;
+    this.querySelector('[data-latest]').onclick = () => this.history(0);
+    this.querySelector('[data-newer]').onclick = () => this.history(Math.max(0, this._offset - 20));
+    this.querySelector('[data-older]').onclick = () => this.history(this._next);
+    this.querySelector('[data-history]').onchange = event => this.load(event.target.value);
+    this.querySelector('[data-selection]').onchange = () => this.select();
+    this.querySelector('[data-run]').onclick = () => this.run();
   }
-  renderDetails() {
-    const live = this._hass?.states['sensor.energy_manager_v3_decision']?.attributes || {};
-    const doc = this._document;
-    const evaluation = doc?.evaluation || doc?.alternative || live;
-    this._requirements = doc?.snapshot?.frame?.requirements || doc?.alternative?.plan?.requirements || live.requirements || [];
-    const select = this.querySelector('[data-requirement]');
-    select.replaceChildren();
-    for (const [i, requirement] of this._requirements.entries()) {
-      const option = document.createElement('option'); option.value = i;
-      option.textContent = `${requirement.requirement_id}: ${requirement.hard ? 'hard' : 'preferred'}`;
-      select.appendChild(option);
+  async connect() {
+    const call = (endpoint, method = 'get') => this._hass.callWS({type: 'supervisor/api', endpoint, method});
+    let slug = this._config?.addon;
+    if (!slug) {
+      const response = await call('/addons');
+      const candidates = response.addons.filter(a => a.slug.endsWith('_energy_manager') || a.slug === 'energy_manager');
+      if (candidates.length !== 1) throw new Error('Select the installed Energy Manager add-on slug in this card’s addon setting.');
+      slug = candidates[0].slug;
     }
-    this.querySelector('[data-status]').textContent =
-      `${doc?.snapshot_id || live.snapshot_id || 'No decision available'} · ` +
-      `${doc?.disposition || evaluation.status || live.solver_status || 'waiting'}`;
-    this.querySelector('[data-stages]').textContent = JSON.stringify({
-      stages: (evaluation.stages || []).map(({plan, ...stage}) => stage),
-      quantitative_difference: doc?.delta, infeasibility: doc?.infeasibility,
-      economic_confidence: doc?.economic_confidence,
-      baseline_stages: doc?.baseline?.stages?.map(({plan, ...stage}) => stage),
-      attribution: doc?.attribution || doc?.interpretation || live.attribution,
-    }, null, 2);
-    this.querySelector('[data-cmd]').textContent = live.details_command || '';
-    this.showRequirement();
+    if (!/^[a-zA-Z0-9_-]+$/.test(slug)) throw new Error('Invalid add-on slug');
+    const info = await call(`/addons/${slug}/info`);
+    if (!/^\/api\/hassio_ingress\/[A-Za-z0-9_-]+\/?$/.test(info.ingress_url || '')) {
+      throw new Error('The installed Energy Manager version does not provide ingress explanations.');
+    }
+    const response = await call('/ingress/session', 'post');
+    if (!/^[A-Za-z0-9_-]+$/.test(response.session)) throw new Error('Invalid ingress session');
+    // Same cookie contract as Home Assistant frontend src/data/hassio/ingress.ts.
+    document.cookie = `ingress_session=${response.session};path=/api/hassio_ingress/;SameSite=Strict` +
+      (location.protocol === 'https:' ? ';Secure' : '');
+    this._base = info.ingress_url.replace(/\/$/, '');
+    this._connectedAt = Date.now();
   }
-  showRequirement() {
-    const index = Number(this.querySelector('[data-requirement]').value);
-    this.querySelector('[data-detail]').textContent = JSON.stringify(this._requirements[index] ||
-      {status: 'No requirement evidence available'}, null, 2);
+  async api(path, body, retry = true) {
+    if (!this._base || Date.now() - this._connectedAt > 240000) await this.connect();
+    const response = await fetch(this._base + path, {credentials: 'same-origin', cache: 'no-store',
+      method: body ? 'POST' : 'GET', headers: body ? {'Content-Type': 'application/json', 'X-EnergyManager-Request': '1'} : {},
+      ...(body ? {body: JSON.stringify(body)} : {}), signal: AbortSignal.timeout(20000)});
+    if ((response.status === 401 || response.status === 403) && retry) {
+      this._base = null; return this.api(path, body, false);
+    }
+    if (!response.ok) throw new Error((await response.text()).slice(0, 200) || `HTTP ${response.status}`);
+    return response.json();
+  }
+  message(error) { this.querySelector('[data-status]').textContent = String(error?.message || error); }
+  options(selector, entries) {
+    const node = this.querySelector(selector); node.replaceChildren();
+    for (const [value, text] of entries) {
+      const option = document.createElement('option'); option.value = String(value); option.textContent = text;
+      node.appendChild(option);
+    }
+    if (entries.length) node.value = String(entries[0][0]);
+  }
+  async history(offset) {
+    if (offset === null || offset === undefined) return;
+    try {
+      const data = await this.api(`/api/decisions?offset=${offset}`);
+      this._offset = offset; this._next = data.next_offset;
+      this.querySelector('[data-older]').disabled = this._next === null;
+      this.querySelector('[data-newer]').disabled = offset === 0;
+      this.options('[data-history]', data.decisions.map(d => [d.snapshot_id,
+        `${this.time(d.generated_at?.$datetime || d.generated_at)} · ${d.disposition || ''} · ${d.status}`]));
+      if (data.decisions.length) await this.load(data.decisions[0].snapshot_id);
+      else { this._decision = null; this.message('No archived decisions yet. Check planner status and archive persistence.'); }
+    } catch (error) { this.message(error); }
+  }
+  time(value) { return value ? new Date(value).toLocaleString() : 'Unknown time'; }
+  kw(value) { return typeof value === 'number' ? this.number(value / 1000) : 'Unavailable'; }
+  number(value, digits = 3) { return Number.isFinite(value) ? value.toFixed(digits) : 'Unavailable'; }
+  async load(id) {
+    const epoch = this._epoch = (this._epoch || 0) + 1;
+    try {
+      const decision = await this.api(`/api/decisions/${encodeURIComponent(id)}`);
+      if (epoch !== this._epoch) return;
+      this._decision = decision;
+      this.message(`${this.time(decision.generated_at)} · ${decision.disposition} · ${decision.snapshot_id}`);
+      this.querySelector('[data-quality]').textContent =
+        `Physical validation: ${decision.evaluation.quality.physical_validation}. ` +
+        `Objective: €${this.number(decision.evaluation.quality.objective_eur)}. ` +
+        (decision.evaluation.quality.further_improvement_possible ? 'Further optimization may improve this plan.' :
+          'Stages completed within their recorded solver tolerances.');
+      this.stageTable('[data-stages]', decision.evaluation.quality.stages);
+      this.options('[data-selection]', decision.selections.map((s, i) => [i, `${s.kind}: ${s.label}`]));
+      this.options('[data-start]', decision.intervals.map((s, i) => [i, this.time(s.period_start_local)]));
+      this.options('[data-end]', decision.intervals.map((s, i) => [i + 1,
+        this.time(new Date(new Date(s.period_start_local).getTime() + 900000).toISOString())]));
+      this.querySelector('[data-limitation]').textContent = decision.limitation;
+      this.details('[data-inputs]', {measurements: decision.observations, requirements: decision.requirements,
+        jobs: decision.jobs, resources: decision.resources, device_limits: decision.capabilities,
+        tariffs: decision.tariff, monthly_peak_baseline: decision.capacity_peak_baseline, objective_tolerances: decision.policy});
+      this.details('[data-changes]', decision.changes);
+      this.select();
+    } catch (error) { if (epoch === this._epoch) this.message(error); }
+  }
+  table(target, headers, rows) {
+    const container = typeof target === 'string' ? this.querySelector(target) : target;
+    container.replaceChildren();
+    const table = document.createElement('table'); table.style.width = '100%'; table.style.fontSize = '0.9em';
+    const add = (values, tag) => {
+      const row = document.createElement('tr');
+      for (const value of values) {
+        const cell = document.createElement(tag); cell.textContent = String(value ?? 'Unavailable');
+        cell.style.padding = '6px'; cell.style.textAlign = 'left'; row.appendChild(cell);
+      }
+      table.appendChild(row);
+    };
+    add(headers, 'th'); rows.forEach(row => add(row, 'td')); container.appendChild(table);
+  }
+  stageTable(target, stages) {
+    this.table(target, ['Stage', 'Status', 'Objective', 'Improvement in stage units', 'Bound', 'Gap', 'Seconds'],
+      stages.map(s => [s.name, s.status, `${this.number(s.objective)} ${s.unit}`,
+        this.number(s.objective_improvement), this.number(s.bound),
+        s.gap === null || s.gap === undefined ? 'Unknown' : `${(s.gap * 100).toFixed(2)}%`, this.number(s.runtime_seconds, 2)]));
+  }
+  details(selector, data) {
+    const container = typeof selector === 'string' ? this.querySelector(selector) : selector;
+    container.replaceChildren();
+    const render = (parent, value, label) => {
+      if (value !== null && typeof value === 'object') {
+        const group = document.createElement('details'); const title = document.createElement('summary');
+        title.textContent = label; group.appendChild(title);
+        for (const [key, child] of Object.entries(value)) render(group, child, key.replaceAll('_', ' '));
+        parent.appendChild(group);
+      } else {
+        const line = document.createElement('p'); line.textContent = `${label}: ${value ?? 'Unavailable'}`;
+        parent.appendChild(line);
+      }
+    };
+    for (const [key, value] of Object.entries(data || {})) render(container, value, key.replaceAll('_', ' '));
+  }
+  select() {
+    const d = this._decision;
+    if (!d) return;
+    const selection = d.selections[Number(this.querySelector('[data-selection]').value)];
+    if (!selection) return;
+    this.querySelector('[data-start]').value = String(selection.start_index);
+    this.querySelector('[data-end]').value = String(selection.end_index);
+    const root = this.querySelector('[data-selected]'); root.replaceChildren();
+    const heading = document.createElement('p');
+    const record = selection.record;
+    heading.textContent = record && selection.kind === 'Requirement' ?
+      `${record.hard ? 'Mandatory' : 'Preferred'}: ${record.amount ?? 'unspecified'} ${record.unit || ''}` +
+      ` by ${this.time(record.deadline)}. Generated by ${record.provenance?.generator || 'unknown source'}.` :
+      `${selection.kind} · ${this.time(d.intervals[selection.start_index]?.period_start_local)}` +
+      ` · ${(selection.end_index - selection.start_index) * 15} minutes` +
+      (typeof selection.energy_kwh === 'number' ? ` · ${selection.energy_kwh.toFixed(3)} kWh` : '');
+    root.appendChild(heading);
+    const text = document.createElement('div'); root.appendChild(text);
+    this.details(text, {selection: selection.record || selection,
+      accounting_for_entire_plan: d.evaluation.cost, selected_energy_balance: this.energy(selection),
+      generic_jobs_and_storage: d.intervals.slice(selection.start_index, selection.end_index).map(s =>
+        ({time: s.period_start_local, job_power_w: s.job_power_w, stored_energy_kwh: s.resource_energy_kwh})),
+      stage_metric_changes: d.evaluation.quality.stages.map(s =>
+        ({stage: s.name, changes: s.metric_changes, metrics: s.metrics}))});
+    const table = document.createElement('div'); table.style.overflow = 'auto'; table.style.maxHeight = '420px'; root.appendChild(table);
+    const old = new Map(d.previous_intervals.map(s => [+new Date(s.period_start_local), s]));
+    this.table(table, ['Time', 'Load kW', 'PV AC/DC kW', 'EV kW', 'ESS kW (+ discharge)',
+      'Grid kW (+ import)', 'EV / ESS SoC %', 'Previous EV / grid kW'],
+      d.intervals.slice(selection.start_index, selection.end_index).map(s => {
+        const previous = old.get(+new Date(s.period_start_local));
+        return [this.time(s.period_start_local), this.kw(s.background_load_w),
+          `${this.kw(s.pv_ac_power_w)} / ${this.kw(s.pv_dc_power_w)}`,
+          this.kw(s.scheduled_load_w), this.kw(s.ess_ac_power_w),
+          this.kw(s.grid_power_after_ess_w),
+          `${this.number(s.projected_ev_soc_percent, 1)} / ${this.number(s.projected_soc_percent, 1)}`,
+          previous ? `${this.kw(previous.scheduled_load_w)} / ${this.kw(previous.grid_power_after_ess_w)}` : 'No overlap'];
+      }));
+    const stages = document.createElement('details'); const title = document.createElement('summary');
+    title.textContent = 'How each optimization stage changed these time slots'; stages.appendChild(title);
+    root.appendChild(stages);
+    const comparison = document.createElement('div'); comparison.style.overflow = 'auto'; comparison.style.maxHeight = '420px'; stages.appendChild(comparison);
+    this.table(comparison, ['Stage', 'Time', 'EV kW', 'ESS kW', 'Grid kW'],
+      (d.stage_intervals || []).flatMap(stage => stage.intervals.slice(selection.start_index, selection.end_index)
+        .map(s => [stage.stage, this.time(s.period_start_local), this.kw(s.scheduled_load_w),
+          this.kw(s.ess_ac_power_w), this.kw(s.grid_power_after_ess_w)])));
+  }
+  energy(selection) {
+    const slots = this._decision.intervals.slice(selection.start_index, selection.end_index);
+    const sum = (key, transform = v => v) => slots.every(s => typeof s[key] === 'number') ?
+      slots.reduce((total, s) => total + transform(s[key]) * .25 / 1000, 0) : null;
+    const imported = sum('grid_power_after_ess_w', v => Math.max(0, v));
+    const exported = sum('grid_power_after_ess_w', v => Math.max(0, -v));
+    const tariff = this._decision.tariff;
+    return {net_energy_cash_eur_excluding_capacity_and_terminal_value:
+      imported !== null && exported !== null && tariff ? imported * tariff.import_energy_eur_per_kwh -
+        exported * tariff.export_energy_eur_per_kwh : null,
+      pv_ac_kwh: sum('pv_ac_power_w'), pv_dc_kwh: sum('pv_dc_power_w'),
+      background_load_kwh: sum('background_load_w'), ev_charge_kwh: sum('scheduled_load_w'),
+      flexible_load_kwh: sum('flexible_load_w'), grid_import_kwh: sum('grid_power_after_ess_w', v => Math.max(0, v)),
+      grid_export_kwh: sum('grid_power_after_ess_w', v => Math.max(0, -v)),
+      ess_net_ac_discharge_kwh: sum('ess_ac_power_w'), curtailed_dc_pv_kwh: sum('curtailed_dc_pv_w')};
+  }
+  async run() {
+    if (!this._decision || this._jobRunning) return;
+    const status = this.querySelector('[data-job]');
+    const snapshot = this._decision.snapshot_id;
+    this._jobRunning = true; this.querySelector('[data-run]').disabled = true;
+    try {
+      const start = Number(this.querySelector('[data-start]').value), end = Number(this.querySelector('[data-end]').value);
+      if (!Number.isInteger(start) || !Number.isInteger(end) || start >= end) throw new Error('Choose an end after the start.');
+      const job = await this.api('/api/counterfactuals', {snapshot_id: snapshot,
+        kind: this.querySelector('[data-kind]').value, start_index: start, end_index: end});
+      status.textContent = 'Calculating on frozen inputs; the active plan is unchanged. Up to 65 seconds.';
+      const deadline = Date.now() + 75000;
+      const poll = async () => {
+        try {
+          const result = await this.api(`/api/counterfactuals/${job.job_id}`);
+          if (result.status === 'running' && Date.now() < deadline) {
+            this._pollTimer = setTimeout(poll, 1000); return;
+          }
+          status.textContent = `${snapshot}: ${result.status}${result.error ? ' — ' + result.error : ''}`;
+          if (result.result) {
+            const evidence = result.result;
+            const conclusion = {
+              alternative_more_expensive_proven_by_bounds: 'The alternative is more expensive under the frozen model (proven by economic bounds).',
+              alternative_cheaper_proven_by_bounds: 'The alternative is cheaper under the frozen model (proven by economic bounds).',
+              economically_equivalent_within_numerical_tolerance: 'Economic optima are equivalent within numerical tolerance.',
+              feasible_incumbents_only: 'These are feasible schedule comparisons; the optimal cost difference is not proven.',
+              incomplete: 'No complete feasible comparison is available.'
+            }[evidence.economic_confidence?.conclusion] || 'Economic confidence unavailable.';
+            status.textContent += ` — ${conclusion}` + (evidence.delta ?
+              ` Selected objective difference: €${this.number(evidence.delta.objective_eur)}; ` +
+              `grid import difference: ${this.number(evidence.delta.grid_import_kwh)} kWh.` : '');
+            this.details('[data-result]', {intervention: evidence.request,
+              energy_and_economic_differences: result.result.delta,
+              economic_confidence: result.result.economic_confidence,
+              feasibility: {baseline: result.result.baseline.adoption_ready, alternative: result.result.alternative.adoption_ready,
+                reason: result.result.alternative.reason, conflict: result.result.infeasibility},
+              baseline: result.result.baseline, alternative: result.result.alternative,
+              diagnostic_budget: result.result.diagnostic_policy, limitation: result.result.limitation});
+          }
+        } catch (error) { status.textContent = error.message; }
+        this._resumePoll = null; this._jobRunning = false; this.querySelector('[data-run]').disabled = false;
+      };
+      this._resumePoll = poll;
+      await poll();
+    } catch (error) {
+      status.textContent = error.message; this._jobRunning = false; this.querySelector('[data-run]').disabled = false;
+    }
   }
 }
 if (!customElements.get('energymanager-decision-details')) {
   customElements.define('energymanager-decision-details', EnergyManagerDecisionDetails);
 }
-
-// Augment the focused evidence panel with actual archived EV session selection.
-const energyManagerRenderDecision = EnergyManagerDecisionDetails.prototype.renderDetails;
-EnergyManagerDecisionDetails.prototype.renderDetails = function () {
-  energyManagerRenderDecision.call(this);
-  const old = this.querySelector('[data-sessions]');
-  if (old) old.remove();
-  const doc = this._document;
-  const plan = doc?.evaluation?.plan || doc?.alternative?.plan;
-  if (!plan?.intervals) return;
-  const container = document.createElement('div'); container.dataset.sessions = '';
-  container.style.padding = '16px';
-  const label = document.createElement('label'); label.textContent = 'Inspect scheduled EV session ';
-  const select = document.createElement('select'); label.appendChild(select); container.appendChild(label);
-  const detail = document.createElement('pre');
-  detail.style.whiteSpace = 'pre-wrap'; container.appendChild(detail);
-  const sessions = [];
-  let active = null;
-  plan.intervals.forEach((slot, index) => {
-    if (slot.scheduled_load_w > 1) {
-      if (!active) {
-        active = {start_index: index, end_index: index, energy_kwh: 0, slots: []};
-        sessions.push(active);
-      }
-      active.end_index = index + 1;
-      active.energy_kwh += slot.scheduled_load_w * 0.25 / 1000;
-      active.slots.push({start: slot.period_start_local, power_w: slot.scheduled_load_w});
-    } else active = null;
-  });
-  sessions.forEach((session, index) => {
-    const option = document.createElement('option'); option.value = index;
-    option.textContent = `Slots ${session.start_index}–${session.end_index} · ${session.energy_kwh.toFixed(2)} kWh`;
-    select.appendChild(option);
-  });
-  const update = () => {
-    const session = sessions[Number(select.value)];
-    detail.textContent = session ? JSON.stringify({
-      ...session, evidence: 'Compare recorded stage plans above; timing causation is not established by correlation.',
-      counterfactual_command: `python -m energymanager.replay counterfactual ${doc.snapshot_id} forbid_ev ` +
-        `${session.start_index} ${session.end_index}`,
-    }, null, 2) : 'No scheduled charging sessions';
-  };
-  select.onchange = update; update();
-  this.querySelector('ha-card').appendChild(container);
-};
