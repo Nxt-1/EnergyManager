@@ -10,3 +10,6 @@ venv/
 *.log
 
 .v3-evidence/
+
+# Local GPT investigation files (synced through Dropbox).
+/gpt/
