@@ -1,0 +1,1239 @@
+# EnergyManager Dashboard V3 popup fix, separate decision tab — resource /local/energymanager-timeline-card.js?v=300b3p1
+title: EnergyManager
+views:
+- title: Overview
+  path: overview
+  icon: mdi:view-dashboard
+  type: sections
+  max_columns: 2
+  sections:
+  - type: grid
+    column_span: 2
+    cards:
+    - type: vertical-stack
+      grid_options:
+        columns: 12
+        rows: auto
+      cards:
+      - type: grid
+        columns: 3
+        square: false
+        cards:
+        - type: custom:button-card
+          entity: sensor.energy_manager_grid_power
+          name: Grid
+          icon: mdi:transmission-tower
+          show_state: true
+          show_label: true
+          label: '[[[
+
+            const imp = states[''sensor.energy_manager_grid_import_energy_today'']?.state;
+
+            const exp = states[''sensor.energy_manager_grid_export_energy_today'']?.state;
+
+            const fmt = v => Number.isFinite(Number(v)) && ![''unknown'',''unavailable'',''''].includes(v) ? Number(v).toFixed(2)
+            : ''—'';
+
+            return `→ ${fmt(imp)} kWh<br>← ${fmt(exp)} kWh`;
+
+            ]]]'
+          tap_action:
+            action: more-info
+          triggers_update:
+          - sensor.energy_manager_grid_power
+          - sensor.energy_manager_grid_import_energy_today
+          - sensor.energy_manager_grid_export_energy_today
+          styles:
+            card:
+            - padding: 8px 6px
+            - height: 120px
+            - box-sizing: border-box
+            grid:
+            - grid-template-areas: '"i" "n" "s" "l"'
+            - grid-template-columns: 1fr
+            - grid-template-rows: 26px 18px 22px 36px
+            - row-gap: '0'
+            - justify-items: center
+            - align-items: center
+            icon:
+            - width: 24px
+            - height: 24px
+            - --mdc-icon-size: 24px
+            - color: '#dc2626'
+            name:
+            - font-size: 13px
+            - font-weight: '400'
+            - color: var(--secondary-text-color)
+            - justify-self: center
+            - align-self: center
+            state:
+            - font-size: 15px
+            - font-weight: '400'
+            - justify-self: center
+            - align-self: center
+            label:
+            - font-size: 13px
+            - font-weight: '400'
+            - line-height: '1.3'
+            - min-height: 36px
+            - justify-self: center
+            - align-self: start
+            - text-align: center
+            img_cell:
+            - width: 26px
+            - height: 26px
+            - justify-self: center
+            - align-self: center
+          size: 24px
+        - type: custom:button-card
+          entity: sensor.energy_manager_pv_total_power
+          name: PV
+          icon: mdi:solar-power
+          show_state: true
+          show_label: true
+          label: '[[[
+
+            const ac = states[''sensor.energy_manager_pv_ac_energy_today'']?.state;
+
+            const dc = states[''sensor.energy_manager_pv_dc_energy_today'']?.state;
+
+            const fmt = v => Number.isFinite(Number(v)) && ![''unknown'',''unavailable'',''''].includes(v) ? Number(v).toFixed(2)
+            : ''—'';
+
+            return `∿ ${fmt(ac)} kWh<br>⎓ ${fmt(dc)} kWh`;
+
+            ]]]'
+          tap_action:
+            action: more-info
+          triggers_update:
+          - sensor.energy_manager_pv_total_power
+          - sensor.energy_manager_pv_ac_energy_today
+          - sensor.energy_manager_pv_dc_energy_today
+          styles:
+            card:
+            - padding: 8px 6px
+            - height: 120px
+            - box-sizing: border-box
+            grid:
+            - grid-template-areas: '"i" "n" "s" "l"'
+            - grid-template-columns: 1fr
+            - grid-template-rows: 26px 18px 22px 36px
+            - row-gap: '0'
+            - justify-items: center
+            - align-items: center
+            icon:
+            - width: 24px
+            - height: 24px
+            - --mdc-icon-size: 24px
+            - color: '#eab308'
+            name:
+            - font-size: 13px
+            - font-weight: '400'
+            - color: var(--secondary-text-color)
+            - justify-self: center
+            - align-self: center
+            state:
+            - font-size: 15px
+            - font-weight: '400'
+            - justify-self: center
+            - align-self: center
+            label:
+            - font-size: 13px
+            - font-weight: '400'
+            - line-height: '1.3'
+            - min-height: 36px
+            - justify-self: center
+            - align-self: start
+            - text-align: center
+            img_cell:
+            - width: 26px
+            - height: 26px
+            - justify-self: center
+            - align-self: center
+          size: 24px
+        - type: custom:button-card
+          entity: sensor.energy_manager_house_load_power
+          name: House
+          icon: mdi:home-lightning-bolt
+          show_state: true
+          show_label: true
+          label: '[[[ const e = states[''sensor.energy_manager_house_energy_today'']?.state; return e != null && ![''unknown'',''unavailable'',''''].includes(e)
+            && Number.isFinite(Number(e)) ? `${Number(e).toFixed(2)} kWh` : ''— kWh''; ]]]'
+          tap_action:
+            action: more-info
+          triggers_update:
+          - sensor.energy_manager_house_load_power
+          - sensor.energy_manager_house_energy_today
+          styles:
+            card:
+            - padding: 8px 6px
+            - height: 120px
+            - box-sizing: border-box
+            grid:
+            - grid-template-areas: '"i" "n" "s" "l"'
+            - grid-template-columns: 1fr
+            - grid-template-rows: 26px 18px 22px 36px
+            - row-gap: '0'
+            - justify-items: center
+            - align-items: center
+            icon:
+            - width: 24px
+            - height: 24px
+            - --mdc-icon-size: 24px
+            - color: '#16a34a'
+            name:
+            - font-size: 13px
+            - font-weight: '400'
+            - color: var(--secondary-text-color)
+            - justify-self: center
+            - align-self: center
+            state:
+            - font-size: 15px
+            - font-weight: '400'
+            - justify-self: center
+            - align-self: center
+            label:
+            - font-size: 13px
+            - font-weight: '400'
+            - line-height: '1.3'
+            - min-height: 36px
+            - justify-self: center
+            - align-self: start
+            - text-align: center
+            img_cell:
+            - width: 26px
+            - height: 26px
+            - justify-self: center
+            - align-self: center
+          size: 24px
+      - type: custom:button-card
+        entity: sensor.energy_manager_ess_soc
+        name: ESS
+        icon: mdi:home-battery
+        show_state: true
+        show_label: false
+        tap_action:
+          action: more-info
+        custom_fields:
+          zero: '0'
+          hundred: '100'
+          limit: "[[[\n  const minSoc = Number(\n    states['number.garage_gx_device_ess_min_soc_limit']?.state ?? 20\n  );\n\
+            \  return `Min ${minSoc}%`;\n]]]\n"
+          power: "[[[\n  const state = states['sensor.energy_manager_ess_power']?.state;\n  const watts = Number(state);\n  if (!state || ['unknown', 'unavailable'].includes(state) || !Number.isFinite(watts)) return '—';\n  const mode = watts > 25 ? 'Discharge' : watts < -25 ? 'Charge' : 'Idle';\n  return `${mode} · ${Math.round(Math.abs(watts))} W`;\n]]]\n"
+        styles:
+          card:
+          - height: 58px
+          - position: relative
+          - overflow: hidden
+          - padding: 8px 12px
+          - background: "[[[\n  const soc = Math.max(\n    0,\n    Math.min(100, Number(entity.state) || 0)\n  );\n  const\
+              \ minSoc = Number(\n    states['number.garage_gx_device_ess_min_soc_limit']?.state ?? 20\n  );\n  const ratio\
+              \ = Math.max(\n    0,\n    Math.min(\n      1,\n      (soc - minSoc) / Math.max(1, 100 - minSoc)\n    )\n  );\n\
+              \  const hue = Math.round(ratio * 120);\n  const fill = `hsla(${hue}, 72%, 45%, 0.30)`;\n\n  return `linear-gradient(\n\
+              \    to right,\n    ${fill} 0%,\n    ${fill} ${soc}%,\n    var(--ha-card-background, var(--card-background-color))\
+              \ ${soc}%,\n    var(--ha-card-background, var(--card-background-color)) 100%\n  )`;\n]]]\n"
+          grid:
+          - grid-template-areas: '"i n s power"'
+          - grid-template-columns: 32px min-content min-content 1fr
+          - align-items: center
+          icon:
+          - width: 24px
+          - color: "[[[\n  const soc = Number(entity.state) || 0;\n  const minSoc = Number(\n    states['number.garage_gx_device_ess_min_soc_limit']?.state\
+              \ ?? 20\n  );\n  const ratio = Math.max(\n    0,\n    Math.min(\n      1,\n      (soc - minSoc) / Math.max(1,\
+              \ 100 - minSoc)\n    )\n  );\n  const hue = Math.round(ratio * 120);\n  return `hsl(${hue}, 72%, 45%)`;\n]]]\n"
+          name:
+          - font-size: 13px
+          - font-weight: 600
+          - justify-self: start
+          state:
+          - font-size: 18px
+          - font-weight: 700
+          - justify-self: start
+          - margin-left: 8px
+          custom_fields:
+            power:
+            - justify-self: end
+            - font-size: 12px
+            - font-weight: 500
+            - white-space: nowrap
+            - padding-right: 4px
+            zero:
+            - position: absolute
+            - left: 8px
+            - bottom: 2px
+            - font-size: 9px
+            - color: var(--secondary-text-color)
+            hundred:
+            - position: absolute
+            - right: 8px
+            - bottom: 2px
+            - font-size: 9px
+            - color: var(--secondary-text-color)
+            limit:
+            - position: absolute
+            - top: 0
+            - bottom: 0
+            - left: "[[[\n  const minSoc = Math.max(\n    0,\n    Math.min(\n      100,\n      Number(\n        states['number.garage_gx_device_ess_min_soc_limit']?.state\
+                \ ?? 20\n      )\n    )\n  );\n  return `${minSoc}%`;\n]]]\n"
+            - border-left: 1px dashed var(--secondary-text-color)
+            - padding-left: 3px
+            - padding-top: 2px
+            - font-size: 9px
+            - color: var(--secondary-text-color)
+        triggers_update:
+        - sensor.energy_manager_ess_soc
+        - sensor.energy_manager_ess_power
+        - number.garage_gx_device_ess_min_soc_limit
+      - type: custom:button-card
+        entity: sensor.energy_manager_ev_soc
+        name: EV
+        icon: mdi:car-electric
+        show_state: true
+        show_label: false
+        tap_action:
+          action: more-info
+        custom_fields:
+          zero: '0'
+          hundred: '100'
+          limit: "[[[\n  const target = Number(\n    80\n  );\n  return `Target ${target}%`;\n]]]\n"
+        styles:
+          card:
+          - height: 58px
+          - position: relative
+          - overflow: hidden
+          - padding: 8px 12px
+          - background: "[[[\n  const soc = Math.max(\n    0,\n    Math.min(100, Number(entity.state) || 0)\n  );\n  const\
+              \ target = Math.max(\n    1,\n    Number(\n      80\n    )\n  );\n  const ratio = Math.max(0, Math.min(1, soc\
+              \ / target));\n  const hue = Math.round(ratio * 120);\n  const fill = `hsla(${hue}, 72%, 45%, 0.30)`;\n\n  return\
+              \ `linear-gradient(\n    to right,\n    ${fill} 0%,\n    ${fill} ${soc}%,\n    var(--ha-card-background, var(--card-background-color))\
+              \ ${soc}%,\n    var(--ha-card-background, var(--card-background-color)) 100%\n  )`;\n]]]\n"
+          grid:
+          - grid-template-areas: '"i n s"'
+          - grid-template-columns: 32px min-content 1fr
+          - align-items: center
+          icon:
+          - width: 24px
+          - color: "[[[\n  const soc = Number(entity.state) || 0;\n  const target = Math.max(\n    1,\n    Number(\n     \
+              \ 80\n    )\n  );\n  const ratio = Math.max(0, Math.min(1, soc / target));\n  const hue = Math.round(ratio *\
+              \ 120);\n  return `hsl(${hue}, 72%, 45%)`;\n]]]\n"
+          name:
+          - font-size: 13px
+          - font-weight: 600
+          - justify-self: start
+          state:
+          - font-size: 18px
+          - font-weight: 700
+          - justify-self: start
+          - margin-left: 8px
+          custom_fields:
+            zero:
+            - position: absolute
+            - left: 8px
+            - bottom: 2px
+            - font-size: 9px
+            - color: var(--secondary-text-color)
+            hundred:
+            - position: absolute
+            - right: 8px
+            - bottom: 2px
+            - font-size: 9px
+            - color: var(--secondary-text-color)
+            limit:
+            - position: absolute
+            - top: 0
+            - bottom: 0
+            - left: "[[[\n  const target = Math.max(\n    0,\n    Math.min(\n      100,\n      Number(\n        80\n     \
+                \ )\n    )\n  );\n  return `${target}%`;\n]]]\n"
+            - border-left: 1px dashed var(--secondary-text-color)
+            - padding-left: 3px
+            - padding-top: 2px
+            - font-size: 9px
+            - color: var(--secondary-text-color)
+        triggers_update:
+        - sensor.energy_manager_ev_soc
+      - type: grid
+        columns: 3
+        square: false
+        cards:
+        - type: custom:button-card
+          entity: sensor.energy_manager_ev_charging_power
+          name: EV
+          icon: mdi:ev-station
+          show_state: true
+          show_label: true
+          label: '[[[ const e = states[''sensor.energy_manager_ev_energy_today'']?.state; return e != null && ![''unknown'',''unavailable'',''''].includes(e)
+            && Number.isFinite(Number(e)) ? `${Number(e).toFixed(2)} kWh` : ''— kWh''; ]]]'
+          tap_action:
+            action: more-info
+          triggers_update:
+          - sensor.energy_manager_ev_charging_power
+          - sensor.energy_manager_ev_energy_today
+          styles:
+            card:
+            - padding: 8px 6px
+            - height: 120px
+            - box-sizing: border-box
+            grid:
+            - grid-template-areas: '"i" "n" "s" "l"'
+            - grid-template-columns: 1fr
+            - grid-template-rows: 26px 18px 22px 36px
+            - row-gap: '0'
+            - justify-items: center
+            - align-items: center
+            icon:
+            - width: 24px
+            - height: 24px
+            - --mdc-icon-size: 24px
+            - color: '#16a34a'
+            name:
+            - font-size: 13px
+            - font-weight: '400'
+            - color: var(--secondary-text-color)
+            - justify-self: center
+            - align-self: center
+            state:
+            - font-size: 15px
+            - font-weight: '400'
+            - justify-self: center
+            - align-self: center
+            label:
+            - font-size: 13px
+            - font-weight: '400'
+            - line-height: '1.3'
+            - min-height: 36px
+            - justify-self: center
+            - align-self: start
+            - text-align: center
+            img_cell:
+            - width: 26px
+            - height: 26px
+            - justify-self: center
+            - align-self: center
+          size: 24px
+        - type: custom:button-card
+          entity: sensor.energy_manager_monthly_peak_kw
+          name: Peak
+          icon: mdi:gauge
+          show_state: true
+          state_display: |-
+            [[[
+              const raw = entity?.state;
+              if (raw == null || ['unknown', 'unavailable', ''].includes(raw) ||
+                  !Number.isFinite(Number(raw))) return '—';
+              return `${Math.round(Number(raw) * 1000).toLocaleString()} W`;
+            ]]]
+          show_label: true
+          label: |-
+            [[[
+              const raw = states['sensor.energy_manager_quarter_hour_average_kw']?.state;
+              if (raw == null || ['unknown', 'unavailable', ''].includes(raw) ||
+                  !Number.isFinite(Number(raw))) return 'Quarter: —';
+              return `Quarter: ${Math.round(Number(raw) * 1000).toLocaleString()} W`;
+            ]]]
+          tap_action:
+            action: more-info
+          triggers_update:
+          - sensor.energy_manager_monthly_peak_kw
+          - sensor.energy_manager_quarter_hour_average_kw
+          styles:
+            card:
+            - padding: 8px 6px
+            - height: 120px
+            - box-sizing: border-box
+            grid:
+            - grid-template-areas: '"i" "n" "s" "l"'
+            - grid-template-columns: 1fr
+            - grid-template-rows: 26px 18px 22px 36px
+            - row-gap: '0'
+            - justify-items: center
+            - align-items: center
+            icon:
+            - width: 24px
+            - height: 24px
+            - --mdc-icon-size: 24px
+            - color: '#dc2626'
+            name:
+            - font-size: 13px
+            - font-weight: '400'
+            - color: var(--secondary-text-color)
+            - justify-self: center
+            - align-self: center
+            state:
+            - font-size: 15px
+            - font-weight: '400'
+            - justify-self: center
+            - align-self: center
+            label:
+            - font-size: 13px
+            - font-weight: '400'
+            - line-height: '1.3'
+            - min-height: 36px
+            - justify-self: center
+            - align-self: start
+            - text-align: center
+            img_cell:
+            - width: 26px
+            - height: 26px
+            - justify-self: center
+            - align-self: center
+          size: 24px
+        - type: custom:button-card
+          entity: sensor.energy_manager_pv_forecast_tomorrow_energy
+          name: Forecast
+          icon: mdi:chart-timeline-variant
+          show_state: false
+          show_label: false
+          custom_fields:
+            pv: "[[[\n  const raw = entity?.state;\n  const valid = raw != null && !['unknown', 'unavailable', ''].includes(raw)\
+              \ && Number.isFinite(Number(raw));\n  const value = valid ? Number(raw).toFixed(1) : '—';\n  return `<span title=\"\
+              Tomorrow's PV production\" style=\"display:inline-flex;align-items:center;gap:6px;white-space:nowrap;\">\n \
+              \   <ha-icon icon=\"mdi:weather-sunny\" style=\"--mdc-icon-size:18px;width:18px;height:18px;color:#eab308;\"\
+              ></ha-icon>\n    <span>${value} kWh</span></span>`;\n]]]"
+            grid: "[[[\n  const raw = states['sensor.energy_manager_shadow_plan_next_24_hours_grid_import_energy']?.state;\n\
+              \  const valid = raw != null && !['unknown', 'unavailable', ''].includes(raw) && Number.isFinite(Number(raw));\n\
+              \  const value = valid ? Number(raw).toFixed(1) : '—';\n  return `<span title=\"Planned grid import · next 24\
+              \ hours\" style=\"display:inline-flex;align-items:center;gap:6px;white-space:nowrap;\">\n    <ha-icon icon=\"\
+              mdi:transmission-tower-import\" style=\"--mdc-icon-size:18px;width:18px;height:18px;color:#dc2626;\"></ha-icon>\n\
+              \    <span>${value} kWh</span></span>`;\n]]]"
+          tap_action:
+            action: navigate
+            navigation_path: "[[[\n  const parts = window.location.pathname.split('/').filter(Boolean);\n  return `/${parts[0]\
+              \ || 'lovelace'}/planning`;\n]]]"
+          triggers_update:
+          - sensor.energy_manager_pv_forecast_tomorrow_energy
+          - sensor.energy_manager_shadow_plan_next_24_hours_grid_import_energy
+          styles:
+            card:
+            - padding: 8px 6px
+            - height: 120px
+            - box-sizing: border-box
+            grid:
+            - grid-template-areas: '"i" "n" "pv" "grid"'
+            - grid-template-columns: 1fr
+            - grid-template-rows: 26px 18px 28px 28px
+            - row-gap: '0'
+            - justify-items: center
+            - align-items: center
+            icon:
+            - width: 24px
+            - height: 24px
+            - --mdc-icon-size: 24px
+            - color: '#a855f7'
+            name:
+            - font-size: 13px
+            - font-weight: '400'
+            - color: var(--secondary-text-color)
+            - justify-self: center
+            - align-self: center
+            custom_fields:
+              pv:
+              - font-size: 15px
+              - font-weight: '400'
+              - justify-self: center
+              - align-self: center
+              grid:
+              - font-size: 13px
+              - font-weight: '400'
+              - justify-self: center
+              - align-self: center
+            img_cell:
+            - width: 26px
+            - height: 26px
+            - justify-self: center
+            - align-self: center
+          size: 24px
+    - type: custom:energymanager-time-navigator
+      grid_options:
+        columns: full
+        rows: auto
+    - type: custom:energymanager-day-chart
+      grid_options:
+        columns: full
+        rows: auto
+      header:
+        show: true
+        title: Power · actual / planned · 24 h view
+        show_states: false
+      graph_span: 24h
+      span:
+        start: minute
+      now:
+        show: true
+        label: Now
+      apex_config:
+        chart:
+          height: 450
+          toolbar:
+            show: false
+          stacked: false
+        grid:
+          borderColor: var(--divider-color)
+        legend:
+          show: true
+          showForSingleSeries: true
+        tooltip:
+          shared: true
+          intersect: false
+          custom: "EVAL:function ({seriesIndex, dataPointIndex, w}) {\n  // Mixed 5-minute HA history and 15-minute forecasts\
+            \ have unequal X values.\n  // Build one tooltip from the closest available point in every visible series.\n \
+            \ const xValues = w.globals.seriesX || [];\n  const yValues = w.globals.series || [];\n  const time = Number(xValues[seriesIndex]?.[dataPointIndex]);\n\
+            \  if (!Number.isFinite(time)) return '';\n\n  const hidden = new Set(w.globals.collapsedSeriesIndices || []);\n\
+            \  const maxSkewMs = 8 * 60 * 1000; // Half of a 15-minute interval, rounded up.\n  const nearest = i => {\n \
+            \   const xs = xValues[i] || [];\n    const ys = yValues[i] || [];\n    let best = null;\n    let bestDistance\
+            \ = maxSkewMs + 1;\n    for (let j = 0; j < xs.length; j++) {\n      if (ys[j] === null || ys[j] === undefined)\
+            \ continue;\n      const x = Number(xs[j]);\n      const y = Number(ys[j]);\n      const distance = Math.abs(x\
+            \ - time);\n      if (Number.isFinite(x) && Number.isFinite(y) && distance < bestDistance) {\n        best = y;\n\
+            \        bestDistance = distance;\n      }\n    }\n    return best;\n  };\n  const escape = text => String(text).replace(/[&<>\"\
+            ']/g, c => ({\n    '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;'\n  }[c]));\n\n  const\
+            \ entries = [];\n  // List the supply components in physical stacking order in the hover panel.\n  const displayOrder\
+            \ = [2, 1, 0, 3, 4, 5];\n  for (const i of displayOrder) {\n    if (hidden.has(i)) continue;\n    let value =\
+            \ nearest(i);\n    if (value === null) continue;\n    // Supply curves are drawn cumulatively, but labels show\
+            \ component power.\n    if (i === 0 || i === 1) {\n      const lower = nearest(i + 1);\n      if (lower === null)\
+            \ continue;\n      value -= lower;\n    }\n    const name = escape(w.config.series[i].name || `Series ${i + 1}`);\n\
+            \    const color = (w.globals.colors || [])[i] || '#888';\n    entries.push(`<div style=\"display:flex;align-items:center;gap:8px;justify-content:space-between;`\
+            \ +\n      `margin-top:5px\"><span style=\"display:flex;align-items:center;gap:6px\">` +\n      `<span style=\"\
+            width:9px;height:9px;border-radius:50%;background:${color};` +\n      `display:inline-block\"></span>${name}</span>`\
+            \ +\n      `<strong style=\"margin-left:14px\">${Math.round(value).toLocaleString()} W</strong></div>`);\n  }\n\
+            \  if (!entries.length) return '';\n  const when = new Date(time).toLocaleString(undefined, {\n    month: 'short',\
+            \ day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false\n  });\n  return `<div style=\"padding:10px\
+            \ 12px;background:var(--ha-card-background,` +\n    `var(--card-background-color));color:var(--primary-text-color);`\
+            \ +\n    `border:1px solid var(--divider-color);border-radius:8px;min-width:185px\">` +\n    `<div style=\"font-weight:600;margin-bottom:6px\"\
+            >${escape(when)}</div>` +\n    `${entries.join('')}</div>`;\n}"
+        xaxis:
+          type: datetime
+          labels:
+            format: HH:mm
+        yaxis:
+          decimalsInFloat: 0
+          title:
+            text: W
+        stroke:
+          curve: straight
+          dashArray:
+          - 0
+          - 0
+          - 0
+          - 0
+          - 5
+          - 8
+          width:
+          - 1
+          - 1
+          - 1
+          - 2
+          - 2
+          - 1
+        fill:
+          opacity:
+          - 0.82
+          - 0.86
+          - 0.9
+          - 1
+          - 1
+          - 1
+      series:
+      - entity: sensor.energy_manager_plan_day_1
+        name: Solar
+        type: area
+        stroke_width: 1
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "// Share one 5-minute statistics query across all five power series.\n// EnergyManager power sensors\
+          \ have state_class=measurement, so HA compiles\n// short-term means. Never download hundreds of thousands of raw\
+          \ state changes.\nif (typeof window.energyManagerPowerStatsV220?.getPoints !== 'function') {\n  window.energyManagerPowerStatsV220\
+          \ = (() => {\n    const SAMPLE_MS = 5 * 60 * 1000;\n    const IDS = [\n      'sensor.energy_manager_house_load_power',\n\
+          \      'sensor.energy_manager_background_load_power',\n      'sensor.energy_manager_grid_power',\n      'sensor.energy_manager_ess_power',\n\
+          \      'sensor.energy_manager_pv_solax_power'\n    ];\n    const indices = new Map(IDS.map((id, i) => [id, i]));\n\
+          \    const requests = new Map();\n    const stats = {\n      requests: 0, lastDurationMs: null, lastStatisticRows:\
+          \ 0,\n      lastSamples: 0, missingSensors: [], mode: '5minute_mean'\n    };\n\n    async function load(hass, startMs,\
+          \ cutoff) {\n      const key = `${startMs}/${cutoff}`;\n      if (requests.has(key)) return requests.get(key);\n\
+          \      const task = (async () => {\n        const t0 = performance.now();\n        stats.requests++;\n        const\
+          \ response = await hass.callWS({\n          type: 'recorder/statistics_during_period',\n          statistic_ids:\
+          \ IDS,\n          start_time: new Date(startMs).toISOString(),\n          end_time: new Date(cutoff).toISOString(),\n\
+          \          period: '5minute',\n          types: ['mean']\n        });\n        const buckets = IDS.map(id => {\n\
+          \          const values = new Map();\n          for (const item of response?.[id] || []) {\n            const raw\
+          \ = item.start;\n            const timestamp = typeof raw === 'number'\n              ? (raw < 1e11 ? raw * 1000\
+          \ : raw) : Date.parse(raw);\n            const value = Number(item.mean);\n            if (item.mean != null &&\
+          \ Number.isFinite(timestamp) && Number.isFinite(value)) {\n              values.set(Math.floor(timestamp / SAMPLE_MS)\
+          \ * SAMPLE_MS, value);\n            }\n          }\n          return values;\n        });\n        stats.lastStatisticRows\
+          \ = buckets.reduce((total, rows) => total + rows.size, 0);\n        stats.missingSensors = IDS.filter((id, i) =>\
+          \ buckets[i].size === 0);\n        if (stats.missingSensors.length) {\n          console.warn('EnergyManager 5-minute\
+          \ statistics missing:', stats.missingSensors);\n        }\n        const samples = [];\n        for (let t = Math.ceil(startMs\
+          \ / SAMPLE_MS) * SAMPLE_MS; t < cutoff; t += SAMPLE_MS) {\n          samples.push([t, ...buckets.map(values => values.get(t)\
+          \ ?? null)]);\n        }\n        stats.lastDurationMs = Math.round(performance.now() - t0);\n        stats.lastSamples\
+          \ = samples.length;\n        return samples;\n      })();\n      // Cache in-flight and completed requests for the\
+          \ current 5-minute boundary.\n      requests.clear();\n      requests.set(key, task);\n      task.catch(() => {\
+          \ if (requests.get(key) === task) requests.delete(key); });\n      return task;\n    }\n\n    return {\n      stats,\n\
+          \      async getPoints(hass, start, end, sources) {\n        const startMs = start.getTime();\n        const finish\
+          \ = end.getTime();\n        const cutoff = Math.floor(Math.min(Date.now(), finish) / SAMPLE_MS) * SAMPLE_MS;\n \
+          \       if (cutoff <= startMs) return [];\n        const columns = sources.map(id => indices.get(id));\n       \
+          \ if (columns.some(i => i === undefined)) throw new Error('Unrecognized power source');\n        const samples =\
+          \ await load(hass, startMs, cutoff);\n        return samples.filter(row => columns.every(i => row[i + 1] !== null))\n\
+          \          .map(row => [row[0], columns.reduce((total, i) => total + row[i + 1], 0)]);\n      }\n    };\n  })();\n\
+          }\n\nconst sources = ['sensor.energy_manager_grid_power', 'sensor.energy_manager_ess_power', 'sensor.energy_manager_pv_solax_power'];\n\
+          const keys = ['grid_w', 'ess_w', 'pv_ac_w'];\nconst now = Date.now();\nconst begin = start.getTime();\nconst finish\
+          \ = end.getTime();\nlet points = [];\n\n// The five power series share one Recorder query and one 5-minute history\
+          \ cache.\ntry {\n  points = await window.energyManagerPowerStatsV220.getPoints(hass, start, end, sources);\n} catch\
+          \ (error) {\n  console.warn('EnergyManager Solar history unavailable:', error);\n}\n\n// Append fresh live power\
+          \ independently of the Recorder snapshot.\nconst current = sources.map(source => hass.states[source]);\nif (begin\
+          \ <= now && now <= finish && current.every(s =>\n  s && !['unknown', 'unavailable'].includes(String(s.state)) &&\
+          \ Number.isFinite(Number(s.state)) &&\n  Number.isFinite(Date.parse(s.last_updated || '')) && now - Date.parse(s.last_updated)\
+          \ < 120000)) {\n  points.push([now, current.reduce((sum, s) => sum + Number(s.state), 0)]);\n}\n\n// Forecast updates\
+          \ independently of the cached history, using current MILP intervals.\nconst forecast = [1, 2].flatMap(day =>\n  hass.states[`sensor.energy_manager_plan_day_${day}`]?.attributes?.intervals || []);\nfor (const interval of forecast) {\n  const time = Date.parse(interval.start);\n  const values = keys.map(key => Number(key === 'background_w'\n\
+          \    ? (interval.background_w ?? interval.load_w) : interval[key]));\n  if (Number.isFinite(time) && time > now\
+          \ && time <= finish && values.every(Number.isFinite)) {\n    points.push([time, values.reduce((sum, value) => sum\
+          \ + value, 0)]);\n  }\n}\nreturn [...new Map(points.map(point => [point[0], point])).values()]\n  .sort((a, b) =>\
+          \ a[0] - b[0]);"
+        color: '#eab308'
+        opacity: 0.88
+      - entity: sensor.energy_manager_plan_day_1
+        name: ESS
+        type: area
+        stroke_width: 1
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "// Share one 5-minute statistics query across all five power series.\n// EnergyManager power sensors\
+          \ have state_class=measurement, so HA compiles\n// short-term means. Never download hundreds of thousands of raw\
+          \ state changes.\nif (typeof window.energyManagerPowerStatsV220?.getPoints !== 'function') {\n  window.energyManagerPowerStatsV220\
+          \ = (() => {\n    const SAMPLE_MS = 5 * 60 * 1000;\n    const IDS = [\n      'sensor.energy_manager_house_load_power',\n\
+          \      'sensor.energy_manager_background_load_power',\n      'sensor.energy_manager_grid_power',\n      'sensor.energy_manager_ess_power',\n\
+          \      'sensor.energy_manager_pv_solax_power'\n    ];\n    const indices = new Map(IDS.map((id, i) => [id, i]));\n\
+          \    const requests = new Map();\n    const stats = {\n      requests: 0, lastDurationMs: null, lastStatisticRows:\
+          \ 0,\n      lastSamples: 0, missingSensors: [], mode: '5minute_mean'\n    };\n\n    async function load(hass, startMs,\
+          \ cutoff) {\n      const key = `${startMs}/${cutoff}`;\n      if (requests.has(key)) return requests.get(key);\n\
+          \      const task = (async () => {\n        const t0 = performance.now();\n        stats.requests++;\n        const\
+          \ response = await hass.callWS({\n          type: 'recorder/statistics_during_period',\n          statistic_ids:\
+          \ IDS,\n          start_time: new Date(startMs).toISOString(),\n          end_time: new Date(cutoff).toISOString(),\n\
+          \          period: '5minute',\n          types: ['mean']\n        });\n        const buckets = IDS.map(id => {\n\
+          \          const values = new Map();\n          for (const item of response?.[id] || []) {\n            const raw\
+          \ = item.start;\n            const timestamp = typeof raw === 'number'\n              ? (raw < 1e11 ? raw * 1000\
+          \ : raw) : Date.parse(raw);\n            const value = Number(item.mean);\n            if (item.mean != null &&\
+          \ Number.isFinite(timestamp) && Number.isFinite(value)) {\n              values.set(Math.floor(timestamp / SAMPLE_MS)\
+          \ * SAMPLE_MS, value);\n            }\n          }\n          return values;\n        });\n        stats.lastStatisticRows\
+          \ = buckets.reduce((total, rows) => total + rows.size, 0);\n        stats.missingSensors = IDS.filter((id, i) =>\
+          \ buckets[i].size === 0);\n        if (stats.missingSensors.length) {\n          console.warn('EnergyManager 5-minute\
+          \ statistics missing:', stats.missingSensors);\n        }\n        const samples = [];\n        for (let t = Math.ceil(startMs\
+          \ / SAMPLE_MS) * SAMPLE_MS; t < cutoff; t += SAMPLE_MS) {\n          samples.push([t, ...buckets.map(values => values.get(t)\
+          \ ?? null)]);\n        }\n        stats.lastDurationMs = Math.round(performance.now() - t0);\n        stats.lastSamples\
+          \ = samples.length;\n        return samples;\n      })();\n      // Cache in-flight and completed requests for the\
+          \ current 5-minute boundary.\n      requests.clear();\n      requests.set(key, task);\n      task.catch(() => {\
+          \ if (requests.get(key) === task) requests.delete(key); });\n      return task;\n    }\n\n    return {\n      stats,\n\
+          \      async getPoints(hass, start, end, sources) {\n        const startMs = start.getTime();\n        const finish\
+          \ = end.getTime();\n        const cutoff = Math.floor(Math.min(Date.now(), finish) / SAMPLE_MS) * SAMPLE_MS;\n \
+          \       if (cutoff <= startMs) return [];\n        const columns = sources.map(id => indices.get(id));\n       \
+          \ if (columns.some(i => i === undefined)) throw new Error('Unrecognized power source');\n        const samples =\
+          \ await load(hass, startMs, cutoff);\n        return samples.filter(row => columns.every(i => row[i + 1] !== null))\n\
+          \          .map(row => [row[0], columns.reduce((total, i) => total + row[i + 1], 0)]);\n      }\n    };\n  })();\n\
+          }\n\nconst sources = ['sensor.energy_manager_grid_power', 'sensor.energy_manager_ess_power'];\nconst keys = ['grid_w',\
+          \ 'ess_w'];\nconst now = Date.now();\nconst begin = start.getTime();\nconst finish = end.getTime();\nlet points\
+          \ = [];\n\n// The five power series share one Recorder query and one 5-minute history cache.\ntry {\n  points =\
+          \ await window.energyManagerPowerStatsV220.getPoints(hass, start, end, sources);\n} catch (error) {\n  console.warn('EnergyManager\
+          \ ESS history unavailable:', error);\n}\n\n// Append fresh live power independently of the Recorder snapshot.\n\
+          const current = sources.map(source => hass.states[source]);\nif (begin <= now && now <= finish && current.every(s\
+          \ =>\n  s && !['unknown', 'unavailable'].includes(String(s.state)) && Number.isFinite(Number(s.state)) &&\n  Number.isFinite(Date.parse(s.last_updated\
+          \ || '')) && now - Date.parse(s.last_updated) < 120000)) {\n  points.push([now, current.reduce((sum, s) => sum +\
+          \ Number(s.state), 0)]);\n}\n\n// Forecast updates independently of the cached history, using current MILP intervals.\n\
+          const forecast = [1, 2].flatMap(day =>\n  hass.states[`sensor.energy_manager_plan_day_${day}`]?.attributes?.intervals || []);\nfor (const interval of forecast) {\n  const time = Date.parse(interval.start);\n  const\
+          \ values = keys.map(key => Number(key === 'background_w'\n    ? (interval.background_w ?? interval.load_w) : interval[key]));\n\
+          \  if (Number.isFinite(time) && time > now && time <= finish && values.every(Number.isFinite)) {\n    points.push([time,\
+          \ values.reduce((sum, value) => sum + value, 0)]);\n  }\n}\nreturn [...new Map(points.map(point => [point[0], point])).values()]\n\
+          \  .sort((a, b) => a[0] - b[0]);"
+        color: '#007AC2'
+        opacity: 0.88
+      - entity: sensor.energy_manager_plan_day_1
+        name: Grid
+        type: area
+        stroke_width: 1
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "// Share one 5-minute statistics query across all five power series.\n// EnergyManager power sensors\
+          \ have state_class=measurement, so HA compiles\n// short-term means. Never download hundreds of thousands of raw\
+          \ state changes.\nif (typeof window.energyManagerPowerStatsV220?.getPoints !== 'function') {\n  window.energyManagerPowerStatsV220\
+          \ = (() => {\n    const SAMPLE_MS = 5 * 60 * 1000;\n    const IDS = [\n      'sensor.energy_manager_house_load_power',\n\
+          \      'sensor.energy_manager_background_load_power',\n      'sensor.energy_manager_grid_power',\n      'sensor.energy_manager_ess_power',\n\
+          \      'sensor.energy_manager_pv_solax_power'\n    ];\n    const indices = new Map(IDS.map((id, i) => [id, i]));\n\
+          \    const requests = new Map();\n    const stats = {\n      requests: 0, lastDurationMs: null, lastStatisticRows:\
+          \ 0,\n      lastSamples: 0, missingSensors: [], mode: '5minute_mean'\n    };\n\n    async function load(hass, startMs,\
+          \ cutoff) {\n      const key = `${startMs}/${cutoff}`;\n      if (requests.has(key)) return requests.get(key);\n\
+          \      const task = (async () => {\n        const t0 = performance.now();\n        stats.requests++;\n        const\
+          \ response = await hass.callWS({\n          type: 'recorder/statistics_during_period',\n          statistic_ids:\
+          \ IDS,\n          start_time: new Date(startMs).toISOString(),\n          end_time: new Date(cutoff).toISOString(),\n\
+          \          period: '5minute',\n          types: ['mean']\n        });\n        const buckets = IDS.map(id => {\n\
+          \          const values = new Map();\n          for (const item of response?.[id] || []) {\n            const raw\
+          \ = item.start;\n            const timestamp = typeof raw === 'number'\n              ? (raw < 1e11 ? raw * 1000\
+          \ : raw) : Date.parse(raw);\n            const value = Number(item.mean);\n            if (item.mean != null &&\
+          \ Number.isFinite(timestamp) && Number.isFinite(value)) {\n              values.set(Math.floor(timestamp / SAMPLE_MS)\
+          \ * SAMPLE_MS, value);\n            }\n          }\n          return values;\n        });\n        stats.lastStatisticRows\
+          \ = buckets.reduce((total, rows) => total + rows.size, 0);\n        stats.missingSensors = IDS.filter((id, i) =>\
+          \ buckets[i].size === 0);\n        if (stats.missingSensors.length) {\n          console.warn('EnergyManager 5-minute\
+          \ statistics missing:', stats.missingSensors);\n        }\n        const samples = [];\n        for (let t = Math.ceil(startMs\
+          \ / SAMPLE_MS) * SAMPLE_MS; t < cutoff; t += SAMPLE_MS) {\n          samples.push([t, ...buckets.map(values => values.get(t)\
+          \ ?? null)]);\n        }\n        stats.lastDurationMs = Math.round(performance.now() - t0);\n        stats.lastSamples\
+          \ = samples.length;\n        return samples;\n      })();\n      // Cache in-flight and completed requests for the\
+          \ current 5-minute boundary.\n      requests.clear();\n      requests.set(key, task);\n      task.catch(() => {\
+          \ if (requests.get(key) === task) requests.delete(key); });\n      return task;\n    }\n\n    return {\n      stats,\n\
+          \      async getPoints(hass, start, end, sources) {\n        const startMs = start.getTime();\n        const finish\
+          \ = end.getTime();\n        const cutoff = Math.floor(Math.min(Date.now(), finish) / SAMPLE_MS) * SAMPLE_MS;\n \
+          \       if (cutoff <= startMs) return [];\n        const columns = sources.map(id => indices.get(id));\n       \
+          \ if (columns.some(i => i === undefined)) throw new Error('Unrecognized power source');\n        const samples =\
+          \ await load(hass, startMs, cutoff);\n        return samples.filter(row => columns.every(i => row[i + 1] !== null))\n\
+          \          .map(row => [row[0], columns.reduce((total, i) => total + row[i + 1], 0)]);\n      }\n    };\n  })();\n\
+          }\n\nconst sources = ['sensor.energy_manager_grid_power'];\nconst keys = ['grid_w'];\nconst now = Date.now();\n\
+          const begin = start.getTime();\nconst finish = end.getTime();\nlet points = [];\n\n// The five power series share\
+          \ one Recorder query and one 5-minute history cache.\ntry {\n  points = await window.energyManagerPowerStatsV220.getPoints(hass,\
+          \ start, end, sources);\n} catch (error) {\n  console.warn('EnergyManager Grid history unavailable:', error);\n\
+          }\n\n// Append fresh live power independently of the Recorder snapshot.\nconst current = sources.map(source => hass.states[source]);\n\
+          if (begin <= now && now <= finish && current.every(s =>\n  s && !['unknown', 'unavailable'].includes(String(s.state))\
+          \ && Number.isFinite(Number(s.state)) &&\n  Number.isFinite(Date.parse(s.last_updated || '')) && now - Date.parse(s.last_updated)\
+          \ < 120000)) {\n  points.push([now, current.reduce((sum, s) => sum + Number(s.state), 0)]);\n}\n\n// Forecast updates\
+          \ independently of the cached history, using current MILP intervals.\nconst forecast = [1, 2].flatMap(day =>\n  hass.states[`sensor.energy_manager_plan_day_${day}`]?.attributes?.intervals || []);\nfor (const interval of forecast) {\n  const time = Date.parse(interval.start);\n  const values = keys.map(key => Number(key === 'background_w'\n\
+          \    ? (interval.background_w ?? interval.load_w) : interval[key]));\n  if (Number.isFinite(time) && time > now\
+          \ && time <= finish && values.every(Number.isFinite)) {\n    points.push([time, values.reduce((sum, value) => sum\
+          \ + value, 0)]);\n  }\n}\nreturn [...new Map(points.map(point => [point[0], point])).values()]\n  .sort((a, b) =>\
+          \ a[0] - b[0]);"
+        color: '#dc2626'
+        opacity: 0.88
+      - entity: sensor.energy_manager_plan_day_1
+        name: Load (total)
+        type: line
+        stroke_width: 2
+        extend_to: end
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "// Share one 5-minute statistics query across all five power series.\n// EnergyManager power sensors\
+          \ have state_class=measurement, so HA compiles\n// short-term means. Never download hundreds of thousands of raw\
+          \ state changes.\nif (typeof window.energyManagerPowerStatsV220?.getPoints !== 'function') {\n  window.energyManagerPowerStatsV220\
+          \ = (() => {\n    const SAMPLE_MS = 5 * 60 * 1000;\n    const IDS = [\n      'sensor.energy_manager_house_load_power',\n\
+          \      'sensor.energy_manager_background_load_power',\n      'sensor.energy_manager_grid_power',\n      'sensor.energy_manager_ess_power',\n\
+          \      'sensor.energy_manager_pv_solax_power'\n    ];\n    const indices = new Map(IDS.map((id, i) => [id, i]));\n\
+          \    const requests = new Map();\n    const stats = {\n      requests: 0, lastDurationMs: null, lastStatisticRows:\
+          \ 0,\n      lastSamples: 0, missingSensors: [], mode: '5minute_mean'\n    };\n\n    async function load(hass, startMs,\
+          \ cutoff) {\n      const key = `${startMs}/${cutoff}`;\n      if (requests.has(key)) return requests.get(key);\n\
+          \      const task = (async () => {\n        const t0 = performance.now();\n        stats.requests++;\n        const\
+          \ response = await hass.callWS({\n          type: 'recorder/statistics_during_period',\n          statistic_ids:\
+          \ IDS,\n          start_time: new Date(startMs).toISOString(),\n          end_time: new Date(cutoff).toISOString(),\n\
+          \          period: '5minute',\n          types: ['mean']\n        });\n        const buckets = IDS.map(id => {\n\
+          \          const values = new Map();\n          for (const item of response?.[id] || []) {\n            const raw\
+          \ = item.start;\n            const timestamp = typeof raw === 'number'\n              ? (raw < 1e11 ? raw * 1000\
+          \ : raw) : Date.parse(raw);\n            const value = Number(item.mean);\n            if (item.mean != null &&\
+          \ Number.isFinite(timestamp) && Number.isFinite(value)) {\n              values.set(Math.floor(timestamp / SAMPLE_MS)\
+          \ * SAMPLE_MS, value);\n            }\n          }\n          return values;\n        });\n        stats.lastStatisticRows\
+          \ = buckets.reduce((total, rows) => total + rows.size, 0);\n        stats.missingSensors = IDS.filter((id, i) =>\
+          \ buckets[i].size === 0);\n        if (stats.missingSensors.length) {\n          console.warn('EnergyManager 5-minute\
+          \ statistics missing:', stats.missingSensors);\n        }\n        const samples = [];\n        for (let t = Math.ceil(startMs\
+          \ / SAMPLE_MS) * SAMPLE_MS; t < cutoff; t += SAMPLE_MS) {\n          samples.push([t, ...buckets.map(values => values.get(t)\
+          \ ?? null)]);\n        }\n        stats.lastDurationMs = Math.round(performance.now() - t0);\n        stats.lastSamples\
+          \ = samples.length;\n        return samples;\n      })();\n      // Cache in-flight and completed requests for the\
+          \ current 5-minute boundary.\n      requests.clear();\n      requests.set(key, task);\n      task.catch(() => {\
+          \ if (requests.get(key) === task) requests.delete(key); });\n      return task;\n    }\n\n    return {\n      stats,\n\
+          \      async getPoints(hass, start, end, sources) {\n        const startMs = start.getTime();\n        const finish\
+          \ = end.getTime();\n        const cutoff = Math.floor(Math.min(Date.now(), finish) / SAMPLE_MS) * SAMPLE_MS;\n \
+          \       if (cutoff <= startMs) return [];\n        const columns = sources.map(id => indices.get(id));\n       \
+          \ if (columns.some(i => i === undefined)) throw new Error('Unrecognized power source');\n        const samples =\
+          \ await load(hass, startMs, cutoff);\n        return samples.filter(row => columns.every(i => row[i + 1] !== null))\n\
+          \          .map(row => [row[0], columns.reduce((total, i) => total + row[i + 1], 0)]);\n      }\n    };\n  })();\n\
+          }\n\nconst sources = ['sensor.energy_manager_house_load_power'];\nconst keys = ['load_w'];\nconst now = Date.now();\n\
+          const begin = start.getTime();\nconst finish = end.getTime();\nlet points = [];\n\n// The five power series share\
+          \ one Recorder query and one 5-minute history cache.\ntry {\n  points = await window.energyManagerPowerStatsV220.getPoints(hass,\
+          \ start, end, sources);\n} catch (error) {\n  console.warn('EnergyManager Load (total) history unavailable:', error);\n\
+          }\n\n// Append fresh live power independently of the Recorder snapshot.\nconst current = sources.map(source => hass.states[source]);\n\
+          if (begin <= now && now <= finish && current.every(s =>\n  s && !['unknown', 'unavailable'].includes(String(s.state))\
+          \ && Number.isFinite(Number(s.state)) &&\n  Number.isFinite(Date.parse(s.last_updated || '')) && now - Date.parse(s.last_updated)\
+          \ < 120000)) {\n  points.push([now, current.reduce((sum, s) => sum + Number(s.state), 0)]);\n}\n\n// Forecast updates\
+          \ independently of the cached history, using current MILP intervals.\nconst forecast = [1, 2].flatMap(day =>\n  hass.states[`sensor.energy_manager_plan_day_${day}`]?.attributes?.intervals || []);\nfor (const interval of forecast) {\n  const time = Date.parse(interval.start);\n  const values = keys.map(key => Number(key === 'background_w'\n\
+          \    ? (interval.background_w ?? interval.load_w) : interval[key]));\n  if (Number.isFinite(time) && time > now\
+          \ && time <= finish && values.every(Number.isFinite)) {\n    points.push([time, values.reduce((sum, value) => sum\
+          \ + value, 0)]);\n  }\n}\nreturn [...new Map(points.map(point => [point[0], point])).values()]\n  .sort((a, b) =>\
+          \ a[0] - b[0]);"
+        color: '#16a34a'
+      - entity: sensor.energy_manager_plan_day_1
+        name: Background
+        type: line
+        stroke_width: 2
+        extend_to: end
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "// Share one 5-minute statistics query across all five power series.\n// EnergyManager power sensors\
+          \ have state_class=measurement, so HA compiles\n// short-term means. Never download hundreds of thousands of raw\
+          \ state changes.\nif (typeof window.energyManagerPowerStatsV220?.getPoints !== 'function') {\n  window.energyManagerPowerStatsV220\
+          \ = (() => {\n    const SAMPLE_MS = 5 * 60 * 1000;\n    const IDS = [\n      'sensor.energy_manager_house_load_power',\n\
+          \      'sensor.energy_manager_background_load_power',\n      'sensor.energy_manager_grid_power',\n      'sensor.energy_manager_ess_power',\n\
+          \      'sensor.energy_manager_pv_solax_power'\n    ];\n    const indices = new Map(IDS.map((id, i) => [id, i]));\n\
+          \    const requests = new Map();\n    const stats = {\n      requests: 0, lastDurationMs: null, lastStatisticRows:\
+          \ 0,\n      lastSamples: 0, missingSensors: [], mode: '5minute_mean'\n    };\n\n    async function load(hass, startMs,\
+          \ cutoff) {\n      const key = `${startMs}/${cutoff}`;\n      if (requests.has(key)) return requests.get(key);\n\
+          \      const task = (async () => {\n        const t0 = performance.now();\n        stats.requests++;\n        const\
+          \ response = await hass.callWS({\n          type: 'recorder/statistics_during_period',\n          statistic_ids:\
+          \ IDS,\n          start_time: new Date(startMs).toISOString(),\n          end_time: new Date(cutoff).toISOString(),\n\
+          \          period: '5minute',\n          types: ['mean']\n        });\n        const buckets = IDS.map(id => {\n\
+          \          const values = new Map();\n          for (const item of response?.[id] || []) {\n            const raw\
+          \ = item.start;\n            const timestamp = typeof raw === 'number'\n              ? (raw < 1e11 ? raw * 1000\
+          \ : raw) : Date.parse(raw);\n            const value = Number(item.mean);\n            if (item.mean != null &&\
+          \ Number.isFinite(timestamp) && Number.isFinite(value)) {\n              values.set(Math.floor(timestamp / SAMPLE_MS)\
+          \ * SAMPLE_MS, value);\n            }\n          }\n          return values;\n        });\n        stats.lastStatisticRows\
+          \ = buckets.reduce((total, rows) => total + rows.size, 0);\n        stats.missingSensors = IDS.filter((id, i) =>\
+          \ buckets[i].size === 0);\n        if (stats.missingSensors.length) {\n          console.warn('EnergyManager 5-minute\
+          \ statistics missing:', stats.missingSensors);\n        }\n        const samples = [];\n        for (let t = Math.ceil(startMs\
+          \ / SAMPLE_MS) * SAMPLE_MS; t < cutoff; t += SAMPLE_MS) {\n          samples.push([t, ...buckets.map(values => values.get(t)\
+          \ ?? null)]);\n        }\n        stats.lastDurationMs = Math.round(performance.now() - t0);\n        stats.lastSamples\
+          \ = samples.length;\n        return samples;\n      })();\n      // Cache in-flight and completed requests for the\
+          \ current 5-minute boundary.\n      requests.clear();\n      requests.set(key, task);\n      task.catch(() => {\
+          \ if (requests.get(key) === task) requests.delete(key); });\n      return task;\n    }\n\n    return {\n      stats,\n\
+          \      async getPoints(hass, start, end, sources) {\n        const startMs = start.getTime();\n        const finish\
+          \ = end.getTime();\n        const cutoff = Math.floor(Math.min(Date.now(), finish) / SAMPLE_MS) * SAMPLE_MS;\n \
+          \       if (cutoff <= startMs) return [];\n        const columns = sources.map(id => indices.get(id));\n       \
+          \ if (columns.some(i => i === undefined)) throw new Error('Unrecognized power source');\n        const samples =\
+          \ await load(hass, startMs, cutoff);\n        return samples.filter(row => columns.every(i => row[i + 1] !== null))\n\
+          \          .map(row => [row[0], columns.reduce((total, i) => total + row[i + 1], 0)]);\n      }\n    };\n  })();\n\
+          }\n\nconst sources = ['sensor.energy_manager_background_load_power'];\nconst keys = ['background_w'];\nconst now\
+          \ = Date.now();\nconst begin = start.getTime();\nconst finish = end.getTime();\nlet points = [];\n\n// The five\
+          \ power series share one Recorder query and one 5-minute history cache.\ntry {\n  points = await window.energyManagerPowerStatsV220.getPoints(hass,\
+          \ start, end, sources);\n} catch (error) {\n  console.warn('EnergyManager Background history unavailable:', error);\n\
+          }\n\n// Append fresh live power independently of the Recorder snapshot.\nconst current = sources.map(source => hass.states[source]);\n\
+          if (begin <= now && now <= finish && current.every(s =>\n  s && !['unknown', 'unavailable'].includes(String(s.state))\
+          \ && Number.isFinite(Number(s.state)) &&\n  Number.isFinite(Date.parse(s.last_updated || '')) && now - Date.parse(s.last_updated)\
+          \ < 120000)) {\n  points.push([now, current.reduce((sum, s) => sum + Number(s.state), 0)]);\n}\n\n// Forecast updates\
+          \ independently of the cached history, using current MILP intervals.\nconst forecast = [1, 2].flatMap(day =>\n  hass.states[`sensor.energy_manager_plan_day_${day}`]?.attributes?.intervals || []);\nfor (const interval of forecast) {\n  const time = Date.parse(interval.start);\n  const values = keys.map(key => Number(key === 'background_w'\n\
+          \    ? (interval.background_w ?? interval.load_w) : interval[key]));\n  if (Number.isFinite(time) && time > now\
+          \ && time <= finish && values.every(Number.isFinite)) {\n    points.push([time, values.reduce((sum, value) => sum\
+          \ + value, 0)]);\n  }\n}\nreturn [...new Map(points.map(point => [point[0], point])).values()]\n  .sort((a, b) =>\
+          \ a[0] - b[0]);"
+        color: '#a855f7'
+      - entity: sensor.energy_manager_plan_day_1
+        name: Peak (15 min)
+        type: line
+        stroke_width: 1
+        extend_to: end
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: 'return window.energyManagerPeakReferenceV238.points(hass, start, end);'
+        color: '#dc2626'
+    - type: custom:energymanager-timeline-card
+      grid_options:
+        columns: full
+        rows: auto
+      entity: sensor.energy_manager_plan_timeline
+      title: Tasks · actual / planned · 24 h view
+      fixed_day_window: true
+    - type: custom:energymanager-day-chart
+      grid_options:
+        columns: full
+        rows: auto
+      header:
+        show: true
+        title: Battery SoC · actual / planned · 24 h view
+        show_states: false
+      graph_span: 24h
+      span:
+        start: minute
+      now:
+        show: true
+        label: Now
+      apex_config:
+        chart:
+          height: 240
+          toolbar:
+            show: false
+        grid:
+          borderColor: var(--divider-color)
+        legend:
+          show: true
+          showForSingleSeries: true
+        tooltip:
+          shared: true
+          x:
+            format: dd MMM HH:mm
+        xaxis:
+          type: datetime
+          labels:
+            format: HH:mm
+        yaxis:
+          decimalsInFloat: 0
+      series:
+      - entity: sensor.energy_manager_plan_day_1
+        name: ESS SoC
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: >-
+          return (await window.energyManagerOverviewSocV236?.points?.(hass, start, end, 'ess_soc')) ?? [];
+        color: '#007AC2'
+      - entity: sensor.energy_manager_plan_day_1
+        name: EV SoC
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: >-
+          return (await window.energyManagerOverviewSocV236?.points?.(hass, start, end, 'ev_soc')) ?? [];
+        color: '#16a34a'
+      yaxis:
+      - min: 0
+        max: 100
+        decimals: 0
+
+- title: Planning
+  path: planning
+  icon: mdi:calendar-clock
+  type: sections
+  max_columns: 2
+  sections:
+  - type: grid
+    column_span: 2
+    cards:
+    - type: custom:energymanager-day-chart
+      grid_options:
+        columns: full
+        rows: auto
+      header:
+        show: true
+        title: 7 days · AC power · actual / planned
+        show_states: false
+      graph_span: 7d
+      span:
+        start: minute
+      now:
+        show: true
+        label: Now
+      apex_config:
+        chart:
+          height: 440
+          toolbar:
+            show: false
+        grid:
+          borderColor: var(--divider-color)
+        legend:
+          show: true
+          showForSingleSeries: true
+        tooltip:
+          shared: true
+          intersect: false
+          custom: "EVAL:function (params) { return window.energyManagerPlanningV232?.tooltip?.(params, 'W') ?? ''; }"
+        xaxis:
+          type: datetime
+          labels:
+            datetimeFormatter:
+              year: yyyy
+              month: dd MMM yyyy
+              day: dd MMM
+              hour: HH:mm
+              minute: HH:mm
+              second: HH:mm:ss
+        yaxis:
+          decimalsInFloat: 0
+          title:
+            text: W
+        stroke:
+          curve: straight
+          dashArray: [0, 0, 0, 0, 0, 6]
+      series:
+      - entity: sensor.energy_manager_plan_day_1
+        name: Grid
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "if (!window.energyManagerPlanningV232 && !window.energyManagerPlanningHelperWarning) { window.energyManagerPlanningHelperWarning = true; console.error('[EnergyManager Dashboard] Planning charts: JS helper missing. Expected v2.33. Check /local/energymanager-timeline-card.js?v=233 and reload.'); } return (await window.energyManagerPlanningV232?.points?.(hass, start, end, 'grid')) ?? [];"
+        color: '#dc2626'
+      - entity: sensor.energy_manager_plan_day_1
+        name: ESS
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "return (await window.energyManagerPlanningV232?.points?.(hass, start, end, 'ess')) ?? [];"
+        color: '#007AC2'
+      - entity: sensor.energy_manager_plan_day_1
+        name: Solar
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "return (await window.energyManagerPlanningV232?.points?.(hass, start, end, 'solar')) ?? [];"
+        color: '#eab308'
+      - entity: sensor.energy_manager_plan_day_1
+        name: Load
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "return (await window.energyManagerPlanningV232?.points?.(hass, start, end, 'load')) ?? [];"
+        color: '#16a34a'
+      - entity: sensor.energy_manager_plan_day_1
+        name: Background
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "return (await window.energyManagerPlanningV232?.points?.(hass, start, end, 'background')) ?? [];"
+        color: '#a855f7'
+      - entity: sensor.energy_manager_capacity_tariff_status
+        name: Peak (15 min)
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: 'return window.energyManagerPeakReferenceV238.points(hass, start, end);'
+        color: '#dc2626'
+    - type: custom:energymanager-planning-tasks-card
+      grid_options:
+        columns: full
+        rows: auto
+      mode: timeline
+    - type: custom:energymanager-day-chart
+      grid_options:
+        columns: full
+        rows: auto
+      header:
+        show: true
+        title: 7 days · SoC · actual / planned
+        show_states: false
+      graph_span: 7d
+      span:
+        start: minute
+      now:
+        show: true
+        label: Now
+      apex_config:
+        chart:
+          height: 300
+          toolbar:
+            show: false
+        grid:
+          borderColor: var(--divider-color)
+        legend:
+          show: true
+          showForSingleSeries: true
+        tooltip:
+          shared: true
+          intersect: false
+          custom: "EVAL:function (params) { return window.energyManagerPlanningV232?.tooltip?.(params, '%') ?? ''; }"
+        xaxis:
+          type: datetime
+          labels:
+            datetimeFormatter:
+              year: yyyy
+              month: dd MMM yyyy
+              day: dd MMM
+              hour: HH:mm
+              minute: HH:mm
+              second: HH:mm:ss
+        yaxis:
+          decimalsInFloat: 0
+        stroke:
+          curve: straight
+      series:
+      - entity: sensor.energy_manager_plan_day_1
+        name: ESS SoC
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "return (await window.energyManagerPlanningV232?.points?.(hass, start, end, 'ess_soc')) ?? [];"
+        color: '#007AC2'
+      - entity: sensor.energy_manager_plan_day_1
+        name: EV SoC
+        type: line
+        stroke_width: 2
+        extend_to: false
+        show:
+          legend_value: false
+          in_header: false
+        data_generator: "return (await window.energyManagerPlanningV232?.points?.(hass, start, end, 'ev_soc')) ?? [];"
+        color: '#16a34a'
+      yaxis:
+      - min: 0
+        max: 100
+        decimals: 0
+    - type: custom:energymanager-planning-tasks-card
+      grid_options:
+        columns: full
+        rows: auto
+      mode: list
+    - type: entities
+      grid_options:
+        columns: 12
+        rows: auto
+      title: Forecast details · next 24 h
+      show_header_toggle: false
+      entities:
+      - entity: sensor.energy_manager_shadow_plan_next_24_hours_net_deficit_energy
+        name: Net deficit
+      - entity: sensor.energy_manager_background_load_forecast_next_24_hours_energy
+        name: Background load
+- title: Performance
+  path: performance
+  icon: mdi:chart-line
+  cards:
+  - type: entities
+    title: Background-load forecast accuracy
+    show_header_toggle: false
+    entities:
+    - entity: sensor.energy_manager_background_load_backtest
+      name: 24-hour energy forecast error · MAE
+- title: Diagnostics
+  path: diagnostics
+  icon: mdi:clipboard-text-clock
+  cards:
+  - type: entities
+    title: Data availability
+    show_header_toggle: false
+    entities:
+    - sensor.energy_manager_database_status
+    - sensor.energy_manager_input_health
+  - type: entities
+    title: Planner diagnostics · technical
+    show_header_toggle: false
+    entities:
+    - entity: sensor.energy_manager_shadow_plan_status
+      name: Plan calculated
+    - entity: sensor.energy_manager_task_status
+      name: Task requirements available
+    - entity: sensor.energy_manager_actuator_status
+      name: Device catalog available
+    - entity: sensor.energy_manager_plan_cost_status
+      name: Estimated plan cost · 24 h
+    - entity: sensor.energy_manager_capacity_tariff_status
+      name: Observed monthly capacity peak
+  - type: entities
+    title: Live control health
+    entities:
+    - sensor.energy_manager_control_health
+    - sensor.energy_manager_ess_control_status
+    - sensor.energy_manager_ev_control_status
+    - sensor.energy_manager_notification_status
+    - sensor.energy_manager_fast_dispatch_status
+  - type: custom:energymanager-notification-events-card
+- title: Decision details
+  path: decision-details
+  icon: mdi:clipboard-text-search
+  cards:
+  - type: custom:energymanager-decision-details
