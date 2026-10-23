@@ -1,0 +1,12 @@
+{
+  "version": "4.0.1",
+  "wheel_sha256": "b1385e8201aa716c7febbd31e1ca3a5f213bf645015bea3330015ab4df3dca5b",
+  "package_source_and_asset_files_matched": 24,
+  "isolated_installed_package": true,
+  "configuration_created_from_packaged_resource": true,
+  "control_and_remote_access_disabled": true,
+  "existing_file_preserved": true,
+  "sdist_contains_template": true,
+  "provenance": "Local filesystem and installed-wheel verification; no live HA access",
+  "result": "passed"
+}

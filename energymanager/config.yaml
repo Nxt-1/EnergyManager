@@ -1,5 +1,5 @@
 name: Energy Manager
-version: "4.0.0"
+version: "4.0.1"
 slug: energy_manager
 description: Joint EV/ESS planning and responsive control for Home Assistant
 url: https://github.com/Nxt-1/EnergyManager
@@ -15,7 +15,7 @@ panel_icon: mdi:chart-timeline-variant
 image: ghcr.io/nxt-1/energymanager
 map:
   - type: app_config
-    read_only: true
+    read_only: false
 options:
   mode: demo
   planning_budget_seconds: 120

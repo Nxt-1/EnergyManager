@@ -1,6 +1,6 @@
 # EnergyManager 4
 
-Version **4.0.0**, the main Energy Manager application. One joint seven-day EV/ESS MILP
+Version **4.0.1**, the main Energy Manager application. One joint seven-day EV/ESS MILP
 feeds independent responsive control. The application includes configured input/actuator
 boundaries, persisted goals/approvals/decisions and the functional Overview/Planning GUI.
 
@@ -32,7 +32,8 @@ node --check src/energymanager/assets/app.js
 ```
 
 `--fixture` accepts an immutable snapshot for `--solve`. `--config` selects explicit
-V4 JSON input configuration. Remote addresses and hardware control are disabled by
+V4 JSON input configuration and creates a disabled starter file if it is missing.
+Remote addresses and hardware control are disabled by
 default. Missing critical physical settings prevent enabling configured control.
 
 - [Shipping specification](docs/SPECIFICATION.md)
@@ -42,5 +43,9 @@ default. Missing critical physical settings prevent enabling configured control.
 
 The Home Assistant app retains slug `energy_manager`, image `ghcr.io/nxt-1/energymanager`
 and ingress port 8099. Version 4 uses `/config/energymanager.json` and its own
-`/data/energymanager-v4.sqlite3`. Review migration before installation; V3 configuration
+`/data/energymanager-v4.sqlite3`. On startup, including demo mode, the add-on creates
+the configuration file if missing and logs its location. Existing files are preserved.
+Find it through Samba, SSH or an editor in `app_configs/<repository-id>_energy_manager/`
+(some tools expose `addon_configs`). Replace the labelled example settings before
+using configured inputs. Review migration before installation; V3 configuration
 and databases are not automatically imported. No live controller was enabled here.

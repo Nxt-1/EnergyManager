@@ -1,3 +1,11 @@
+## 4.0.1 — Automatic starter configuration
+
+- Create the selected JSON configuration file on add-on startup if it is missing, including in demo mode.
+- Bundle the complete example in the installed package and enable writes to the app configuration folder.
+- Preserve existing files without modification; log new-file locations and report creation errors clearly.
+- Keep generated settings explicitly synthetic, with remote access, commissioning confirmations and hardware control disabled.
+- Support the same first-file creation for standalone `--config` use; document where to edit it on HA.
+
 ## 4.0.0 — Joint EV/ESS architecture
 
 - Replace the V3 application with the fresh joint seven-day EV/ESS MILP and independent responsive control.

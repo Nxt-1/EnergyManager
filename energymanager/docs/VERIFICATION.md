@@ -1,4 +1,28 @@
-# EnergyManager 4.0.0 verification
+# EnergyManager 4 verification
+
+## Version 4.0.1 — automatic starter configuration
+
+Missing configuration files are created from the installed package on add-on startup,
+including demo mode, and standalone `--config`. Existing bytes are preserved, including
+empty/invalid files and user edits. New files retain disabled control/remote access and
+explicit synthetic labels. Creation failures are reported before service startup. The
+Home Assistant app configuration mount is writable for this initialization.
+
+Local verification on23 October2026: **52 tests passed in28.29s**, including nine new
+filesystem/startup/error tests and real localhost API checks in demo/configured modes.
+Ruff and mypy passed.4.0.1 wheel and source archive built with the bundled template.
+An isolated installed wheel created a file using its packaged resource, preserved an
+edited file, reported4.0.1 and matched all24 package source/asset files. The wheel hash
+and results are in configuration-bootstrap-verification.json.
+
+The full-horizon configured fake integration also passed:2,018 intervals accepted in
+20.096s, maximum measured control tick5.27ms and20 fake-only calls. See offline-e2e.json.
+No scheduler mathematics or control policy changed. Live Supervisor startup and physical
+commissioning remain unverified. The reports below retain4.0.0 promotion/CI history;
+package-verification.json and ci-verification.json describe that prior release, while
+offline-e2e.json now records the new4.0.1 run.
+
+## Version 4.0.0 promotion history
 
 The fresh implementation has been promoted into the main `energymanager/` application,
 replacing V3 as explicitly requested on 23 October 2026. The Python distribution,

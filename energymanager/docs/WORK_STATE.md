@@ -58,3 +58,22 @@ max control6.85ms,21 fake-only calls. Evidence: ci-verification.json and VERIFIC
 The published4.0.0 image contains the same runtime code; this fix changes tests/docs only.
 Next concrete action: review RUNBOOK.md for Supervisor/ingress installation and physical
 commissioning, which remain live-unverified and require separate user authorization.
+
+## Automatic starter configuration — 23 October 2026
+
+IMPLEMENTED for4.0.1: missing configuration initialized from a bundled package resource
+on every add-on startup, including demo mode, and standalone --config. Existing files
+are preserved, even empty/invalid user edits; exclusive creation handles competing
+startups. New files retain synthetic labels and disabled remote/control/commissioning
+flags. Startup logs the created path; write errors are explicit. App config mount is
+writable. Updated release identity, user instructions and configuration-folder mapping.
+
+TESTED:52 tests passed28.29s (nine new startup/filesystem/HTTP/error tests); Ruff and
+mypy passed.4.0.1 wheel/sdist built; isolated installed-wheel creation/preservation
+passed and all24 package source/assets match. Template included in wheel and sdist.
+Evidence: configuration-bootstrap-verification.json. No scheduler/control policy changes.
+Configured fake E2E also passed:2,018 intervals accepted20.096s, max control5.27ms,
+20 fake-only calls. Current evidence: offline-e2e.json and VERIFICATION.md.
+Next concrete action: commit/push the reviewed changes
+under existing authorization and verify CI/image publication. No live deployment or
+controller action is authorized; Supervisor/ingress/physical commissioning remain unverified.

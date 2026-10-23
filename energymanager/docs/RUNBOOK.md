@@ -52,14 +52,17 @@ limits can change incumbents; replay does not promise bit-identical optimization
 
 ## Main-project version 4 update
 
-`config.yaml` now advertises **4.0.0** for the existing `energy_manager` Home Assistant
+`config.yaml` now advertises **4.0.1** for the existing `energy_manager` Home Assistant
 app and `ghcr.io/nxt-1/energymanager` image. It keeps ingress port8099 and manual startup.
 The packaged Python distribution, CLI and module are all named `energymanager`. The
 former standalone candidate has been moved into this main app; the old V3 modules,
 tests and dashboard are replaced. The separate InfluxDB app is unchanged.
 
-V4 starts in demo mode. Configured mode reads `/config/energymanager.json` from the
-read-only app configuration mount. It writes `/data/energymanager-v4.sqlite3`, separately
+V4 starts in demo mode. On startup, including demo mode, the app creates a missing
+`/config/energymanager.json` from its bundled synthetic example and logs the path.
+The app configuration mount is writable for initialization. Existing files are never
+replaced, including empty or unfinished files. Creation failures stop startup with a
+clear error. Configured mode reads this file. It writes `/data/energymanager-v4.sqlite3`, separately
 from V3 data. V3 options and database files are not automatically imported. Review the
 mapping below; an old options object cannot enable V4 control. Existing JSON fixtures
 and immutable candidate decisions remain usable for offline replay.
@@ -73,11 +76,12 @@ The dashboard wrapper uses `custom:energymanager-card` and embeds these pages. I
 setup is in ../../energymanager-dashboard/README.md. Existing installed dashboards
 need the reviewed V4 resource/configuration update; no live dashboard was changed here.
 
-Docker is unavailable locally. No image build, Supervisor install, publish or deployment
-is claimed. After review, a target host can run `docker build --build-arg
-BUILD_VERSION=4.0.0 -t energymanager:4.0.0 .` from this directory. The repository publish
-workflow still targets the existing GHCR image when config.yaml is pushed to main;
-this local promotion did not push or trigger it.
+Docker is unavailable locally. The V4.0.0 CI and image workflows verified the Linux
+container build and publication; evidence is in VERIFICATION.md and ci-verification.json.
+Supervisor installation and physical deployment remain separate checks. A target host
+can run `docker build --build-arg BUILD_VERSION=4.0.1 -t energymanager:4.0.1 .` from this
+directory. The repository publish workflow targets the existing GHCR image when
+config.yaml is pushed to main; inspect the workflow for the version being installed.
 
 The pre-promotion working files and staged patch were preserved locally under
 `gpt/architecture/v4-promotion-2026-10-23/` (Git-ignored). Committed V3 history remains
@@ -88,8 +92,16 @@ as V4 configuration defaults.
 
 ## Configuration mapping
 
-Copy `configuration.example.json` to a new application-specific file. It is labelled
-synthetic and contains every required physical field. `allow_remote`,
+Find the generated `energymanager.json` through Samba, SSH or an editor under
+`app_configs/<repository-id>_energy_manager/` (some tools call the parent folder
+`addon_configs`). Home Assistant maps that app-specific folder to `/config` inside
+EnergyManager. For a custom `configuration_file` path, look at that location instead.
+The [HA configuration guide](https://contributors.home-assistant.io/apps/guides/options/#configuration-files-for-users)
+describes this folder mapping. Edit the file and restart to load the changes.
+
+For standalone use, `--config path/to/new-file.json` also creates a missing file and
+parent folders. Alternatively copy `configuration.example.json` yourself. The starter is
+labelled synthetic and contains every required physical field. `allow_remote`,
 `commissioning_reviewed`, `exclusive_controller_confirmed` and `policy.control_enabled`
 are false. No old options file is imported. For local fake integration, keep remote
 access false and use loopback URLs. Start with `--config path/to/new-file.json`.

@@ -10,7 +10,7 @@ from aiohttp import web
 
 from . import __version__
 from .domain import Policy, Snapshot, encode
-from .configuration import configured_application
+from .configuration import configured_application, create_configuration_if_missing
 from .forecasts import demo_snapshot
 from .planner import Planner
 from .service import Application
@@ -35,17 +35,30 @@ def main() -> None:
     )
     parser.add_argument("--solve", type=Path, help="Save one complete offline decision and exit")
     args = parser.parse_args()
+    configuration_path: Path | None = args.config
     if args.addon:
         options = json.loads(Path("/data/options.json").read_text(encoding="utf-8"))
         args.budget = float(options.get("planning_budget_seconds", 120))
+        configuration_path = Path(options.get("configuration_file", "/config/energymanager.json"))
         if options.get("mode") == "configured":
-            args.config = Path(options["configuration_file"])
+            args.config = configuration_path
     if not 1 <= args.budget <= 600:
         parser.error("Planning budget must be between 1 and 600 seconds")
     if args.config and (args.fixture or args.solve):
         parser.error("Configured service inputs cannot be combined with offline fixture/solve mode")
     if args.fixture and not args.solve:
         parser.error("Frozen fixtures use --solve; use demo or configured inputs for the running service")
+    if configuration_path:
+        try:
+            created = create_configuration_if_missing(configuration_path)
+        except OSError as exc:
+            parser.error(f"Cannot create configuration at {configuration_path}: {exc}")
+        if created:
+            print(
+                f"Created starter configuration at {configuration_path}. "
+                "Edit its example settings before using configured inputs. Hardware control is disabled.",
+                flush=True,
+            )
     policy = replace(Policy(), planning_budget_seconds=args.budget)
     snapshot = demo_snapshot(policy=policy, season=args.scenario)
     if args.fixture:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import fields, replace
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,20 @@ from .forecasts import demo_snapshot
 from .service import Application
 from .store import Store
 from .notifications import Notifications
+
+
+def create_configuration_if_missing(path: Path) -> bool:
+    """Create the packaged starter configuration without replacing any existing path."""
+    if path.exists():
+        return False
+    template = files("energymanager").joinpath("defaults", "configuration.example.json").read_bytes()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with path.open("xb") as destination:
+            destination.write(template)
+    except FileExistsError:
+        return False  # Another startup may have created it after the existence check.
+    return True
 
 
 def configured_application(path: Path, store: Store) -> Application:

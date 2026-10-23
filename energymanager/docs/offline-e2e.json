@@ -1,10 +1,10 @@
 {
-  "version": "4.0.0",
+  "version": "4.0.1",
   "provenance": "SYNTHETIC local HTTP integration acceptance; constant test signals",
-  "accepted_seconds": 25.72427840018645,
+  "accepted_seconds": 20.095818600151688,
   "intervals": 2018,
-  "control_max_seconds": 0.005703799892216921,
-  "fake_service_calls": 22,
+  "control_max_seconds": 0.005266100168228149,
+  "fake_service_calls": 20,
   "result": "passed",
   "checks": [
     "configured JSON and HA HTTP inputs",

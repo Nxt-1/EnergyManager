@@ -1,6 +1,6 @@
 # First release implementation specification
 
-This is the shipping specification for the EnergyManager 4.0.0 application. The
+This is the shipping specification for the EnergyManager 4.0.1 application. The
 authorized handoff and confirmed decisions govern behavior. All supplied development
 capacities, tariffs, efficiencies and forecasts are **synthetic provisional parameters**.
 No installation measurements or missing historical native archive were substituted.
@@ -136,11 +136,16 @@ latches EV stopping. A solver-parent watchdog prevents orphan workers after serv
 
 ## Boundaries
 
-The main project is now EnergyManager 4.0.0. Its fresh joint core replaces V3 under the
+The main project is now EnergyManager 4.0.1. Its fresh joint core replaces V3 under the
 `energymanager` Python package and existing `energy_manager` add-on/image identity. V3
 source/tests/dashboard were replaced; historical evidence remains in Git and labelled
 reports. V3 installation options and database files are not automatically imported. V4
 uses its own JSON configuration and SQLite file, with control disabled by default. Only
+the selected configuration file is initialized when missing: add-on startup (including
+demo mode) and standalone `--config` copy a bundled synthetic starter with remote access,
+commissioning confirmations and hardware control disabled. Existing files, including
+unfinished files, are preserved. Creation failures stop startup with the path and reason.
+The add-on's app configuration mount is writable to permit this initialization. Only
 amd64 packaging is declared. Deferred PV/storage expansion, market pricing, V2G, appliances, automatic
 travel/external charging, learned policy, live deployment and historical retention
 policy are outside this release. Live wiring, values and hardware timings remain

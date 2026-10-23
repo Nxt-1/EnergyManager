@@ -7,4 +7,4 @@ configuration:
     description: Total budget for one full seven-day planning cycle, including comparisons and validation.
   configuration_file:
     name: V4 configuration file
-    description: Absolute path in the read-only app configuration folder. V3 options and databases are not automatically imported.
+    description: Absolute path in the app configuration folder. A disabled starter file is created if missing, including in demo mode. Existing files are preserved; V3 settings are not imported.
