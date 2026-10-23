@@ -1,6 +1,6 @@
 # EnergyManager 4
 
-Version **4.0.1**, the main Energy Manager application. One joint seven-day EV/ESS MILP
+Version **4.0.2**, the main Energy Manager application. One joint seven-day EV/ESS MILP
 feeds independent responsive control. The application includes configured input/actuator
 boundaries, persisted goals/approvals/decisions and the functional Overview/Planning GUI.
 
@@ -18,8 +18,9 @@ python -m venv .venv
 
 Open [Overview and Planning](http://127.0.0.1:8100/). Solver work runs in a separate
 process while dry-run control continues. All demo measurements, forecasts, capacities
-and tariffs are synthetic assumptions. Demo never reads HA credentials or installation
-DBs. Default local state is `runtime/energymanager-v4.sqlite3`.
+and tariffs are synthetic assumptions. Demo planning/control never uses installation
+inputs or databases. Settings can read HA's entity list to prepare the real configuration.
+Default local state is `runtime/energymanager-v4.sqlite3`.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
@@ -40,6 +41,13 @@ default. Missing critical physical settings prevent enabling configured control.
 - [Runbook, V3 mapping and rollback](docs/RUNBOOK.md)
 - [Verification](docs/VERIFICATION.md)
 - [Current checkpoint](docs/WORK_STATE.md)
+
+Open **Settings** for searchable entity pickers and normal controls for capacities,
+tariffs and policy. The HA app can discover entities through its Supervisor proxy;
+choose **Use Home Assistant connection** to fill that connection. Save writes the same
+JSON file, preserves unknown fields and creates a dated backup. Conflicting edits are
+rejected. Restart explicitly to apply changes; the running controller stays unchanged.
+Local demo starts also create `energymanager.json` alongside the selected state database.
 
 The Home Assistant app retains slug `energy_manager`, image `ghcr.io/nxt-1/energymanager`
 and ingress port 8099. Version 4 uses `/config/energymanager.json` and its own

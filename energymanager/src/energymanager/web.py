@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from importlib.resources import files
 from typing import Any
 from urllib.parse import urlsplit
@@ -10,9 +11,10 @@ from aiohttp import web
 
 from .domain import json_data
 from .service import Application
+from .settings import ConfigurationConflict, ConfigurationFile, SettingsValidationError
 
 
-def create_web(application: Application) -> web.Application:
+def create_web(application: Application, *, configuration: ConfigurationFile | None = None) -> web.Application:
     @web.middleware
     async def boundary(request: web.Request, handler: Any) -> web.StreamResponse:
         peer = request.transport.get_extra_info("peername") if request.transport else None
@@ -38,6 +40,40 @@ def create_web(application: Application) -> web.Application:
             return web.json_response({"error": str(exc)}, status=400)
 
     app = web.Application(middlewares=[boundary], client_max_size=64 * 1024)
+
+    async def settings(request: web.Request) -> web.Response:
+        if configuration is None:
+            return web.json_response({"error": "Start EnergyManager with a configuration file to edit settings"},
+                                     status=503)
+        try:
+            if request.method == "GET":
+                result = await asyncio.to_thread(configuration.read)
+            else:
+                body = await request.json()
+                if (not isinstance(body, dict) or not isinstance(body.get("revision"), str)
+                        or not isinstance(body.get("values"), dict)):
+                    raise ValueError("A settings revision and field values are required")
+                result = await asyncio.to_thread(configuration.save, body["revision"], body["values"])
+                application.store.event("configuration_saved", {
+                    "revision": result["revision"], "fields": sorted(body["values"]),
+                    "restart_required": result["restart_required"],
+                })
+        except ConfigurationConflict as exc:
+            return web.json_response({"error": str(exc)}, status=409)
+        except SettingsValidationError as exc:
+            return web.json_response({"error": str(exc), "errors": exc.errors}, status=400)
+        except OSError as exc:
+            return web.json_response({"error": f"Cannot access configuration file: {exc.strerror}"}, status=500)
+        return web.json_response(result, headers={"Cache-Control": "no-store"})
+
+    async def entities(request: web.Request) -> web.Response:
+        if configuration is None:
+            return web.json_response({"error": "No configuration file selected"}, status=503)
+        try:
+            result = await configuration.entities()
+        except (RuntimeError, OSError) as exc:
+            return web.json_response({"error": str(exc)}, status=503)
+        return web.json_response(result, headers={"Cache-Control": "no-store"})
 
     async def state(request: web.Request) -> web.Response:
         return web.json_response(application.state())
@@ -77,7 +113,7 @@ def create_web(application: Application) -> web.Application:
 
     async def asset(request: web.Request) -> web.Response:
         name = request.match_info.get("name", "index.html")
-        if name not in ("index.html", "app.js", "style.css", "ha-card.js"):
+        if name not in ("index.html", "app.js", "settings.js", "style.css", "ha-card.js"):
             raise web.HTTPNotFound()
         content_type = {"html": "text/html", "js": "text/javascript", "css": "text/css"}[
             name.rsplit(".", 1)[1]
@@ -97,6 +133,9 @@ def create_web(application: Application) -> web.Application:
     app.add_routes(
         [
             web.get("/api/state", state),
+            web.get("/api/settings", settings),
+            web.post("/api/settings", settings),
+            web.get("/api/settings/entities", entities),
             web.post("/api/goals", goals),
             web.delete("/api/goals/{id}", delete),
             web.post("/api/goals/{id}/approval", approve),

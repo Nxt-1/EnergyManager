@@ -82,3 +82,35 @@ Next concrete action for the user: update the HA app to4.0.1 and start it; inspe
 log for the created configuration path, edit the file and restart when ready. No live
 deployment or controller action was performed; Supervisor/ingress/physical commissioning
 remain unverified. Hardware control remains disabled in every generated starter.
+
+## Visual configuration editor — in progress, 23 October 2026
+
+User request: edit the persistent JSON through HA-style forms and entity autocomplete.
+Implementing a Settings page alongside Overview/Planning. Entity discovery uses read-only
+HA states via the server-side Supervisor token in the app, or saved standalone connection.
+No live installation is accessed during development. Entity IDs, friendly names, states,
+units and compatible domains are provided; credentials are never sent to the browser.
+Configuration edits are validated, backed up and atomically replaced with revision
+conflict protection. Saving applies after explicit restart; no hot controller changes.
+
+IMPLEMENTED for4.0.2: complete Settings form, entity combobox with keyboard selection,
+friendly names/state/units and domain/unit filtering, Supervisor connection preset,
+validated/atomic/revision-checked saves and backups, HTTP routes and startup wiring.
+User-edited JSON remains the persisted source; unknown fields are preserved. Existing
+Overview/Planning remain functional. Changes apply in configured mode after restart.
+
+TESTED after normal allowance reset and checkpoint/workspace reconciliation:76 tests
+passed28.69s (24 settings tests), Ruff/mypy20 modules/JS checks passed. Local configured
+fake E2E accepted2,018 intervals19.933s, max control5.04ms,20 fake-only calls. Browser
+verified entity search, keyboard choice, compatible actuator suggestion, invalid-value
+feedback, save/backup/reload, navigation persistence and a390px mobile layout. Desktop
+console errors absent. Entity traffic used only loopback Supervisor fixtures and GET.
+Final4.0.2 package built and isolated editor save/backup/reload passed with26 matching
+source/asset files, including the configured-mode guidance. Evidence is in
+settings-package-verification.json and settings-ui-verification.json. Screenshots in
+docs/screenshots/. No production installation or credentials were used.
+
+Remaining: authorized commit/push and remote CI/image verification. Next concrete action:
+push the reviewed changes, inspect CI and publication, then record their outcomes.
+No live HA/database/hardware access or controller enablement.
+The published release remains4.0.1 until the new change is verified and published.

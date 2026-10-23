@@ -1,5 +1,35 @@
 # EnergyManager 4 verification
 
+## Version 4.0.2 — visual configuration
+
+The Settings page edits the persistent JSON using grouped form controls and searchable
+entity pickers. The server reads HA states through the Supervisor proxy or a saved
+standalone connection, returns friendly names/state/units without credentials, and
+does not call actuator services during discovery. Validated saves preserve unknown
+fields, retain original bytes in a backup and replace the file atomically. Stale edits
+are rejected. File work runs outside the control event loop. Changes apply after a
+restart into configured mode; saving leaves the active controller unchanged.
+
+Local checks: **76 tests passed in28.69s**, including24 settings tests for real loopback
+HTTP discovery, Supervisor proxy/token boundaries, form API, backup/reload, concurrent
+and external edits, physical/field validation, atomic replacement failure and discovery
+outage. Ruff, mypy20 modules and JavaScript syntax passed. The4.0.2 wheel/source package
+built; isolated installed-package save/backup/reload and26-file comparison passed.
+Final package details are in settings-package-verification.json.
+
+Browser checks used explicitly synthetic, loopback-only fixtures. Friendly-name search,
+keyboard selection, actuator domain/unit filtering, field validation, save/reload and
+Overview/Planning navigation passed. A390px mobile layout was inspected. Desktop browser
+console errors were absent. Screenshots: settings-entities.png, settings-saved.png and
+settings-mobile.png under screenshots/. Structured checks are in settings-ui-verification.json.
+
+The configured seven-day fake integration passed with2,018 intervals accepted19.933s,
+maximum measured control tick5.04ms and20 fake-only service calls (offline-e2e.json).
+Scheduler mathematics and control policy are unchanged. Existing full-horizon benchmark
+evidence remains applicable; no new benchmark claim is made for the settings editor.
+Live Supervisor/ingress and physical commissioning remain unverified. Reports below
+retain previous-release evidence; offline-e2e.json now describes4.0.2.
+
 ## Version 4.0.1 — automatic starter configuration
 
 Missing configuration files are created from the installed package on add-on startup,

@@ -524,3 +524,41 @@ body.planning aside .card {
     color:#ff9b9b
   }
 }
+/* Persistent settings and searchable entity choices. */
+[hidden] { display:none !important; }
+#settings-panel { max-width:1100px; margin:0 auto; }
+#settings-panel .notice small { display:block; overflow-wrap:anywhere; }
+.settings-entities { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:18px 0; }
+.settings-entities > span { flex:1 1 300px; }
+.settings-group { margin:16px 0; }
+.settings-group h2 { margin-top:0; }
+.settings-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px 24px; }
+.settings-group details[open] > summary { margin-bottom:20px; }
+.setting-field > label { display:block; font-size:14px; font-weight:600; margin-bottom:7px; }
+.setting-field > input,.setting-field > select,em-entity-picker > input { width:100%; margin:0; }
+.setting-field small { display:block; margin-top:5px; overflow-wrap:anywhere; }
+.setting-field .field-error:empty { display:none; }
+.boolean-field { display:grid; grid-template-columns:22px 1fr; gap:6px 10px; align-content:start; }
+.boolean-field > input { width:18px; height:18px; margin-top:2px; }
+.boolean-field > label { align-self:center; margin:0; }
+.boolean-field > small { grid-column:2; }
+.settings-save { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:20px 0; }
+.settings-save p { margin:0; overflow-wrap:anywhere; }
+.settings-success { color:#168348; }
+em-entity-picker { display:block; position:relative; }
+.entity-selection { color:var(--muted); min-height:18px; font-size:12px; }
+.entity-options { position:absolute; z-index:20; top:43px; left:0; right:0; max-height:290px;
+  overflow-y:auto; background:var(--surface); border:1px solid var(--line); border-radius:8px;
+  box-shadow:0 8px 24px #0003; }
+.entity-option { padding:11px 12px; cursor:pointer; border-bottom:1px solid var(--line); }
+.entity-option strong { display:block; font-size:14px; font-weight:500; overflow-wrap:anywhere; }
+.entity-option small { font-size:11px; color:var(--muted); }
+.entity-option:hover,.entity-option[aria-selected=true] { background:#007ac218; }
+.entity-empty { padding:12px; font-size:12px; color:var(--muted); }
+[aria-invalid=true] { border-color:#c83a3a !important; }
+@media(max-width:650px) {
+  .settings-fields { grid-template-columns:1fr; gap:18px; }
+  .settings-save { align-items:stretch; flex-direction:column; }
+  .settings-save .actions { justify-content:flex-end; flex-wrap:wrap; }
+  .settings-entities button { flex:1 1 auto; }
+}

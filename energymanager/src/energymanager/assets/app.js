@@ -1,3 +1,5 @@
+import {SettingsPage} from './settings.js';
+
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
   '&': '&amp;',
@@ -41,9 +43,14 @@ async function api(path, method = 'GET', body) {
     })
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || `Request failed: ${response.status}`);
+  if (!response.ok) {
+    const error = new Error(result.error || `Request failed: ${response.status}`);
+    error.fields = result.errors;
+    throw error;
+  }
   return result;
 }
+const settingsPage = new SettingsPage($('settings-panel'), api);
 
 function range() {
   const now = Date.parse(state.now);
@@ -181,14 +188,22 @@ function viewLocked() {
 
 function render() {
   if (!state || viewLocked()) return;
-  const o = state.observation,
-    c = state.capabilities,
-    plan = state.accepted;
+  $('app-version').textContent = ` ${state.version}`;
+  document.title = `EnergyManager · ${state.version}`;
+  $('dashboard').hidden = page === 'settings';
+  $('settings-panel').hidden = page !== 'settings';
+  for (const name of ['overview', 'planning', 'settings']) {
+    $(name).setAttribute('aria-selected', String(page === name));
+  }
+  $('connection').textContent = state.status === 'planning' ? '● Calculating · control responsive' : state
+    .status === 'ready' ? '● Plan ready' : '● ' + state.status;
   document.querySelector('footer').textContent =
     `${state.control_enabled ? 'Commissioned control enabled' : 'Hardware control disabled'} / Forecasts and planned costs are estimates.`;
   document.body.classList.toggle('planning', page === 'planning');
-  $('overview').setAttribute('aria-selected', String(page === 'overview'));
-  $('planning').setAttribute('aria-selected', String(page === 'planning'));
+  if (page === 'settings') return;
+  const o = state.observation,
+    c = state.capabilities,
+    plan = state.accepted;
   $('page-title').textContent = page === 'overview' ? 'Overview' : 'Planning';
   const [start, end] = range();
   $('period').textContent = `${time(start)} — ${time(end)} · ${state.policy.timezone}`;
@@ -197,8 +212,6 @@ function render() {
   $('navigation').hidden = page === 'planning';
   $('provenance').textContent =
     `${state.provenance} · ${state.demo?'Deterministic local demonstration':'Configured inputs'} · ${state.control_enabled ? 'Commissioned controller enabled' : 'Hardware control disabled'}`;
-  $('connection').textContent = state.status === 'planning' ? '● Calculating · control responsive' : state
-    .status === 'ready' ? '● Plan ready' : '● ' + state.status;
   const live = [
     ['Grid', o.house_kw + o.ev_power_kw - o.pv_ac_kw - o.ess_power_kw, 'kW', 'Quarter-hour import ' + num(o
       .quarter_import_kwh) + ' kWh', 'grid'],
@@ -314,18 +327,14 @@ async function refresh() {
 document.addEventListener('pointerdown', () => {
   pointerUntil = Date.now() + 350
 });
-$('overview').onclick = () => {
+function showPage(name) {
   pointerUntil = 0;
-  page = 'overview';
-  history.replaceState(null, '', '#overview');
-  render()
-};
-$('planning').onclick = () => {
-  pointerUntil = 0;
-  page = 'planning';
-  history.replaceState(null, '', '#planning');
-  render()
-};
+  page = name;
+  history.replaceState(null, '', `#${name}`);
+  render();
+  if (name === 'settings') settingsPage.show();
+}
+for (const name of ['overview', 'planning', 'settings']) $(name).onclick = () => showPage(name);
 $('back').onclick = () => {
   pointerUntil = 0;
   offset -= 12;
@@ -434,6 +443,7 @@ $('history-list').onclick = async event => {
     )
   }
 };
-page = location.hash === '#planning' ? 'planning' : 'overview';
+page = ['#planning', '#settings'].includes(location.hash) ? location.hash.slice(1) : 'overview';
 await refresh();
+if (page === 'settings') await settingsPage.show();
 setInterval(refresh, 2000);

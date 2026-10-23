@@ -42,6 +42,7 @@ jobs:
       - name: Check dashboard JavaScript
         run: |
           node --check energymanager/src/energymanager/assets/app.js
+          node --check energymanager/src/energymanager/assets/settings.js
           node --check energymanager/src/energymanager/assets/ha-card.js
           node --check energymanager-dashboard/energymanager-card.js
 

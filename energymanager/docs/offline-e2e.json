@@ -1,9 +1,9 @@
 {
-  "version": "4.0.1",
+  "version": "4.0.2",
   "provenance": "SYNTHETIC local HTTP integration acceptance; constant test signals",
-  "accepted_seconds": 20.095818600151688,
+  "accepted_seconds": 19.93295449996367,
   "intervals": 2018,
-  "control_max_seconds": 0.005266100168228149,
+  "control_max_seconds": 0.005040199961513281,
   "fake_service_calls": 20,
   "result": "passed",
   "checks": [

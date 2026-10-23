@@ -1,3 +1,12 @@
+## 4.0.2 — Visual settings and Home Assistant entity pickers
+
+- Add a Settings page with searchable entity selectors, friendly names, current states, units and compatible-domain filtering.
+- Configure connections, measurements, actuators, physical limits, readiness and tariffs through forms backed by the existing JSON file.
+- Discover HA entities through the server-side Supervisor proxy, including in demo mode; credentials stay on the server.
+- Validate edits, preserve unknown fields, save a dated backup and replace the file atomically with protection against conflicting edits.
+- Apply saved changes after an explicit restart; saving leaves the running controller unchanged.
+- Show the running version in the GUI and retain the existing Overview and Planning pages.
+
 ## 4.0.1 — Automatic starter configuration
 
 - Create the selected JSON configuration file on add-on startup if it is missing, including in demo mode.

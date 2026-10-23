@@ -1,0 +1,42 @@
+{
+  "version": "4.0.2",
+  "provenance": "SYNTHETIC browser fixture; Supervisor DNS redirected exclusively to a loopback HA server",
+  "checks": [
+    "friendly-name and entity-ID search with state/units",
+    "keyboard entity selection and escape cancellation",
+    "compatible-domain/unit actuator suggestions",
+    "Supervisor connection preset",
+    "invalid-value field error without overwriting configuration",
+    "save, original-byte backup and reload persistence",
+    "Overview/Planning/Settings navigation retains inputs",
+    "390px mobile layout inspected",
+    "desktop application console errors absent"
+  ],
+  "persisted_fixture_values": {
+    "ev_entity": "sensor.fixture_ev_soc",
+    "current_entity": "number.fixture_current",
+    "daily_soc_percent": 62
+  },
+  "fake_ha_requests": [
+    {
+      "method": "GET",
+      "path": "/core/api/states"
+    },
+    {
+      "method": "GET",
+      "path": "/core/api/states"
+    },
+    {
+      "method": "GET",
+      "path": "/core/api/states"
+    }
+  ],
+  "hardware_control_enabled": false,
+  "live_installation_accessed": false,
+  "screenshots": [
+    "screenshots/settings-entities.png",
+    "screenshots/settings-saved.png",
+    "screenshots/settings-mobile.png"
+  ],
+  "result": "passed"
+}

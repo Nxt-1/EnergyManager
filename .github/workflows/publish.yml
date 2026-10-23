@@ -46,6 +46,7 @@ jobs:
         run: |
           python -m energymanager --version
           node --check energymanager/src/energymanager/assets/app.js
+          node --check energymanager/src/energymanager/assets/settings.js
           node --check energymanager-dashboard/energymanager-card.js
 
       - name: Read app version

@@ -1,0 +1,12 @@
+{
+  "version": "4.0.2",
+  "wheel_sha256": "87f1f6e684dc9bfe17a43956f94b8684baff78ebeb947d2e0fefb58ad68bc16c",
+  "package_source_and_asset_files_matched": 26,
+  "isolated_installed_package": true,
+  "packaged_configuration_creation_and_editor_save": "passed",
+  "backup_and_reload": "passed",
+  "sdist_contains_settings_module_and_asset": true,
+  "provenance": "SYNTHETIC local filesystem and installed-wheel verification; no live HA access",
+  "result": "passed",
+  "final_guidance_text_included": true
+}

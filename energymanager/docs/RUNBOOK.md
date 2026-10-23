@@ -16,7 +16,8 @@ battery states and separate EV/ESS sessions. Planning shows the entire seven day
 Add/edit/remove timed SoC goals or total-distance journeys. Expand reasons, sessions
 and history for explanations and immutable decision evidence. Approval buttons act on
 the displayed revision. Hardware control is disabled by default. The demo advances an
-explicitly synthetic device model; it never reads HA credentials or installation DBs.
+explicitly synthetic device model and does not use installation inputs or databases.
+Settings can separately read HA's entity list to prepare the configured installation.
 
 This workspace's prepared environment is `.venv313/Scripts/python.exe`. Dependencies
 are isolated, not registered system-wide. `requirements.lock` and `requirements-dev.lock`
@@ -52,7 +53,7 @@ limits can change incumbents; replay does not promise bit-identical optimization
 
 ## Main-project version 4 update
 
-`config.yaml` now advertises **4.0.1** for the existing `energy_manager` Home Assistant
+`config.yaml` now advertises **4.0.2** for the existing `energy_manager` Home Assistant
 app and `ghcr.io/nxt-1/energymanager` image. It keeps ingress port8099 and manual startup.
 The packaged Python distribution, CLI and module are all named `energymanager`. The
 former standalone candidate has been moved into this main app; the old V3 modules,
@@ -79,7 +80,7 @@ need the reviewed V4 resource/configuration update; no live dashboard was change
 Docker is unavailable locally. The V4.0.0 CI and image workflows verified the Linux
 container build and publication; evidence is in VERIFICATION.md and ci-verification.json.
 Supervisor installation and physical deployment remain separate checks. A target host
-can run `docker build --build-arg BUILD_VERSION=4.0.1 -t energymanager:4.0.1 .` from this
+can run `docker build --build-arg BUILD_VERSION=4.0.2 -t energymanager:4.0.2 .` from this
 directory. The repository publish workflow targets the existing GHCR image when
 config.yaml is pushed to main; inspect the workflow for the version being installed.
 
@@ -92,12 +93,34 @@ as V4 configuration defaults.
 
 ## Configuration mapping
 
+Open **Settings** in EnergyManager for normal form controls and entity autocomplete.
+Search by friendly name or entity ID; pickers show state and units and filter compatible
+domains/units. In the HA app, entity discovery uses read-only `GET /core/api/states`
+through the Supervisor, even when planning is in demo mode. The server reads the
+Supervisor token from its environment; it never sends the token to the browser.
+**Use Home Assistant connection** fills the API URL, token variable name and network
+access flag. Save still requires an explicit click. Standalone discovery uses the
+saved HA connection and named token variable instead.
+
+**Save settings** validates the complete configuration, preserves unknown fields and
+writes a dated `*.backup-*.json` beside the configuration before atomic replacement.
+External or concurrent edits produce a conflict instead of being overwritten. Discovery
+failure leaves current mappings and other settings editable. Credentials remain in
+environment variables. Restart explicitly to apply saved changes. The HA Configuration
+tab's `mode` dropdown selects demo/configured; saving JSON does not change that mode or
+the currently running controller. Physical commissioning confirmations still apply.
+
+For local demo use, a missing `energymanager.json` is created beside the state database
+so Settings is available without supplying `--config`. Such a demo still uses synthetic
+planning/control inputs. Its entity picker may read HA's entity list when requested.
+
 Find the generated `energymanager.json` through Samba, SSH or an editor under
 `app_configs/<repository-id>_energy_manager/` (some tools call the parent folder
 `addon_configs`). Home Assistant maps that app-specific folder to `/config` inside
 EnergyManager. For a custom `configuration_file` path, look at that location instead.
 The [HA configuration guide](https://contributors.home-assistant.io/apps/guides/options/#configuration-files-for-users)
-describes this folder mapping. Edit the file and restart to load the changes.
+describes this folder mapping. The Settings page edits this same file; manual editing
+remains available for backup/recovery and is not needed for routine configuration.
 
 For standalone use, `--config path/to/new-file.json` also creates a missing file and
 parent folders. Alternatively copy `configuration.example.json` yourself. The starter is

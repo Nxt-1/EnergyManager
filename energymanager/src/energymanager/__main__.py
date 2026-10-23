@@ -16,6 +16,7 @@ from .planner import Planner
 from .service import Application
 from .store import Store
 from .web import create_web
+from .settings import ConfigurationFile
 
 
 def main() -> None:
@@ -48,17 +49,6 @@ def main() -> None:
         parser.error("Configured service inputs cannot be combined with offline fixture/solve mode")
     if args.fixture and not args.solve:
         parser.error("Frozen fixtures use --solve; use demo or configured inputs for the running service")
-    if configuration_path:
-        try:
-            created = create_configuration_if_missing(configuration_path)
-        except OSError as exc:
-            parser.error(f"Cannot create configuration at {configuration_path}: {exc}")
-        if created:
-            print(
-                f"Created starter configuration at {configuration_path}. "
-                "Edit its example settings before using configured inputs. Hardware control is disabled.",
-                flush=True,
-            )
     policy = replace(Policy(), planning_budget_seconds=args.budget)
     snapshot = demo_snapshot(policy=policy, season=args.scenario)
     if args.fixture:
@@ -84,6 +74,17 @@ def main() -> None:
             )
         )
         raise SystemExit(0 if result.get("valid") else 1)
+    configuration_path = configuration_path or args.data.parent / "energymanager.json"
+    try:
+        created = create_configuration_if_missing(configuration_path)
+    except OSError as exc:
+        parser.error(f"Cannot create configuration at {configuration_path}: {exc}")
+    if created:
+        print(
+            f"Created starter configuration at {configuration_path}. "
+            "Edit it in Settings before using configured inputs. Hardware control is disabled.",
+            flush=True,
+        )
     args.data.parent.mkdir(parents=True, exist_ok=True)
     store = Store(args.data)
     application = (
@@ -91,7 +92,11 @@ def main() -> None:
         if args.config
         else Application(store, policy=policy, snapshot=snapshot, demo=not bool(args.fixture))
     )
-    web.run_app(create_web(application), host="0.0.0.0" if args.ingress else "127.0.0.1", port=args.port)
+    configuration = ConfigurationFile(
+        configuration_path, addon=args.addon, mode="configured" if args.config else "demo"
+    )
+    web.run_app(create_web(application, configuration=configuration),
+                host="0.0.0.0" if args.ingress else "127.0.0.1", port=args.port)
 
 
 if __name__ == "__main__":
