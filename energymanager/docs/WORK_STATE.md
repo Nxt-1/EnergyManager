@@ -83,7 +83,7 @@ log for the created configuration path, edit the file and restart when ready. No
 deployment or controller action was performed; Supervisor/ingress/physical commissioning
 remain unverified. Hardware control remains disabled in every generated starter.
 
-## Visual configuration editor — in progress, 23 October 2026
+## Visual configuration editor — complete, 23 October 2026
 
 User request: edit the persistent JSON through HA-style forms and entity autocomplete.
 Implementing a Settings page alongside Overview/Planning. Entity discovery uses read-only
@@ -110,7 +110,15 @@ source/asset files, including the configured-mode guidance. Evidence is in
 settings-package-verification.json and settings-ui-verification.json. Screenshots in
 docs/screenshots/. No production installation or credentials were used.
 
-Remaining: authorized commit/push and remote CI/image verification. Next concrete action:
-push the reviewed changes, inspect CI and publication, then record their outcomes.
-No live HA/database/hardware access or controller enablement.
-The published release remains4.0.1 until the new change is verified and published.
+REMOTE-VERIFIED: committed/pushed as bdacbee29b730aed86d939159817331fe525c005.
+CI39962540057 passed all76 tests in35.68s, lint/types/CLI/JS, configured fake E2E,
+package and Linux container builds. Remote synthetic E2E:2,018 intervals accepted27.227s,
+max control8.85ms,21 fake-only calls. Image workflow39962539923 passed and published4.0.2.
+Verification is recorded in VERIFICATION.md and settings-package-verification.json.
+Browser verification tabs and the8102 synthetic fixture were stopped; the existing8100
+preview was preserved. No live HA/database/hardware access or controller enablement.
+
+No application work remains for this request. Next concrete action for the user: update
+the HA app to4.0.2, reopen its interface and choose Settings. Select entities and save;
+restart in configured mode when installation inputs are ready. Verify actual ingress,
+entity mappings and physical commissioning separately before hardware control.

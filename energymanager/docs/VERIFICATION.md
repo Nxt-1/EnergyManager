@@ -30,6 +30,14 @@ evidence remains applicable; no new benchmark claim is made for the settings edi
 Live Supervisor/ingress and physical commissioning remain unverified. Reports below
 retain previous-release evidence; offline-e2e.json now describes4.0.2.
 
+Remote verification on commit `bdacbee29b730aed86d939159817331fe525c005`:
+[CI](https://github.com/Nxt-1/EnergyManager/actions/runs/39962540057) passed all 76 tests
+in 35.68 s, lint/types/CLI/JavaScript, the configured fake integration, Python package
+builds and the Linux container build. That synthetic integration accepted 2,018 intervals
+in 27.227 s, with a maximum measured control tick of 8.85 ms and 21 fake-only calls.
+The [image workflow](https://github.com/Nxt-1/EnergyManager/actions/runs/39962539923)
+also passed and published version 4.0.2. No live installation was accessed or deployed.
+
 ## Version 4.0.1 — automatic starter configuration
 
 Missing configuration files are created from the installed package on add-on startup,

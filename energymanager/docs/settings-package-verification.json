@@ -8,5 +8,23 @@
   "sdist_contains_settings_module_and_asset": true,
   "provenance": "SYNTHETIC local filesystem and installed-wheel verification; no live HA access",
   "result": "passed",
-  "final_guidance_text_included": true
+  "final_guidance_text_included": true,
+  "remote_verification": {
+    "commit": "bdacbee29b730aed86d939159817331fe525c005",
+    "ci_run_url": "https://github.com/Nxt-1/EnergyManager/actions/runs/39962540057",
+    "ci_conclusion": "success",
+    "tests_passed": 76,
+    "tests_seconds": 35.68,
+    "configured_synthetic_integration": {
+      "intervals": 2018,
+      "accepted_seconds": 27.22653283000001,
+      "control_max_seconds": 0.008847310999996694,
+      "fake_service_calls": 21
+    },
+    "package_and_container_builds": "passed",
+    "image_run_url": "https://github.com/Nxt-1/EnergyManager/actions/runs/39962539923",
+    "image_conclusion": "success",
+    "published_version": "4.0.2",
+    "live_installation_verified": false
+  }
 }
