@@ -21,6 +21,7 @@ import aiohttp
 
 from .adapters import checked_url
 from .domain import Capabilities, Policy
+from .measurements import MeasurementOptions
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,8 @@ class SettingField:
     step: float = 0.01
     domains: tuple[str, ...] = ()
     units: tuple[str, ...] = ()
+    choices: tuple[tuple[str, str], ...] = ()
+    visible_when: tuple[str, tuple[str, ...]] | None = None
 
 
 def setting_fields() -> tuple[SettingField, ...]:
@@ -49,25 +52,56 @@ def setting_fields() -> tuple[SettingField, ...]:
         SettingField("notification_webhook", "Notification webhook (optional)", "Connections", "optional_url",
                      "Leave empty to keep notices inside EnergyManager."),
     ]
+    result.extend((
+        SettingField("measurement_options.house_source", "House demand source", "Measurements", "choice",
+                     "House demand means appliances excluding EV charging. EnergyManager can calculate it for you.",
+                     choices=(("direct", "House demand excluding EV"),
+                              ("total_consumption", "Total household consumption including EV"),
+                              ("signed_grid", "Grid power · positive import, negative export"),
+                              ("separate_grid", "Separate grid import and export sensors"))),
+        SettingField("measurement_options.quarter_source", "Quarter-hour measurement type", "Measurements", "choice",
+                     "Select the meaning reported by your meter; instantaneous power is not a quarter average.",
+                     choices=(("energy", "Imported energy since quarter start · kWh"),
+                              ("fixed_quarter_average", "P1 Current Quarter Average Demand · W or kW"),
+                              ("elapsed_average", "Average over elapsed quarter time · W or kW"))),
+        SettingField("measurement_options.phase_source", "Charger phase information", "Measurements", "choice",
+                     "go-e APIv2 Connect can use its existing phase selector; no extra sensor is needed.",
+                     choices=(("count", "Phase count sensor · 1 or 3"),
+                              ("goe_selector", "Read the go-e phase selector · 1=single, 2=three"))),
+    ))
     measurements = (
         ("ev_soc", "EV state of charge", ("%",)),
         ("ess_soc", "ESS state of charge", ("%",)),
         ("connected", "EV connected", ()),
-        ("house_kw", "Uncontrolled house demand", ("W", "kW")),
+        ("house_kw", "House or grid power", ("W", "kW")),
+        ("grid_import_kw", "Grid import power", ("W", "kW")),
+        ("grid_export_kw", "Grid export power", ("W", "kW")),
         ("pv_ac_kw", "AC solar power", ("W", "kW")),
         ("pv_dc_kw", "DC solar power", ("W", "kW")),
         ("ev_kw", "EV charging power", ("W", "kW")),
         ("ess_kw", "ESS power · positive discharge", ("W", "kW")),
-        ("quarter_import_kwh", "Import already used this quarter-hour", ("kWh",)),
+        ("quarter_import_kwh", "Current quarter import measurement", ("kWh", "W", "kW")),
         ("monthly_peak_kw", "Measured monthly peak", ("W", "kW")),
-        ("ev_phases", "Actual EV phase count · 1 or 3", ()),
+        ("ev_phases", "EV phase count sensor · 1 or 3", ()),
     )
     for key, label, units in measurements:
         domains: tuple[str, ...] = ("sensor", "number", "input_number")
         if key == "connected":
             domains = ("binary_sensor", "sensor", "input_boolean", "switch")
-        result.append(SettingField(f"measurements.{key}", label, "Measurements", "entity",
-                                   domains=domains, units=units))
+        visible_when: tuple[str, tuple[str, ...]] | None = None
+        if key == "house_kw":
+            visible_when = ("measurement_options.house_source", ("direct", "total_consumption", "signed_grid"))
+        elif key in ("grid_import_kw", "grid_export_kw"):
+            visible_when = ("measurement_options.house_source", ("separate_grid",))
+        elif key == "ev_phases":
+            visible_when = ("measurement_options.phase_source", ("count",))
+        help_text = ""
+        if key == "ess_kw":
+            help_text = "AC power at the ESS inverter: positive supplies the house, negative charges. Not battery DC power."
+        elif key == "ev_phases":
+            help_text = "Optional alternative to selector readback. go-e APIv2 Connect exposes pnp as a disabled diagnostic."
+        result.append(SettingField(f"measurements.{key}", label, "Measurements", "entity", help_text,
+                                   domains=domains, units=units, visible_when=visible_when))
     for key, label, domain in (
         ("force", "Charger stop / charge selector", "select"),
         ("phase", "Charger phase selector", "select"),
@@ -153,6 +187,9 @@ class SettingsValidationError(ValueError):
 
 
 def field_value(document: dict[str, Any], path: str) -> Any:
+    if path.startswith("measurement_options."):
+        key = path.split(".")[1]
+        return document.get("measurement_options", {}).get(key, getattr(MeasurementOptions(), key))
     value: Any = document
     for key in path.split("."):
         if not isinstance(value, dict):
@@ -187,6 +224,8 @@ class ConfigurationFile:
         errors = {}
         for field in SETTING_FIELDS:
             value = field_value(document, field.path)
+            if field.visible_when and field_value(document, field.visible_when[0]) not in field.visible_when[1]:
+                continue
             if field.kind == "optional_url" and not value:
                 continue
             if field.kind == "boolean":
@@ -201,6 +240,8 @@ class ConfigurationFile:
             elif field.kind == "phases":
                 valid = isinstance(value, list) and bool(value) and all(type(p) is int and p in (1, 3)
                                                                       for p in value)
+            elif field.kind == "choice":
+                valid = isinstance(value, str) and value in dict(field.choices)
             else:
                 valid = isinstance(value, str) and len(value) <= 2000
                 if field.path != "_description":
@@ -220,6 +261,7 @@ class ConfigurationFile:
                     raise ValueError(f"Missing {group}: {', '.join(sorted(missing))}")
             Capabilities(**document["capabilities"])
             Policy(**document["policy"])
+            MeasurementOptions(**document.get("measurement_options", {}))
             for key in ("home_assistant_url", "forecast_url", "notification_webhook"):
                 if document.get(key):
                     checked_url(document[key], document["allow_remote"])

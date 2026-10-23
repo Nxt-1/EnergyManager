@@ -592,7 +592,8 @@ class Application:
             "actuator_health": {
                 "delivery_fault": bool(getattr(self.actuator, "delivery_fault", False)),
                 "write_failures": getattr(self.actuator, "failures", 0),
-                "preparing_phase": getattr(self.actuator, "target_phase", None),
+                "preparing_phase": (getattr(self.actuator, "target_phase", None)
+                                    or getattr(self.actuator, "awaiting_phase", None)),
             },
             "provenance": self.snapshot.provenance,
             "observation": json_data(self.observation),

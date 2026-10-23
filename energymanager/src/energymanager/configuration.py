@@ -16,6 +16,7 @@ from .forecasts import demo_snapshot
 from .service import Application
 from .store import Store
 from .notifications import Notifications
+from .measurements import MeasurementOptions
 
 
 def create_configuration_if_missing(path: Path) -> bool:
@@ -59,6 +60,9 @@ def configured_application(path: Path, store: Store) -> Application:
         data["measurements"],
         os.environ.get(data.get("token_environment", "ENERGY_MANAGER_HA_TOKEN"), ""),
         allow_remote=allow_remote,
+        measurement_options=MeasurementOptions(**data.get("measurement_options", {})),
+        phase_entity=data.get("actuators", {}).get("phase"),
+        measurement_max_age_seconds=p.measurement_max_age_seconds,
     )
     forecast = JsonForecastAdapter(data["forecast_url"], allow_remote=allow_remote)
     placeholder = demo_snapshot(policy=p)

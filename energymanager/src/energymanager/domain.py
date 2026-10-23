@@ -179,6 +179,8 @@ class Observation:
     ess_grid_kwh: float = 0.0
     ev_state_known: bool = True
     ev_observed_at: datetime | None = None
+    ev_phase_known: bool = True
+    ev_phase_source: str = "count"
 
     def __post_init__(self) -> None:
         instant(self.at)

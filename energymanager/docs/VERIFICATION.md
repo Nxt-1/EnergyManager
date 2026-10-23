@@ -1,5 +1,36 @@
 # EnergyManager 4 verification
 
+## Version 4.0.3 — installation measurement compatibility
+
+P1 quarter demand accepts W/kW with a fixed0.25h energy conversion, based on the
+user-confirmed reset-and-build behavior. Source inspection confirms the P1 reader
+passes OBIS1-0:1.4.0 unchanged. Separate P1 import/export reconstruct house load; other
+supported sources are direct house, total consumption and signed grid power. go-e
+APIv2 Connect2026.10.3 can reuse its raw phase selector1/2 without an extra sensor.
+Unknown phase information pauses EV while ESS remains responsive. Phase switching
+waits for fresh mode readback after stop/zero/dwell. Slightly later SoC reads remain
+valid within5s of the oldest shared input; far-future readings stay unknown.
+
+Local verification: **84 tests passed in28.57s**; Ruff, mypy21 modules and JavaScript
+syntax passed. The eight new test cases cover conversion denominators, import/export,
+ESS directions, unknown modes, quarter boundaries, configuration reload and delayed
+mode acknowledgment. Existing tests continue to cover the original normalized inputs.
+The4.0.3 wheel and source distribution built. All27 package files match source and
+an isolated installed wheel; actual settings save/backup/reload passed.
+
+Browser verification used loopback synthetic HA states: all three source choices,
+conditional fields, friendly-name/keyboard P1 selections, kW demand acceptance,
+selector reuse, save/backup/reload and zero desktop console errors. Evidence is in
+measurement-source-verification.json and screenshots/measurement-source-choices.png.
+No live HA settings or controllers were accessed.
+
+A real spawned HiGHS solve using the new P1/go-e input choices accepted the complete
+seven-day2,018-interval schedule in21.556s. The check requires known measured EV SoC;
+maximum control tick5.495ms;20 calls went only to local fake services. API and archive
+checks passed. Details: offline-e2e.json. CI and image publication are pending for this
+release. Meter clock alignment, inverter AC topology/signs, ingress and hardware timing
+remain live-unverified commissioning checks.
+
 ## Version 4.0.2 — visual configuration
 
 The Settings page edits the persistent JSON using grouped form controls and searchable

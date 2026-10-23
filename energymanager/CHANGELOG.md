@@ -1,3 +1,11 @@
+## 4.0.3 — Existing P1 and go-e measurement support
+
+- Accept P1 quarter-hour demand in W/kW with explicit conversion to imported energy.
+- Calculate house demand from separate import/export, signed grid power or total consumption.
+- Reuse the go-e phase selector without an extra phase-count sensor; wait for mode readback after switching.
+- Keep ESS balancing responsive when phase information is unknown and preserve existing configuration interpretations until changed.
+- Show only applicable measurement fields and describe source units, signs and conversions.
+
 ## 4.0.2 — Visual settings and Home Assistant entity pickers
 
 - Add a Settings page with searchable entity selectors, friendly names, current states, units and compatible-domain filtering.

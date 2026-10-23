@@ -310,6 +310,8 @@ class FastControl:
             )
             solar_source = o.pv_ac_kw + direct_dc_ac + eligible_discharge
             ev = min(ev, max(0, solar_source - (0 if conditional else o.house_kw)))
+        if not o.ev_phase_known:
+            ev = 0.0
         amps = min(c.maximum_current_a, math.floor((ev + 1e-9) * 1000 / (c.voltage * phases)))
         if amps < c.minimum_current_a:
             amps = 0
@@ -323,6 +325,9 @@ class FastControl:
         self.last_tick = at
         self.last_import_kw = max(0, net_house + ev - ess)
         reason = (
+            "Charger phase information unavailable; EV paused, ESS balancing continues"
+            if not o.ev_phase_known
+            else
             "Quarter-hour peak protection"
             if emergency
             else "Accepted schedule and measured balancing"
@@ -380,6 +385,7 @@ class GuardedActuator:
         self.lock = asyncio.Lock()
         self.phase: int | None = None
         self.target_phase: int | None = None
+        self.awaiting_phase: int | None = None
         self.stopped_at: datetime | None = None
         self.zero_since: datetime | None = None
         self.switched_at: datetime | None = None
@@ -417,12 +423,27 @@ class GuardedActuator:
             raise ValueError("Incomplete actuator mapping")
         if self.fault_until and command.at < self.fault_until and command.current_a:
             return
-        self.phase = observation.ev_phases if self.phase is None else self.phase
+        if not observation.ev_phase_known:
+            self.phase = None
+        elif self.phase is None:
+            self.phase = observation.ev_phases
         try:
             # ESS remains responsive while EV phase changes or a delivery fault block charging.
             await self.write(
                 "number", "set_value", "ess_setpoint", "value", round(-command.ess_kw * 1000 / 10) * 10
             )
+            if self.awaiting_phase is not None:
+                if (observation.ev_phase_known and observation.ev_phases == self.awaiting_phase
+                        and self.switched_at is not None and observation.at > self.switched_at):
+                    self.phase = self.awaiting_phase
+                    self.awaiting_phase = None
+                else:
+                    await self.write("select", "select_option", "force", "option", "1")
+                    return
+            if (observation.ev_phase_known and observation.ev_phase_source == "goe_selector"
+                    and observation.ev_phases != self.phase):
+                self.phase = observation.ev_phases
+                self.last = None
             if (
                 command.ev_kw > 0.1
                 and observation.connected
@@ -462,7 +483,8 @@ class GuardedActuator:
                     await self.write(
                         "select", "select_option", "phase", "option", "2" if command.phases == 3 else "1"
                     )
-                    self.phase, self.switched_at = command.phases, command.at
+                    self.switched_at = command.at
+                    self.awaiting_phase = command.phases
                     self.stopped_at = self.zero_since = None
                     self.target_phase = None
                     self.last = None

@@ -1,6 +1,6 @@
 # First release implementation specification
 
-This is the shipping specification for the EnergyManager 4.0.2 application. The
+This is the shipping specification for the EnergyManager 4.0.3 application. The
 authorized handoff and confirmed decisions govern behavior. All supplied development
 capacities, tariffs, efficiencies and forecasts are **synthetic provisional parameters**.
 No installation measurements or missing historical native archive were substituted.
@@ -12,6 +12,21 @@ AC powers, separate DC PV, current-quarter imported energy, actual monthly peak,
 forecast revision, policy, capabilities, goal revisions and explicit permissions. SHA256
 covers canonical serialized inputs. SQLite retains every decision and event without
 automatic deletion. Exported decision JSON can be replayed with `--fixture ... --solve`.
+
+Settings explicitly select measurement interpretations. House demand can be direct,
+total consumption minus EV, or reconstructed from signed/separate grid powers as
+`grid_import - grid_export + PV_AC + ESS_AC_output - EV`. ESS means its AC bus boundary;
+DC solar is not counted twice. P1 quarter demand that builds from zero converts W/kW
+to imported kWh using a fixed0.25h denominator. Elapsed-time averages are a separate
+option using the reading timestamp. Raw kWh remains supported. Existing configuration
+files retain their previous meanings until edited; incompatible quarter-boundary samples
+are retried. Meter/controller clock alignment remains a commissioning prerequisite.
+
+The go-e phase selector can replace a separate count sensor. Raw forced modes1/2 map
+to one/three phases; Auto/unavailable is unknown. Readback is labelled as selector
+state, without claiming physical contactor telemetry. Unknown phase state pauses EV
+delivery while fresh ESS balancing continues. After stop/zero/dwell sequencing, a
+phase change must be read back before charge resumes.
 
 The horizon is168 elapsed hours in UTC, with local recurring deadlines and billing
 months. Five-minute boundaries are split at goals, departures, returns, publication hold
@@ -136,7 +151,7 @@ latches EV stopping. A solver-parent watchdog prevents orphan workers after serv
 
 ## Boundaries
 
-The main project is now EnergyManager 4.0.2. Its fresh joint core replaces V3 under the
+The main project is now EnergyManager 4.0.3. Its fresh joint core replaces V3 under the
 `energymanager` Python package and existing `energy_manager` add-on/image identity. V3
 source/tests/dashboard were replaced; historical evidence remains in Git and labelled
 reports. V3 installation options and database files are not automatically imported. V4

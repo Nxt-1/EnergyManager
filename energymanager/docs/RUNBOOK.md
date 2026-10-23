@@ -138,19 +138,59 @@ access false and use loopback URLs. Start with `--config path/to/new-file.json`.
 | `measurements.ess_kw` | `ess.power_entity` | W/kW, **positive discharge**; normalize opposite signs |
 | `measurements.pv_ac_kw` | `pv.solax_power_entity` | AC generation, W/kW |
 | `measurements.pv_dc_kw` | `pv.shed_power_entity` | DC generation, W/kW; confirm actual topology |
-| `measurements.house_kw` | Uncontrolled house channel | Exclude controlled EV; no automatic double subtraction |
-| `measurements.ev_phases` | New normalized phase sensor | Actual1 or3, not go-e selector enum |
-| `measurements.quarter_import_kwh` | Meter/current-quarter helper | Imported kWh already consumed in this billing quarter |
+| `measurements.house_kw` | House, total consumption or signed grid channel | Choose the source interpretation in Settings; see below |
+| `measurements.grid_import_kw` / `grid_export_kw` | Separate P1 import/export sensors | Nonnegative W/kW; replaces `house_kw` in separate-grid mode |
+| `measurements.ev_phases` | Optional normalized count sensor | Count mode only; go-e selector mode reuses `actuators.phase` |
+| `measurements.quarter_import_kwh` | Current-quarter energy or demand sensor | Select kWh, P1 demand, or elapsed-time average in Settings |
 | `measurements.monthly_peak_kw` | `monitoring.monthly_peak_entity` | Actual incurred billing quarter average, kW |
 | `actuators.current` | `ev.current_entity` | `number.set_value`, integer amperes |
 | `actuators.phase` | `ev.phase_mode_entity` | `select.select_option`:1 single,2 three phase |
 | `actuators.force` | `ev.force_state_entity` | `select.select_option`:1 stop,2 charge; verify device meanings |
 | `actuators.ess_setpoint` | `ess.setpoint_entity` | `number.set_value`, grid/converter AC W; negative supplies loads |
 
-The quarter prefix is not a total lifetime counter or a full-quarter projected average.
-If deriving it from a meter average, use the actual elapsed-quarter duration and verify
-reset timing. Monthly allowance resets on the configured local month. Validate house
-background against independent energy balances. All physical limits, phases, electrical
+### P1 and go-e measurement choices
+
+Version4.0.3 adds explicit source choices under **Settings → Measurements**. Existing
+files keep their old interpretation until changed; these choices preserve other mappings,
+tariffs and capabilities. No helper sensors or JSON editing are required.
+
+For the user's confirmed P1 reader and go-e APIv2 Connect setup, select:
+
+- **House demand source → Separate grid import and export sensors**. Map import to
+  `sensor.p1_dongle_momentary_active_import` and export to
+  `sensor.p1_dongle_momentary_active_export`. Both channels are nonnegative W/kW.
+- **Quarter-hour measurement type → P1 Current Quarter Average Demand**. Map it to
+  `sensor.p1_dongle_current_quarter_average_demand`. The user confirmed it resets near
+  zero and builds during the quarter: `imported_kWh = demand_kW × 0.25 h`.
+- **Charger phase information → Read the go-e phase selector**. Select the existing
+  charger phase selector under Actuators. No separate phase-count sensor is required.
+  The integration exposes raw options0 (Auto),1 (single) and2 (three). This reads the
+  forced mode, not physical contactor feedback. Auto/unavailable leaves phase state
+  unknown and pauses EV delivery while fresh ESS balancing continues. Stop/zero/dwell
+  sequencing sets a forced mode, then waits for readback before resuming charging.
+
+House background is calculated as `import - export + AC_solar + ESS_AC_output - EV`.
+ESS AC output is positive when supplying the AC bus and negative when absorbing it;
+use inverter AC power, not battery DC power. DC solar is not separately added to this
+AC balance. Total-consumption mode instead subtracts EV once; direct-house mode
+already excludes it. Negative derived demand beyond0.1kW is rejected as inconsistent;
+small sampling differences are clamped to zero. Review topology and signs before control.
+
+Quarter energy mode accepts only kWh; both demand modes accept W/kW. The alternative
+**Average over elapsed quarter time** multiplies by elapsed hours at the sensor's
+reported timestamp. It is a different sensor definition and must not be chosen for the
+confirmed P1 signal. Neither accepts instantaneous power or a lifetime energy counter.
+HA/meter clock alignment and quarter reset timing remain commissioning checks; readings
+that straddle a quarter boundary are rejected for retry. Monthly allowance resets on
+the configured local month. Validate house background against independent balances.
+
+Source inspection: the [P1 reader](https://github.com/Nxt-1/esphome-p1reader-BE/blob/0c0e9f07056e1907be9d92dcd06cbd4fa416f95d/components/p1reader/p1reader.cpp)
+passes OBIS1-0:1.4.0 unchanged. The [go-e integration2026.10.3](https://github.com/marq24/ha-goecharger-api2/blob/2026.10.3/custom_components/goecharger_api2/const.py)
+exposes `psm` as a selector; `pnp` phase count is a diagnostic disabled by default.
+The [manufacturer API](https://github.com/goecharger/go-eCharger-API-v2/blob/main/API_KEYS_FIRMWARE/apikeys-en.md)
+documents phase status separately. All development verification used synthetic fixtures.
+
+All physical limits, phases, electrical
 power boundaries, efficiencies, EV consumption and both residual-inventory values must
 be reviewed; old ESS aggregate caps must not be copied onto independent DC charging.
 The provisional2.5kW floor,4kW automatic ceiling,30km reserve and tariffs are not claimed

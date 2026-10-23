@@ -248,6 +248,14 @@ export class SettingsPage {
       if (field.kind === 'entity') {
         control = document.createElement('em-entity-picker');
         control.configure(field, value, this.entities);
+      } else if (field.kind === 'choice') {
+        control = element('select');
+        for (const [val, text] of field.choices) {
+          const option = element('option', '', text);
+          option.value = val;
+          control.append(option);
+        }
+        control.value = value;
       } else if (field.kind === 'phases') {
         control = element('select');
         for (const [val, text] of [['1', 'Single phase'], ['3', 'Three phase'], ['1,3', 'Single and three phase']]) {
@@ -279,7 +287,7 @@ export class SettingsPage {
       if (field.kind === 'boolean') {
         wrapper.append(control, label);
       } else wrapper.append(label, control);
-      if (field.help) wrapper.append(element('small', 'muted field-help', field.help));
+      wrapper.append(element('small', 'muted field-help', field.help || ''));
       const error = element('small', 'error field-error');
       error.id = `${id}-error`;
       error.setAttribute('aria-live', 'polite');
@@ -288,7 +296,7 @@ export class SettingsPage {
       groups.get(field.group).append(wrapper);
     }
     this.form.addEventListener('input', () => this.markDirty());
-    this.form.addEventListener('change', () => this.markDirty());
+    this.form.addEventListener('change', () => { this.updateMeasurementFields(); this.markDirty(); });
     const actions = element('div', 'settings-save card');
     this.message = element('p', '', 'No unsaved changes.');
     this.message.id = 'settings-message';
@@ -307,6 +315,39 @@ export class SettingsPage {
     this.form.append(actions);
     this.form.onsubmit = event => { event.preventDefault(); this.save(); };
     this.container.append(this.form);
+    this.updateMeasurementFields();
+  }
+
+  updateMeasurementFields() {
+    for (const field of this.document.fields) {
+      const control = this.controls.get(field.path);
+      if (field.visible_when) {
+        const [path, choices] = field.visible_when;
+        control.closest('.setting-field').hidden = !choices.includes(this.controls.get(path).value);
+      }
+    }
+    const describe = (path, label, help, units) => {
+      const control = this.controls.get(path);
+      const wrapper = control.closest('.setting-field');
+      wrapper.querySelector('label').textContent = label;
+      control.input.setAttribute('aria-label', label);
+      wrapper.querySelector('.field-help').textContent = help;
+      if (units) control.field = {...control.field, units};
+    };
+    const house = this.controls.get('measurement_options.house_source').value;
+    describe('measurements.house_kw', {
+      direct: 'House demand excluding EV', total_consumption: 'Total household consumption including EV',
+      signed_grid: 'Grid power · positive import, negative export', separate_grid: 'House power (unused)',
+    }[house], house === 'direct' ? 'Appliance demand before subtracting solar; EV charging is already excluded.' :
+      house === 'total_consumption' ? 'Total load before solar and battery offsets. EV charging is subtracted once.' :
+        'House demand is calculated from grid, AC solar, ESS AC power and EV charging.');
+    const quarter = this.controls.get('measurement_options.quarter_source').value;
+    describe('measurements.quarter_import_kwh', quarter === 'energy' ?
+      'Import already used this quarter-hour · kWh' : 'Current Quarter Average Demand · W or kW', {
+      energy: 'Imported energy since the latest 00, 15, 30 or 45 minute boundary; not a lifetime meter reading.',
+      elapsed_average: 'Average over the elapsed part of this quarter. Converted using the meter reading time.',
+      fixed_quarter_average: 'P1 demand builds up from zero each quarter. EnergyManager converts kW to kWh by multiplying by 0.25 h.',
+    }[quarter], quarter === 'energy' ? ['kWh'] : ['W', 'kW']);
   }
 
   markDirty() {

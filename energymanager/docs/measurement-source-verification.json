@@ -1,0 +1,60 @@
+{
+  "version": "4.0.3",
+  "provenance": "SYNTHETIC local installation compatibility verification",
+  "tests": {
+    "passed": 84,
+    "elapsed_seconds": 28.57
+  },
+  "lint": "passed",
+  "types": "passed (21 modules)",
+  "javascript": "passed",
+  "package": {
+    "wheel": "energymanager-4.0.3-py3-none-any.whl",
+    "sha256": "9d0ea04307ee2c63ebfb450a252b7ba8148759f2c6ba8f39edafc2dcccc1f2cf",
+    "source_and_installed_files_match": 27,
+    "isolated_installed_configuration_save_backup_reload": "passed"
+  },
+  "browser": {
+    "url": "http://127.0.0.1:8102/#settings",
+    "fixture_only": true,
+    "checks": [
+      "source choices show correct conditional fields",
+      "P1 import/export friendly-name autocomplete and keyboard selection",
+      "kW quarter demand accepted",
+      "go-e selector reused without phase sensor",
+      "save, backup and reload persisted all mappings",
+      "desktop console has no errors"
+    ],
+    "screenshot": "screenshots/measurement-source-choices.png"
+  },
+  "sources": {
+    "p1_reader_sha": "0c0e9f07056e1907be9d92dcd06cbd4fa416f95d",
+    "goe_integration_tag": "2026.10.3",
+    "quarter_denominator": "user confirmed reset near zero then builds; fixed 0.25 hours"
+  },
+  "live_verification": "not performed; meter clocks, topology, signs, ingress and hardware require commissioning",
+  "offline_e2e": {
+    "version": "4.0.3",
+    "provenance": "SYNTHETIC local HTTP integration acceptance; constant test signals",
+    "accepted_seconds": 21.55594989983365,
+    "intervals": 2018,
+    "control_max_seconds": 0.005494900047779083,
+    "fake_service_calls": 20,
+    "result": "passed",
+    "measurement_options": {
+      "house_source": "separate_grid",
+      "quarter_source": "fixed_quarter_average",
+      "phase_source": "goe_selector"
+    },
+    "checks": [
+      "configured JSON and HA HTTP inputs",
+      "separate P1 powers, kW quarter demand and go-e selector readback",
+      "spawned real full-horizon HiGHS plan",
+      "publication against current measurements",
+      "independent guarded calls to local fake only",
+      "API state",
+      "persisted input checksum and accepted result"
+    ],
+    "ev_soc_known_required": true
+  }
+}

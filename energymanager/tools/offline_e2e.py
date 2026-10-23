@@ -25,14 +25,15 @@ async def run() -> None:
         "ev_soc": (45, "%"),
         "ess_soc": (50, "%"),
         "connected": ("on", None),
-        "house_kw": (0.4, "kW"),
+        "grid_import_kw": (0, "W"),
+        "grid_export_kw": (600, "W"),
         "pv_ac_kw": (1, "kW"),
         "pv_dc_kw": (1, "kW"),
         "ev_kw": (0, "kW"),
         "ess_kw": (0, "kW"),
-        "quarter_import_kwh": (0, "kWh"),
+        "quarter_import_kwh": (0, "kW"),
         "monthly_peak_kw": (2.5, "kW"),
-        "ev_phases": (1, None),
+        "phase": (1, None),
     }
 
     async def state(request: web.Request) -> web.Response:
@@ -64,11 +65,14 @@ async def run() -> None:
         )
 
     async def service(request: web.Request) -> web.Response:
+        body = await request.json()
+        if body.get("entity_id") == "phase":
+            values["phase"] = (int(body["option"]), None)
         calls.append(
             {
                 "domain": request.match_info["domain"],
                 "service": request.match_info["service"],
-                **await request.json(),
+                **body,
             }
         )
         return web.json_response([])
@@ -87,7 +91,12 @@ async def run() -> None:
         config = json.loads(Path("configuration.example.json").read_text(encoding="utf-8"))
         config["home_assistant_url"] = str(endpoint.make_url("/api"))
         config["forecast_url"] = str(endpoint.make_url("/forecast"))
-        config["measurements"] = {key: key for key in values}
+        config["measurements"] = {key: key for key in values if key != "phase"}
+        config["measurement_options"] = {
+            "house_source": "separate_grid", "quarter_source": "fixed_quarter_average",
+            "phase_source": "goe_selector",
+        }
+        config["actuators"]["phase"] = "phase"
         config["policy"]["planning_budget_seconds"] = 15
         path = stem.with_suffix(".json")
         path.write_text(json.dumps(config), encoding="utf-8")
@@ -110,6 +119,10 @@ async def run() -> None:
             response = await client.get("/api/state")
             current = await response.json()
             assert current["accepted"]["valid"] and current["provenance"].startswith("SYNTHETIC")
+            assert abs(current["observation"]["house_kw"] - 0.4) < 1e-9
+            assert current["observation"]["ev_phase_source"] == "goe_selector"
+            assert current["observation"]["ev_phase_known"]
+            assert current["observation"]["ev_state_known"]
             assert calls and any(call["entity_id"] == "ess_setpoint" for call in calls)
             assert application.store.decisions()[0]["disposition"] == "accepted"
             assert application.store.decision(application.accepted["id"])["result"]["valid"]
@@ -121,8 +134,10 @@ async def run() -> None:
                 "control_max_seconds": current["control_max_seconds"],
                 "fake_service_calls": len(calls),
                 "result": "passed",
+                "measurement_options": config["measurement_options"],
                 "checks": [
                     "configured JSON and HA HTTP inputs",
+                    "separate P1 powers, kW quarter demand and go-e selector readback",
                     "spawned real full-horizon HiGHS plan",
                     "publication against current measurements",
                     "independent guarded calls to local fake only",
