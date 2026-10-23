@@ -1,5 +1,31 @@
 # EnergyManager 4 verification
 
+## Version 4.0.8 — independent live values and input freshness
+
+Scope: the reported all-or-nothing Overview behavior and timestamp/freshness failures.
+Local verification: **148 tests passed in 39.30 s**, plus the final 27 affected-input/integration checks
+in 2.73 s; Ruff, mypy (28 modules) and JavaScript checks passed. Regressions cover
+slow battery/static states, unchanged values with fresh reports, fallback timestamp age,
+true quarter resets and recovery, stale/future/missing timestamps, invalid units/values,
+failed HTTP reads, visible unaffected cards and restricted control on invalid snapshots.
+
+The real seven-day automatic-Supervisor/fake-HA E2E accepted 2,018 intervals in 27.573 s;
+maximum control tick 2.178 ms, five fake service calls. Eight-minute battery states and
+older unchanged-state timestamps exercise the original failure shape. Wheel/source
+archives built; all 34 isolated installed package files match source, with live-input API
+and disabled startup verified. The first local build hit a transient Windows metadata
+rename denial; retry succeeded without changing packaging behavior.
+
+Browser checks injected stale power, unavailable DC solar and an old quarter meter after
+a successful real solve. Available values stayed visible, missing totals/components and
+entity-specific warnings were clear, the hardware switch remained blocked, and console
+warnings/errors were absent. Screenshots: live-v408-stale.png, live-v408-unavailable.png
+and live-v408-quarter.png. All are synthetic local fixtures, not installation evidence.
+Temporary fixtures/tabs were closed and the user's 8100 preview preserved. No live HA,
+installation database, hardware or real notification access. Live installation reporting
+rates and physical commissioning remain unverified. Release CI/publication results are
+reported in the chat and ignored implementation checkpoint; no separate evidence commit.
+
 ## Version 4.0.7 — responsive disabled control during final stop
 
 Includes the settings/control update below. A disabled actuator now returns before

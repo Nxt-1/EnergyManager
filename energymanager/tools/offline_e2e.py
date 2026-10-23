@@ -39,10 +39,11 @@ class VerificationResolver(AbstractResolver):
         pass
 
 
-async def run(*, serve: bool = False) -> None:
+async def run(*, serve: bool = False, preview_fault: str | None = None) -> None:
     issued = datetime.now(UTC)
     calls = []
     weather_queries = []
+    active_fault: str | None = None
     values = {
         "ev_soc": (45, "%"),
         "ess_soc": (50, "%"),
@@ -62,9 +63,21 @@ async def run(*, serve: bool = False) -> None:
     def state_row(entity: str) -> dict:
         key = entity.split(".", 1)[-1]
         value, unit = values[key]
+        now = datetime.now(UTC)
+        reported_at = now
+        if key in ("ess_soc", "ev_soc"):
+            reported_at = issued - timedelta(minutes=8)
+        elif key in ("connected", "phase", "monthly_peak_kw"):
+            reported_at = issued - timedelta(days=1)
+        if active_fault == "quarter" and key == "quarter_import_kwh":
+            reported_at = now.replace(minute=now.minute // 15 * 15, second=0, microsecond=0) - timedelta(seconds=1)
+        elif active_fault == "stale" and key == "pv_ac_kw":
+            reported_at = now - timedelta(seconds=45)
+        elif active_fault == "unavailable" and key == "pv_dc_kw":
+            value = "unavailable"
         return {"entity_id": entity, "state": str(value),
                 "attributes": {"unit_of_measurement": unit, "friendly_name": key.replace("_", " ")},
-                "last_updated": datetime.now(UTC).isoformat(), "last_reported": datetime.now(UTC).isoformat()}
+                "last_updated": (issued - timedelta(hours=2)).isoformat(), "last_reported": reported_at.isoformat()}
 
     async def states(request: web.Request) -> web.Response:
         assert request.headers.get("Authorization") == "Bearer synthetic-supervisor-credential"
@@ -211,6 +224,7 @@ async def run(*, serve: bool = False) -> None:
                         "built-in Open-Meteo pipeline with four original planes and correction tables",
                         "persisted measured household baseline; no prepared forecast endpoint",
                         "separate P1 powers, kW quarter demand and go-e selector readback",
+                        "eight-minute battery states and unchanged states do not age fresh power or cross billing quarters",
                         "spawned real full-horizon HiGHS plan",
                         "publication against current measurements",
                         "independent guarded calls to local fake only",
@@ -221,6 +235,7 @@ async def run(*, serve: bool = False) -> None:
                 Path("docs/offline-e2e.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
                 print(json.dumps(report, indent=2), flush=True)
                 if serve:
+                    active_fault = preview_fault
                     print("SYNTHETIC forecast verification preview: http://127.0.0.1:8102/", flush=True)
                     await asyncio.Event().wait()
 
@@ -228,4 +243,9 @@ async def run(*, serve: bool = False) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--serve", action="store_true", help="Keep synthetic verification UI on localhost:8102")
-    asyncio.run(run(serve=parser.parse_args().serve))
+    parser.add_argument("--input-fault", choices=("quarter", "stale", "unavailable"),
+                        help="Inject an input problem only after successful verification, for the local preview")
+    arguments = parser.parse_args()
+    if arguments.input_fault and not arguments.serve:
+        parser.error("--input-fault requires --serve")
+    asyncio.run(run(serve=arguments.serve, preview_fault=arguments.input_fault))

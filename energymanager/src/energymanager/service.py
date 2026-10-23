@@ -245,6 +245,9 @@ class Application:
                 observation = await self.ha.observe(self.snapshot.capabilities)
                 initial = self.forecast_data is None or self.observation.quality == "unknown"
                 self.observe(observation)
+                if self.status == "inputs_unavailable":
+                    self.error = None
+                    self.status = "inputs_ready"
                 try:
                     data = await self.forecast.read(observation, self.now())
                 except (
@@ -618,6 +621,7 @@ class Application:
             "provenance": self.snapshot.provenance,
             "forecast_status": getattr(self.forecast, "status", {}),
             "observation": json_data(self.observation),
+            "live_inputs": self.ha.inputs.view(self.now(), self.snapshot.capabilities) if self.ha else None,
             "capabilities": json_data(self.snapshot.capabilities),
             "policy": json_data(self.policy),
             "goals": json_data(self.goals),

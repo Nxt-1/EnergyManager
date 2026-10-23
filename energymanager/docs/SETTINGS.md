@@ -1,4 +1,4 @@
-# Settings and hardware control in 4.0.6
+# Settings and hardware control
 
 The HA app connects through the built-in Supervisor proxy automatically. Settings no
 longer contains connection addresses, token-variable names, network permission choices,
@@ -20,10 +20,11 @@ webhook and forecast fields are removed; obsolete HA connection fields are remov
 for the installed HA app. Reading or starting the app does not rewrite the file.
 
 Incomplete physical settings keep the editor available. They do not produce a plan
-or enable an actuator. Unverified live-card values display dashes; unknown or demo
-observations are excluded from configured-mode actual charts. The original billing
-timestamp checks remain in force. Persistent input errors need actual telemetry
-diagnosis; the hardware switch does not bypass them.
+or enable an actuator. Overview values are read independently: available values remain
+visible when another input fails. Known stale values carry an entity/age warning;
+unavailable values show dashes, and available solar components remain visible in the
+subtitle. Actual charts use complete measured observations. Input errors name the entity
+and failed check. The hardware switch still requires valid critical measurements.
 
 The HA app's own Configuration tab still selects `demo` or `configured`. Demo mode
 cannot operate hardware. Choose `configured` and restart to use installation inputs.
@@ -82,3 +83,21 @@ SQLite switch key; they use the old JSON control/commissioning flags. Restore an
 appropriately disabled earlier JSON backup and review those flags before starting an
 earlier image. Automatic HA connection settings and phone notification destinations
 also differ in earlier versions. No live deployment or rollback was performed here.
+
+
+## Measurement freshness (4.0.8)
+
+Power readings and quarter-demand reports use Maximum measurement age (30 s by default).
+ESS/EV percentages have a separate 900 s budget so slower battery reports do not age fresh
+power. Connection state, forced charger phase mode and monthly peak are state values:
+they remain valid until changed or unavailable. These budgets are engineering defaults,
+not measured installation reporting rates. No new setting or configuration migration is
+required for this release.
+
+The quarter counter must have reported in the current quarter. At a reset, EnergyManager
+waits for that counter to update; it can use fresh instantaneous power reported just
+before the reset. An expired or unavailable critical input still prevents hardware control.
+HA timestamps use last_reported when supplied and last_updated otherwise; see the
+[HA state object](https://www.home-assistant.io/docs/configuration/state_object/).
+If a power input genuinely stops reporting, the warning identifies its entity and age;
+restarting EnergyManager does not make that old reading fresh.

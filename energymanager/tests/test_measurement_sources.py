@@ -127,31 +127,33 @@ async def test_p1_split_powers_and_goe_selector_over_local_http():
                                      phase_source="goe_selector")
         async with HomeAssistantAdapter(str(server.make_url("")), {key: key for key in values},
                                         measurement_options=options, phase_entity="phase_selector") as adapter:
-            observation = await adapter.observe(Capabilities())
+            observation = await adapter.observe(Capabilities(), at=at)
             assert observation.house_kw == pytest.approx(0.7)
             assert observation.quarter_import_kwh == pytest.approx(0.4)
             assert observation.ev_phases == 3 and observation.ev_phase_known
             assert observation.ev_phase_source == "goe_selector"
             assert "house_kw" not in calls and "ev_phases" not in calls
             timestamps["ev_soc"] = at + timedelta(seconds=1)
-            assert (await adapter.observe(Capabilities())).ev_state_known
+            assert (await adapter.observe(Capabilities(), at=at)).ev_state_known
             timestamps["ev_soc"] = at + timedelta(seconds=60)
-            assert not (await adapter.observe(Capabilities())).ev_state_known
+            assert not (await adapter.observe(Capabilities(), at=at)).ev_state_known
             timestamps["ev_soc"] = at
             adapter.options = replace(options, quarter_source="fixed_quarter_average")
-            assert (await adapter.observe(Capabilities())).quarter_import_kwh == pytest.approx(0.8)
+            assert (await adapter.observe(Capabilities(), at=at)).quarter_import_kwh == pytest.approx(0.8)
             # Auto is not an observed phase count, but fresh ESS balancing remains usable.
             values["phase_selector"] = ("0", None)
-            unknown = await adapter.observe(Capabilities())
+            unknown = await adapter.observe(Capabilities(), at=at)
             assert not unknown.ev_phase_known and unknown.quality == "measured"
             command = FastControl(Capabilities(), Policy()).tick(unknown, at, None, 1)
             assert command.ev_kw == 0 and command.ess_kw < 0
             assert "phase" in command.reason.lower()
             values["phase_selector"] = ("unavailable", None)
-            assert not (await adapter.observe(Capabilities())).ev_phase_known
-            timestamps["quarter_import_kwh"] = at.replace(minute=15, second=1)
-            with pytest.raises(ValueError, match="boundary"):
-                await adapter.observe(Capabilities())
+            assert not (await adapter.observe(Capabilities(), at=at)).ev_phase_known
+            boundary_at = at.replace(minute=15, second=1)
+            timestamps.update({key: boundary_at for key in timestamps})
+            timestamps["quarter_import_kwh"] = boundary_at - timedelta(seconds=2)
+            with pytest.raises(ValueError, match="billing quarter"):
+                await adapter.observe(Capabilities(), at=boundary_at)
 
 
 async def test_phase_change_waits_for_readback_before_resuming_charge():

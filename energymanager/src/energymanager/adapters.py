@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Protocol
 from urllib.parse import quote, urlsplit
 from uuid import uuid4
@@ -14,6 +14,7 @@ import aiohttp
 from .domain import Capabilities, Goal, Interval, Observation, Policy, Snapshot, instant, time_grid
 from .forecasts import apply_requirements, daily_goals
 from .measurements import MeasurementOptions
+from .live_inputs import LiveInputs
 
 
 def checked_url(url: str, allow_remote: bool = False) -> str:
@@ -42,6 +43,7 @@ class HomeAssistantAdapter:
         self.token = token
         self.session: aiohttp.ClientSession | None = None
         self.last_observation: Observation | None = None
+        self.inputs = LiveInputs(self.entities, self.options, measurement_max_age_seconds)
 
     async def __aenter__(self) -> HomeAssistantAdapter:
         headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
@@ -77,7 +79,7 @@ class HomeAssistantAdapter:
         except (aiohttp.ClientError, TimeoutError) as exc:
             raise RuntimeError(f"HA service failed: {type(exc).__name__}") from exc
 
-    async def observe(self, c: Capabilities) -> Observation:
+    async def observe(self, c: Capabilities, *, at: datetime | None = None) -> Observation:
         required = (
             "ev_soc",
             "ess_soc",
@@ -94,74 +96,57 @@ class HomeAssistantAdapter:
         shared = tuple(key for key in required if key not in ("ev_soc", "ev_phases"))
         if self.options.house_source == "separate_grid":
             shared = tuple(key for key in shared if key != "house_kw") + ("grid_import_kw", "grid_export_kw")
-        responses = await asyncio.gather(*(self.state(key) for key in shared))
-        values = dict(zip(shared, responses))
-        try:
-            values["ev_soc"] = await self.state("ev_soc")
-        except (aiohttp.ClientError, TimeoutError, KeyError):
-            values["ev_soc"] = {"state": "unknown", "attributes": {}}
-        try:
-            values["ev_phases"] = await self.state("ev_phases")
-        except (aiohttp.ClientError, TimeoutError, KeyError):
-            values["ev_phases"] = {"state": "unknown", "attributes": {}}
+        keys = (*shared, "ev_soc", "ev_phases")
 
-        def number(key: str, expected_unit: str | None = None) -> float:
-            row = values[key]
-            value = float(row["state"])
-            if not math.isfinite(value):
-                raise ValueError(f"Invalid input {key}")
-            unit = row.get("attributes", {}).get("unit_of_measurement")
-            if expected_unit == "kW" and unit == "W":
-                value /= 1000
-            elif expected_unit and unit != expected_unit:
-                raise ValueError(f"{key} requires declared {expected_unit} units")
-            return value
+        async def read(key: str) -> dict[str, Any] | Exception:
+            try:
+                return await self.state(key)
+            except (aiohttp.ClientError, TimeoutError, KeyError, ValueError) as exc:
+                return exc
 
-        connected = str(values["connected"]["state"]).lower()
+        responses = await asyncio.gather(*(read(key) for key in keys))
+        polled_at = at or datetime.now(UTC)
+        # Publish each read before validating the collection used by planning/control.
+        self.inputs.options = self.options
+        self.inputs.update(dict(zip(keys, responses)), polled_at)
+
+        def number(key: str) -> float:
+            return self.inputs.number(key, polled_at)
+
+        connected = str(self.inputs.readings["connected"].require(polled_at)).lower()
         if connected not in ("on", "off", "true", "false", "connected", "disconnected"):
-            raise ValueError("Unknown EV connection state")
-        critical: tuple[str, ...] = (
-            "house_kw", "pv_ac_kw", "pv_dc_kw", "ev_kw", "ess_kw", "quarter_import_kwh", "ess_soc"
-        )
+            raise ValueError(f"{self.entities['connected']}: unknown EV connection state {connected!r}")
+        if issue := self.inputs.quarter_issue(polled_at):
+            raise ValueError(issue)
+        quarter_at = self.inputs.readings["quarter_import_kwh"].reported_at
+        assert quarter_at is not None  # Validated by the quarter freshness check.
+        # The energy prefix belongs to this timestamp, independently of slower battery states.
+        at = quarter_at
+        ev_kw, ess_kw = number("ev_kw"), number("ess_kw")
+        pv_ac_kw = number("pv_ac_kw")
         if self.options.house_source == "separate_grid":
-            critical = tuple(key for key in critical if key != "house_kw") + ("grid_import_kw", "grid_export_kw")
-        at = min(instant(values[key].get("last_reported", values[key]["last_updated"])) for key in critical)
-        quarter_at = instant(values["quarter_import_kwh"].get(
-            "last_reported", values["quarter_import_kwh"]["last_updated"]))
-        if int(at.timestamp()) // 900 != int(quarter_at.timestamp()) // 900:
-            raise ValueError("Power and quarter-hour meter readings straddle a billing boundary; retry")
-        ev_kw, ess_kw = number("ev_kw", "kW"), number("ess_kw", "kW")
-        pv_ac_kw = number("pv_ac_kw", "kW")
-        if self.options.house_source == "separate_grid":
-            imported, exported = number("grid_import_kw", "kW"), number("grid_export_kw", "kW")
+            imported, exported = number("grid_import_kw"), number("grid_export_kw")
             if min(imported, exported) < 0:
                 raise ValueError("Separate grid import/export powers must be nonnegative")
             house_input_kw = imported - exported
         else:
-            house_input_kw = number("house_kw", "kW")
+            house_input_kw = number("house_kw")
         house_kw = self.options.house_power(house_input_kw, ev_kw, pv_ac_kw, ess_kw)
-        quarter_unit = "kWh" if self.options.quarter_source == "energy" else "kW"
-        quarter_kwh = self.options.quarter_energy(number("quarter_import_kwh", quarter_unit), quarter_at)
-        phases = self.options.phase_count(str(values["ev_phases"]["state"]))
-        if phases is not None and self.options.phase_source == "count":
-            try:
-                phase_at = instant(values["ev_phases"].get(
-                    "last_reported", values["ev_phases"]["last_updated"]))
-                if not -5 <= (at - phase_at).total_seconds() <= self.measurement_max_age_seconds:
-                    phases = None
-            except (KeyError, ValueError, TypeError):
-                phases = None
+        quarter_kwh = self.options.quarter_energy(number("quarter_import_kwh"), quarter_at)
+        try:
+            phases = self.options.phase_count(str(self.inputs.readings["ev_phases"].require(polled_at)))
+        except ValueError:
+            phases = None
         ev_known = True
         ev_at = None
         try:
-            ev_kwh = number("ev_soc", "%") / 100 * c.ev_capacity_kwh
-            ev_at = instant(values["ev_soc"].get("last_reported", values["ev_soc"]["last_updated"]))
-            # Independent HA reads can report SoC slightly after the oldest shared power.
-            ev_known = 0 <= ev_kwh <= c.ev_capacity_kwh and -5 <= (at - ev_at).total_seconds() <= 900
+            ev_kwh = number("ev_soc") / 100 * c.ev_capacity_kwh
+            ev_at = self.inputs.readings["ev_soc"].reported_at
+            ev_known = 0 <= ev_kwh <= c.ev_capacity_kwh
         except (ValueError, KeyError, TypeError):
             ev_kwh = self.last_observation.ev_kwh if self.last_observation else 0
             ev_known = False
-        ess_kwh = number("ess_soc", "%") / 100 * c.ess_capacity_kwh
+        ess_kwh = number("ess_soc") / 100 * c.ess_capacity_kwh
         usable = max(0, ess_kwh - c.ess_min_kwh)
         # Unknown initial inventory is conservatively restricted. New solar is proven only
         # across fresh, import-free observations; restart never invents an eligible stock.
@@ -184,11 +169,11 @@ class HomeAssistantAdapter:
             connected in ("on", "true", "connected"),
             house_kw,
             pv_ac_kw,
-            number("pv_dc_kw", "kW"),
+            number("pv_dc_kw"),
             ev_kw,
             ess_kw,
             quarter_kwh,
-            number("monthly_peak_kw", "kW"),
+            number("monthly_peak_kw"),
             phases or (self.last_observation.ev_phases if self.last_observation else c.phases[0]),
             ess_grid_kwh=restricted,
             ev_state_known=ev_known,

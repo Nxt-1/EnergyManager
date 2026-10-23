@@ -120,7 +120,7 @@ async def test_ha_measurements_and_actuator_calls_against_local_http_server():
         async with HomeAssistantAdapter(
             str(server.make_url("")).rstrip("/"), {key: key for key in vals}
         ) as adapter:
-            observation = await adapter.observe(s.capabilities)
+            observation = await adapter.observe(s.capabilities, at=s.observation.at)
             assert observation.house_kw == pytest.approx(0.42)
             actuator = GuardedActuator(
                 adapter,
@@ -141,7 +141,7 @@ async def test_ha_measurements_and_actuator_calls_against_local_http_server():
                 {"entity_id": "fake.force", "option": "2"},
             ]
             vals["ev_soc"] = ("unavailable", "%")
-            unknown = await adapter.observe(s.capabilities)
+            unknown = await adapter.observe(s.capabilities, at=s.observation.at)
             assert not unknown.ev_state_known
             assert (
                 unknown.ev_kwh == observation.ev_kwh

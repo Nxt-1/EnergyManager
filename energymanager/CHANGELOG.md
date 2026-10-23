@@ -1,3 +1,10 @@
+## 4.0.8 — Independent live values and per-input freshness
+
+- Keep available Overview values visible when another input fails; mark stale values and unavailable components individually.
+- Validate power, battery and status readings separately instead of giving every value the oldest sensor timestamp.
+- Anchor quarter energy to its meter timestamp; require a current-quarter counter while allowing fresh power from just before a reset.
+- Name the affected entity and report its age/limit or specific read/validation problem.
+
 ## 4.0.7 — Keep disabled control responsive during stop
 
 - Return immediately from disabled actuator dispatch instead of waiting behind a slow stop request.

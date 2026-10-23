@@ -243,8 +243,14 @@ function render() {
   const liveKnown = state.demo || o.quality === 'measured' && measurementAge >= -5 &&
     measurementAge <= state.policy.measurement_max_age_seconds;
   $('live').innerHTML = live.map(([name, value, unit, label, key]) => {
-    if (!liveKnown) { value = null; label = 'Waiting for live input'; }
-    return     `<article class="live-item"><span class="muted">${name}</span><strong style="color:${colors[key]}">${num(value,unit==='%'?0:2)} <small style="display:inline;font-size:13px">${unit}</small></strong><small>${esc(label)}</small>${unit==='%' && value !== null ?`<div class="meter"><i style="width:${value}%;background:${colors[key]}"></i></div>`:''}</article>`;
+    let issues = [];
+    if (!state.demo && state.live_inputs) {
+      const reading = state.live_inputs.cards[key];
+      value = reading?.value ?? null;
+      label = reading?.label || 'Waiting for live input';
+      issues = reading?.issues || [];
+    } else if (!liveKnown) { value = null; label = 'Waiting for live input'; }
+    return     `<article class="live-item"><span class="muted">${name}</span><strong style="color:${colors[key]}">${num(value,unit==='%'?0:2)} <small style="display:inline;font-size:13px">${unit}</small></strong><small>${esc(label)}</small>${issues.map(issue=>`<small class="error">${esc(issue)}</small>`).join('')}${unit==='%' && value !== null ?`<div class="meter"><i style="width:${Math.max(0,Math.min(100,value))}%;background:${colors[key]}"></i></div>`:''}</article>`;
   }).join('');
   $('status').innerHTML =
     `<p class="status-line">${plan?`Plan updated ${time(plan.intervals[0].start)} · ${plan.summary.intervals} intervals · ${num(plan.seconds,1)} s calculation`:'Waiting for the first validated joint plan. The independent control loop is running.'}${state.actuator_health?.delivery_fault ? '<span class="error"> / EV delivery fault: stopped; diagnose before restart</span>' : ''}${state.error?` · <span class="error">${esc(state.error)}</span>`:''}</p>`;

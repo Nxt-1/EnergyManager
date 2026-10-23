@@ -305,3 +305,34 @@ phase/setpoint behavior and phone receipt. No live HA/database/hardware/phone ac
 or deployment occurred. No implementation work remains for this settings update.
 NEXT: commit/push verification evidence; user installs/configures and reviews actual
 telemetry before enabling hardware. Earlier billing timestamp rejection is not bypassed.
+
+
+4.0.8 IN PROGRESS (authorized next release): scope limited to independent live cards,
+per-input freshness and actionable input errors. No unrelated features/fixes; user
+requires permission before any later code work and no optional verification-only commit.
+Implemented: per-entity reads survive another failure; individual Overview values with
+source/age/error metadata; meter's own timestamp anchors quarter energy. Power/quarter
+retain configured age (default 30 s), battery percentages have separate 900 s bound,
+static connection/phase-selector/monthly-peak states use availability. Expired/unknown
+critical inputs still prevent control. Current-quarter counter required, while fresh
+power from just before reset is allowed. No poll-time substitution for report timestamps.
+64 focused regressions passed in 6.41 s; mypy 28 / Ruff / JS passed. Full suite running.
+NEXT: full-suite results; full-horizon fake E2E including slow battery states; browser
+verification with stale/unavailable/quarter inputs, packaging, one release commit/push
+and inspect existing CI/publication. Record remote results in ignored checkpoint/final
+response, without a separate verification-record commit. No live installation access.
+
+
+4.0.8 LOCAL COMPLETE: limited input freshness/independent Overview update. Full suite
+148 passed in 39.30 s; final 12 input regressions 0.33 s; Ruff/mypy 28/JS passed.
+Seven-day fake-Supervisor E2E: 2,018 intervals, 27.573 s, max tick 2.178 ms, five
+fake-only calls, including eight-minute battery and old static-state reports. Browser
+stale/unavailable/old-quarter cases passed; unaffected cards remain, failed components
+and ages identified, switch blocked; no console warnings/errors. Wheel/sdist built;
+34 installed files match source and isolated startup/API passed. Transient Windows
+build metadata rename error resolved on retry, no packaging behavior change.
+Local fixtures/tabs closed; existing 8100 preview preserved. No live installation,
+database, hardware or real notification access. State age budgets remain provisional.
+NEXT: final diff review, ONE release commit/push, inspect CI and image publication.
+Then append remote evidence only to ignored checkpoint/final reply; user forbids optional
+verification-record commits. Future unrelated code work requires explicit permission.

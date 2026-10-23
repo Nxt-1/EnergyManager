@@ -1,6 +1,6 @@
 # First release implementation specification
 
-This is the shipping specification for the EnergyManager 4.0.7 application. The
+This is the shipping specification for the EnergyManager 4.0.8 application. The
 authorized handoff and confirmed decisions govern behavior. All supplied development
 capacities, tariffs and efficiencies are **synthetic provisional parameters**.
 PV plane geometry and correction tables are recovered installation values; verification
@@ -150,7 +150,8 @@ imports, allowing legitimate short pulses rather than imposing a false instantan
 limit. DC capture is reserved. Excess PV first charges ESS; only residual may advance
 existing valid EV work. No plan permits basic ESS balancing, no forecast grid precharge.
 Missing EV SoC holds EV instructions while fresh shared powers still support ESS. Power
-freshness30s, EV SoC900s and forecast2h are declared provisional commissioning values.
+freshness defaults to 30 s per power/quarter input; ESS and EV percentages use separate
+900 s budgets. These and the forecast 2 h limit are provisional engineering parameters.
 Measurement loss stops new commands. Source and permission guards remain independent
 of economic score. Generation is checked between asynchronous actuator writes.
 
@@ -166,7 +167,7 @@ latches EV stopping. A solver-parent watchdog prevents orphan workers after serv
 
 ## Boundaries
 
-The main project is now EnergyManager 4.0.7. Its fresh joint core replaces V3 under the
+The main project is now EnergyManager 4.0.8. Its fresh joint core replaces V3 under the
 `energymanager` Python package and existing `energy_manager` add-on/image identity. V3
 source/tests/dashboard were replaced; historical evidence remains in Git and labelled
 reports. V3 installation options and database files are not automatically imported. V4
@@ -194,3 +195,21 @@ amd64 packaging is declared. Deferred PV/storage expansion, market pricing, V2G,
 travel/external charging, learned policy, live deployment and historical retention
 policy are outside this release. Live wiring, values and hardware timings remain
 unverified and require the commissioning procedure in RUNBOOK.md.
+
+
+## Per-input freshness and independent live values (4.0.8)
+
+Each entity retains its own reported/received time, normalized value, unit and issue.
+Prefer HA last_reported; fall back to last_updated when absent. Polling never invents a
+new report timestamp. Future reports beyond 5 s and genuinely stale power remain invalid.
+Battery percentages use a 900 s state budget. Available connection, forced phase-selector
+and monthly-peak states remain valid until changed/unavailable; physical phase-count
+telemetry retains the power-age limit. The quarter counter must belong to the current
+billing quarter. Its timestamp anchors the energy prefix; fresh instantaneous power
+from just before a reset and slower battery states do not create a false quarter conflict.
+
+The Overview reads individual measurements independently of the complete control snapshot.
+Known stale values stay visible with a source/age warning. Missing components are explicit;
+for example, available AC solar stays visible in the subtitle when DC solar is unavailable,
+and the combined total is withheld. Actual charts retain complete measured observations.
+Critical input failures still revoke affected control and prevent enabling the switch.

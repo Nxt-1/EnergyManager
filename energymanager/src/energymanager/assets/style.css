@@ -136,6 +136,7 @@ p {
   margin-bottom:20px
 }
 .live-item {
+  min-width:0;
   border:1px solid var(--line);
   background:var(--surface);
   border-radius:10px;
@@ -148,7 +149,8 @@ p {
   font-weight:650
 }
 .live-item small {
-  display:block
+  display:block;
+  overflow-wrap:anywhere
 }
 .meter {
   height:5px;

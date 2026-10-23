@@ -1,11 +1,11 @@
 {
-  "version": "4.0.7",
+  "version": "4.0.8",
   "provenance": "SYNTHETIC local weather fixture \u00b7 Open-Meteo KNMI \u00b7 four installed PV planes \u00b7 correction 2026-10-03-seed \u00b7 household baseline learning (samples: 1)",
-  "accepted_seconds": 27.345871499739587,
+  "accepted_seconds": 27.573061000090092,
   "intervals": 2018,
-  "control_max_seconds": 0.0028108996339142323,
-  "baseline_control_max_seconds": 0.0028108996339142323,
-  "switch_control_max_seconds": 0.0019268998876214027,
+  "control_max_seconds": 0.0021782000549137592,
+  "baseline_control_max_seconds": 0.0021782000549137592,
+  "switch_control_max_seconds": 0.0019787000492215157,
   "switch_control_ticks": 1,
   "fake_service_calls": 5,
   "weather_queries": [
@@ -63,7 +63,7 @@
     "weather_error": null,
     "load_stage": "learning",
     "synthetic": true,
-    "weather_at": "2026-10-23T19:17:56.670295+00:00",
+    "weather_at": "2026-10-23T20:06:02.928844+00:00",
     "load_methods": [
       "recent_baseline"
     ],
@@ -83,6 +83,7 @@
     "built-in Open-Meteo pipeline with four original planes and correction tables",
     "persisted measured household baseline; no prepared forecast endpoint",
     "separate P1 powers, kW quarter demand and go-e selector readback",
+    "eight-minute battery states and unchanged states do not age fresh power or cross billing quarters",
     "spawned real full-horizon HiGHS plan",
     "publication against current measurements",
     "independent guarded calls to local fake only",
