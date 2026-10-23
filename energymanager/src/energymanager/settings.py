@@ -21,7 +21,7 @@ import aiohttp
 
 from .adapters import checked_url
 from .domain import Capabilities, Policy
-from .measurements import MeasurementOptions
+from .measurements import installation_configuration
 
 
 @dataclass(frozen=True)
@@ -36,8 +36,6 @@ class SettingField:
     step: float = 0.01
     domains: tuple[str, ...] = ()
     units: tuple[str, ...] = ()
-    choices: tuple[tuple[str, str], ...] = ()
-    visible_when: tuple[str, tuple[str, ...]] | None = None
 
 
 def setting_fields() -> tuple[SettingField, ...]:
@@ -52,56 +50,32 @@ def setting_fields() -> tuple[SettingField, ...]:
         SettingField("notification_webhook", "Notification webhook (optional)", "Connections", "optional_url",
                      "Leave empty to keep notices inside EnergyManager."),
     ]
-    result.extend((
-        SettingField("measurement_options.house_source", "House demand source", "Measurements", "choice",
-                     "House demand means appliances excluding EV charging. EnergyManager can calculate it for you.",
-                     choices=(("direct", "House demand excluding EV"),
-                              ("total_consumption", "Total household consumption including EV"),
-                              ("signed_grid", "Grid power · positive import, negative export"),
-                              ("separate_grid", "Separate grid import and export sensors"))),
-        SettingField("measurement_options.quarter_source", "Quarter-hour measurement type", "Measurements", "choice",
-                     "Select the meaning reported by your meter; instantaneous power is not a quarter average.",
-                     choices=(("energy", "Imported energy since quarter start · kWh"),
-                              ("fixed_quarter_average", "P1 Current Quarter Average Demand · W or kW"),
-                              ("elapsed_average", "Average over elapsed quarter time · W or kW"))),
-        SettingField("measurement_options.phase_source", "Charger phase information", "Measurements", "choice",
-                     "go-e APIv2 Connect can use its existing phase selector; no extra sensor is needed.",
-                     choices=(("count", "Phase count sensor · 1 or 3"),
-                              ("goe_selector", "Read the go-e phase selector · 1=single, 2=three"))),
-    ))
     measurements = (
         ("ev_soc", "EV state of charge", ("%",)),
         ("ess_soc", "ESS state of charge", ("%",)),
         ("connected", "EV connected", ()),
-        ("house_kw", "House or grid power", ("W", "kW")),
         ("grid_import_kw", "Grid import power", ("W", "kW")),
         ("grid_export_kw", "Grid export power", ("W", "kW")),
         ("pv_ac_kw", "AC solar power", ("W", "kW")),
         ("pv_dc_kw", "DC solar power", ("W", "kW")),
         ("ev_kw", "EV charging power", ("W", "kW")),
         ("ess_kw", "ESS power · positive discharge", ("W", "kW")),
-        ("quarter_import_kwh", "Current quarter import measurement", ("kWh", "W", "kW")),
+        ("quarter_import_kwh", "Current Quarter Average Demand", ("W", "kW")),
         ("monthly_peak_kw", "Measured monthly peak", ("W", "kW")),
-        ("ev_phases", "EV phase count sensor · 1 or 3", ()),
     )
     for key, label, units in measurements:
         domains: tuple[str, ...] = ("sensor", "number", "input_number")
         if key == "connected":
             domains = ("binary_sensor", "sensor", "input_boolean", "switch")
-        visible_when: tuple[str, tuple[str, ...]] | None = None
-        if key == "house_kw":
-            visible_when = ("measurement_options.house_source", ("direct", "total_consumption", "signed_grid"))
-        elif key in ("grid_import_kw", "grid_export_kw"):
-            visible_when = ("measurement_options.house_source", ("separate_grid",))
-        elif key == "ev_phases":
-            visible_when = ("measurement_options.phase_source", ("count",))
         help_text = ""
         if key == "ess_kw":
             help_text = "AC power at the ESS inverter: positive supplies the house, negative charges. Not battery DC power."
-        elif key == "ev_phases":
-            help_text = "Optional alternative to selector readback. go-e APIv2 Connect exposes pnp as a disabled diagnostic."
+        elif key == "quarter_import_kwh":
+            help_text = "Select your P1 demand sensor in W or kW. Quarter-hour energy is calculated automatically."
+        elif key == "grid_export_kw":
+            help_text = "House demand is calculated from these P1 powers, solar, ESS and EV charging."
         result.append(SettingField(f"measurements.{key}", label, "Measurements", "entity", help_text,
-                                   domains=domains, units=units, visible_when=visible_when))
+                                   domains=domains, units=units))
     for key, label, domain in (
         ("force", "Charger stop / charge selector", "select"),
         ("phase", "Charger phase selector", "select"),
@@ -109,7 +83,10 @@ def setting_fields() -> tuple[SettingField, ...]:
         ("ess_setpoint", "ESS AC setpoint", "number"),
     ):
         units = ("A",) if key == "current" else ("W",) if key == "ess_setpoint" else ()
-        result.append(SettingField(f"actuators.{key}", label, "Actuators", "entity",
+        help_text = ""
+        if key == "phase":
+            help_text = "Use the go-e APIv2 Connect Phase switch mode selector. Phase information is read here too."
+        result.append(SettingField(f"actuators.{key}", label, "Actuators", "entity", help_text,
                                    domains=(domain,), units=units))
     for key, label, group, minimum, maximum in (
         ("ev_capacity_kwh", "EV capacity (kWh)", "EV and charger", 0.01, None),
@@ -135,14 +112,14 @@ def setting_fields() -> tuple[SettingField, ...]:
         SettingField("capabilities.maximum_current_a", "Maximum charging current (A)", "EV and charger",
                      "integer", minimum=1, step=1),
         SettingField("capabilities.phases", "Supported charging phases", "EV and charger", "phases"),
-        SettingField("policy.timezone", "Timezone", "Daily readiness", "text"),
-        SettingField("policy.daily_time", "Daily ready time", "Daily readiness", "time"),
+        SettingField("policy.timezone", "Timezone", "EV and charger", "text"),
+        SettingField("policy.daily_time", "Daily ready time", "EV and charger", "time"),
     ))
     for key, label, group, minimum, maximum, step in (
-        ("daily_soc_percent", "Daily target (%)", "Daily readiness", 0, 100, 0.1),
-        ("normal_soc_percent", "Normal optional ceiling (%)", "Daily readiness", 0, 100, 0.1),
-        ("consumption_kwh_per_100km", "Journey consumption (kWh / 100 km)", "Daily readiness", 0, None, 0.1),
-        ("arrival_reserve_km", "Arrival reserve (km)", "Daily readiness", 0, None, 1),
+        ("daily_soc_percent", "Daily target (%)", "EV and charger", 0, 100, 0.1),
+        ("normal_soc_percent", "Normal optional ceiling (%)", "EV and charger", 0, 100, 0.1),
+        ("consumption_kwh_per_100km", "Journey consumption (kWh / 100 km)", "EV and charger", 0, None, 0.1),
+        ("arrival_reserve_km", "Arrival reserve (km)", "EV and charger", 0, None, 1),
         ("import_eur_kwh", "Import tariff (€/kWh)", "Tariffs and peak policy", 0, None, 0.00001),
         ("export_eur_kwh", "Export tariff (€/kWh)", "Tariffs and peak policy", 0, None, 0.00001),
         ("capacity_eur_kw_month", "Capacity tariff (€/kW/month)", "Tariffs and peak policy", 0, None, 0.00001),
@@ -187,9 +164,6 @@ class SettingsValidationError(ValueError):
 
 
 def field_value(document: dict[str, Any], path: str) -> Any:
-    if path.startswith("measurement_options."):
-        key = path.split(".")[1]
-        return document.get("measurement_options", {}).get(key, getattr(MeasurementOptions(), key))
     value: Any = document
     for key in path.split("."):
         if not isinstance(value, dict):
@@ -212,7 +186,8 @@ class ConfigurationFile:
         if not isinstance(document, dict):
             raise ValueError("The configuration must be a JSON object")
         revision = sha256(original).hexdigest()
-        values = {field.path: field_value(document, field.path) for field in SETTING_FIELDS}
+        prepared = installation_configuration(document)
+        values = {field.path: field_value(prepared, field.path) for field in SETTING_FIELDS}
         return {
             "path": str(self.path), "revision": revision, "values": values,
             "fields": [asdict(field) for field in SETTING_FIELDS],
@@ -224,8 +199,6 @@ class ConfigurationFile:
         errors = {}
         for field in SETTING_FIELDS:
             value = field_value(document, field.path)
-            if field.visible_when and field_value(document, field.visible_when[0]) not in field.visible_when[1]:
-                continue
             if field.kind == "optional_url" and not value:
                 continue
             if field.kind == "boolean":
@@ -240,8 +213,6 @@ class ConfigurationFile:
             elif field.kind == "phases":
                 valid = isinstance(value, list) and bool(value) and all(type(p) is int and p in (1, 3)
                                                                       for p in value)
-            elif field.kind == "choice":
-                valid = isinstance(value, str) and value in dict(field.choices)
             else:
                 valid = isinstance(value, str) and len(value) <= 2000
                 if field.path != "_description":
@@ -261,7 +232,6 @@ class ConfigurationFile:
                     raise ValueError(f"Missing {group}: {', '.join(sorted(missing))}")
             Capabilities(**document["capabilities"])
             Policy(**document["policy"])
-            MeasurementOptions(**document.get("measurement_options", {}))
             for key in ("home_assistant_url", "forecast_url", "notification_webhook"):
                 if document.get(key):
                     checked_url(document[key], document["allow_remote"])
@@ -285,6 +255,7 @@ class ConfigurationFile:
             document = json.loads(original)
             if not isinstance(document, dict):
                 raise ValueError("The configuration must be a JSON object")
+            document = installation_configuration(document)
             for path, value in changes.items():
                 keys = path.split(".")
                 parent = document

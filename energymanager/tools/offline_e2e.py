@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import monotonic
@@ -92,10 +93,6 @@ async def run() -> None:
         config["home_assistant_url"] = str(endpoint.make_url("/api"))
         config["forecast_url"] = str(endpoint.make_url("/forecast"))
         config["measurements"] = {key: key for key in values if key != "phase"}
-        config["measurement_options"] = {
-            "house_source": "separate_grid", "quarter_source": "fixed_quarter_average",
-            "phase_source": "goe_selector",
-        }
         config["actuators"]["phase"] = "phase"
         config["policy"]["planning_budget_seconds"] = 15
         path = stem.with_suffix(".json")
@@ -134,7 +131,7 @@ async def run() -> None:
                 "control_max_seconds": current["control_max_seconds"],
                 "fake_service_calls": len(calls),
                 "result": "passed",
-                "measurement_options": config["measurement_options"],
+                "normalization": asdict(application.ha.options),
                 "checks": [
                     "configured JSON and HA HTTP inputs",
                     "separate P1 powers, kW quarter demand and go-e selector readback",

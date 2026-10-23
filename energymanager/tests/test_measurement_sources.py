@@ -41,36 +41,64 @@ def test_house_reconstruction_with_import_export_and_storage(source, measured, e
         MeasurementOptions(house_source="total_consumption").house_power(1, 2, 0, 0)
 
 
-def test_settings_migrate_by_explicit_choices_without_losing_user_mappings(tmp_path):
+def test_existing_settings_use_confirmed_installation_without_source_choices(tmp_path):
     path = tmp_path / "energymanager.json"
     create_configuration_if_missing(path)
+    legacy = json.loads(path.read_bytes())
+    legacy["measurements"].pop("grid_import_kw")
+    legacy["measurements"].pop("grid_export_kw")
+    legacy["measurements"]["quarter_import_kwh"] = "sensor.replace_quarter_import_kwh"
+    legacy["measurements"]["house_kw"] = "sensor.old_house_mapping"
+    legacy["measurements"]["ev_phases"] = "sensor.old_phase_mapping"
+    legacy["measurement_options"] = {
+        "house_source": "direct", "quarter_source": "energy", "phase_source": "count",
+        "future_extension": "preserve-me",
+    }
+    path.write_text(json.dumps(legacy), encoding="utf-8")
+    original = path.read_bytes()
     editor = ConfigurationFile(path)
-    original = json.loads(path.read_bytes())
+    loaded = editor.read()
+    paths = set(loaded["values"])
+    assert not any(key.startswith("measurement_options.") for key in paths)
+    assert "measurements.house_kw" not in paths
+    assert "measurements.ev_phases" not in paths
+    assert loaded["values"]["measurements.grid_import_kw"] == "sensor.p1_dongle_momentary_active_import"
+    assert loaded["values"]["measurements.quarter_import_kwh"] == "sensor.p1_dongle_current_quarter_average_demand"
+    assert path.read_bytes() == original  # Reading never overwrites the user's file.
     saved = editor.save(editor.read()["revision"], {
-        "measurement_options.house_source": "separate_grid",
-        "measurement_options.quarter_source": "fixed_quarter_average",
-        "measurement_options.phase_source": "goe_selector",
-        "measurements.grid_import_kw": "sensor.p1_dongle_momentary_active_import",
-        "measurements.grid_export_kw": "sensor.p1_dongle_momentary_active_export",
-        "measurements.quarter_import_kwh": "sensor.p1_dongle_current_quarter_average_demand",
         "actuators.phase": "select.goe_test_psm",
     })
     data = json.loads(path.read_bytes())
-    assert data["measurements"]["house_kw"] == original["measurements"]["house_kw"]
-    assert data["measurements"]["ev_phases"] == original["measurements"]["ev_phases"]
-    assert data["capabilities"] == original["capabilities"]
+    assert (path.parent / saved["backup"]).read_bytes() == original
+    assert data["measurements"]["house_kw"] == "sensor.old_house_mapping"
+    assert data["measurements"]["ev_phases"] == "sensor.old_phase_mapping"
+    assert data["capabilities"] == legacy["capabilities"]
+    assert data["measurement_options"] == {"future_extension": "preserve-me"}
     store = Store(tmp_path / "test.sqlite")
     try:
         app = configured_application(path, store)
         assert app.ha.entities["ev_phases"] == "select.goe_test_psm"
-        assert app.ha.options.house_source == "separate_grid"
+        assert app.ha.options == MeasurementOptions.installation()
         assert not app.policy.control_enabled
     finally:
         store.close()
-    with pytest.raises(SettingsValidationError):
+    with pytest.raises(ValueError, match="Unknown configuration fields"):
         editor.save(saved["revision"], {"measurement_options.house_source": "invented"})
     with pytest.raises(SettingsValidationError):
         editor.save(saved["revision"], {"measurements.grid_export_kw": ""})
+
+
+def test_readiness_fields_belong_to_ev_settings(tmp_path):
+    path = tmp_path / "settings.json"
+    create_configuration_if_missing(path)
+    fields = ConfigurationFile(path).read()["fields"]
+    by_path = {field["path"]: field for field in fields}
+    assert all(field["group"] != "Daily readiness" for field in fields)
+    for key in ("daily_soc_percent", "daily_time", "normal_soc_percent",
+                "consumption_kwh_per_100km", "arrival_reserve_km"):
+        assert by_path[f"policy.{key}"]["group"] == "EV and charger"
+    assert by_path["measurements.quarter_import_kwh"]["label"] == "Current Quarter Average Demand"
+    assert by_path["measurements.quarter_import_kwh"]["units"] == ("W", "kW")
 
 
 async def test_p1_split_powers_and_goe_selector_over_local_http():

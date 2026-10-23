@@ -1,5 +1,28 @@
 # EnergyManager 4 verification
 
+## Version 4.0.4 — simplified installation settings
+
+Removed all source/type selectors and the nonexistent house/phase sensor inputs.
+The confirmed P1/go-e setup is applied in both runtime and Settings, including legacy
+files that still contain direct/energy/count choices. Known P1 IDs replace only missing
+or generated placeholders; custom mappings remain. Reads/startup do not rewrite files.
+Explicit save backs up the original bytes, persists defaults and removes retired choice
+keys while preserving future fields, unrelated values and control flags. Daily readiness,
+journey consumption and reserve controls are in EV and charger.
+
+Local checks: **85 tests passed in30.22s**, Ruff/mypy21 modules/JS passed. Browser checks
+used a legacy config and synthetic loopback HA: all unwanted fields absent before and
+after reload, P1 mappings prefilled, single go-e selector, daily target saved/reloaded
+inside EV group, backup verified, zero desktop console errors. Screenshots are
+simple-settings-measurements.png and simple-settings-ev.png under screenshots/.
+
+The4.0.4 wheel/sdist built. All27 code/assets match source and isolated installed files;
+installed legacy read/startup/save/backup/reload passed. Seven-day E2E without any source
+choices accepted2,018 intervals21.799s; max control4.812ms;20 local fake calls. Known
+EV SoC and selector state, archive and API checks passed. Details are in
+simple-settings-verification.json and offline-e2e.json. CI/image publication pending.
+No live HA/controller operation; wiring, clocks, ingress and commissioning remain unverified.
+
 ## Version 4.0.3 — installation measurement compatibility
 
 P1 quarter demand accepts W/kW with a fixed0.25h energy conversion, based on the

@@ -1,3 +1,11 @@
+## 4.0.4 — Configure the confirmed installation directly
+
+- Remove the house-demand source, quarter-hour type and charger-phase information dropdowns.
+- Calculate house demand and P1 quarter-hour energy internally, and read phases from the existing charger selector.
+- Remove house-demand and phase-count sensor fields, including when loading old configurations.
+- Prefill known P1 mappings without overwriting custom settings; back up migration on explicit save.
+- Move daily readiness, journey consumption and reserve settings into EV and charger.
+
 ## 4.0.3 — Existing P1 and go-e measurement support
 
 - Accept P1 quarter-hour demand in W/kW with explicit conversion to imported energy.

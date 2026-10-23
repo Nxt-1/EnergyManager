@@ -1,6 +1,6 @@
 # First release implementation specification
 
-This is the shipping specification for the EnergyManager 4.0.3 application. The
+This is the shipping specification for the EnergyManager 4.0.4 application. The
 authorized handoff and confirmed decisions govern behavior. All supplied development
 capacities, tariffs, efficiencies and forecasts are **synthetic provisional parameters**.
 No installation measurements or missing historical native archive were substituted.
@@ -13,20 +13,21 @@ forecast revision, policy, capabilities, goal revisions and explicit permissions
 covers canonical serialized inputs. SQLite retains every decision and event without
 automatic deletion. Exported decision JSON can be replayed with `--fixture ... --solve`.
 
-Settings explicitly select measurement interpretations. House demand can be direct,
-total consumption minus EV, or reconstructed from signed/separate grid powers as
-`grid_import - grid_export + PV_AC + ESS_AC_output - EV`. ESS means its AC bus boundary;
-DC solar is not counted twice. P1 quarter demand that builds from zero converts W/kW
-to imported kWh using a fixed0.25h denominator. Elapsed-time averages are a separate
-option using the reading timestamp. Raw kWh remains supported. Existing configuration
-files retain their previous meanings until edited; incompatible quarter-boundary samples
-are retried. Meter/controller clock alignment remains a commissioning prerequisite.
+The configured application uses the confirmed P1/go-e installation. House demand is
+reconstructed as `grid_import - grid_export + PV_AC + ESS_AC_output - EV`. ESS means
+its AC bus boundary; DC solar is not counted twice. The P1 demand sensor builds from
+zero and is converted from W/kW to quarter import kWh using a fixed0.25h denominator.
+The go-e phase selector supplies forced-mode readback; no additional phase sensor is
+required. Auto/unavailable is unknown and pauses EV while fresh ESS balancing continues.
+Stop/zero/dwell and post-switch readback remain enforced without claiming physical
+contactor telemetry. Meter/controller clock alignment remains a commissioning check.
 
-The go-e phase selector can replace a separate count sensor. Raw forced modes1/2 map
-to one/three phases; Auto/unavailable is unknown. Readback is labelled as selector
-state, without claiming physical contactor telemetry. Unknown phase state pauses EV
-delivery while fresh ESS balancing continues. After stop/zero/dwell sequencing, a
-phase change must be read back before charge resumes.
+Settings exposes only these sensor mappings, with no source/type selectors or computed
+house/phase-count inputs. Daily readiness is in the EV group. Older JSON is interpreted
+with the same setup immediately; retired source choices are ignored. Missing/generated
+P1 mappings receive the known defaults, while custom mappings and unrelated values are
+preserved. The file is unchanged until explicit save creates a backup and removes the
+retired choices. Starter templates omit the unused house and phase-count mappings.
 
 The horizon is168 elapsed hours in UTC, with local recurring deadlines and billing
 months. Five-minute boundaries are split at goals, departures, returns, publication hold
@@ -151,7 +152,7 @@ latches EV stopping. A solver-parent watchdog prevents orphan workers after serv
 
 ## Boundaries
 
-The main project is now EnergyManager 4.0.3. Its fresh joint core replaces V3 under the
+The main project is now EnergyManager 4.0.4. Its fresh joint core replaces V3 under the
 `energymanager` Python package and existing `energy_manager` add-on/image identity. V3
 source/tests/dashboard were replaced; historical evidence remains in Git and labelled
 reports. V3 installation options and database files are not automatically imported. V4

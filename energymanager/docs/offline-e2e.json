@@ -1,12 +1,12 @@
 {
-  "version": "4.0.3",
+  "version": "4.0.4",
   "provenance": "SYNTHETIC local HTTP integration acceptance; constant test signals",
-  "accepted_seconds": 21.55594989983365,
+  "accepted_seconds": 21.799063799902797,
   "intervals": 2018,
-  "control_max_seconds": 0.005494900047779083,
+  "control_max_seconds": 0.004811599850654602,
   "fake_service_calls": 20,
   "result": "passed",
-  "measurement_options": {
+  "normalization": {
     "house_source": "separate_grid",
     "quarter_source": "fixed_quarter_average",
     "phase_source": "goe_selector"

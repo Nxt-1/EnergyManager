@@ -16,7 +16,7 @@ from .forecasts import demo_snapshot
 from .service import Application
 from .store import Store
 from .notifications import Notifications
-from .measurements import MeasurementOptions
+from .measurements import MeasurementOptions, installation_configuration
 
 
 def create_configuration_if_missing(path: Path) -> bool:
@@ -34,7 +34,7 @@ def create_configuration_if_missing(path: Path) -> bool:
 
 
 def configured_application(path: Path, store: Store) -> Application:
-    data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    data: dict[str, Any] = installation_configuration(json.loads(path.read_text(encoding="utf-8")))
     required_capabilities = {f.name for f in fields(Capabilities)}
     if required_capabilities - set(data.get("capabilities", {})):
         raise ValueError(
@@ -60,7 +60,7 @@ def configured_application(path: Path, store: Store) -> Application:
         data["measurements"],
         os.environ.get(data.get("token_environment", "ENERGY_MANAGER_HA_TOKEN"), ""),
         allow_remote=allow_remote,
-        measurement_options=MeasurementOptions(**data.get("measurement_options", {})),
+        measurement_options=MeasurementOptions.installation(),
         phase_entity=data.get("actuators", {}).get("phase"),
         measurement_max_age_seconds=p.measurement_max_age_seconds,
     )

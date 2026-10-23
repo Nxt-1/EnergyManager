@@ -9,11 +9,12 @@ filtered to compatible domains. In the HA app, **Use Home Assistant connection**
 the Supervisor API connection. Its token stays on the server. Entity discovery is
 read-only and also works while planning runs in demo mode.
 
-Under **Measurements**, choose how existing sensors report house demand, quarter-hour
-imports and charger phases. Separate P1 import/export sensors can calculate house demand.
-P1 Current Quarter Average Demand accepts W/kW. go-e APIv2 Connect can reuse its phase
-selector without a separate count sensor. The [mapping instructions](docs/RUNBOOK.md#p1-and-go-e-measurement-choices)
-give the confirmed P1 entity mappings and conversion.
+The P1/go-e setup is built in. **Measurements** contains the existing import, export
+and Current Quarter Average Demand sensors; house demand and quarter-hour energy are
+calculated automatically. Configure the go-e **Charger phase selector** once under
+Actuators. No separate house/phase sensor or source-type choices are required. Daily
+readiness is in **EV and charger**. Known P1 entity IDs are prefilled while other saved
+mappings are preserved. See the [mapping instructions](docs/RUNBOOK.md#p1-and-go-e-setup).
 
 Edit the grouped capacities, tariffs, readiness and connection fields, then choose
 **Save settings**. Edits are validated and saved to the existing configuration file.

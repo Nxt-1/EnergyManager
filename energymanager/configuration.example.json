@@ -56,14 +56,14 @@
     "ev_soc": "sensor.replace_ev_soc",
     "ess_soc": "sensor.replace_ess_soc",
     "connected": "sensor.replace_connected",
-    "house_kw": "sensor.replace_house_kw",
     "pv_ac_kw": "sensor.replace_pv_ac_kw",
     "pv_dc_kw": "sensor.replace_pv_dc_kw",
     "ev_kw": "sensor.replace_ev_kw",
     "ess_kw": "sensor.replace_ess_kw",
-    "quarter_import_kwh": "sensor.replace_quarter_import_kwh",
+    "quarter_import_kwh": "sensor.p1_dongle_current_quarter_average_demand",
     "monthly_peak_kw": "sensor.replace_monthly_peak_kw",
-    "ev_phases": "sensor.replace_ev_phases"
+    "grid_import_kw": "sensor.p1_dongle_momentary_active_import",
+    "grid_export_kw": "sensor.p1_dongle_momentary_active_export"
   },
   "actuators": {
     "force": "select.replace_goe_force",

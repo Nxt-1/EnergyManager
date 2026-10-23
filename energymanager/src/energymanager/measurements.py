@@ -3,8 +3,31 @@
 from __future__ import annotations
 
 import math
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
+
+
+def installation_configuration(document: dict[str, Any]) -> dict[str, Any]:
+    """Resolve the confirmed P1/go-e setup without replacing other saved settings."""
+    prepared = deepcopy(document)
+    measurements = prepared.setdefault("measurements", {})
+    for key, entity in (
+        ("grid_import_kw", "sensor.p1_dongle_momentary_active_import"),
+        ("grid_export_kw", "sensor.p1_dongle_momentary_active_export"),
+        ("quarter_import_kwh", "sensor.p1_dongle_current_quarter_average_demand"),
+    ):
+        if key not in measurements or measurements[key] == f"sensor.replace_{key}":
+            measurements[key] = entity
+    # These retired choices no longer control the application. Keep future extensions.
+    options = prepared.get("measurement_options")
+    if isinstance(options, dict):
+        for key in ("house_source", "quarter_source", "phase_source"):
+            options.pop(key, None)
+        if not options:
+            prepared.pop("measurement_options")
+    return prepared
 
 
 @dataclass(frozen=True)
@@ -12,6 +35,11 @@ class MeasurementOptions:
     house_source: str = "direct"
     quarter_source: str = "energy"
     phase_source: str = "count"
+
+    @classmethod
+    def installation(cls) -> MeasurementOptions:
+        return cls(house_source="separate_grid", quarter_source="fixed_quarter_average",
+                   phase_source="goe_selector")
 
     def __post_init__(self) -> None:
         for name, choices in (

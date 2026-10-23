@@ -142,3 +142,25 @@ maps the three supplied P1 entity IDs plus existing phase selector, saves and re
 Physical commissioning remains separate: check AC signs/topology, meter clock/reset,
 HA ingress and hardware timing before enabling control. On resumption reconcile the
 actual workspace and current checkpoint before continuing new work.
+
+## Settings simplification — local verification complete, 23 October 2026
+
+User explicitly rejected source/type choices and nonexistent house/phase sensors.
+IMPLEMENTED for4.0.4: configured runtime always uses separate P1 powers, fixed0.25h
+demand conversion and existing go-e selector readback. Settings and new starters omit
+all three source selectors and the two unused sensor mappings. Known P1 IDs fill only
+missing/generated placeholders; custom mappings remain. Old source choices cannot
+reappear or alter runtime. Reading/startup leave files unchanged; explicit save backs
+up originals and removes retired choices, preserving unknown future fields and flags.
+Daily readiness/consumption/reserve settings moved into EV and charger.
+TESTED:85 tests30.22s, Ruff/mypy21 modules/JS passed. Seven-day new-input E2E accepted
+2,018 intervals21.799s, max control4.812ms,20 fake calls. Browser used a legacy source
+configuration: unwanted fields absent initially and after reload; P1 IDs filled; one
+phase selector saved; daily target61 remained in EV group; backup/control-disabled
+verified on disk; desktop console errors absent. Screenshots: simple-settings-*.png.
+No live HA, controller or hardware access. Existing8100 preview preserved.
+NEXT: build and isolated package check, final review, commit/push, CI/image verification.
+Synthetic8102 preview must be stopped at completion. Shipping authority remains
+SPECIFICATION.md/RUNBOOK.md and the original handoff/decisions/deferred work in gpt/.
+
+Package verification passed:4.0.4 wheel/sdist,27 matching source/installed files, isolated legacy startup/read/save/backup checks. Existing8100 preview untouched; synthetic8102 service and verification tab stopped. Next: publish verified changes and inspect CI/image results.
