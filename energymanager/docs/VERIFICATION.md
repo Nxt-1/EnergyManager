@@ -27,9 +27,16 @@ No live HA settings or controllers were accessed.
 A real spawned HiGHS solve using the new P1/go-e input choices accepted the complete
 seven-day2,018-interval schedule in21.556s. The check requires known measured EV SoC;
 maximum control tick5.495ms;20 calls went only to local fake services. API and archive
-checks passed. Details: offline-e2e.json. CI and image publication are pending for this
-release. Meter clock alignment, inverter AC topology/signs, ingress and hardware timing
-remain live-unverified commissioning checks.
+checks passed. Details: offline-e2e.json.
+
+Remote verification: implementation commit7d64dd39d9cff2d1507a1ecb0db96c0ce362520b
+passed [CI39971619636](https://github.com/Nxt-1/EnergyManager/actions/runs/39971619636):
+84 tests30.51s, Ruff/mypy/CLI/JS, configured new-source application, package and Linux
+container builds. Remote synthetic seven-day solve:2,018 intervals accepted23.380s,
+max control12.712ms,19 local fake calls. [Image workflow39971619511](https://github.com/Nxt-1/EnergyManager/actions/runs/39971619511)
+succeeded and published4.0.3. The temporary8102 browser fixture was stopped; existing
+8100 preview preserved. Meter clock alignment, inverter AC topology/signs, ingress and
+hardware timing remain live-unverified commissioning checks.
 
 ## Version 4.0.2 — visual configuration
 

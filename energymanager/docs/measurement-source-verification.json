@@ -25,7 +25,8 @@
       "save, backup and reload persisted all mappings",
       "desktop console has no errors"
     ],
-    "screenshot": "screenshots/measurement-source-choices.png"
+    "screenshot": "screenshots/measurement-source-choices.png",
+    "temporary_preview_stopped": true
   },
   "sources": {
     "p1_reader_sha": "0c0e9f07056e1907be9d92dcd06cbd4fa416f95d",
@@ -56,5 +57,36 @@
       "persisted input checksum and accepted result"
     ],
     "ev_soc_known_required": true
+  },
+  "remote": {
+    "commit": "7d64dd39d9cff2d1507a1ecb0db96c0ce362520b",
+    "ci": {
+      "run": 39971619636,
+      "url": "https://github.com/Nxt-1/EnergyManager/actions/runs/39971619636",
+      "result": "success",
+      "tests_passed": 84,
+      "tests_seconds": 30.51,
+      "full_horizon_accepted_seconds": 23.380345666999972,
+      "intervals": 2018,
+      "control_max_seconds": 0.012712120000003324,
+      "fake_service_calls": 19,
+      "checks": [
+        "Ruff",
+        "mypy",
+        "CLI",
+        "tests",
+        "JavaScript",
+        "configured application with known EV SoC and new source choices",
+        "wheel and source build",
+        "Linux container build"
+      ]
+    },
+    "image": {
+      "run": 39971619511,
+      "url": "https://github.com/Nxt-1/EnergyManager/actions/runs/39971619511",
+      "result": "success",
+      "tag": "ghcr.io/nxt-1/energymanager:4.0.3",
+      "digest": "sha256:5e7aba5753f7ca240a3adeb3f480c13b705e2998a23e6b3ee6caed95b938fbe5"
+    }
   }
 }

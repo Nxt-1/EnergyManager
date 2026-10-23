@@ -128,3 +128,17 @@ User reports P1 current-quarter demand in kW, no separate background-house senso
 
 
 LOCAL COMPLETE for4.0.3: explicit sensor interpretations, P1 separate-grid house reconstruction, fixed-quarter demand conversion, go-e selector readback and conditional Settings fields. User confirmed demand resets near zero then builds; fixed0.25h is correct for their signal. EV/ESS independent control preserved; unknown phase pauses EV; phase change waits for mode readback. Corrected SoC freshness for slight asynchronous read skew.84 tests passed28.57s; Ruff/mypy21 modules/JS passed. New-input seven-day E2E accepted2,018 intervals21.556s, max control5.495ms,20 fake calls, known EV SoC required. Wheel/sdist built and27 source/installed files matched, isolated config save/backup/reload passed. Browser choices, P1 autocomplete/kW demand, conditional fields and save/reload verified; desktop errors absent. Evidence: measurement-source-verification.json, offline-e2e.json, VERIFICATION.md and screenshot. No live access or commissioning. Next: final diff/release checks, commit/push and inspect CI/publication, then record outcome. Synthetic8102 preview will be stopped at completion.
+
+REMOTE COMPLETE:4.0.3 committed/pushed as7d64dd39d9cff2d1507a1ecb0db96c0ce362520b.
+CI39971619636 passed84 tests30.51s, lint/types/CLI/JS, configured new-source E2E,
+Python packages and Linux container. Remote synthetic seven-day E2E accepted2,018
+intervals23.380s, max control12.712ms,19 fake calls. Image workflow39971619511 passed
+and published ghcr.io/nxt-1/energymanager:4.0.3. Updated VERIFICATION.md and
+measurement-source-verification.json with run links/digest. Synthetic browser tab and
+8102 service stopped; pre-existing8100 preview preserved. No live HA/hardware access.
+No implementation work remains. Next concrete action: user updates HA app to4.0.3,
+selects separate-grid source, P1 current-quarter demand and go-e selector source,
+maps the three supplied P1 entity IDs plus existing phase selector, saves and restarts.
+Physical commissioning remains separate: check AC signs/topology, meter clock/reset,
+HA ingress and hardware timing before enabling control. On resumption reconcile the
+actual workspace and current checkpoint before continuing new work.
