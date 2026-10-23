@@ -74,6 +74,11 @@ passed and all24 package source/assets match. Template included in wheel and sdi
 Evidence: configuration-bootstrap-verification.json. No scheduler/control policy changes.
 Configured fake E2E also passed:2,018 intervals accepted20.096s, max control5.27ms,
 20 fake-only calls. Current evidence: offline-e2e.json and VERIFICATION.md.
-Next concrete action: commit/push the reviewed changes
-under existing authorization and verify CI/image publication. No live deployment or
-controller action is authorized; Supervisor/ingress/physical commissioning remain unverified.
+REMOTE-VERIFIED: implementation committed/pushed as32ea875364836b1512efb23fadadf84383dc19ca.
+CI39938880228 passed52 tests34.71s, lint/types/CLI/JS, configured fake E2E, package and
+Linux container builds. Synthetic E2E:2,018 intervals accepted26.999s, max control14.24ms,
+21 fake-only calls. Image workflow39938880153 passed and published4.0.1.
+Next concrete action for the user: update the HA app to4.0.1 and start it; inspect its
+log for the created configuration path, edit the file and restart when ready. No live
+deployment or controller action was performed; Supervisor/ingress/physical commissioning
+remain unverified. Hardware control remains disabled in every generated starter.

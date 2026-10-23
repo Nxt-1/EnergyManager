@@ -8,5 +8,23 @@
   "existing_file_preserved": true,
   "sdist_contains_template": true,
   "provenance": "Local filesystem and installed-wheel verification; no live HA access",
-  "result": "passed"
+  "result": "passed",
+  "remote_verification": {
+    "commit": "32ea875364836b1512efb23fadadf84383dc19ca",
+    "ci_run_url": "https://github.com/Nxt-1/EnergyManager/actions/runs/39938880228",
+    "ci_conclusion": "success",
+    "tests_passed": 52,
+    "tests_seconds": 34.71,
+    "configured_synthetic_integration": {
+      "intervals": 2018,
+      "accepted_seconds": 26.999268260000008,
+      "control_max_seconds": 0.014244090999994796,
+      "fake_service_calls": 21
+    },
+    "package_and_container_builds": "passed",
+    "image_run_url": "https://github.com/Nxt-1/EnergyManager/actions/runs/39938880153",
+    "image_conclusion": "success",
+    "published_version": "4.0.1",
+    "live_installation_verified": false
+  }
 }

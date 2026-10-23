@@ -22,6 +22,14 @@ commissioning remain unverified. The reports below retain4.0.0 promotion/CI hist
 package-verification.json and ci-verification.json describe that prior release, while
 offline-e2e.json now records the new4.0.1 run.
 
+Remote verification on commit `32ea875364836b1512efb23fadadf84383dc19ca`:
+[CI](https://github.com/Nxt-1/EnergyManager/actions/runs/39938880228) passed52 tests
+in34.71s, lint/types/CLI/JS, configured fake integration, package builds and the Linux
+container build. That synthetic integration accepted2,018 intervals in26.999s with
+maximum measured control tick14.24ms and21 fake-only calls.
+The [image workflow](https://github.com/Nxt-1/EnergyManager/actions/runs/39938880153)
+also passed and published4.0.1. No live installation or controller action was performed.
+
 ## Version 4.0.0 promotion history
 
 The fresh implementation has been promoted into the main `energymanager/` application,
