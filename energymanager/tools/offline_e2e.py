@@ -64,11 +64,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None) -> None:
         key = entity.split(".", 1)[-1]
         value, unit = values[key]
         now = datetime.now(UTC)
-        reported_at = now
-        if key in ("ess_soc", "ev_soc"):
-            reported_at = issued - timedelta(minutes=8)
-        elif key in ("connected", "phase", "monthly_peak_kw"):
-            reported_at = issued - timedelta(days=1)
+        reported_at = issued - timedelta(hours=3)
         if active_fault == "quarter" and key == "quarter_import_kwh":
             reported_at = now.replace(minute=now.minute // 15 * 15, second=0, microsecond=0) - timedelta(seconds=1)
         elif active_fault == "stale" and key == "pv_ac_kw":
@@ -89,6 +85,8 @@ async def run(*, serve: bool = False, preview_fault: str | None = None) -> None:
             "mobile_app_verification_phone": {"name": "Verification phone"}}}])
 
     async def state(request: web.Request) -> web.Response:
+        if active_fault == "read_failure":
+            raise web.HTTPServiceUnavailable()
         if request.match_info["key"] == "zone.home":
             return web.json_response({"attributes": {"latitude": 50, "longitude": 4}})
         return web.json_response(state_row(request.match_info["key"]))
@@ -224,7 +222,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None) -> None:
                         "built-in Open-Meteo pipeline with four original planes and correction tables",
                         "persisted measured household baseline; no prepared forecast endpoint",
                         "separate P1 powers, kW quarter demand and go-e selector readback",
-                        "eight-minute battery states and unchanged states do not age fresh power or cross billing quarters",
+                        "all HA states carry three-hour-old report metadata; validated input reads still drive forecasting/control",
                         "spawned real full-horizon HiGHS plan",
                         "publication against current measurements",
                         "independent guarded calls to local fake only",
@@ -243,8 +241,8 @@ async def run(*, serve: bool = False, preview_fault: str | None = None) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--serve", action="store_true", help="Keep synthetic verification UI on localhost:8102")
-    parser.add_argument("--input-fault", choices=("quarter", "stale", "unavailable"),
-                        help="Inject an input problem only after successful verification, for the local preview")
+    parser.add_argument("--input-fault", choices=("quarter", "stale", "unavailable", "read_failure"),
+                        help="Inject old metadata, unavailability or HA read failure after local verification")
     arguments = parser.parse_args()
     if arguments.input_fault and not arguments.serve:
         parser.error("--input-fault requires --serve")

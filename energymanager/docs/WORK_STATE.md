@@ -336,3 +336,35 @@ database, hardware or real notification access. State age budgets remain provisi
 NEXT: final diff review, ONE release commit/push, inspect CI and image publication.
 Then append remote evidence only to ignored checkpoint/final reply; user forbids optional
 verification-record commits. Future unrelated code work requires explicit permission.
+
+
+4.0.9 IN PROGRESS: user explicitly authorized replacing per-entity age gates with HA
+availability/current states and a successful-input-read watchdog. Scope only this design
+change; no unrelated fixes, one release commit, no optional verification-only commit.
+Implemented: HA report timestamps diagnostic only (including old/missing/future metadata);
+Observation.at is completion of a validated HA input read. Unknown/unavailable, failed
+reads and value/unit/physical checks still apply. Existing control/hardware/forecast
+watchdogs now age the successful-read snapshot; quarter accounting uses current HA value
+at read time, with no report-timestamp quarter comparison. Original P1 conversion and
+quarter reset/accounting retained. Existing JSON watchdog key retained; UI label clarified.
+67 affected tests passed in 6.58 s; Ruff/mypy 28 passed. Includes stalled input-loop
+independent-control watchdog and old unchanged values across quarters. Metadata bumped
+4.0.9; full E2E now uses three-hour-old report timestamps on every entity.
+NEXT: full suite, full-horizon E2E, browser healthy-old-metadata and HA failure cases,
+package/install checks, focused docs, one commit/push and inspect CI/publication.
+No live HA/database/hardware/real notification access. Integration device availability
+is trusted as agreed; actual installation outage reporting remains live-unverified.
+
+
+4.0.9 LOCAL COMPLETE: 151 tests passed in 39.54 s; Ruff/mypy 28/JS passed. Seven-day
+fake-Supervisor/HA/weather E2E: 2,018 intervals, 27.045 s, max tick 1.864 ms, five
+fake-only calls; ALL entity report timestamps three hours old. Read-time watchdog,
+HA availability and value validation gate control; no per-entity expiry or report-quarter
+comparison. Original quarter conversion/reset and forecast expiry remain. Watchdog
+expiry/recovery and stalled input-loop independent control tested. Browser healthy-old
+metadata ON/OFF, genuine HA HTTP failure/blocking and no console errors passed.
+Wheel/sdist built (metadata rename retry); 34 isolated installed files match source;
+old available states accepted and read watchdog expiry verified. Local fixtures/tabs
+closed, existing 8100 preview preserved. No live access or operation. Actual integration
+outage reporting remains live-unverified. NEXT: final scoped diff review, ONE release
+commit/push, inspect CI/image. Record remote results only in ignored checkpoint/final.

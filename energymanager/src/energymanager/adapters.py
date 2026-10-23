@@ -116,12 +116,8 @@ class HomeAssistantAdapter:
         connected = str(self.inputs.readings["connected"].require(polled_at)).lower()
         if connected not in ("on", "off", "true", "false", "connected", "disconnected"):
             raise ValueError(f"{self.entities['connected']}: unknown EV connection state {connected!r}")
-        if issue := self.inputs.quarter_issue(polled_at):
-            raise ValueError(issue)
-        quarter_at = self.inputs.readings["quarter_import_kwh"].reported_at
-        assert quarter_at is not None  # Validated by the quarter freshness check.
-        # The energy prefix belongs to this timestamp, independently of slower battery states.
-        at = quarter_at
+        # This is a validated view of HA's current available states, not their last change time.
+        at = polled_at
         ev_kw, ess_kw = number("ev_kw"), number("ess_kw")
         pv_ac_kw = number("pv_ac_kw")
         if self.options.house_source == "separate_grid":
@@ -132,7 +128,7 @@ class HomeAssistantAdapter:
         else:
             house_input_kw = number("house_kw")
         house_kw = self.options.house_power(house_input_kw, ev_kw, pv_ac_kw, ess_kw)
-        quarter_kwh = self.options.quarter_energy(number("quarter_import_kwh"), quarter_at)
+        quarter_kwh = self.options.quarter_energy(number("quarter_import_kwh"), polled_at)
         try:
             phases = self.options.phase_count(str(self.inputs.readings["ev_phases"].require(polled_at)))
         except ValueError:

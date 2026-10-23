@@ -82,7 +82,7 @@ class InstallationForecast:
         if (observation.quality != "measured" or not math.isfinite(observation.house_kw)
                 or observation.house_kw < 0
                 or not -5 <= (at - observation.at).total_seconds() <= self.measurement_max_age_seconds):
-            raise ValueError("A fresh measured household baseline is required")
+            raise ValueError("Household forecast requires validated inputs from a recent HA read")
         if not self.last_sample or (observation.at - self.last_sample[0].observed_at_utc).total_seconds() >= 300:
             sample = LoadSample(observation.at.astimezone(UTC), observation.house_kw * 1000)
             self.store.record_load(sample)

@@ -1,5 +1,6 @@
-"""Independent live values and per-source freshness through a real local HA endpoint."""
+"""Independent HA states and successful-read watchdog through a real local HA endpoint."""
 
+import asyncio
 import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -10,7 +11,7 @@ from aiohttp.test_utils import TestServer
 
 from energymanager.adapters import HomeAssistantAdapter
 from energymanager.control import FastControl
-from energymanager.domain import Capabilities
+from energymanager.domain import Capabilities, Policy
 from energymanager.forecasts import demo_snapshot
 from energymanager.measurements import MeasurementOptions
 from energymanager.service import Application
@@ -46,75 +47,50 @@ async def inputs():
             yield adapter, rows, at
 
 
-async def test_slow_battery_and_static_states_do_not_age_the_power_snapshot(inputs):
+async def test_old_unchanged_available_states_are_usable_without_zero_exceptions(inputs):
     adapter, rows, at = inputs
-    rows["ess_soc"]["last_reported"] = (at - timedelta(minutes=8)).isoformat()
-    rows["ev_soc"]["last_reported"] = (at - timedelta(minutes=8)).isoformat()
-    for key in ("connected", "ev_phases", "monthly_peak_kw"):
-        rows[key]["last_reported"] = (at - timedelta(days=1)).isoformat()
+    for row in rows.values():
+        row["last_reported"] = (at - timedelta(hours=3)).isoformat()
+        row["last_updated"] = row["last_reported"]
     observation = await adapter.observe(Capabilities(), at=at)
     assert observation.at == at and observation.quality == "measured"
     assert observation.house_kw == pytest.approx(0.7)
     assert observation.ev_state_known and observation.ev_phase_known
-    assert not any(card["issues"] for card in adapter.inputs.view(at, Capabilities())["cards"].values())
+    view = adapter.inputs.view(at, Capabilities())
+    assert not any(card["issues"] for card in view["cards"].values())
+    assert view["readings"]["ess_soc"]["report_age_seconds"] == 10800
+    assert view["readings"]["ess_soc"]["read_age_seconds"] == 0
 
 
-async def test_fresh_power_from_before_reset_can_accompany_current_quarter_energy(inputs):
+async def test_unchanged_zero_values_and_quarter_counter_remain_valid_across_quarters(inputs):
     adapter, rows, at = inputs
-    at = at.replace(minute=15, second=2)
+    for key in ("grid_import_kw", "pv_ac_kw", "pv_dc_kw", "ev_kw", "ess_kw", "quarter_import_kwh"):
+        rows[key]["state"] = "0"
+    rows["grid_export_kw"]["state"] = "0"
     for row in rows.values():
-        row["last_reported"] = (at - timedelta(seconds=3)).isoformat()
-    rows["quarter_import_kwh"]["last_reported"] = (at - timedelta(seconds=1)).isoformat()
-    observation = await adapter.observe(Capabilities(), at=at)
-    assert observation.at == at - timedelta(seconds=1)
-    assert observation.quarter_import_kwh == pytest.approx(0.2)
-    control = FastControl(Capabilities(), demo_snapshot().policy)
-    control.tick(observation, at, None, 1)
-    assert control.estimated_quarter_kwh >= 0.2
+        row["last_reported"] = (at - timedelta(hours=2)).isoformat()
+    for polled_at in (at, at + timedelta(minutes=15), at + timedelta(hours=1)):
+        observation = await adapter.observe(Capabilities(), at=polled_at)
+        assert observation.at == polled_at and observation.quarter_import_kwh == 0
+        assert observation.house_kw == observation.pv_ac_kw == observation.pv_dc_kw == 0
+        assert not any(card["issues"] for card in adapter.inputs.view(polled_at, Capabilities())["cards"].values())
 
 
-async def test_previous_quarter_counter_blocks_control_but_not_live_cards(inputs, tmp_path):
+async def test_quarter_energy_uses_current_ha_value_and_resets_independently_of_metadata(inputs):
     adapter, rows, at = inputs
-    rows["quarter_import_kwh"]["last_reported"] = (at.replace(minute=15) - timedelta(seconds=1)).isoformat()
-    at = at.replace(minute=15, second=1)
-    for key, row in rows.items():
-        if key != "quarter_import_kwh":
-            row["last_reported"] = at.isoformat()
-    with pytest.raises(ValueError, match="sensor.quarter_import_kwh.*different billing quarter"):
-        await adapter.observe(Capabilities(), at=at)
-    assert adapter.last_observation is None
-    store = Store(tmp_path / "readings.sqlite")
-    try:
-        app = Application(store, demo=False, ha=adapter)
-        app.observation = replace(app.observation, quality="unknown")
-        app.now = lambda: at
-        state = app.state()
-        cards = state["live_inputs"]["cards"]
-        assert cards["grid"]["value"] == pytest.approx(-1.3)
-        assert cards["house"]["value"] == pytest.approx(0.7)
-        assert cards["solar"]["value"] == pytest.approx(3.4)
-        assert cards["ess"]["value"] == 50 and cards["ev"]["value"] == 45
-        assert "different billing quarter" in cards["grid"]["issues"][0]
-        command = app.controller.tick(app.observation, at, None, 1)
-        assert command.ev_kw == command.ess_kw == 0
-    finally:
-        store.close()
-    rows["quarter_import_kwh"]["last_reported"] = at.isoformat()
-    recovered = await adapter.observe(Capabilities(), at=at)
-    assert recovered.quality == "measured"
-    assert not adapter.inputs.view(at, Capabilities())["cards"]["grid"]["issues"]
-
-
-async def test_stale_power_names_entity_age_and_limit_and_preserves_other_readings(inputs):
-    adapter, rows, at = inputs
-    rows["pv_ac_kw"]["last_reported"] = (at - timedelta(seconds=45)).isoformat()
-    with pytest.raises(ValueError, match=r"sensor.pv_ac_kw: last reported 45.0 s ago; maximum 30 s"):
-        await adapter.observe(Capabilities(), at=at)
-    cards = adapter.inputs.view(at, Capabilities())["cards"]
-    assert cards["grid"]["value"] == pytest.approx(-1.3) and not cards["grid"]["issues"]
-    assert cards["solar"]["value"] == pytest.approx(3.4)
-    assert "45.0 s" in cards["solar"]["issues"][0]
-    assert cards["ev"]["value"] == 45 and not cards["ev"]["issues"]
+    metadata = (at - timedelta(hours=2)).isoformat()
+    rows["quarter_import_kwh"]["last_reported"] = metadata
+    control = FastControl(Capabilities(), Policy())
+    before = await adapter.observe(Capabilities(), at=at)
+    assert before.quarter_import_kwh == pytest.approx(0.2)
+    control.tick(before, at, None, 1)
+    assert control.estimated_quarter_kwh == pytest.approx(0.2)
+    next_quarter = at.replace(minute=30, second=1)
+    rows["quarter_import_kwh"]["state"] = "0"
+    after = await adapter.observe(Capabilities(), at=next_quarter)
+    control.tick(after, next_quarter, None, 1)
+    assert after.at == next_quarter and control.estimated_quarter_kwh == 0
+    assert adapter.inputs.readings["quarter_import_kwh"].reported_at.isoformat() == metadata
 
 
 async def test_failed_entity_read_preserves_ac_solar_house_grid_and_batteries(inputs):
@@ -132,39 +108,51 @@ async def test_failed_entity_read_preserves_ac_solar_house_grid_and_batteries(in
     json.dumps(view, allow_nan=False)
 
 
-async def test_fresh_reports_keep_unchanged_zero_power_and_soc_usable(inputs):
+@pytest.mark.parametrize("state", ["unknown", "unavailable"])
+async def test_critical_ha_availability_blocks_snapshot_and_names_entity(inputs, state):
+    adapter, rows, at = inputs
+    rows["ess_soc"]["state"] = state
+    with pytest.raises(ValueError, match=f"sensor.ess_soc: state is {state}"):
+        await adapter.observe(Capabilities(), at=at)
+    assert adapter.last_observation is None
+    cards = adapter.inputs.view(at, Capabilities())["cards"]
+    assert cards["ess"]["value"] is None and f"state is {state}" in cards["ess"]["issues"][0]
+    assert cards["grid"]["value"] == pytest.approx(-1.3)
+    assert cards["house"]["value"] == pytest.approx(0.7)
+
+
+async def test_unknown_ev_soc_holds_ev_but_available_shared_states_still_allow_ess(inputs):
+    adapter, rows, at = inputs
+    rows["ev_soc"]["state"] = "unavailable"
+    observation = await adapter.observe(Capabilities(), at=at)
+    assert not observation.ev_state_known and observation.quality == "measured"
+    command = FastControl(Capabilities(), Policy()).tick(observation, at, None, 1)
+    assert command.ev_kw == 0 and command.ess_kw < 0
+
+
+@pytest.mark.parametrize("metadata", ["old", "future", "missing", "malformed"])
+async def test_report_timestamps_are_diagnostic_and_never_substitute_for_read_time(inputs, metadata):
     adapter, rows, at = inputs
     for row in rows.values():
-        row["last_updated"] = (at - timedelta(hours=3)).isoformat()
-    assert (await adapter.observe(Capabilities(), at=at)).house_kw == pytest.approx(0.7)
-    del rows["grid_import_kw"]["last_reported"]
-    with pytest.raises(ValueError, match="sensor.grid_import_kw.*maximum 30 s.*last_updated"):
-        await adapter.observe(Capabilities(), at=at)
+        if metadata == "missing":
+            row.pop("last_reported")
+            row.pop("last_updated")
+        else:
+            row["last_reported"] = (at + timedelta(days=1)).isoformat() if metadata == "future" else (
+                (at - timedelta(days=1)).isoformat() if metadata == "old" else "no timestamp")
+    observation = await adapter.observe(Capabilities(), at=at)
+    assert observation.at == at and observation.house_kw == pytest.approx(0.7)
+    assert observation.ev_state_known and observation.ev_phase_known
+    assert not any(card["issues"] for card in adapter.inputs.view(at, Capabilities())["cards"].values())
 
 
-async def test_expired_ess_soc_is_named_and_still_visible_as_stale(inputs):
-    adapter, rows, at = inputs
-    rows["ess_soc"]["last_reported"] = (at - timedelta(seconds=901)).isoformat()
-    with pytest.raises(ValueError, match="sensor.ess_soc.*901.0 s.*maximum 900 s"):
-        await adapter.observe(Capabilities(), at=at)
-    cards = adapter.inputs.view(at, Capabilities())["cards"]
-    assert cards["ess"]["value"] == 50 and "901.0 s" in cards["ess"]["issues"][0]
-    assert cards["house"]["value"] == pytest.approx(0.7) and not cards["house"]["issues"]
-
-
-@pytest.mark.parametrize("problem,message", [("nan", "not finite"), ("future", "in the future"),
-                                          ("unit", "requires declared kW"), ("missing_time", "timestamp is missing")])
-async def test_invalid_input_is_named_without_hiding_unaffected_cards(inputs, problem, message):
+@pytest.mark.parametrize("problem,message", [("nan", "not finite"), ("unit", "requires declared kW")])
+async def test_invalid_values_still_block_control_without_hiding_unaffected_cards(inputs, problem, message):
     adapter, rows, at = inputs
     if problem == "nan":
         rows["pv_dc_kw"]["state"] = "nan"
-    elif problem == "future":
-        rows["pv_dc_kw"]["last_reported"] = (at + timedelta(seconds=6)).isoformat()
-    elif problem == "unit":
-        rows["pv_dc_kw"]["attributes"]["unit_of_measurement"] = "kWh"
     else:
-        rows["pv_dc_kw"].pop("last_reported")
-        rows["pv_dc_kw"].pop("last_updated")
+        rows["pv_dc_kw"]["attributes"]["unit_of_measurement"] = "kWh"
     with pytest.raises(ValueError, match=f"sensor.pv_dc_kw.*{message}"):
         await adapter.observe(Capabilities(), at=at)
     view = adapter.inputs.view(at, Capabilities())
@@ -173,11 +161,54 @@ async def test_invalid_input_is_named_without_hiding_unaffected_cards(inputs, pr
     json.dumps(view, allow_nan=False)
 
 
-async def test_live_freshness_advances_without_relabelling_cached_values_as_current(inputs):
+async def test_read_watchdog_expires_when_successful_polls_stop(inputs):
     adapter, _, at = inputs
-    await adapter.observe(Capabilities(), at=at)
-    view = adapter.inputs.view(at + timedelta(seconds=40), Capabilities())
-    assert "40.0 s ago" in view["cards"]["grid"]["issues"][0]
+    observation = await adapter.observe(Capabilities(), at=at)
+    control = FastControl(Capabilities(), Policy())
+    assert control.tick(observation, at, None, 1).ess_kw < 0
+    later = at + timedelta(seconds=31)
+    command = control.tick(observation, later, None, 1)
+    assert command.ev_kw == command.ess_kw == 0 and "stale" in command.reason.lower()
+    view = adapter.inputs.view(later, Capabilities())
+    assert "last read from HA 31.0 s ago; watchdog limit 30 s" in view["cards"]["grid"]["issues"][0]
     assert view["cards"]["grid"]["value"] == pytest.approx(-1.3)
-    assert "40.0 s ago" in view["cards"]["ess"]["issues"][0]  # ESS power is stale, its percentage is still usable.
-    assert not view["cards"]["ev"]["issues"]
+    renewed = await adapter.observe(Capabilities(), at=later)
+    assert renewed.at == later and control.tick(renewed, later, None, 1).ess_kw < 0
+    assert not adapter.inputs.view(later, Capabilities())["cards"]["grid"]["issues"]
+
+
+async def test_independent_control_stops_when_the_input_loop_cannot_complete_another_read(inputs, tmp_path):
+    adapter, _, _ = inputs
+    entered = asyncio.Event()
+
+    class BlockedForecast:
+        async def read(self, observation, at):
+            entered.set()
+            await asyncio.Event().wait()
+
+    store = Store(tmp_path / "watchdog.sqlite")
+    policy = replace(Policy(), control_period_seconds=0.02)
+    snapshot = replace(demo_snapshot(goals=()), policy=policy)
+    app = Application(store, snapshot=snapshot, policy=policy, demo=False, ha=adapter, forecast=BlockedForecast())
+    app.observation = replace(app.observation, quality="unknown")
+    clock = [datetime.now(UTC)]
+    app.now = lambda: clock[0]
+    tasks = [asyncio.create_task(app.input_loop()), asyncio.create_task(app.control_loop())]
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        clock[0] = app.observation.at
+        async with asyncio.timeout(2):
+            while not any(command.ess_kw < 0 for command in app.actuator.commands):
+                await asyncio.sleep(0.01)
+        clock[0] = app.observation.at + timedelta(seconds=31)
+        async with asyncio.timeout(2):
+            while not app.last_command or "stale" not in app.last_command["reason"].lower():
+                await asyncio.sleep(0.01)
+        assert app.last_command["ev_kw"] == app.last_command["ess_kw"] == 0
+        assert app.observation.quality == "measured"  # The independent watchdog, not an error callback, stopped control.
+    finally:
+        app.shutdown = True
+        for task in (*tasks, *app.protective_tasks):
+            task.cancel()
+        await asyncio.gather(*tasks, *app.protective_tasks, return_exceptions=True)
+        store.close()

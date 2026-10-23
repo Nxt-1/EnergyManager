@@ -113,7 +113,7 @@ def setting_fields() -> tuple[SettingField, ...]:
         ("planning_budget_seconds", "Planning budget (seconds)", "Advanced", 1, 600, 1),
         ("polish_tolerance_eur", "Plan comparison tolerance (€)", "Advanced", 0, None, 0.01),
         ("completion_margin_minutes", "Completion margin (minutes)", "Advanced", 0, None, 1),
-        ("measurement_max_age_seconds", "Maximum measurement age (seconds)", "Advanced", 0.001, None, 1),
+        ("measurement_max_age_seconds", "HA input-read watchdog (seconds)", "Advanced", 0.001, None, 1),
         ("forecast_max_age_seconds", "Maximum forecast age (seconds)", "Advanced", 0.001, None, 1),
         ("control_period_seconds", "Control period (seconds)", "Advanced", 0.001, None, 0.1),
         ("sustained_deviation_seconds", "Sustained deviation (seconds)", "Advanced", 0, None, 1),

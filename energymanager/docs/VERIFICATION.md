@@ -1,5 +1,33 @@
 # EnergyManager 4 verification
 
+## Version 4.0.9 — HA availability and successful-read watchdog
+
+User-approved scope: use current available HA states, remove per-entity age gates and
+retain a watchdog on validated input reads. Report timestamps are diagnostic, including
+old/missing/malformed metadata. Numbers, units, physical consistency and required
+unknown/unavailable states still validate. Quarter conversion/reset accounting remains;
+report timestamps are no longer compared with the current quarter. Existing JSON timeout
+key is retained with the clarified HA input-read watchdog label. Forecast expiry is unchanged.
+
+Local: **151 tests passed in 39.54 s**; Ruff, mypy (28 modules) and JavaScript checks passed.
+Coverage includes unchanged zero/nonzero states across quarters, diagnostic timestamps,
+current-quarter counter reset, unavailable/unknown/read failures, value/unit rejection,
+read-watchdog expiry/recovery and independent control while the input loop is stalled.
+The full seven-day fake-Supervisor/HA/weather application accepted 2,018 intervals in
+27.045 s, maximum tick 1.864 ms and five fake service calls. Every entity carried a
+three-hour-old report timestamp throughout the successful run.
+
+Browser: clean live values and immediate fake ON/OFF with old metadata; injected HA HTTP
+failure blocks enablement and identifies failed reads. No console warnings/errors.
+Screenshots availability-v409-healthy.png and availability-v409-read-failure.png are
+synthetic local verification only. Wheel/source archives built (transient Windows metadata
+rename denial resolved by retry); all 34 isolated installed files match source. Installed
+old-state acceptance and read-watchdog expiry passed. Temporary fixtures/tabs closed and
+the existing 8100 preview preserved. No live HA/database/hardware/real notification access.
+Actual device outage detection is delegated to HA integrations as agreed and remains a
+commissioning check. Remote results go in the chat/ignored checkpoint, without a separate
+verification-record commit.
+
 ## Version 4.0.8 — independent live values and input freshness
 
 Scope: the reported all-or-nothing Overview behavior and timestamp/freshness failures.

@@ -136,7 +136,7 @@ async def test_p1_split_powers_and_goe_selector_over_local_http():
             timestamps["ev_soc"] = at + timedelta(seconds=1)
             assert (await adapter.observe(Capabilities(), at=at)).ev_state_known
             timestamps["ev_soc"] = at + timedelta(seconds=60)
-            assert not (await adapter.observe(Capabilities(), at=at)).ev_state_known
+            assert (await adapter.observe(Capabilities(), at=at)).ev_state_known
             timestamps["ev_soc"] = at
             adapter.options = replace(options, quarter_source="fixed_quarter_average")
             assert (await adapter.observe(Capabilities(), at=at)).quarter_import_kwh == pytest.approx(0.8)
@@ -152,8 +152,8 @@ async def test_p1_split_powers_and_goe_selector_over_local_http():
             boundary_at = at.replace(minute=15, second=1)
             timestamps.update({key: boundary_at for key in timestamps})
             timestamps["quarter_import_kwh"] = boundary_at - timedelta(seconds=2)
-            with pytest.raises(ValueError, match="billing quarter"):
-                await adapter.observe(Capabilities(), at=boundary_at)
+            current = await adapter.observe(Capabilities(), at=boundary_at)
+            assert current.at == boundary_at and current.quarter_import_kwh == pytest.approx(0.8)
 
 
 async def test_phase_change_waits_for_readback_before_resuming_charge():

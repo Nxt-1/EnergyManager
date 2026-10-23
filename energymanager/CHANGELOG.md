@@ -1,3 +1,10 @@
+## 4.0.9 — Trust HA availability and watch successful input reads
+
+- Use Home Assistant's current available states without per-entity timestamp expiry or zero-value exceptions.
+- Keep report timestamps as diagnostics; stop control if validated HA input reads cease or required states become unknown/unavailable.
+- Preserve value/unit/physical validation and quarter-hour accounting; remove comparisons between report timestamps and billing quarters.
+- Clarify the existing timeout setting as the HA input-read watchdog; no configuration migration required.
+
 ## 4.0.8 — Independent live values and per-input freshness
 
 - Keep available Overview values visible when another input fails; mark stale values and unavailable components individually.

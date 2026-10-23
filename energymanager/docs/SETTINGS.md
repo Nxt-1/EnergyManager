@@ -21,7 +21,7 @@ for the installed HA app. Reading or starting the app does not rewrite the file.
 
 Incomplete physical settings keep the editor available. They do not produce a plan
 or enable an actuator. Overview values are read independently: available values remain
-visible when another input fails. Known stale values carry an entity/age warning;
+visible when another input fails. Cached values carry a watchdog warning if HA reads stop;
 unavailable values show dashes, and available solar components remain visible in the
 subtitle. Actual charts use complete measured observations. Input errors name the entity
 and failed check. The hardware switch still requires valid critical measurements.
@@ -38,11 +38,11 @@ installation JSON. Planning and measurements continue while it is off.
 On first upgrade to4.0.6 the new switch starts **off**. The old commissioning checkboxes
 and JSON `policy.control_enabled` flag cannot enable it. Once explicitly enabled through
 the new switch, later restarts wait for valid saved/runtime settings, mapped entities
-and fresh critical measurements before resuming. The switch can always revoke a pending
+and a recent validated HA input read before resuming. The switch can always revoke a pending
 request. Settings that have been saved but not loaded still require their normal restart.
 
-Enabling validates settings, checks entity availability/units and checks measurement
-freshness. A missing EV SoC or unknown phase reading can still pause EV independently
+Enabling validates settings, checks entity availability/units and checks the last
+validated input read against the HA read watchdog. A missing EV SoC or unknown phase reading can still pause EV independently
 while fresh shared measurements permit ESS balancing. Existing planner permissions,
 physical limits and conditional-purchase guards continue to apply.
 
@@ -85,19 +85,24 @@ earlier image. Automatic HA connection settings and phone notification destinati
 also differ in earlier versions. No live deployment or rollback was performed here.
 
 
-## Measurement freshness (4.0.8)
+## HA availability and input-read watchdog (4.0.9)
 
-Power readings and quarter-demand reports use Maximum measurement age (30 s by default).
-ESS/EV percentages have a separate 900 s budget so slower battery reports do not age fresh
-power. Connection state, forced charger phase mode and monthly peak are state values:
-they remain valid until changed or unavailable. These budgets are engineering defaults,
-not measured installation reporting rates. No new setting or configuration migration is
-required for this release.
+Available HA states are accepted even when their values and report timestamps have not
+changed for hours. There are no per-entity age limits or zero-value exceptions. HA is
+responsible for marking devices/entities unavailable when device communication fails.
+EnergyManager still rejects required unknown/unavailable states, failed reads, invalid
+numbers/units and physically inconsistent values. A missing EV-only state can pause EV
+independently while valid shared states continue to support ESS.
 
-The quarter counter must have reported in the current quarter. At a reset, EnergyManager
-waits for that counter to update; it can use fresh instantaneous power reported just
-before the reset. An expired or unavailable critical input still prevents hardware control.
-HA timestamps use last_reported when supplied and last_updated otherwise; see the
-[HA state object](https://www.home-assistant.io/docs/configuration/state_object/).
-If a power input genuinely stops reporting, the warning identifies its entity and age;
-restarting EnergyManager does not make that old reading fresh.
+The Advanced setting HA input-read watchdog (seconds) defaults to 30 s. It retains the
+existing JSON key policy.measurement_max_age_seconds, so no migration is needed. It now
+limits time since a validated HA input read, rather than age of entity report timestamps.
+If HA reads stop completing, the independent controller restricts commands, enablement
+is blocked and cached Overview values show a read-watchdog warning. Report metadata is
+kept in the API for diagnostics and never substituted with an invented report timestamp.
+
+Quarter-hour accounting and meter conversion remain in place; available counters are
+used at read time and reset with their reported values. An unchanged zero can span many
+quarters without requiring a new entity timestamp. Weather forecast expiry is unchanged.
+A working HA request proves HA is reachable; correct physical-device outage detection
+still depends on the underlying integrations and must be checked during commissioning.

@@ -1,4 +1,4 @@
-"""Per-entity measurements, freshness checks and independent Overview values."""
+"""HA state validation, input-read watchdog and independent Overview values."""
 
 from __future__ import annotations
 
@@ -19,13 +19,13 @@ class Reading:
     unit: str | None
     reported_at: datetime | None
     received_at: datetime
-    maximum_age: float | None
+    maximum_read_age: float
     timestamp_source: str | None
     error: str | None = None
 
     @classmethod
     def parse(cls, entity: str, row: dict[str, Any] | BaseException, received_at: datetime,
-              unit: str | None, maximum_age: float | None) -> Reading:
+              unit: str | None, maximum_read_age: float) -> Reading:
         value: float | str | None = None
         reported_at = None
         source = None
@@ -55,21 +55,22 @@ class Reading:
             source = "last_reported" if row.get("last_reported") else "last_updated"
             timestamp = row.get(source)
             if timestamp:
-                reported_at = instant(timestamp)
-            elif maximum_age is not None:
-                raise ValueError("report timestamp is missing")
+                try:
+                    reported_at = instant(timestamp)
+                except (ValueError, TypeError, AttributeError):
+                    pass  # HA report metadata is diagnostic; availability/value checks grant authority.
         except (ValueError, TypeError, KeyError, AttributeError) as exc:
             error = str(exc)
-        return cls(entity, value, unit, reported_at, received_at, maximum_age, source, error)
+        return cls(entity, value, unit, reported_at, received_at, maximum_read_age, source, error)
 
     def issue(self, at: datetime) -> str | None:
         reason = self.error
-        if not reason and self.reported_at:
-            age = (at - self.reported_at).total_seconds()
+        if not reason:
+            age = (at - self.received_at).total_seconds()
             if age < -5:
-                reason = f"report timestamp is {-age:.1f} s in the future; maximum 5 s"
-            elif self.maximum_age is not None and age > self.maximum_age:
-                reason = f"last reported {age:.1f} s ago; maximum {self.maximum_age:g} s ({self.timestamp_source})"
+                reason = "HA input-read clock moved backwards"
+            elif age > self.maximum_read_age:
+                reason = f"last read from HA {age:.1f} s ago; watchdog limit {self.maximum_read_age:g} s"
         return f"{self.entity_id}: {reason}" if reason else None
 
     def require(self, at: datetime) -> float | str:
@@ -82,9 +83,9 @@ class Reading:
 class LiveInputs:
     """Retain successful reads even when another entity prevents a control snapshot."""
 
-    def __init__(self, entities: dict[str, str], options: MeasurementOptions, maximum_power_age: float) -> None:
+    def __init__(self, entities: dict[str, str], options: MeasurementOptions, maximum_read_age: float) -> None:
         self.entities, self.options = entities, options
-        self.maximum_power_age = maximum_power_age
+        self.maximum_read_age = maximum_read_age
         self.readings: dict[str, Reading] = {}
 
     def update(self, values: dict[str, Any], received_at: datetime) -> None:
@@ -95,35 +96,18 @@ class LiveInputs:
                      quarter_import_kwh="kWh" if self.options.quarter_source == "energy" else "kW")
         self.readings = {}
         for key, row in values.items():
-            maximum_age: float | None = self.maximum_power_age
-            if key in ("ess_soc", "ev_soc"):
-                maximum_age = 900  # Battery percentages are slower state readings, as with existing EV SoC.
-            elif key in ("connected", "monthly_peak_kw") or (
-                key == "ev_phases" and self.options.phase_source == "goe_selector"
-            ):
-                maximum_age = None  # These states remain valid until changed or unavailable.
-            self.readings[key] = Reading.parse(self.entities[key], row, received_at, units.get(key), maximum_age)
+            self.readings[key] = Reading.parse(self.entities[key], row, received_at, units.get(key), self.maximum_read_age)
 
     def number(self, key: str, at: datetime) -> float:
         return float(self.readings[key].require(at))
-
-    def quarter_issue(self, at: datetime) -> str | None:
-        reading = self.readings["quarter_import_kwh"]
-        issue = reading.issue(at)
-        if issue:
-            return issue
-        if reading.reported_at and int(reading.reported_at.timestamp()) // 900 != int(at.timestamp()) // 900:
-            age = (at - reading.reported_at).total_seconds()
-            return (f"{reading.entity_id}: quarter-hour reading reported {age:.1f} s ago at {reading.reported_at.isoformat()} "
-                    "belongs to a different billing quarter; waiting for the meter's current-quarter update")
-        return None
 
     def view(self, at: datetime, capabilities: Capabilities) -> dict[str, Any]:
         if not self.readings:
             return {"readings": {}, "cards": {}}
         readings = {
             key: {**json_data(reading), "issue": reading.issue(at),
-                  "age_seconds": (at - reading.reported_at).total_seconds() if reading.reported_at else None}
+                  "report_age_seconds": (at - reading.reported_at).total_seconds() if reading.reported_at else None,
+                  "read_age_seconds": (at - reading.received_at).total_seconds()}
             for key, reading in self.readings.items()
         }
 
@@ -163,12 +147,12 @@ class LiveInputs:
         ev = card(("ev_soc",), lambda soc: soc)
         quarter = self.readings["quarter_import_kwh"]
         quarter_kwh = None
-        if isinstance(quarter.value, float) and quarter.reported_at:
+        if isinstance(quarter.value, float):
             try:
-                quarter_kwh = self.options.quarter_energy(quarter.value, quarter.reported_at)
+                quarter_kwh = self.options.quarter_energy(quarter.value, quarter.received_at)
             except ValueError as exc:
                 grid["issues"].append(f"{quarter.entity_id}: {exc}")
-        if issue := self.quarter_issue(at):
+        if issue := quarter.issue(at):
             grid["issues"].append(issue)
         grid["label"] = (f"Quarter-hour import {quarter_kwh:.2f} kWh" if quarter_kwh is not None
                          else "Quarter-hour import unavailable")
