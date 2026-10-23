@@ -86,12 +86,37 @@ the latter is a rejected diagnostic, never a passing acceptance result.
 
 ## Remaining external checks
 
-Docker/Supervisor, target-host dependency wheels, authenticated ingress and physical
-commissioning remain unverified locally. CI has been updated, but remote execution was
-not triggered. No live installation/database, real hardware, external notification,
-controller enablement, image publishing or push was used. Review the runbook before
+Supervisor, authenticated ingress and physical commissioning remain unverified.
+The authorized V4 push was commit `1d420848cdbb57e50169b552c178947343a5d494`.
+The [image workflow](https://github.com/Nxt-1/EnergyManager/actions/runs/39935019989)
+passed, including its tests, container build and publication of version4.0.0. Docker
+was unavailable locally. No live installation/database, real hardware, external
+notification or controller enablement was used. Review the runbook before
 installing/configuring this major update; explicit complete physical/actuator mappings
 and commissioning/exclusive-controller flags are still mandatory for control.
+
+## CI timing regression follow-up — 23 October 2026
+
+The [initial CI run](https://github.com/Nxt-1/EnergyManager/actions/runs/39935019991)
+had42 passing tests and one failure in the real-solver disconnect test. Its elapsed
+wall-clock assertion expected a requested80ms sleep plus observation processing to
+finish within200ms; the observed time was423ms. The image workflow passed the same
+test on the same commit. Those logs do not establish the actual protective-dispatch
+latency on the failing runner.
+
+Four diagnostic local runs restricted to two CPUs recorded protective dispatch in
+1.13–2.39ms, while the old sleep-based measurement varied from83.38–166.31ms. These
+are synthetic local measurements, not installation evidence or a CI latency guarantee.
+
+The test now observes actual protective-actuator delivery, requires delivery while
+the real full-horizon solve is pending, checks zero EV power and the current generation,
+preserves unaffected ESS validity, and waits for stale-result rejection. The2s dispatch
+timeout is a test deadlock guard; it is not a control-latency claim. Host-dependent
+subsecond wall-clock assertions are removed. Runtime scheduling/control code is unchanged.
+Existing numerical latency measurements above remain performance evidence.
+
+Local verification with two-CPU affinity:43 tests passed in28.29s; Ruff and mypy passed.
+Remote CI for this follow-up must also pass before treating it as remotely verified.
 
 Storage policy is unchanged: no retention deletion is enabled. Prior compressed decisions
 used about72–127kB per snapshot/result pair; one-second synthetic measurement+command

@@ -36,3 +36,21 @@ v4-promotion-browser.json. Next concrete action after the authorized push: inspe
 and image-publishing results, then verify Supervisor startup/ingress with control disabled
 and review the migration runbook before physical commissioning. No live deployment is
 authorized by the commit/push request. Verify actual workspace/checkpoint if resumed later.
+
+## CI follow-up — 23 October 2026
+
+Initial V4 main commit1d420848cdbb57e50169b552c178947343a5d494 was pushed. Image
+workflow39935019989 succeeded, including container publication. CI39935019991 failed
+only the real-solver disconnect test's elapsed-sleep assertion (423ms vs200ms);
+42 other tests passed. The same test passed in the image workflow on the same SHA.
+
+IMPLEMENTED: test now signals actual protective-command delivery and requires it before
+the real solve completes, then checks EV invalidation, unaffected ESS and stale-result
+rejection. Removed host-dependent subsecond wall-clock assertions. No runtime code changed.
+TESTED: full43 tests passed28.29s with two-CPU affinity; four additional focused runs
+passed5.31–5.40s each on two CPUs; Ruff and mypy passed. Four local
+diagnostic runs measured protective dispatch1.13–2.39ms vs old sleep measurement83–166ms.
+These fixtures are synthetic; failing-runner dispatch latency is unknown.
+Next concrete action: commit/push the focused CI fix
+under the existing authorization and inspect its remote CI, including configured E2E,
+package and container steps. Physical commissioning remains live-unverified.

@@ -4,12 +4,26 @@ from time import monotonic
 
 import pytest
 
-from energymanager.domain import Goal
+from energymanager.control import Command, FakeActuator
+from energymanager.domain import Goal, Observation
 from energymanager.forecasts import demo_snapshot
 from energymanager.planner import Planner
 from energymanager.service import Application
 from energymanager.store import Store
 from test_first_slice import tiny
+
+
+class ProtectiveActuator(FakeActuator):
+    """Signal delivery of the revocation command through the real control path."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.dispatched = asyncio.Event()
+
+    async def apply(self, command: Command, generation: int, observation: Observation) -> None:
+        await super().apply(command, generation, observation)
+        if command.generation == generation and command.reason.startswith("Affected instruction revoked:"):
+            self.dispatched.set()
 
 
 def test_timeout_and_malformed_solution_are_not_infeasibility(monkeypatch):
@@ -42,6 +56,8 @@ async def test_real_solve_does_not_block_control_and_disconnect_cannot_be_resurr
     )
     store = Store(tmp_path / "events.sqlite")
     app = Application(store, policy=full.policy, snapshot=full)
+    actuator = ProtectiveActuator()
+    app.actuator = actuator
     app.accepted = accepted
     app.ev_valid = app.ess_valid = True
     await app.start()
@@ -51,16 +67,17 @@ async def test_real_solve_does_not_block_control_and_disconnect_cannot_be_resurr
             await asyncio.sleep(0.01)
         assert app.status == "planning"
         await asyncio.sleep(0.05)
-        before = monotonic()
         app.observe(replace(app.observation, connected=False, at=app.now()))
         disconnect_revision = app.revision
-        await asyncio.sleep(0.08)
-        assert monotonic() - before < 0.2
+        # Observe dispatch itself; an unrelated sleep also measures shared-runner scheduling delays.
+        await asyncio.wait_for(actuator.dispatched.wait(), timeout=2)
+        assert app.status == "planning"
+        assert not store.decisions(), "Protective control must precede completion of the real solve"
         assert not app.ev_valid
         assert app.ess_valid
         assert app.last_command["ev_kw"] == 0
         assert app.last_command["generation"] == disconnect_revision
-        assert app.response_seconds and max(app.response_seconds) < 0.1
+        assert app.response_seconds
         end = monotonic() + 8
         while monotonic() < end and not any(d["disposition"] == "rejected_stale" for d in store.decisions()):
             await asyncio.sleep(0.05)
