@@ -59,5 +59,36 @@
       "persisted input checksum and accepted result"
     ]
   },
-  "live_verification": "not performed; no live HA or controller actions"
+  "live_verification": "not performed; no live HA or controller actions",
+  "remote": {
+    "commit": "b6297bc29e60337e78ea4bdf00bc68d5dfd8f094",
+    "ci": {
+      "run": 39979435914,
+      "url": "https://github.com/Nxt-1/EnergyManager/actions/runs/39979435914",
+      "result": "success",
+      "tests_passed": 85,
+      "tests_seconds": 35.31,
+      "full_horizon_accepted_seconds": 28.933872323999992,
+      "intervals": 2018,
+      "control_max_seconds": 0.011631542000003492,
+      "fake_service_calls": 22,
+      "checks": [
+        "Ruff",
+        "mypy",
+        "CLI",
+        "tests",
+        "JavaScript",
+        "configured application without source choices",
+        "wheel and source build",
+        "Linux container build"
+      ]
+    },
+    "image": {
+      "run": 39979436032,
+      "url": "https://github.com/Nxt-1/EnergyManager/actions/runs/39979436032",
+      "result": "success",
+      "tag": "ghcr.io/nxt-1/energymanager:4.0.4",
+      "digest": "sha256:c175b165230798f2e2fdebeb2c9813b7a37618cf76966d998219a2663be838e9"
+    }
+  }
 }

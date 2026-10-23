@@ -20,7 +20,14 @@ The4.0.4 wheel/sdist built. All27 code/assets match source and isolated installe
 installed legacy read/startup/save/backup/reload passed. Seven-day E2E without any source
 choices accepted2,018 intervals21.799s; max control4.812ms;20 local fake calls. Known
 EV SoC and selector state, archive and API checks passed. Details are in
-simple-settings-verification.json and offline-e2e.json. CI/image publication pending.
+simple-settings-verification.json and offline-e2e.json.
+
+Remote: commitb6297bc29e60337e78ea4bdf00bc68d5dfd8f094 passed
+[CI39979435914](https://github.com/Nxt-1/EnergyManager/actions/runs/39979435914):85 tests
+35.31s, lint/types/CLI/JS, configured full-horizon application, package and container.
+Remote synthetic E2E:2,018 intervals accepted28.934s, max tick11.632ms,22 fake calls.
+[Image39979436032](https://github.com/Nxt-1/EnergyManager/actions/runs/39979436032)
+succeeded and published4.0.4. Temporary browser/service fixtures were stopped.
 No live HA/controller operation; wiring, clocks, ingress and commissioning remain unverified.
 
 ## Version 4.0.3 — installation measurement compatibility

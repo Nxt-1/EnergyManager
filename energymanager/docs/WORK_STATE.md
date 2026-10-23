@@ -164,3 +164,13 @@ Synthetic8102 preview must be stopped at completion. Shipping authority remains
 SPECIFICATION.md/RUNBOOK.md and the original handoff/decisions/deferred work in gpt/.
 
 Package verification passed:4.0.4 wheel/sdist,27 matching source/installed files, isolated legacy startup/read/save/backup checks. Existing8100 preview untouched; synthetic8102 service and verification tab stopped. Next: publish verified changes and inspect CI/image results.
+
+REMOTE COMPLETE:4.0.4 pushed asb6297bc29e60337e78ea4bdf00bc68d5dfd8f094.
+CI39979435914 passed85 tests35.31s, lint/types/JS/CLI, configured seven-day E2E,
+Python packages and Linux container. Remote E2E accepted2,018 intervals28.934s,
+max tick11.632ms,22 fake-only calls. Image39979436032 published4.0.4. Evidence in
+simple-settings-verification.json and VERIFICATION.md. No live HA/hardware access.
+No implementation work remains. User's next action: update HA app and refresh its
+page; the known P1 mappings are prefilled, phase information uses the one existing
+charger selector, and readiness appears in EV and charger. Save and restart when ready.
+Commissioning of actual values, AC topology/signs, clocks and hardware remains separate.
