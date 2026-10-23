@@ -1,0 +1,29 @@
+{
+  "version": "4.0.0",
+  "wheel": "energymanager-4.0.0-py3-none-any.whl",
+  "wheel_sha256": "d9d56ce85545fdbfb60a3745b86e356a4315ff5b07970c0c17a2edfb2d3bad9b",
+  "wheel_bytes": 75381,
+  "source_and_asset_files_matched": 23,
+  "isolated_install": "artifacts/v4-wheel-site; python -I; asserted import path",
+  "smoke_status": "Optimal",
+  "smoke_valid": true,
+  "smoke_seconds": 0.009145000018179417,
+  "core_modules_matched_to_candidate": [
+    "domain",
+    "forecasts",
+    "optimization",
+    "incumbent",
+    "validation",
+    "planner",
+    "reservations",
+    "publication",
+    "control",
+    "demo_plant",
+    "worker",
+    "store"
+  ],
+  "same_addon_identity": true,
+  "legacy_candidate_directory_removed": true,
+  "unrelated_app_and_historical_docs_unchanged": true,
+  "docker": "unavailable; not built or installed"
+}

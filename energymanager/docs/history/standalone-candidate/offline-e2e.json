@@ -1,0 +1,16 @@
+{
+  "provenance": "SYNTHETIC local HTTP integration acceptance; constant test signals",
+  "accepted_seconds": 24.061297200154513,
+  "intervals": 2018,
+  "control_max_seconds": 0.006235599983483553,
+  "fake_service_calls": 21,
+  "result": "passed",
+  "checks": [
+    "configured JSON and HA HTTP inputs",
+    "spawned real full-horizon HiGHS plan",
+    "publication against current measurements",
+    "independent guarded calls to local fake only",
+    "API state",
+    "persisted input checksum and accepted result"
+  ]
+}

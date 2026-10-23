@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EnergyManager · 4.0.0</title><link rel="stylesheet" href="./style.css"></head>
+<body><header><div><span class="brand">◉</span> <strong>EnergyManager</strong><span class="muted"> 4.0.0</span></div>
+<nav aria-label="Main navigation"><button id="overview" aria-selected="true">Overview</button><button id="planning" aria-selected="false">Planning</button></nav>
+<div id="connection" role="status">Connecting…</div></header>
+<main><div class="notice" id="provenance">Loading application inputs…</div>
+<section class="page-heading"><div><h1 id="page-title">Overview</h1><p id="period" class="muted"></p></div>
+<div class="actions"><button id="refresh">Recalculate</button><button class="primary" id="new-goal">＋ Add goal</button></div></section>
+<div id="live" class="live"></div>
+<div id="status" role="status"></div>
+<div class="layout"><section class="charts">
+<article class="card"><div class="card-heading"><h2 id="power-title">Power · actual / planned</h2><div id="navigation"><button id="back" aria-label="Previous 12 hours">←</button><button id="now">Now</button><button id="forward" aria-label="Next 12 hours">→</button></div></div>
+<div id="power" class="plot"></div><div class="legend"><span style="--series:#dc2626">Grid</span><span style="--series:#007ac2">ESS</span><span style="--series:#e4ac19">Solar</span><span style="--series:#8c65c8">House</span><span style="--series:#16a34a">EV</span><small>Solid: observed · dashed: planned</small></div></article>
+<article class="card"><h2>Scheduled sessions</h2><div id="timeline"></div></article>
+<article class="card"><h2>Battery state of charge · %</h2><div id="soc" class="plot"></div><div class="legend"><span style="--series:#007ac2">ESS</span><span style="--series:#16a34a">EV</span></div></article>
+</section><aside><article class="card"><h2>Goals & progress</h2><div id="goals"></div></article>
+<article class="card" id="approval-card"><h2>Decisions needing attention</h2><div id="approvals"></div></article>
+<article class="card"><h2>Forecast costs & energy assets</h2><div id="costs"></div></article>
+<article class="card"><details><summary>Why this plan</summary><div id="reasons"></div></details></article>
+</aside></div>
+<article class="card"><details id="sessions-detail"><summary>Session details and expected pauses</summary><div id="sessions"></div></details></article>
+<article class="card"><details id="diagnostics"><summary>Decision history & technical evidence</summary><div id="evidence"></div><button id="history">Load decisions</button><div id="history-list"></div></details></article>
+<footer>Control disabled · Local verification application · Forecasts and planned costs are estimates.</footer>
+</main>
+<dialog id="goal-dialog"><form id="goal-form"><div class="card-heading"><h2 id="form-title">Add an EV goal</h2><button type="button" id="close-dialog" aria-label="Close">×</button></div>
+<input name="id" type="hidden"><label>Name<input name="title" required maxlength="120" placeholder="e.g. Monday journey"></label>
+<label>Goal type<select name="kind"><option value="manual">Timed SoC goal</option><option value="trip">Journey (total distance, including return)</option></select></label>
+<label id="soc-field">Target SoC (%)<input name="target_soc_percent" type="number" min="0" max="100" step="0.1" value="70"></label>
+<label id="distance-field" hidden>Total journey distance (km)<input name="distance_km" type="number" min="0" step="1" value="120"></label>
+<label>Deadline / departure<input name="deadline" type="datetime-local" required></label>
+<label id="return-field" hidden>Return time (optional)<input name="return_at" type="datetime-local"><small>Unknown return means unavailable until reconnection.</small></label>
+<label>Priority<input name="priority" type="number" min="0" max="1000" value="50"><small>Priority resolves conflicts; it does not grant peak permission.</small></label>
+<p id="form-error" class="error" role="alert"></p><div class="actions"><button type="button" id="cancel-dialog">Cancel</button><button class="primary" type="submit">Save goal</button></div>
+</form></dialog><dialog id="detail-dialog"><div id="detail-body"></div><button id="close-detail">Close</button></dialog>
+<script type="module" src="./app.js"></script></body></html>

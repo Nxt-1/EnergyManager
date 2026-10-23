@@ -1,3 +1,13 @@
+## 4.0.0 — Joint EV/ESS architecture
+
+- Replace the V3 application with the fresh joint seven-day EV/ESS MILP and independent responsive control.
+- Add causal source accounting, scoped peak approvals, conditional solar tasks and explicit best-effort outcomes.
+- Persist immutable decisions and observations; validate current state before publication and reconcile after restart.
+- Replace the dashboard entry point with the application's functional Overview and Planning pages.
+- Use explicit reviewed V4 JSON configuration, a separate V4 SQLite database, and disabled control by default.
+- Preserve the existing energy_manager add-on identity and GHCR image. V3 options/data require reviewed migration; they are not imported automatically.
+- Local solver, integration, browser and package verification is documented in docs/VERIFICATION.md. Docker/Supervisor and hardware commissioning remain separate checks.
+
 ## 3.0.0b3 — Dashboard explanations and measured planning quality
 
 - Integrate archived history, EV/ESS/requirement/job selection, stage schedules, input changes and

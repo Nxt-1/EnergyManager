@@ -1,0 +1,16 @@
+{
+  "provenance": "SYNTHETIC multi-hour local demo; no installation evidence",
+  "prior_rejected_decision": "27a4f5410fd343ecab823286a6c9ce02",
+  "original_error": "Malformed trajectory: ess_solar",
+  "reconciled_at": "2026-10-23T15:07:43.237739+00:00",
+  "errors_after_fix": [
+    "Required outcome daily-2026-10-24",
+    "Required outcome daily-2026-10-25",
+    "Required outcome daily-2026-10-26",
+    "Required outcome daily-2026-10-27",
+    "Required outcome daily-2026-10-28",
+    "Required outcome daily-2026-10-29",
+    "Required outcome daily-2026-10-30"
+  ],
+  "remaining_intervals": 2016
+}

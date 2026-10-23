@@ -1,0 +1,11 @@
+{
+  "wheel": "energymanager_next-0.1.0.dev0-py3-none-any.whl",
+  "wheel_sha256": "5b75ee4c816de8ab6831194c9f390fc4ce96f82a551e19ec7f1b97bf1e3f234c",
+  "wheel_bytes": 74827,
+  "source_and_asset_files_matched": 23,
+  "isolated_install": "artifacts/wheel-final; python -I; asserted import path",
+  "smoke_status": "Optimal",
+  "smoke_valid": true,
+  "smoke_seconds": 0.009240400046110153,
+  "docker": "unavailable; not built or installed"
+}

@@ -1,151 +1,26 @@
 name: Energy Manager
-version: "3.0.0b3"
+version: "4.0.0"
 slug: energy_manager
-description: Predictive home energy manager for Home Assistant
+description: Joint EV/ESS planning and responsive control for Home Assistant
 url: https://github.com/Nxt-1/EnergyManager
 arch:
   - amd64
 startup: application
-boot: auto
+boot: manual
 stage: experimental
 homeassistant_api: true
 ingress: true
 ingress_port: 8099
 panel_icon: mdi:chart-timeline-variant
 image: ghcr.io/nxt-1/energymanager
+map:
+  - type: app_config
+    read_only: true
 options:
-  log_level: info
-  planner:
-    tie_break_seconds: 30
-    economic_tolerance_eur: 0.01
-    robustness_tolerance_kwh: 0.05
-    operations_tolerance_events: 0.0
-    stability_tolerance_kwh: 0.01
-    grid_import_limit_kw: 25.0
-    grid_export_limit_kw: 25.0
-    archive_max_mb: 1024
-    archive_keep: 10000
-    archive_days: 30
-  grid: {}
-  ess:
-    power_positive_means: discharge
-    control_enabled: false
-  pv: {}
-  ev:
-    control_enabled: false
-    automatic_fault_reset: false
-    fault_reset_delay_seconds: 60
-    max_reset_attempts: 1
-    weekly_schedule: []
-  economics:
-    enabled: false
-  monitoring: {}
-  notifications:
-    enabled: false
-    cooldown_seconds: 300
-  database:
-    enabled: false
-    database: energy_manager
-  legacy_influx:
-    backfill_enabled: false
-    database: home_assistant
-    retention_policy: autogen
+  mode: demo
+  planning_budget_seconds: 120
+  configuration_file: /config/energymanager.json
 schema:
-  log_level: list(debug|info|warning|error)
-  planner:
-    tie_break_seconds: int
-    economic_tolerance_eur: float?
-    robustness_tolerance_kwh: float?
-    operations_tolerance_events: float?
-    stability_tolerance_kwh: float?
-    grid_import_limit_kw: float?
-    grid_export_limit_kw: float?
-    archive_max_mb: int?
-    archive_keep: int?
-    archive_days: int?
-  grid:
-    import_power_entity: str?
-    export_power_entity: str?
-  ess:
-    soc_entity: str?
-    power_entity: str?
-    setpoint_entity: str?
-    control_enabled: bool
-    power_positive_means: list(discharge|charge)
-    capacity_kwh: float?
-    min_soc_percent: int?
-    max_soc_percent: int?
-    max_charge_power_w: int?
-    max_discharge_power_w: int?
-    charge_efficiency: float?
-    discharge_efficiency: float?
-  pv:
-    solax_power_entity: str?
-    shed_power_entity: str?
-    forecast_enabled: bool?
-  ev:
-    soc_entity: str?
-    connected_entity: str?
-    charging_power_entity: str?
-    current_entity: str?
-    phase_mode_entity: str?
-    force_state_entity: str?
-    reset_button_entity: str?
-    automatic_fault_reset: bool
-    fault_reset_delay_seconds: int
-    max_reset_attempts: int
-    control_enabled: bool
-    min_charge_current_a: int?
-    max_charge_current_a: int?
-    nominal_voltage_v: int?
-    supports_single_phase: bool?
-    supports_three_phase: bool?
-    battery_capacity_kwh: float?
-    charge_efficiency: float?
-    target_soc_percent: int?
-    minimum_soc_percent: int?
-    departure_time_local: str?
-    weekly_schedule:
-      - str
-  economics:
-    enabled: bool
-    import_energy_eur_per_kwh: float?
-    export_energy_eur_per_kwh: float?
-    capacity_tariff_eur_per_kw_month: float?
-    capacity_tariff_floor_kw: float?
-    valid_from_utc: str?
-  monitoring:
-    grid_import_energy_entity: str?
-    grid_export_energy_entity: str?
-    pv_ac_energy_entity: str?
-    pv_dc_energy_entity: str?
-    house_energy_entity: str?
-    ev_energy_entity: str?
-    ess_charge_energy_entity: str?
-    ess_discharge_energy_entity: str?
-    grid_import_counter_cumulative: bool?
-    grid_export_counter_cumulative: bool?
-    pv_ac_counter_cumulative: bool?
-    pv_dc_counter_cumulative: bool?
-    house_counter_cumulative: bool?
-    ev_counter_cumulative: bool?
-    ess_charge_counter_cumulative: bool?
-    ess_discharge_counter_cumulative: bool?
-    monthly_peak_entity: str?
-    quarter_hour_average_entity: str?
-  notifications:
-    enabled: bool
-    service: str?
-    cooldown_seconds: int?
-  database:
-    enabled: bool
-    url: url?
-    database: str
-    token: password?
-  legacy_influx:
-    backfill_enabled: bool
-    url: url?
-    database: str
-    retention_policy: str
-    username: str?
-    password: password?
+  mode: list(demo|configured)
+  planning_budget_seconds: int(10,600)
+  configuration_file: str

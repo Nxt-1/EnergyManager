@@ -1,9 +1,3 @@
-"""Energy Manager application package."""
+"""EnergyManager 4 joint planning and independent control application."""
 
-from __future__ import annotations
-
-__all__ = ["__version__"]
-
-import os
-
-__version__ = os.environ.get("ENERGY_MANAGER_VERSION", "dev")
+__version__ = "4.0.0"

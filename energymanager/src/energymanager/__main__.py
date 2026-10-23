@@ -1,302 +1,84 @@
-"""Process entrypoint for the Energy Manager Home Assistant app."""
-
 from __future__ import annotations
 
-import asyncio
-import logging
-import os
-import signal
+import argparse
+import json
+from dataclasses import replace
+from pathlib import Path
+from hashlib import sha256
+
+from aiohttp import web
 
 from . import __version__
-from .app import EnergyManagerApp
-from .config import (
-    CONFIGURATION_STATUS_ENTITY,
-    CONFIGURATION_STATUS_VERSION,
-    ConfigurationError,
-    Settings,
-    effective_integer_option_diagnostics,
-)
-from .control_notifications import ControlNotificationManager
-from .database import EnergyManagerStore, InfluxDatabaseClient, InfluxDatabaseError
-from .diagnostics import DiagnosticsPublisher
-from .economics import EconomicsService
-from .ess_control import ControlAwareActuatorRegistry, EssHardwareController
-from .ev_control import EvHardwareController
-from .explanation_api import explanation_server
-from .ha_client import HomeAssistantClient
-from .legacy_influx import LegacyInfluxBackfill, LegacyInfluxClient, LegacyInfluxError
-from .load_service import BackgroundLoadHistory, BackgroundLoadService
-from .open_meteo import OpenMeteoClient
-from .planner_service import PlannerService
-from .pv_service import PvForecastService
-from .tasks import TaskRegistry
-
-
-async def async_main() -> int:
-    """Start the Energy Manager daemon and wait for termination."""
-    try:
-        settings = Settings.load()
-    except ConfigurationError as exc:
-        logging.basicConfig(level=logging.ERROR, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-        logging.error("Invalid Energy Manager configuration: %s", exc)
-        return 2
-    logging.basicConfig(
-        level=getattr(logging, settings.log_level.upper()),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-    logger = logging.getLogger("energymanager")
-    logger.info(
-        "Starting Energy Manager %s; ESS hardware control=%s, EV hardware control=%s",
-        __version__,
-        "enabled" if settings.ess.control_enabled else "disabled",
-        "enabled" if settings.ev.control_enabled else "disabled",
-    )
-    logger.info(
-        "Control notifications=%s%s",
-        "enabled" if settings.notifications.enabled else "disabled",
-        f" via {settings.notifications.service}" if settings.notifications.enabled else "",
-    )
-    supervisor_token = os.environ.get("SUPERVISOR_TOKEN", "")
-    if not supervisor_token:
-        logger.error("SUPERVISOR_TOKEN is missing; Home Assistant API access is unavailable")
-        return 2
-    stop_event = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        try:
-            loop.add_signal_handler(sig, stop_event.set)
-        except NotImplementedError:
-            pass
-
-    async with HomeAssistantClient(supervisor_token) as client:
-        await client.set_state(
-            CONFIGURATION_STATUS_ENTITY,
-            "loaded",
-            {
-                "friendly_name": "Energy Manager Configuration Status",
-                "configuration_status_version": CONFIGURATION_STATUS_VERSION,
-                "source": "/data/options.json",
-                "effective_integer_options": effective_integer_option_diagnostics(settings),
-            },
-        )
-        ess_controller = EssHardwareController(client, settings.ess)
-        ev_controller = EvHardwareController(client, settings.ev)
-        await ess_controller.initialize()
-        await ev_controller.initialize()
-        try:
-            if settings.database.enabled:
-                assert settings.database.url is not None
-                assert settings.database.token is not None
-                async with InfluxDatabaseClient(
-                    settings.database.url,
-                    settings.database.database,
-                    settings.database.token,
-                ) as database_client:
-                    await _run_with_database(
-                        settings,
-                        client,
-                        database_client,
-                        stop_event,
-                        ess_controller,
-                        ev_controller,
-                    )
-            else:
-                diagnostics = DiagnosticsPublisher(client)
-                await diagnostics.publish_database_status("disabled", database=settings.database.database)
-                economics_service = EconomicsService(
-                    settings.economics,
-                    client,
-                    grid_import_entity_id=settings.grid.import_power_entity,
-                )
-                await economics_service.initialize()
-                await _run_app(
-                    settings,
-                    client,
-                    stop_event,
-                    ess_controller=ess_controller,
-                    ev_controller=ev_controller,
-                    store=None,
-                    history=None,
-                    economics_service=economics_service,
-                )
-        finally:
-            await ev_controller.shutdown()
-            await ess_controller.shutdown()
-    logger.info("Energy Manager stopped")
-    return 0
-
-
-async def _run_with_database(
-    settings: Settings,
-    client: HomeAssistantClient,
-    database_client: InfluxDatabaseClient,
-    stop_event: asyncio.Event,
-    ess_controller: EssHardwareController,
-    ev_controller: EvHardwareController,
-) -> None:
-    logger = logging.getLogger("energymanager")
-    diagnostics = DiagnosticsPublisher(client)
-    store = EnergyManagerStore(database_client)
-    backfill_result = None
-    backfill_error = None
-    try:
-        migrated_pv, migrated_load, migrated_load_forecast = await store.initialize()
-        if settings.legacy_influx.backfill_enabled:
-            async with LegacyInfluxClient(settings.legacy_influx) as legacy_client:
-                backfill_result = await LegacyInfluxBackfill(settings, legacy_client, store).run()
-        samples = await store.load_background_samples(days=35)
-    except InfluxDatabaseError as exc:
-        logger.error("InfluxDB persistence unavailable; continuing with local JSONL fallback: %s", exc)
-        await diagnostics.publish_database_status(
-            "error",
-            database=settings.database.database,
-            url=settings.database.url,
-            error=str(exc),
-        )
-        economics_service = EconomicsService(
-            settings.economics,
-            client,
-            grid_import_entity_id=settings.grid.import_power_entity,
-        )
-        await economics_service.initialize()
-        await _run_app(
-            settings,
-            client,
-            stop_event,
-            ess_controller=ess_controller,
-            ev_controller=ev_controller,
-            store=None,
-            history=None,
-            economics_service=economics_service,
-        )
-        return
-    except LegacyInfluxError as exc:
-        backfill_error = str(exc)
-        logger.warning("Legacy InfluxDB backfill failed; continuing with existing EnergyManager history: %s", exc)
-        samples = await store.load_background_samples(days=35)
-    logger.info(
-        "InfluxDB persistence connected: database=%s, history_samples=%d",
-        store.database,
-        len(samples),
-    )
-    await diagnostics.publish_database_status(
-        "connected",
-        database=store.database,
-        url=settings.database.url,
-        migrated_pv_rows=migrated_pv,
-        migrated_load_rows=migrated_load,
-        migrated_load_forecast_rows=migrated_load_forecast,
-        legacy_backfill_status=backfill_result.status if backfill_result else ("error" if backfill_error else None),
-        legacy_backfill_source_rows=backfill_result.source_rows if backfill_result else None,
-        legacy_backfill_sources_updated=backfill_result.sources_updated if backfill_result else None,
-        legacy_backfill_house_rows=backfill_result.house_rows if backfill_result else None,
-        legacy_backfill_background_rows=backfill_result.background_rows if backfill_result else None,
-        legacy_backfill_skipped_rows=backfill_result.skipped_rows if backfill_result else None,
-        legacy_backfill_start_utc=(
-            backfill_result.source_start_utc.isoformat()
-            if backfill_result and backfill_result.source_start_utc
-            else None
-        ),
-        legacy_backfill_end_utc=(
-            backfill_result.source_end_utc.isoformat()
-            if backfill_result and backfill_result.source_end_utc
-            else None
-        ),
-        legacy_backfill_error=backfill_error,
-    )
-    economics_service = EconomicsService(
-        settings.economics,
-        client,
-        grid_import_entity_id=settings.grid.import_power_entity,
-        influx_client=database_client,
-    )
-    await economics_service.initialize()
-    history = BackgroundLoadHistory(path=None, samples=samples)
-    await _run_app(
-        settings,
-        client,
-        stop_event,
-        ess_controller=ess_controller,
-        ev_controller=ev_controller,
-        store=store,
-        history=history,
-        economics_service=economics_service,
-    )
-
-
-async def _run_app(
-    settings: Settings,
-    client: HomeAssistantClient,
-    stop_event: asyncio.Event,
-    *,
-    ess_controller: EssHardwareController,
-    ev_controller: EvHardwareController,
-    store: EnergyManagerStore | None,
-    history: BackgroundLoadHistory | None,
-    economics_service: EconomicsService,
-) -> None:
-    load_service = BackgroundLoadService(client, history=history, store=store)
-    notification_manager = ControlNotificationManager(client, settings.notifications)
-    if settings.pv.forecast_enabled:
-        async with OpenMeteoClient() as meteo_client:
-            pv_service = PvForecastService(client, meteo_client, store=store)
-            planner_service = PlannerService(
-                client,
-                load_service,
-                pv_service,
-                actuator_registry=ControlAwareActuatorRegistry(settings),
-                task_registry=TaskRegistry(settings.ev),
-                economics_service=economics_service,
-                ess_controller=ess_controller,
-                ev_controller=ev_controller,
-                notification_manager=notification_manager,
-                store=store,
-                tie_break_seconds=settings.planner.tie_break_seconds,
-                planner_settings=settings.planner,
-            )
-            app = EnergyManagerApp(
-                settings,
-                client,
-                pv_forecast_service=pv_service,
-                background_load_service=load_service,
-                planner_service=planner_service,
-            )
-            try:
-                async with explanation_server(settings.planner, planner_service):
-                    await app.run(stop_event)
-            finally:
-                await planner_service.shutdown()
-        return
-    planner_service = PlannerService(
-        client,
-        load_service,
-        None,
-        actuator_registry=ControlAwareActuatorRegistry(settings),
-        task_registry=TaskRegistry(settings.ev),
-        economics_service=economics_service,
-        ess_controller=ess_controller,
-        ev_controller=ev_controller,
-        notification_manager=notification_manager,
-        store=store,
-        tie_break_seconds=settings.planner.tie_break_seconds,
-        planner_settings=settings.planner,
-    )
-    app = EnergyManagerApp(
-        settings,
-        client,
-        background_load_service=load_service,
-        planner_service=planner_service,
-    )
-    try:
-        async with explanation_server(settings.planner, planner_service):
-            await app.run(stop_event)
-    finally:
-        await planner_service.shutdown()
+from .domain import Policy, Snapshot, encode
+from .configuration import configured_application
+from .forecasts import demo_snapshot
+from .planner import Planner
+from .service import Application
+from .store import Store
+from .web import create_web
 
 
 def main() -> None:
-    """Synchronous process entrypoint."""
-    raise SystemExit(asyncio.run(async_main()))
+    parser = argparse.ArgumentParser(description="EnergyManager 4: joint EV/ESS planning and control")
+    parser.add_argument("--version", action="version", version=f"EnergyManager {__version__}")
+    parser.add_argument("--port", type=int, default=8100)
+    parser.add_argument("--data", type=Path, default=Path("runtime/energymanager-v4.sqlite3"))
+    parser.add_argument("--fixture", type=Path)
+    parser.add_argument(
+        "--config", type=Path, help="Configured HA/forecast boundaries; control disabled by default"
+    )
+    parser.add_argument("--addon", action="store_true")
+    parser.add_argument("--ingress", action="store_true")
+    parser.add_argument("--budget", type=float, default=120)
+    parser.add_argument(
+        "--scenario", choices=("mixed", "winter"), default="mixed", help="Explicit synthetic demo weather"
+    )
+    parser.add_argument("--solve", type=Path, help="Save one complete offline decision and exit")
+    args = parser.parse_args()
+    if args.addon:
+        options = json.loads(Path("/data/options.json").read_text(encoding="utf-8"))
+        args.budget = float(options.get("planning_budget_seconds", 120))
+        if options.get("mode") == "configured":
+            args.config = Path(options["configuration_file"])
+    if not 1 <= args.budget <= 600:
+        parser.error("Planning budget must be between 1 and 600 seconds")
+    if args.config and (args.fixture or args.solve):
+        parser.error("Configured service inputs cannot be combined with offline fixture/solve mode")
+    if args.fixture and not args.solve:
+        parser.error("Frozen fixtures use --solve; use demo or configured inputs for the running service")
+    policy = replace(Policy(), planning_budget_seconds=args.budget)
+    snapshot = demo_snapshot(policy=policy, season=args.scenario)
+    if args.fixture:
+        payload = json.loads(args.fixture.read_text(encoding="utf-8"))
+        data = payload.get("snapshot", payload)
+        expected = payload.get("result", {}).get("input_digest")
+        if expected and sha256(encode(data).encode()).hexdigest() != expected:
+            parser.error("Frozen decision input checksum mismatch")
+        snapshot = Snapshot.from_dict(data)
+        snapshot = replace(snapshot, policy=replace(snapshot.policy, planning_budget_seconds=args.budget))
+    if args.solve:
+        result = Planner().plan(snapshot)
+        args.solve.parent.mkdir(parents=True, exist_ok=True)
+        args.solve.write_text(encode({"snapshot": snapshot, "result": result}), encoding="utf-8")
+        print(
+            json.dumps(
+                {
+                    k: v
+                    for k, v in result.items()
+                    if k in ("status", "valid", "summary", "seconds", "stages", "reason")
+                },
+                indent=2,
+            )
+        )
+        raise SystemExit(0 if result.get("valid") else 1)
+    args.data.parent.mkdir(parents=True, exist_ok=True)
+    store = Store(args.data)
+    application = (
+        configured_application(args.config, store)
+        if args.config
+        else Application(store, policy=policy, snapshot=snapshot, demo=not bool(args.fixture))
+    )
+    web.run_app(create_web(application), host="0.0.0.0" if args.ingress else "127.0.0.1", port=args.port)
 
 
 if __name__ == "__main__":

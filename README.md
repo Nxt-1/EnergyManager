@@ -1,46 +1,55 @@
-# Energy Manager
+# EnergyManager 4
 
-This repo houses a project that serves as a predictive home energy manager that integrates with Home Assistant. It's
-likely not useful to anyone else since it's taylor made to my setup, however if it can be of any use to someone, be my
-guest.
+Version **4.0.0** replaces the previous Energy Manager application with a joint EV/ESS
+MILP scheduler, independent responsive control and functional Overview/Planning pages.
+The complete seven-day horizon uses planning intervals no longer than five minutes.
+Goals, scoped peak permissions, reasons, measured progress and immutable decisions are
+persisted. Demo mode uses explicitly synthetic inputs and disables hardware control.
 
-The project is being developed as a Home Assistant app.
+The main app lives in `energymanager/`. The standalone `energymanager-next/` tree has
+been promoted into it; there is one active application. Home Assistant retains the
+`energy_manager` slug and `ghcr.io/nxt-1/energymanager` image identity. The separate
+`influxdb3/` app is unchanged.
 
-## V3 preview
+## Run locally
 
-Version **3.0.0b3** implements explainable hierarchical planning with per-device hardware permissions.
-Observations and forecasts become immutable requirements and snapshots; HiGHS solves explicit
-priority stages; validated schedules feed the existing independent safety/dispatch loop.
-Overview and Planning now expose historical evidence and read-only counterfactuals directly through
-authenticated Home Assistant ingress. Offline replay remains available for diagnostics.
+From the repository root, use Python 3.13:
 
-See [V3 architecture, migration, replay and direct replacement](docs/V3.md) and
-[validation results](docs/V3-validation.md). Existing installations must explicitly configure
-an EV departure minimum; an omitted minimum no longer inherits the preferred terminal target.
-
-## Repository layout
-
-```text
-energymanager/          Home Assistant app
-.github/workflows/      CI and image publishing
-tests/                  Unit tests
-repository.yaml         Home Assistant custom repository metadata
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m energymanager --version
+.\.venv\Scripts\python.exe -m energymanager --port 8100
 ```
 
-## Versioning and updates
+Open [Overview and Planning](http://127.0.0.1:8100/). In this prepared workspace the
+existing interpreter is `energymanager/.venv313/Scripts/python.exe`.
 
-Home Assistant uses `energymanager/config.yaml` as the source of the available app version. A deployable change must
-bump that version. Pushing the version bump to `main` triggers the publish workflow, which builds and publishes the
-matching GHCR image. Home Assistant can then show the new version as an available update; installation remains manual.
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check energymanager/src energymanager/tests energymanager/tools
+.\.venv\Scripts\python.exe -m mypy energymanager/src/energymanager
+.\.venv\Scripts\python.exe -m build --no-isolation energymanager
+```
 
-Normal commits that do not change `energymanager/config.yaml` run CI but do not publish a deployable image.
+- [Specification](energymanager/docs/SPECIFICATION.md)
+- [Run, configure, migrate and roll back](energymanager/docs/RUNBOOK.md)
+- [Verification and remaining commissioning checks](energymanager/docs/VERIFICATION.md)
+- [Release notes](energymanager/CHANGELOG.md)
+- [Optional Home Assistant dashboard card](energymanager-dashboard/README.md)
 
-## Development and installation
+## Updating from V3
 
-Use Python 3.13 and install `requirements-dev.txt` in a virtual environment. Run
-`ruff check energymanager/src tests tools` and `pytest`. A reproducible synthetic benchmark is
-available through `PYTHONPATH=energymanager/src python tools/benchmark_v3.py`.
+This is a major application/configuration update. V3 options and databases are not
+loaded by V4. Review the explicit JSON mapping in the runbook, keep a V3 backup, and
+start with control disabled. The add-on defaults to manual start and synthetic demo
+mode. Configured operation requires a reviewed issued forecast feed; control additionally
+requires complete physical/actuator mappings and explicit commissioning/exclusive-
+controller confirmations. The V4 SQLite file is separate from historical V3 data.
 
-The 3.0.0b3 corrections are local and unpublished. Follow the direct replacement and rollback procedure in
-[the V3 guide](docs/V3.md#direct-replacement-configuration-verification-and-rollback) after review and
-explicit deployment approval. Do not enable device control merely to inspect planning diagnostics.
+Home Assistant reads the available version from `energymanager/config.yaml`. The existing
+publish workflow targets the same GHCR image when a version change is pushed to main.
+No image has been built or published locally and no live installation has been changed.
+Docker/Supervisor, physical mapping and hardware cutover require the runbook's later checks.
+Historical V3 investigation/verification documents remain under `docs/`; current V4
+shipping documentation lives with the application in `energymanager/docs/`.

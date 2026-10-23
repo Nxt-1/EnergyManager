@@ -1,13 +1,13 @@
 [tool.pytest.ini_options]
 pythonpath = ["energymanager/src"]
-testpaths = ["tests"]
+testpaths = ["energymanager/tests"]
+asyncio_mode = "auto"
 
 [tool.ruff]
-line-length = 120
-target-version = "py313"
+line-length = 110
+target-version = "py312"
 
-[tool.ruff.lint]
-select = ["E", "F", "I", "UP"]
-
-[tool.ruff.lint.isort]
-known-first-party = ["energymanager"]
+[tool.mypy]
+python_version = "3.12"
+check_untyped_defs = true
+ignore_missing_imports = true

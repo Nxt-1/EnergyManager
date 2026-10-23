@@ -1,0 +1,23 @@
+{
+  "version": "4.0.0",
+  "status": "ready",
+  "error": null,
+  "control_enabled": false,
+  "provenance": "SYNTHETIC deterministic fixture",
+  "control_max_seconds": 0.007247899658977985,
+  "accepted_id": "6b4fe9629ac34b8aa17c6458e7f09055",
+  "accepted_intervals": 2017,
+  "browser_checks": [
+    "version branding",
+    "Overview and Planning",
+    "real archived planning charts",
+    "goal create",
+    "reload persistence",
+    "goal remove",
+    "no console errors"
+  ],
+  "screenshots": [
+    "screenshots/overview.png",
+    "screenshots/planning.png"
+  ]
+}

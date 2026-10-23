@@ -1,0 +1,12 @@
+.venv/
+build/
+dist/
+*.egg-info/
+runtime/
+artifacts/
+.mypy_cache/
+.python/
+.uv-cache/
+.venv313/
+energymanager_next-*/
+/energymanager-*/

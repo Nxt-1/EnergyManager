@@ -1,0 +1,169 @@
+{
+  "overview": {
+    "provenance": "SYNTHETIC deterministic fixture",
+    "status": "ready",
+    "error": null,
+    "control_max_seconds": 0.008859199937433004,
+    "accepted_id": "a3087d3f1d784d56be800f427fdb268e",
+    "accepted_intervals": 2018,
+    "summary": {
+      "imports_kwh": 5.7412381283243725,
+      "exports_kwh": 81.81007868979282,
+      "import_cost_eur": 1.7542927224907952,
+      "export_income_eur": 3.2478601239847746,
+      "capacity_cost_eur": 0.0,
+      "predicted_bill_eur": -1.4935674014939795,
+      "stored_start_eur": 9.930514791779743,
+      "stored_end_eur": 16.31501978293527,
+      "inventory_change_eur": 6.384504991155527,
+      "comparison_eur": -7.878072392649507,
+      "peak_kw": 2.5,
+      "ev_terminal_state_known": true,
+      "optional_ev_kwh": 17.994048784512174,
+      "sessions": 11,
+      "ess_sessions": 15,
+      "phase_changes": 0,
+      "three_phase_activation_changes": 0,
+      "validation": "passed",
+      "intervals": 2018,
+      "provenance": "SYNTHETIC deterministic fixture"
+    },
+    "events": [
+      {
+        "kind": "commanded_dry_run",
+        "count": 656,
+        "mean_body_bytes": 254.0
+      },
+      {
+        "kind": "measurement",
+        "count": 656,
+        "mean_body_bytes": 488.0
+      }
+    ],
+    "decisions": [
+      {
+        "disposition": "accepted",
+        "count": 3
+      }
+    ],
+    "goals": [
+      {
+        "id": "trip-weekend",
+        "title": "Weekend journey \u00b7 120 km return included",
+        "deadline": "2026-10-24T09:00:00+00:00",
+        "target_soc_percent": 50.0,
+        "kind": "trip",
+        "revision": 1,
+        "priority": 70,
+        "distance_km": 120,
+        "return_at": "2026-10-24T18:00:00+00:00",
+        "earliest": null,
+        "approved_peak_kw": null,
+        "approval_revision": 0,
+        "approval_state": "none",
+        "rejected_peak_kw": null
+      }
+    ],
+    "issues": []
+  },
+  "permission": {
+    "provenance": "SYNTHETIC deterministic fixture",
+    "status": "ready",
+    "error": null,
+    "control_max_seconds": 0.021096200216561556,
+    "accepted_id": "380902c9f9eb48bca24624e1ecd978d7",
+    "accepted_intervals": 2018,
+    "summary": {
+      "imports_kwh": 86.43208368421757,
+      "exports_kwh": 0.0,
+      "import_cost_eur": 26.41018749054952,
+      "export_income_eur": 0.0,
+      "capacity_cost_eur": 6.546255000000015,
+      "predicted_bill_eur": 32.956442490549534,
+      "stored_start_eur": 9.814014704267521,
+      "stored_end_eur": 10.443293179790631,
+      "inventory_change_eur": 0.62927847552311,
+      "comparison_eur": 32.327164015026426,
+      "peak_kw": 4.0000000000000036,
+      "ev_terminal_state_known": true,
+      "optional_ev_kwh": 0.0,
+      "sessions": 1,
+      "ess_sessions": 1,
+      "phase_changes": 0,
+      "three_phase_activation_changes": 2,
+      "validation": "passed",
+      "intervals": 2018,
+      "provenance": "SYNTHETIC deterministic fixture"
+    },
+    "events": [
+      {
+        "kind": "approval",
+        "count": 2,
+        "mean_body_bytes": 323.0
+      },
+      {
+        "kind": "commanded_dry_run",
+        "count": 667,
+        "mean_body_bytes": 248.0
+      },
+      {
+        "kind": "goal_revised",
+        "count": 1,
+        "mean_body_bytes": 306.0
+      },
+      {
+        "kind": "invalidation",
+        "count": 3,
+        "mean_body_bytes": 63.0
+      },
+      {
+        "kind": "measurement",
+        "count": 667,
+        "mean_body_bytes": 469.0
+      },
+      {
+        "kind": "protective_command",
+        "count": 2,
+        "mean_body_bytes": 250.0
+      }
+    ],
+    "decisions": [
+      {
+        "disposition": "accepted",
+        "count": 3
+      },
+      {
+        "disposition": "rejected_stale",
+        "count": 2
+      }
+    ],
+    "goals": [
+      {
+        "id": "urgent",
+        "title": "Synthetic urgent goal revised",
+        "deadline": "2026-10-23T09:00:00+00:00",
+        "target_soc_percent": 56,
+        "kind": "manual",
+        "revision": 2,
+        "priority": 90,
+        "distance_km": 0.0,
+        "return_at": null,
+        "earliest": null,
+        "approved_peak_kw": null,
+        "approval_revision": 2,
+        "approval_state": "rejected",
+        "rejected_peak_kw": 10.601032577396161
+      }
+    ],
+    "issues": [
+      {
+        "goal_id": "urgent",
+        "proposed_peak_kw": null,
+        "revision": 2,
+        "shortfall_kwh": 2.8625415984375167,
+        "state": "rejected",
+        "text": "Forecast shortfall. No higher-permission plan has been demonstrated to meet this goal; useful permitted work continues."
+      }
+    ]
+  }
+}

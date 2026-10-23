@@ -13,3 +13,10 @@ venv/
 
 # Local GPT investigation files (synced through Dropbox).
 /gpt/
+
+# Local V4 development outputs.
+.venv*/
+/runtime/
+/artifacts/
+/dist/
+.mypy_cache/

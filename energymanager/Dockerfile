@@ -1,29 +1,15 @@
-FROM python:3.13-alpine3.22
-
-ARG BUILD_VERSION=dev
+FROM python:3.13-slim
+ARG BUILD_VERSION=4.0.0
 ARG BUILD_ARCH=amd64
-
-LABEL \
-    io.hass.version="${BUILD_VERSION}" \
-    io.hass.type="app" \
-    io.hass.arch="${BUILD_ARCH}" \
-    org.opencontainers.image.source="https://github.com/Nxt-1/EnergyManager" \
-    org.opencontainers.image.description="Predictive home energy manager for Home Assistant"
-
-ENV \
-    ENERGY_MANAGER_VERSION="${BUILD_VERSION}" \
-    PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app/src
-
+LABEL io.hass.version="${BUILD_VERSION}" \
+      io.hass.type="app" \
+      io.hass.arch="${BUILD_ARCH}" \
+      org.opencontainers.image.source="https://github.com/Nxt-1/EnergyManager" \
+      org.opencontainers.image.description="EnergyManager 4 joint EV/ESS planning and control"
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
-COPY requirements.txt /app/requirements.txt
-# Optional enterprise/cloud proxy CA: mounted only during installation, never baked into the image.
-RUN --mount=type=secret,id=pip_ca \
-    if [ -f /run/secrets/pip_ca ]; then export PIP_CERT=/run/secrets/pip_ca; fi; \
-    pip install --no-cache-dir -r /app/requirements.txt
-
+COPY pyproject.toml /app/pyproject.toml
 COPY src /app/src
-RUN python -c "import energymanager.app, energymanager.database, energymanager.economics, energymanager.legacy_influx, energymanager.load_backtest, energymanager.load_forecast, energymanager.load_service, energymanager.milp_planner, energymanager.planner, energymanager.planner_service, energymanager.pv_forecast, energymanager.pv_service, energymanager.hierarchy, energymanager.replay, energymanager.jobs, energymanager.explanation_api, energymanager.explanation_worker"
-
-CMD ["python", "-m", "energymanager"]
+COPY requirements.lock /app/requirements.lock
+RUN pip install --no-cache-dir -r requirements.lock && pip install --no-cache-dir --no-deps .
+CMD ["python", "-m", "energymanager", "--addon", "--ingress", "--port", "8099", "--data", "/data/energymanager-v4.sqlite3"]
