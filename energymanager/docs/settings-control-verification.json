@@ -276,6 +276,38 @@
     }
   },
   "remote_v407": {
-    "status": "pending"
+    "code_sha": "bd0af8fb4e7ca1804ed076ae5f2cf30299253a8a",
+    "ci": {
+      "run": 40010642618,
+      "job": 120609818357,
+      "conclusion": "success",
+      "tests": 136,
+      "test_seconds": 41.5
+    },
+    "publication": {
+      "run": 40010642108,
+      "job": 120609817229,
+      "conclusion": "success",
+      "tests": 136,
+      "test_seconds": 35.73
+    },
+    "e2e_seconds": 31.02860169599998,
+    "control_max_seconds": 0.005749194999992824,
+    "baseline_control_max_seconds": 0.003629816000000119,
+    "switch_control_max_seconds": 0.005749194999992824,
+    "switch_control_ticks": 1,
+    "fake_service_calls": 5,
+    "image": "ghcr.io/nxt-1/energymanager:4.0.7",
+    "image_digest": "sha256:b909ccdf13b8a9e8a6b5285a9d9374a9a29bf57b3d84c633f3fc08fd42bfccc9",
+    "checks": [
+      "Ruff",
+      "mypy",
+      "CLI and JS",
+      "136 tests",
+      "configured automatic-Supervisor seven-day E2E",
+      "wheel/source archive",
+      "Linux container build/publication"
+    ],
+    "live_deployed": false
   }
 }

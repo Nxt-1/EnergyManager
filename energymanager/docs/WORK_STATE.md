@@ -288,3 +288,20 @@ Clarification of preceding entry: the 4.0.6 CI 4.276 s tick was measured BEFORE
 switching, so its cause is unestablished. The disabled-stop lock wait is a separate
 reproduced bug, now fixed. Timing reports now separate baseline/post-switch samples.
 NEXT: commit/push 4.0.7, inspect CI and container publication, record final evidence.
+
+
+4.0.7 IMPLEMENTED / TESTED / PUBLISHED: code bd0af8fb4e7ca1804ed076ae5f2cf30299253a8a.
+CI 40010642618 passed (136 tests, 41.50 s; types/JS/CLI, full-horizon E2E, package
+and Linux container). Publication 40010642108 passed (136 tests, 35.73 s), image
+4.0.7 digest sha256:b909ccdf13b8a9e8a6b5285a9d9374a9a29bf57b3d84c633f3fc08fd42bfccc9.
+Remote E2E 31.029 s, max tick 5.749 ms, baseline 3.630 ms, post-switch 5.749 ms
+(one sample), five fake-only calls. Shipping behavior/run instructions: SETTINGS.md,
+SPECIFICATION.md and RUNBOOK.md. Evidence: VERIFICATION.md and
+settings-control-verification.json; screenshots settings-v407-*.png (synthetic).
+Local fixtures stopped and existing 8100 preview preserved. First upgrade switch off;
+subsequent saved on requests resume only after input/configuration checks.
+LIVE-UNVERIFIED: actual Supervisor/ingress, billing telemetry timestamps, physical stop/
+phase/setpoint behavior and phone receipt. No live HA/database/hardware/phone access
+or deployment occurred. No implementation work remains for this settings update.
+NEXT: commit/push verification evidence; user installs/configures and reviews actual
+telemetry before enabling hardware. Earlier billing timestamp rejection is not bypassed.

@@ -26,7 +26,15 @@ Temporary local fixtures/tabs were stopped; the user's existing 8100 preview was
 No live HA, installation database, hardware or real notification was accessed.
 Billing timestamp rejection remains guarded and needs actual telemetry diagnostics.
 
-Remote CI and version 4.0.7 container publication: pending.
+Remote code `bd0af8fb4e7ca1804ed076ae5f2cf30299253a8a` passed
+[CI 40010642618](https://github.com/Nxt-1/EnergyManager/actions/runs/40010642618)
+(136 tests in 41.50 s, type/JS/CLI checks, configured E2E, package and Linux container
+builds) and [publication 40010642108](https://github.com/Nxt-1/EnergyManager/actions/runs/40010642108)
+(136 tests in 35.73 s). Remote E2E: 31.029 s, maximum tick 5.749 ms, baseline
+3.630 ms and post-switch 5.749 ms (one sample), five fake-only service calls.
+Published image: `ghcr.io/nxt-1/energymanager:4.0.7`, digest
+`sha256:b909ccdf13b8a9e8a6b5285a9d9374a9a29bf57b3d84c633f3fc08fd42bfccc9`.
+No live deployment was performed.
 
 ## Version 4.0.6 — automatic HA connection and one hardware switch
 
