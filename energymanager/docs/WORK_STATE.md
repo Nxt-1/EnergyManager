@@ -51,6 +51,10 @@ TESTED: full43 tests passed28.29s with two-CPU affinity; four additional focused
 passed5.31–5.40s each on two CPUs; Ruff and mypy passed. Four local
 diagnostic runs measured protective dispatch1.13–2.39ms vs old sleep measurement83–166ms.
 These fixtures are synthetic; failing-runner dispatch latency is unknown.
-Next concrete action: commit/push the focused CI fix
-under the existing authorization and inspect its remote CI, including configured E2E,
-package and container steps. Physical commissioning remains live-unverified.
+REMOTE-VERIFIED: fix committed/pushed as9fa914a97c2e7c34c877e636c3e50f85f0bc56e8.
+CI39936237809 passed all steps:43 tests33.93s, lint/types/CLI/JS, configured E2E,
+Python package and Linux container builds. Synthetic E2E:2,018 intervals accepted25.806s,
+max control6.85ms,21 fake-only calls. Evidence: ci-verification.json and VERIFICATION.md.
+The published4.0.0 image contains the same runtime code; this fix changes tests/docs only.
+Next concrete action: review RUNBOOK.md for Supervisor/ingress installation and physical
+commissioning, which remain live-unverified and require separate user authorization.

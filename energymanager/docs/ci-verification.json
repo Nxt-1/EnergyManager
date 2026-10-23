@@ -1,0 +1,34 @@
+{
+  "verified_on": "2026-10-23",
+  "repository": "Nxt-1/EnergyManager",
+  "commit": "9fa914a97c2e7c34c877e636c3e50f85f0bc56e8",
+  "run_url": "https://github.com/Nxt-1/EnergyManager/actions/runs/39936237809",
+  "job_id": 120356345903,
+  "conclusion": "success",
+  "checks": [
+    "Ruff",
+    "mypy and release entry point",
+    "43 tests passed in 33.93 seconds",
+    "dashboard JavaScript syntax",
+    "configured local application with real full-horizon HiGHS solve",
+    "wheel and source archive build",
+    "Linux container build"
+  ],
+  "configured_integration": {
+    "provenance": "SYNTHETIC loopback HTTP measurements, forecasts and fake actuator endpoints",
+    "accepted_seconds": 25.805594036000002,
+    "intervals": 2018,
+    "control_max_seconds": 0.006849574999989727,
+    "fake_service_calls": 21,
+    "result": "passed"
+  },
+  "image_publication": {
+    "commit": "1d420848cdbb57e50169b552c178947343a5d494",
+    "run_url": "https://github.com/Nxt-1/EnergyManager/actions/runs/39935019989",
+    "conclusion": "success",
+    "version": "4.0.0",
+    "note": "The CI fix changes tests and documentation only; application runtime code is unchanged."
+  },
+  "live_installation_verified": false,
+  "controller_enabled": false
+}

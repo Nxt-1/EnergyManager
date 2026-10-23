@@ -116,7 +116,13 @@ subsecond wall-clock assertions are removed. Runtime scheduling/control code is 
 Existing numerical latency measurements above remain performance evidence.
 
 Local verification with two-CPU affinity:43 tests passed in28.29s; Ruff and mypy passed.
-Remote CI for this follow-up must also pass before treating it as remotely verified.
+Four additional focused runs passed in5.31–5.40s each, also restricted to two CPUs.
+The [follow-up CI run](https://github.com/Nxt-1/EnergyManager/actions/runs/39936237809)
+passed on commit `9fa914a97c2e7c34c877e636c3e50f85f0bc56e8`:43 tests in33.93s,
+Ruff, mypy, CLI and JavaScript checks, configured localhost integration, wheel/source
+archive builds and the Linux container build. Its synthetic seven-day integration
+accepted2,018 intervals in25.806s, with maximum measured control tick6.85ms and21
+fake-only service calls. Structured remote evidence is in ci-verification.json.
 
 Storage policy is unchanged: no retention deletion is enabled. Prior compressed decisions
 used about72–127kB per snapshot/result pair; one-second synthetic measurement+command
