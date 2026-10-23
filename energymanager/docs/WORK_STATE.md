@@ -206,3 +206,15 @@ VERIFICATION.md and forecast-restoration-verification.json. Addresses deferred.
 Live HA/topology/control commissioning remains unverified; no live operation occurred.
 
 Resume audit: workspace matches checkpoint. Final malformed non-object weather guard added;15 focused forecast tests5.40s and Ruff/mypy25 passed. Rebuilt wheel31 source/assets match; installed guard verified. Full local suite previously112 tests; current collection113. Final review complete; next commit/push and CI/image verification. No new live access.
+
+
+4.0.5 REMOTE COMPLETE: code32855877ea4177351d4c49dfce256baec01dc2d4 passed
+CI39997508230 (113 tests40.92s; types/lint/CLI/JS, restored-source configured seven-day
+E2E31.174s, max tick8.674ms/25 fake calls, package and Linux container).
+Image39997508225 passed113 tests37.69s and published4.0.5; digest recorded in
+forecast-restoration-verification.json and VERIFICATION.md. Original source/PV values
+and corrections all found and preserved; addresses deferred. No live HA/DB/hardware
+access or deployment. No application work remains for this forecasting request.
+NEXT: commit/push the remote evidence and inspect that documentation commit's CI,
+then finish. User's next action is update the HA app to4.0.5; forecast URL is unused,
+location comes from HA zone.home. Existing connection/commissioning setup unchanged.

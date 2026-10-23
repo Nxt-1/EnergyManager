@@ -35,7 +35,17 @@ Wheel/sdist built;31 installed code/assets exactly match source. Isolated instal
 configured startup selects the restored forecast pipeline, has no demonstration goals
 and keeps hardware control disabled. No live HA, installation databases, notifications,
 hardware, deployment or commissioning. Detailed evidence: forecast-restoration-verification.json
-and offline-e2e.json. Remote CI/container publication pending.
+and offline-e2e.json.
+
+Remote code commit32855877ea4177351d4c49dfce256baec01dc2d4 passed
+[CI39997508230](https://github.com/Nxt-1/EnergyManager/actions/runs/39997508230):
+**113 tests40.92s**, lint/types/CLI/JS, restored-source configured seven-day E2E,
+package and Linux container build. Remote E2E accepted2,018 intervals31.174s,
+max tick8.674ms and25 fake-only service calls.
+[Image39997508225](https://github.com/Nxt-1/EnergyManager/actions/runs/39997508225)
+passed113 tests37.69s and published `ghcr.io/nxt-1/energymanager:4.0.5`, digest
+`sha256:95ee21fc26a7bf5793e7fdad51b681b38a24ce9abb0d8c8540dfe16748aad5cd`.
+No installation deployment or hardware operation was performed.
 
 ## Version 4.0.4 — simplified installation settings
 

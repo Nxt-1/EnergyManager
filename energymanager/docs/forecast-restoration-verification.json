@@ -55,5 +55,28 @@
     "additional_forecast_focused_tests": 15,
     "additional_forecast_focused_seconds": 5.4,
     "latest_guard": "Malformed non-object provider response rejected; rebuilt wheel protection verified"
+  },
+  "remote": {
+    "code_sha": "32855877ea4177351d4c49dfce256baec01dc2d4",
+    "ci": {
+      "run": 39997508230,
+      "url": "https://github.com/Nxt-1/EnergyManager/actions/runs/39997508230",
+      "conclusion": "success",
+      "tests": 113,
+      "test_seconds": 40.92,
+      "configured_e2e_accepted_seconds": 31.17363753799998,
+      "configured_e2e_control_max_seconds": 0.00867418800004316,
+      "fake_service_calls": 25,
+      "checks": "lint, types, CLI, JS, all tests, restored-source configured seven-day E2E, package, Linux container"
+    },
+    "image": {
+      "run": 39997508225,
+      "url": "https://github.com/Nxt-1/EnergyManager/actions/runs/39997508225",
+      "conclusion": "success",
+      "tests": 113,
+      "test_seconds": 37.69,
+      "tag": "ghcr.io/nxt-1/energymanager:4.0.5",
+      "digest": "sha256:95ee21fc26a7bf5793e7fdad51b681b38a24ce9abb0d8c8540dfe16748aad5cd"
+    }
   }
 }
