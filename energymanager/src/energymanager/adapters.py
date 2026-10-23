@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import asyncio
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import quote, urlsplit
 from uuid import uuid4
 
@@ -53,9 +53,11 @@ class HomeAssistantAdapter:
             await self.session.close()
 
     async def state(self, key: str) -> dict[str, Any]:
+        return await self.entity_state(self.entities[key])
+
+    async def entity_state(self, entity: str) -> dict[str, Any]:
         if self.session is None:
             raise RuntimeError("Adapter is not open")
-        entity = self.entities[key]
         async with self.session.get(
             f"{self.url}/states/{quote(entity, safe='._-')}", allow_redirects=False
         ) as response:
@@ -198,19 +200,28 @@ class HomeAssistantAdapter:
         return observation
 
 
+class ForecastSource(Protocol):
+    async def read(self, observation: Observation, at: datetime) -> dict[str, Any]: ...
+
+    async def close(self) -> None: ...
+
+
 class JsonForecastAdapter:
     """Energy-preserving resampling of issued AC/DC/background forecasts onto the planning grid."""
 
     def __init__(self, url: str, *, allow_remote: bool = False) -> None:
         self.url = checked_url(url, allow_remote)
 
-    async def read(self) -> dict[str, Any]:
+    async def read(self, observation: Observation | None = None, at: datetime | None = None) -> dict[str, Any]:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
             async with session.get(self.url, allow_redirects=False) as response:
                 response.raise_for_status()
                 if response.content_length and response.content_length > 8 * 1024 * 1024:
                     raise ValueError("Forecast too large")
                 return await response.json()
+
+    async def close(self) -> None:
+        pass
 
     @staticmethod
     def snapshot(
@@ -232,23 +243,31 @@ class JsonForecastAdapter:
         grid = time_grid(at, boundaries=boundaries)
         source = [(instant(i["start"]), instant(i["end"]), i) for i in data["intervals"]]
         source.sort(key=lambda item: item[0])
-        for index, (left, right, _) in enumerate(source):
+        for index, (left, right, row) in enumerate(source):
             if right <= left or index and left != source[index - 1][1]:
                 raise ValueError("Forecast intervals must be consecutive without overlap")
+            for key in ("house_kw", "pv_ac_kw", "pv_dc_kw"):
+                value = float(row[key])
+                if not math.isfinite(value) or value < 0:
+                    raise ValueError(f"Invalid {key}")
         intervals = []
+        source_index = 0
         for left, right in zip(grid, grid[1:]):
             duration = (right - left).total_seconds()
             covered = 0.0
             values = {key: 0.0 for key in ("house_kw", "pv_ac_kw", "pv_dc_kw")}
-            for a, b, row in source:
+            # Sweep overlapping source rows once, keeping five-second input polling responsive.
+            while source_index < len(source) and source[source_index][1] <= left:
+                source_index += 1
+            position = source_index
+            while position < len(source) and source[position][0] < right:
+                a, b, row = source[position]
                 seconds = max(0, (min(b, right) - max(a, left)).total_seconds())
                 if seconds:
                     covered += seconds
                     for key in values:
-                        value = float(row[key])
-                        if not math.isfinite(value) or value < 0:
-                            raise ValueError(f"Invalid {key}")
-                        values[key] += value * seconds / duration
+                        values[key] += float(row[key]) * seconds / duration
+                position += 1
             if abs(covered - duration) > 1e-5:
                 raise ValueError("A complete seven-day forecast is required; missing data is not zero")
             intervals.append(

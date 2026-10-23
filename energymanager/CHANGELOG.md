@@ -1,3 +1,12 @@
+## 4.0.5 — Restore built-in installation forecasts
+
+- Fetch the original Open-Meteo KNMI weather at the HA home location; no prepared forecast service is needed.
+- Restore all four installed PV planes, original front/rear corrections and separate roof AC / shed DC forecasts.
+- Restore household pattern learning from persisted measured background demand, with the original recent-history baseline.
+- Preserve complete rolling seven-day coverage, both DST hours and forecast freshness through weather outages.
+- Keep weather requests independent of measurement polling/control and prevent configured startup from inheriting demonstration journeys.
+- Retain the connection settings for later review; mark the former forecast URL unused.
+
 ## 4.0.4 — Configure the confirmed installation directly
 
 - Remove the house-demand source, quarter-hour type and charger-phase information dropdowns.

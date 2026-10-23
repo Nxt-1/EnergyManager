@@ -9,7 +9,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
-from .adapters import HomeAssistantAdapter, JsonForecastAdapter
+from .adapters import HomeAssistantAdapter
 from .control import GuardedActuator
 from .domain import Capabilities, Policy
 from .forecasts import demo_snapshot
@@ -17,6 +17,8 @@ from .service import Application
 from .store import Store
 from .notifications import Notifications
 from .measurements import MeasurementOptions, installation_configuration
+from .forecast_service import InstallationForecast
+from .open_meteo import FORECAST_URL
 
 
 def create_configuration_if_missing(path: Path) -> bool:
@@ -33,7 +35,7 @@ def create_configuration_if_missing(path: Path) -> bool:
     return True
 
 
-def configured_application(path: Path, store: Store) -> Application:
+def configured_application(path: Path, store: Store, *, weather_url: str = FORECAST_URL) -> Application:
     data: dict[str, Any] = installation_configuration(json.loads(path.read_text(encoding="utf-8")))
     required_capabilities = {f.name for f in fields(Capabilities)}
     if required_capabilities - set(data.get("capabilities", {})):
@@ -64,8 +66,10 @@ def configured_application(path: Path, store: Store) -> Application:
         phase_entity=data.get("actuators", {}).get("phase"),
         measurement_max_age_seconds=p.measurement_max_age_seconds,
     )
-    forecast = JsonForecastAdapter(data["forecast_url"], allow_remote=allow_remote)
-    placeholder = demo_snapshot(policy=p)
+    forecast = InstallationForecast(ha, store, allow_remote=allow_remote, weather_url=weather_url,
+                                    max_age_seconds=p.forecast_max_age_seconds,
+                                    measurement_max_age_seconds=p.measurement_max_age_seconds)
+    placeholder = demo_snapshot(policy=p, goals=())
     placeholder = replace(
         placeholder,
         capabilities=c,

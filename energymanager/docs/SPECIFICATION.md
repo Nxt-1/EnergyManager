@@ -1,9 +1,23 @@
 # First release implementation specification
 
-This is the shipping specification for the EnergyManager 4.0.4 application. The
+This is the shipping specification for the EnergyManager 4.0.5 application. The
 authorized handoff and confirmed decisions govern behavior. All supplied development
-capacities, tariffs, efficiencies and forecasts are **synthetic provisional parameters**.
+capacities, tariffs and efficiencies are **synthetic provisional parameters**.
+PV plane geometry and correction tables are recovered installation values; verification
+weather and measurements are explicitly synthetic fixtures or labelled public references.
 No installation measurements or missing historical native archive were substituted.
+
+## Built-in installation forecasting
+
+Configured mode uses the recovered Open-Meteo KNMI seamless source, HA zone.home location,
+exact four-plane installation and original empirical front/rear corrections. The shed
+retains its physical model without an empirical factor. AC/DC routing matches V3.
+The original35-day median load predictor consumes persisted5min measured background
+samples, with a recent3h median during learning. No prepared forecast endpoint is required.
+See FORECASTING.md for numerical parameters, source provenance and failure behavior.
+Weather HTTP runs independently from fresh measurements and fast control; no missing
+weather is replaced by zero, extrapolation or a demonstration forecast. A configured
+startup has no demonstration journeys. Existing user goals are preserved.
 
 ## Inputs and requirements
 
@@ -152,7 +166,7 @@ latches EV stopping. A solver-parent watchdog prevents orphan workers after serv
 
 ## Boundaries
 
-The main project is now EnergyManager 4.0.4. Its fresh joint core replaces V3 under the
+The main project is now EnergyManager 4.0.5. Its fresh joint core replaces V3 under the
 `energymanager` Python package and existing `energy_manager` add-on/image identity. V3
 source/tests/dashboard were replaced; historical evidence remains in Git and labelled
 reports. V3 installation options and database files are not automatically imported. V4

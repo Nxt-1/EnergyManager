@@ -1,6 +1,6 @@
 # EnergyManager 4
 
-Version **4.0.4** replaces the previous Energy Manager application with a joint EV/ESS
+Version **4.0.5** replaces the previous Energy Manager application with a joint EV/ESS
 MILP scheduler, independent responsive control and functional Overview/Planning pages.
 The complete seven-day horizon uses planning intervals no longer than five minutes.
 Goals, scoped peak permissions, reasons, measured progress and immutable decisions are
@@ -43,7 +43,7 @@ existing interpreter is `energymanager/.venv313/Scripts/python.exe`.
 This is a major application/configuration update. V3 options and databases are not
 loaded by V4. Review the explicit JSON mapping in the runbook, keep a V3 backup, and
 start with control disabled. The add-on defaults to manual start and synthetic demo
-mode. Configured operation requires a reviewed issued forecast feed; control additionally
+mode. Configured operation builds Open-Meteo PV and measured household forecasts; control additionally
 requires complete physical/actuator mappings and explicit commissioning/exclusive-
 controller confirmations. The V4 SQLite file is separate from historical V3 data.
 

@@ -53,7 +53,7 @@ limits can change incumbents; replay does not promise bit-identical optimization
 
 ## Main-project version 4 update
 
-`config.yaml` now advertises **4.0.2** for the existing `energy_manager` Home Assistant
+`config.yaml` now advertises **4.0.5** for the existing `energy_manager` Home Assistant
 app and `ghcr.io/nxt-1/energymanager` image. It keeps ingress port8099 and manual startup.
 The packaged Python distribution, CLI and module are all named `energymanager`. The
 former standalone candidate has been moved into this main app; the old V3 modules,
@@ -80,7 +80,7 @@ need the reviewed V4 resource/configuration update; no live dashboard was change
 Docker is unavailable locally. The V4.0.0 CI and image workflows verified the Linux
 container build and publication; evidence is in VERIFICATION.md and ci-verification.json.
 Supervisor installation and physical deployment remain separate checks. A target host
-can run `docker build --build-arg BUILD_VERSION=4.0.2 -t energymanager:4.0.2 .` from this
+can run `docker build --build-arg BUILD_VERSION=4.0.5 -t energymanager:4.0.5 .` from this
 directory. The repository publish workflow targets the existing GHCR image when
 config.yaml is pushed to main; inspect the workflow for the version being installed.
 
@@ -202,21 +202,33 @@ from the named environment variable; never put credentials in URLs, snapshots or
 Notification webhook is omitted by default; notices stay in local SQLite. A configured
 webhook must be reviewed separately and was exercised only against a loopback fake.
 
-The issued forecast endpoint returns JSON:
+Configured mode now creates its forecasts internally. It reads latitude and longitude
+from HA `zone.home`, then calls the original Open-Meteo `knmi_seamless` source for each
+of the four recovered PV planes. No separate forecast service or forecast URL is needed.
+The legacy forecast URL field remains visibly unused until the connection settings are
+reviewed separately. Existing files do not need a new forecast setting. Network access
+must already be enabled for configured HA/Open-Meteo operation; saving does not change it.
 
-```json
-{"issued_at":"2026-10-23T08:00:00+00:00","revision":"provider-1",
- "provenance":"declare actual provider or SYNTHETIC fixture",
- "intervals":[{"start":"2026-10-23T08:00:00+00:00",
- "end":"2026-10-30T09:00:00+00:00","house_kw":0.4,"pv_ac_kw":1,"pv_dc_kw":1}]}
-```
+See [forecast sources and exact installation parameters](FORECASTING.md). Roof-front
+and roof-rear production feed the AC channel; shed production feeds the DC channel.
+The original correction tables are retained. Weather refreshes every30min independently
+of measurement polling. A failed refresh keeps the old issuance timestamp, and stale or
+incomplete data cannot authorize forecast-dependent purchases. Missing home coordinates,
+HTTP failure and coverage problems appear in application status/evidence.
 
-That constant example is synthetic, not a forecast recommendation. Real issued intervals
-must cover the complete rolling168h without overlap or holes, with separate background,
-AC and DC channels. Resampling preserves interval energy. The independent median-load
-and PV-plane utilities document the inspected forecasting mechanics; the configured
-application consumes the declared issued feed, not the old scheduler's plan. Verify the
-provider and calibration before commissioning; missing data is never treated as zero.
+Household load is sampled from the measured background demand every5min and persisted
+in the V4 SQLite file. The original35-day median predictor uses weekday/time-of-day
+patterns when available and the recent3h measured median while learning. The banner
+shows the learning state and sample count. V3 history/database files are not silently
+imported or modified; a new V4 history learns from current measurements immediately.
+There is no fabricated default household demand. Restart preserves V4 samples.
+
+Planning still covers168 elapsed hours with windows no longer than5min. Weather requests
+include9 calendar days to leave enough data for a late-evening start and refresh buffer.
+UTC timestamps preserve DST; hourly solar means apply to the preceding hour. Interval
+resampling preserves energy. Deterministic local HA/weather fixtures are explicitly
+labelled SYNTHETIC and are only a verification source.
+
 Over30s shared power data restricts new commands; EV SoC over900s disables EV while ESS
 can balance fresh powers. Forecast over2h disables conditional work. These thresholds
 and15-minute desired completion margin are provisional.

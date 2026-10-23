@@ -54,6 +54,7 @@ def test_editor_covers_template_and_preserves_future_fields_and_backup(tmp_path)
         assert application.ha.entities["ev_soc"] == "sensor.car_battery"
         assert application.policy.daily_soc_percent == 61
         assert not application.policy.control_enabled
+        assert application.goals == ()  # Configured startup must not inherit demonstration journeys.
     finally:
         store.close()
 

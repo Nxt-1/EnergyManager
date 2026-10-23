@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from . import __version__
 from .control import Actuator, Command, FakeActuator, FastControl
-from .adapters import HomeAssistantAdapter, JsonForecastAdapter
+from .adapters import ForecastSource, HomeAssistantAdapter, JsonForecastAdapter
 from .domain import Goal, Observation, PeakPermission, Policy, Snapshot, json_data
 from .publication import rebase
 from .demo_plant import DemoPlant
@@ -36,7 +36,7 @@ class Application:
         snapshot: Snapshot | None = None,
         demo: bool = True,
         ha: HomeAssistantAdapter | None = None,
-        forecast: JsonForecastAdapter | None = None,
+        forecast: ForecastSource | None = None,
     ) -> None:
         self.store, self.demo = store, demo
         self.ha, self.forecast = ha, forecast
@@ -122,6 +122,8 @@ class Application:
             *(t for t in (self.control_task, self.planning, self.input_task, *self.protective_tasks) if t),
             return_exceptions=True,
         )
+        if self.forecast:
+            await self.forecast.close()
         if self.ha:
             await self.ha.__aexit__()
         self.store.put("observed", self.observed)
@@ -171,6 +173,8 @@ class Application:
             self.store.event("protective_command", command)
 
     def build_snapshot(self) -> Snapshot:
+        if not self.demo and self.forecast and self.forecast_data is None:
+            raise ValueError("Configured forecasts are not ready")
         if self.forecast_data is not None:
             prepared = JsonForecastAdapter.snapshot(
                 self.forecast_data,
@@ -230,10 +234,10 @@ class Application:
         while not self.shutdown:
             try:
                 observation = await self.ha.observe(self.snapshot.capabilities)
-                initial = self.observation.quality == "unknown"
+                initial = self.forecast_data is None or self.observation.quality == "unknown"
                 self.observe(observation)
                 try:
-                    data = await self.forecast.read()
+                    data = await self.forecast.read(observation, self.now())
                 except (
                     ValueError,
                     KeyError,
@@ -242,6 +246,7 @@ class Application:
                     aiohttp.ClientError,
                     TimeoutError,
                 ) as exc:
+                    self.conditional_valid = False
                     self.error = f"Forecast unavailable: {type(exc).__name__}: {exc}"
                     self.status = "forecast_unavailable"
                     self.store.event("forecast_error", {"reason": self.error})
@@ -258,6 +263,7 @@ class Application:
                         self.now(),
                     )
                 except (ValueError, KeyError, TypeError) as exc:
+                    self.conditional_valid = False
                     self.error = f"Forecast rejected: {exc}"
                     self.status = "forecast_unavailable"
                     self.store.event("forecast_error", {"reason": self.error})
@@ -265,10 +271,14 @@ class Application:
                     continue
                 self.forecast_data = data
                 self.snapshot = prepared
-                if data["revision"] != last_forecast or initial:
+                recovered = self.status == "forecast_unavailable"
+                if recovered:
+                    self.error = None
+                if data["revision"] != last_forecast or initial or recovered:
                     self.conditional_valid = False
                     last_forecast = data["revision"]
-                    self.changed("inputs_ready" if initial else "forecast_revision", ess=not initial)
+                    reason = "inputs_ready" if initial else "forecast_recovered" if recovered else "forecast_revision"
+                    self.changed(reason, ess=not initial)
             except (ValueError, KeyError, OSError, RuntimeError, aiohttp.ClientError, TimeoutError) as exc:
                 self.error = f"Inputs unavailable: {type(exc).__name__}: {exc}"
                 self.status = "inputs_unavailable"
@@ -596,6 +606,7 @@ class Application:
                                     or getattr(self.actuator, "awaiting_phase", None)),
             },
             "provenance": self.snapshot.provenance,
+            "forecast_status": getattr(self.forecast, "status", {}),
             "observation": json_data(self.observation),
             "capabilities": json_data(self.snapshot.capabilities),
             "policy": json_data(self.policy),

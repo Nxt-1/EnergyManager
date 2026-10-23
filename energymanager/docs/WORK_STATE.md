@@ -174,3 +174,35 @@ No implementation work remains. User's next action: update HA app and refresh it
 page; the known P1 mappings are prefilled, phase information uses the one existing
 charger selector, and readiness appears in EV and charger. Save and restart when ready.
 Commissioning of actual values, AC topology/signs, clocks and hardware remains separate.
+
+
+## Forecast restoration — implementation milestone, 23 October 2026
+
+User requests original weather source, installation PV planes and applicable correction
+factors; connection-address redesign deferred. Found complete legacy modules/tests in
+gpt/architecture/v4-promotion-2026-10-23/legacy-application and legacy-tests. Restored
+Open-Meteo knmi_seamless, HA zone.home, all four exact PV planes, calibration
+2026-10-03-seed and 35-day household median predictor. UTC weather timestamps preserve
+DST hours; nine calendar weather days cover rolling168h with refresh buffer. Weather
+fetch is an independent async task; measured background samples persist in V4 SQLite.
+Configured runtime ignores obsolete forecast_url. Hardware authority unchanged.
+TESTED so far:42 existing/recovered focused tests and13 new runtime/DST/failure tests
+passed; Ruff passed and mypy25 modules passed. Full suite running.
+NEXT: configured fake-weather seven-day E2E, browser, package, release review and CI.
+No live weather coordinates, HA, hardware or installation databases accessed.
+
+
+4.0.5 LOCAL COMPLETE: original Open-Meteo knmi_seamless + four exact PV planes and
+2026-10-03-seed corrections restored; household median learning/persistent5min samples.
+112 tests38.59s, Ruff/mypy25/JS passed. Exact legacy parity:2,520 correction factors,
+648 PV points,676 load points. Public-reference four-plane weather HTTP check passed;
+no installation coordinates used. New pipeline seven-day E2E29.408s/2,018 intervals/
+max tick4.617ms/26 fake calls passed. Browser pages/source/learning labels/no fake
+journey/console passed. Wheel/sdist and31 installed/source files match; isolated
+configured startup passed. Synthetic8102 service/tab stopped;8100 untouched.
+NEXT: final diff review, commit/push4.0.5 and inspect CI/image publication. Source/run
+instructions and evidence ship in docs/FORECASTING.md, RUNBOOK.md, SPECIFICATION.md,
+VERIFICATION.md and forecast-restoration-verification.json. Addresses deferred.
+Live HA/topology/control commissioning remains unverified; no live operation occurred.
+
+Resume audit: workspace matches checkpoint. Final malformed non-object weather guard added;15 focused forecast tests5.40s and Ruff/mypy25 passed. Rebuilt wheel31 source/assets match; installed guard verified. Full local suite previously112 tests; current collection113. Final review complete; next commit/push and CI/image verification. No new live access.

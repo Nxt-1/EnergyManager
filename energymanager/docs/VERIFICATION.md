@@ -1,5 +1,42 @@
 # EnergyManager 4 verification
 
+## Version 4.0.5 — original installation forecasting restored
+
+Configured runtime now fetches Open-Meteo KNMI seamless weather at HA zone.home,
+builds the exact four-plane PV model and original front/rear corrections, and learns
+household demand from persisted background measurements. No prepared forecast service
+is required. Connection-address redesign remains deferred. See FORECASTING.md for exact
+installation values, retained formulas, time handling and outage policy.
+
+Local: **112 tests passed in38.59s**; Ruff, mypy25 modules and dashboard JS syntax
+passed. After a final malformed-response guard, all15 focused forecast tests passed
+in5.40s and the rebuilt installed wheel guard was verified. New runtime tests cover
+missing/null/nonfinite/gapped weather, stale-cache
+issuance, remote-access gate, restart persistence, both DST changes and current partial
+quarters. An application-level blocked-weather test confirms new HA polls and at least
+five independent control ticks continue, and no placeholder forecast reaches planning.
+
+Direct comparison against preserved source matched2,520 correction factors,648 PV
+points and676 household points exactly. A35-day/10,080-sample load model built in41.3ms;
+full-horizon resampling took9.25ms. Four actual Open-Meteo requests through the new
+client returned216 aligned hours each and passed169h coverage. Those requests used
+**public Brussels city-centre coordinates**, not installation coordinates. This is a
+provider-contract check, not live installation evidence.
+
+The configured fake-HA/fake-weather application accepted2,018 intervals in29.408s,
+max control tick4.617ms and26 guarded calls to loopback fakes. Persistence, current
+measurements, four plane queries, learning status, API and decision validation passed.
+Overview/Planning browser checks showed forecasts and source/learning labels, retained
+charts/time navigation and no demonstration journey; console errors absent. Screenshots:
+forecast-overview.png and forecast-planning.png under screenshots/. The constant test
+weather is explicitly SYNTHETIC. The temporary8102 preview was stopped;8100 preserved.
+
+Wheel/sdist built;31 installed code/assets exactly match source. Isolated installed
+configured startup selects the restored forecast pipeline, has no demonstration goals
+and keeps hardware control disabled. No live HA, installation databases, notifications,
+hardware, deployment or commissioning. Detailed evidence: forecast-restoration-verification.json
+and offline-e2e.json. Remote CI/container publication pending.
+
 ## Version 4.0.4 — simplified installation settings
 
 Removed all source/type selectors and the nonexistent house/phase sensor inputs.

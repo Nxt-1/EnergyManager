@@ -1,10 +1,72 @@
 {
-  "version": "4.0.4",
-  "provenance": "SYNTHETIC local HTTP integration acceptance; constant test signals",
-  "accepted_seconds": 21.799063799902797,
+  "version": "4.0.5",
+  "provenance": "SYNTHETIC local weather fixture \u00b7 Open-Meteo KNMI \u00b7 four installed PV planes \u00b7 correction 2026-10-03-seed \u00b7 household baseline learning (samples: 1)",
+  "accepted_seconds": 29.40837910026312,
   "intervals": 2018,
-  "control_max_seconds": 0.004811599850654602,
-  "fake_service_calls": 20,
+  "control_max_seconds": 0.004617400001734495,
+  "fake_service_calls": 26,
+  "weather_queries": [
+    {
+      "latitude": "50.0",
+      "longitude": "4.0",
+      "hourly": "global_tilted_irradiance,temperature_2m,cloud_cover,direct_radiation,diffuse_radiation",
+      "tilt": "46.0",
+      "azimuth": "-130.0",
+      "models": "knmi_seamless",
+      "forecast_days": "9",
+      "timezone": "Europe/Brussels",
+      "timeformat": "unixtime"
+    },
+    {
+      "latitude": "50.0",
+      "longitude": "4.0",
+      "hourly": "global_tilted_irradiance,temperature_2m,cloud_cover,direct_radiation,diffuse_radiation",
+      "tilt": "38.0",
+      "azimuth": "50.0",
+      "models": "knmi_seamless",
+      "forecast_days": "9",
+      "timezone": "Europe/Brussels",
+      "timeformat": "unixtime"
+    },
+    {
+      "latitude": "50.0",
+      "longitude": "4.0",
+      "hourly": "global_tilted_irradiance,temperature_2m,cloud_cover,direct_radiation,diffuse_radiation",
+      "tilt": "13.0",
+      "azimuth": "-130.0",
+      "models": "knmi_seamless",
+      "forecast_days": "9",
+      "timezone": "Europe/Brussels",
+      "timeformat": "unixtime"
+    },
+    {
+      "latitude": "50.0",
+      "longitude": "4.0",
+      "hourly": "global_tilted_irradiance,temperature_2m,cloud_cover,direct_radiation,diffuse_radiation",
+      "tilt": "9.5",
+      "azimuth": "-40.0",
+      "models": "knmi_seamless",
+      "forecast_days": "9",
+      "timezone": "Europe/Brussels",
+      "timeformat": "unixtime"
+    }
+  ],
+  "forecast_status": {
+    "source": "Open-Meteo",
+    "model": "knmi_seamless",
+    "location": "Home Assistant zone.home",
+    "calibration": "2026-10-03-seed",
+    "load_model": "2026-10-04-baseline",
+    "weather_error": null,
+    "load_stage": "learning",
+    "synthetic": true,
+    "weather_at": "2026-10-23T17:18:08.376276+00:00",
+    "load_methods": [
+      "recent_baseline"
+    ],
+    "load_samples": 1,
+    "history_days": 0.0
+  },
   "result": "passed",
   "normalization": {
     "house_source": "separate_grid",
@@ -13,6 +75,8 @@
   },
   "checks": [
     "configured JSON and HA HTTP inputs",
+    "built-in Open-Meteo pipeline with four original planes and correction tables",
+    "persisted measured household baseline; no prepared forecast endpoint",
     "separate P1 powers, kW quarter demand and go-e selector readback",
     "spawned real full-horizon HiGHS plan",
     "publication against current measurements",

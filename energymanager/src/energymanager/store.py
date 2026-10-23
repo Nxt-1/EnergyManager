@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .domain import encode
+from .load_forecast import LoadSample
 
 
 def archive_json(value: Any) -> bytes:
@@ -32,10 +33,21 @@ class Store:
             CREATE TABLE IF NOT EXISTS decisions (
                 id TEXT PRIMARY KEY, at TEXT NOT NULL, disposition TEXT NOT NULL,
                 digest TEXT NOT NULL, snapshot TEXT NOT NULL, result TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS load_samples (at REAL PRIMARY KEY, power_w REAL NOT NULL);
         """)
 
     def close(self) -> None:
         self.connection.close()
+
+    def record_load(self, sample: LoadSample) -> None:
+        with self.connection:
+            self.connection.execute("INSERT OR IGNORE INTO load_samples VALUES (?,?)",
+                                    (sample.observed_at_utc.timestamp(), sample.power_w))
+
+    def load_samples(self, since: datetime) -> tuple[LoadSample, ...]:
+        rows = self.connection.execute("SELECT at,power_w FROM load_samples WHERE at>=? ORDER BY at",
+                                       (since.timestamp(),))
+        return tuple(LoadSample(datetime.fromtimestamp(at, UTC), power) for at, power in rows)
 
     def get(self, key: str, default: Any = None) -> Any:
         row = self.connection.execute("SELECT value FROM state WHERE key=?", (key,)).fetchone()

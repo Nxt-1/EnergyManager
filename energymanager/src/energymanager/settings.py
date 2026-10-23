@@ -41,8 +41,8 @@ class SettingField:
 def setting_fields() -> tuple[SettingField, ...]:
     result = [
         SettingField("home_assistant_url", "Home Assistant API URL", "Connections", "url"),
-        SettingField("forecast_url", "Issued forecast URL", "Connections", "url",
-                     "The feed must cover the complete seven days."),
+        SettingField("forecast_url", "Legacy forecast URL (unused)", "Connections", "optional_url",
+                     "Forecasts now use Open-Meteo automatically at your HA home location. This saved value is unused."),
         SettingField("allow_remote", "Allow network connections", "Connections", "boolean",
                      "Required for the Supervisor proxy or other non-loopback endpoints."),
         SettingField("token_environment", "Token environment variable", "Connections", "text",
@@ -232,7 +232,7 @@ class ConfigurationFile:
                     raise ValueError(f"Missing {group}: {', '.join(sorted(missing))}")
             Capabilities(**document["capabilities"])
             Policy(**document["policy"])
-            for key in ("home_assistant_url", "forecast_url", "notification_webhook"):
+            for key in ("home_assistant_url", "notification_webhook"):
                 if document.get(key):
                     checked_url(document[key], document["allow_remote"])
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", document["token_environment"]):

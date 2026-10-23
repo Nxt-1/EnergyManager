@@ -1,0 +1,59 @@
+{
+  "version": "4.0.5",
+  "evidence": "SYNTHETIC model parity and performance, not live installation validation",
+  "legacy_sources": {
+    "open_meteo.py": "2225285cfdc131615d38f8395ae097f9bea0cac153b5f6a9632908f6783b6434",
+    "pv_forecast.py": "5bbcc98c87f4c8ebeff7132f3408ac6e4bce82c7bdecdbd247e2a4a2f6419a38",
+    "load_forecast.py": "d478476a4f67209f3e53b1dfe367d68672fb7c37c9a30e7f073e28cf039e74f4"
+  },
+  "correction_factor_equalities": 2520,
+  "pv_points_exactly_matching_legacy": 648,
+  "load_points_matching_legacy": 676,
+  "load_history_samples": 10080,
+  "load_build_seconds": 0.04130890034139156,
+  "resample_seconds": 0.009245000313967466,
+  "planning_intervals": 2018,
+  "public_provider_check": {
+    "reference_location": "Public Brussels city centre; not installation coordinates",
+    "checked_at": "2026-10-23T17:11:14.789503+00:00",
+    "planes": {
+      "front_roof": 216,
+      "rear_roof": 216,
+      "rear_flat": 216,
+      "shed": 216
+    },
+    "pv_points": 216,
+    "full_169h_coverage": true,
+    "note": "Actual public provider response through new client/model; no HA, user location or hardware"
+  },
+  "browser": {
+    "source": "SYNTHETIC localhost HA/weather only",
+    "version": "4.0.5",
+    "checks": [
+      "Overview and Planning render forecasts, actual/planned powers and SoC",
+      "seven-day Planning view with2018 intervals",
+      "source, correction version and household learning count visible",
+      "no demonstration journey in configured startup",
+      "ten observed/planned power chart paths",
+      "zero browser console errors"
+    ],
+    "screenshots": [
+      "screenshots/forecast-overview.png",
+      "screenshots/forecast-planning.png"
+    ]
+  },
+  "local_checks": {
+    "tests": 112,
+    "test_seconds": 38.59,
+    "ruff": "passed",
+    "mypy_modules": 25,
+    "javascript": "passed",
+    "wheel_sdist": "built",
+    "installed_files_exactly_matching_source": 31,
+    "installed_configured_startup": "passed; built-in forecast, no demo journeys, control disabled",
+    "temporary_preview": "stopped; original8100 preview preserved",
+    "additional_forecast_focused_tests": 15,
+    "additional_forecast_focused_seconds": 5.4,
+    "latest_guard": "Malformed non-object provider response rejected; rebuilt wheel protection verified"
+  }
+}
