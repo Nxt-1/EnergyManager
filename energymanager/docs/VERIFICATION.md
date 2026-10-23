@@ -1,5 +1,42 @@
 # EnergyManager 4 verification
 
+## Version 4.0.6 — automatic HA connection and one hardware switch
+
+Removed the connection and commissioning options and explanatory entity subtitles.
+Runtime and discovery use the automatic Supervisor URL/token. The webhook is replaced
+by one optional phone picker, supporting notify entities and legacy phone actions.
+Missing/placeholder/unavailable fields are highlighted before Save. Incomplete physical
+settings keep the editor available with no plan/authority; unverified live cards show
+dashes. The existing billing-boundary timestamp guard remains unchanged.
+
+One Overview switch applies immediately and persists in SQLite. It starts off on first
+upgrade, independently of retired checkbox/JSON flags. A saved on request waits for
+settings/entity/input checks on restart. Off revokes queued/in-flight ordinary writes,
+stops EV and clears ESS independently; stop/persistence failures are reported. Unknown
+EV SoC/phase can still pause EV independently while fresh shared inputs permit ESS work.
+See SETTINGS.md for exact state, migration and rollback behavior.
+
+Local: **135 tests39.32s**, final27 focused tests0.98s, Ruff/mypy27 modules/JS passed.
+Coverage includes concurrent enable/off, mid-dispatch revocation, failed persistence,
+independent stop attempts, restart/input gates, local-only API boundary, legacy backups,
+notify entity/action delivery and deduplication, and incomplete-file editor availability.
+
+Configured new-pipeline seven-day E2E:2,018 intervals accepted26.521s, maximum control
+2.718ms, five fake service calls. It used the automatic Supervisor connection through
+local fake DNS/auth, made zero startup hardware calls, exercised the live switch and
+sent a notification only to fake HA. Browser installation fixtures verified initial
+missing-field highlights, missing-number/entity edits, one immediate switch, phone
+picker/save/reload/backup, removed fields/help, pending-value dashes and zero console
+errors. Screenshots use settings-v406-*.png. Both temporary previews/tabs were stopped;
+the existing8100 preview was preserved.
+
+Wheel/sdist built; all33 installed package code/assets match source. Isolated installed
+startup verified automatic Supervisor access, removed groups, missing-field reports
+and disabled control. No live HA, installation DB, hardware, real notifications or
+deployment was accessed. Actual billing timestamps and hardware/phone commissioning
+remain unverified. Evidence: settings-control-verification.json and offline-e2e.json.
+Remote CI/container publication pending.
+
 ## Version 4.0.5 — original installation forecasting restored
 
 Configured runtime now fetches Open-Meteo KNMI seamless weather at HA zone.home,

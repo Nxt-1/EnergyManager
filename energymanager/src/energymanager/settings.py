@@ -19,7 +19,8 @@ from uuid import uuid4
 
 import aiohttp
 
-from .adapters import checked_url
+from .connections import HomeAssistantConnection
+from .notifications import NotificationTarget
 from .domain import Capabilities, Policy
 from .measurements import installation_configuration
 
@@ -36,20 +37,12 @@ class SettingField:
     step: float = 0.01
     domains: tuple[str, ...] = ()
     units: tuple[str, ...] = ()
+    required: bool = True
 
 
 def setting_fields() -> tuple[SettingField, ...]:
-    result = [
-        SettingField("home_assistant_url", "Home Assistant API URL", "Connections", "url"),
-        SettingField("forecast_url", "Legacy forecast URL (unused)", "Connections", "optional_url",
-                     "Forecasts now use Open-Meteo automatically at your HA home location. This saved value is unused."),
-        SettingField("allow_remote", "Allow network connections", "Connections", "boolean",
-                     "Required for the Supervisor proxy or other non-loopback endpoints."),
-        SettingField("token_environment", "Token environment variable", "Connections", "text",
-                     "Only the variable name is stored. Credentials stay on the server."),
-        SettingField("notification_webhook", "Notification webhook (optional)", "Connections", "optional_url",
-                     "Leave empty to keep notices inside EnergyManager."),
-    ]
+    result = [SettingField("notification_target", "Phone notifications (optional)", "Notifications",
+                           "notification", domains=("notify",), required=False)]
     measurements = (
         ("ev_soc", "EV state of charge", ("%",)),
         ("ess_soc", "ESS state of charge", ("%",)),
@@ -67,14 +60,7 @@ def setting_fields() -> tuple[SettingField, ...]:
         domains: tuple[str, ...] = ("sensor", "number", "input_number")
         if key == "connected":
             domains = ("binary_sensor", "sensor", "input_boolean", "switch")
-        help_text = ""
-        if key == "ess_kw":
-            help_text = "AC power at the ESS inverter: positive supplies the house, negative charges. Not battery DC power."
-        elif key == "quarter_import_kwh":
-            help_text = "Select your P1 demand sensor in W or kW. Quarter-hour energy is calculated automatically."
-        elif key == "grid_export_kw":
-            help_text = "House demand is calculated from these P1 powers, solar, ESS and EV charging."
-        result.append(SettingField(f"measurements.{key}", label, "Measurements", "entity", help_text,
+        result.append(SettingField(f"measurements.{key}", label, "Measurements", "entity",
                                    domains=domains, units=units))
     for key, label, domain in (
         ("force", "Charger stop / charge selector", "select"),
@@ -83,10 +69,7 @@ def setting_fields() -> tuple[SettingField, ...]:
         ("ess_setpoint", "ESS AC setpoint", "number"),
     ):
         units = ("A",) if key == "current" else ("W",) if key == "ess_setpoint" else ()
-        help_text = ""
-        if key == "phase":
-            help_text = "Use the go-e APIv2 Connect Phase switch mode selector. Phase information is read here too."
-        result.append(SettingField(f"actuators.{key}", label, "Actuators", "entity", help_text,
+        result.append(SettingField(f"actuators.{key}", label, "Actuators", "entity",
                                    domains=(domain,), units=units))
     for key, label, group, minimum, maximum in (
         ("ev_capacity_kwh", "EV capacity (kWh)", "EV and charger", 0.01, None),
@@ -138,14 +121,7 @@ def setting_fields() -> tuple[SettingField, ...]:
         kind = "integer" if key == "completion_margin_minutes" else "number"
         result.append(SettingField(f"policy.{key}", label, group, kind, minimum=minimum,
                                    maximum=maximum, step=step))
-    result.extend((
-        SettingField("commissioning_reviewed", "Installation and mappings reviewed", "Commissioning", "boolean"),
-        SettingField("exclusive_controller_confirmed", "EnergyManager is the only controller", "Commissioning",
-                     "boolean"),
-        SettingField("policy.control_enabled", "Enable hardware control after restart", "Commissioning", "boolean",
-                     "Both confirmations above are required. Saving does not change the running controller."),
-        SettingField("_description", "Configuration notes", "Advanced", "text"),
-    ))
+    result.append(SettingField("_description", "Configuration notes", "Advanced", "text", required=False))
     return tuple(result)
 
 
@@ -178,7 +154,12 @@ class ConfigurationFile:
     def __init__(self, path: Path, *, addon: bool = False, mode: str = "demo") -> None:
         self.path, self.addon, self.mode = path, addon, mode
         self.lock = Lock()
-        self.started_revision = sha256(path.read_bytes()).hexdigest()
+        self.started_values = self.values(json.loads(path.read_bytes()))
+
+    @staticmethod
+    def values(document: dict[str, Any]) -> dict[str, Any]:
+        prepared = installation_configuration(document)
+        return {field.path: field_value(prepared, field.path) for field in SETTING_FIELDS}
 
     def read(self) -> dict[str, Any]:
         original = self.path.read_bytes()
@@ -187,19 +168,26 @@ class ConfigurationFile:
             raise ValueError("The configuration must be a JSON object")
         revision = sha256(original).hexdigest()
         prepared = installation_configuration(document)
-        values = {field.path: field_value(prepared, field.path) for field in SETTING_FIELDS}
+        values = self.values(prepared)
         return {
             "path": str(self.path), "revision": revision, "values": values,
             "fields": [asdict(field) for field in SETTING_FIELDS],
             "addon": self.addon, "mode": self.mode,
-            "restart_required": revision != self.started_revision,
+            "restart_required": values != self.started_values,
+            "issues": self.issues(prepared),
         }
 
     def validate(self, document: dict[str, Any]) -> None:
         errors = {}
         for field in SETTING_FIELDS:
             value = field_value(document, field.path)
-            if field.kind == "optional_url" and not value:
+            if not field.required and (value is None or value == ""):
+                continue
+            if field.kind == "notification":
+                try:
+                    NotificationTarget.from_data(value)
+                except ValueError as exc:
+                    errors[field.path] = str(exc)
                 continue
             if field.kind == "boolean":
                 valid = type(value) is bool
@@ -215,7 +203,7 @@ class ConfigurationFile:
                                                                       for p in value)
             else:
                 valid = isinstance(value, str) and len(value) <= 2000
-                if field.path != "_description":
+                if field.required:
                     valid = valid and bool(value.strip())
                 if valid and field.kind == "entity":
                     valid = bool(ENTITY_ID.fullmatch(value)) and value.split(".")[0] in field.domains
@@ -227,22 +215,26 @@ class ConfigurationFile:
             raise SettingsValidationError(errors)
         try:
             for group, model in (("capabilities", Capabilities), ("policy", Policy)):
-                missing = {field.name for field in fields(model)} - set(document.get(group, {}))
+                missing = {field.name for field in fields(model) if field.name != "control_enabled"} - set(document.get(group, {}))
                 if missing:
                     raise ValueError(f"Missing {group}: {', '.join(sorted(missing))}")
             Capabilities(**document["capabilities"])
             Policy(**document["policy"])
-            for key in ("home_assistant_url", "notification_webhook"):
-                if document.get(key):
-                    checked_url(document[key], document["allow_remote"])
-            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", document["token_environment"]):
-                raise ValueError("Token environment variable must be a variable name, not a credential")
-            if document["policy"]["control_enabled"] and not (
-                document["commissioning_reviewed"] and document["exclusive_controller_confirmed"]
-            ):
-                raise ValueError("Hardware control requires both commissioning confirmations")
         except (ValueError, TypeError, KeyError) as exc:
             raise SettingsValidationError({"configuration": str(exc)}) from exc
+
+    def issues(self, document: dict[str, Any]) -> dict[str, str]:
+        try:
+            self.validate(document)
+        except SettingsValidationError as exc:
+            errors = dict(exc.errors)
+        else:
+            errors = {}
+        for field in SETTING_FIELDS:
+            value = field_value(document, field.path)
+            if field.kind == "entity" and isinstance(value, str) and value.split(".")[-1].startswith("replace_"):
+                errors[field.path] = "Select an entity"
+        return errors
 
     def save(self, revision: str, changes: dict[str, Any]) -> dict[str, Any]:
         allowed = {field.path for field in SETTING_FIELDS}
@@ -256,6 +248,12 @@ class ConfigurationFile:
             if not isinstance(document, dict):
                 raise ValueError("The configuration must be a JSON object")
             document = installation_configuration(document)
+            for key in ("forecast_url", "notification_webhook", "commissioning_reviewed", "exclusive_controller_confirmed"):
+                document.pop(key, None)
+            if self.addon:
+                for key in ("home_assistant_url", "token_environment", "allow_remote"):
+                    document.pop(key, None)
+            document.get("policy", {}).pop("control_enabled", None)
             for path, value in changes.items():
                 keys = path.split(".")
                 parent = document
@@ -263,10 +261,7 @@ class ConfigurationFile:
                     parent = parent.setdefault(key, {})
                     if not isinstance(parent, dict):
                         raise ValueError(f"Configuration section {key} must be an object")
-                if path == "notification_webhook" and not value:
-                    parent.pop(keys[-1], None)
-                else:
-                    parent[keys[-1]] = value
+                parent[keys[-1]] = value
             self.validate(document)
             if document == json.loads(original):
                 return {**self.read(), "backup": None}
@@ -294,26 +289,32 @@ class ConfigurationFile:
             return {**self.read(), "backup": backup.name}
 
     async def entities(self) -> dict[str, Any]:
-        if self.addon:
-            url, token_name = "http://supervisor/core/api", "SUPERVISOR_TOKEN"
-        else:
-            document = await asyncio.to_thread(lambda: json.loads(self.path.read_bytes()))
-            url = checked_url(document["home_assistant_url"], document.get("allow_remote", False))
-            token_name = document.get("token_environment", "ENERGY_MANAGER_HA_TOKEN")
-        token = os.environ.get(token_name, "")
-        if self.addon and not token:
-            raise RuntimeError("Home Assistant entity discovery needs the Supervisor token supplied to the app")
-        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        document = await asyncio.to_thread(lambda: json.loads(self.path.read_bytes()))
+        connection = HomeAssistantConnection.resolve(document, addon=self.addon)
+        if self.addon and not connection.token:
+            raise RuntimeError("Home Assistant did not supply its connection token")
+        headers = {"Authorization": f"Bearer {connection.token}"} if connection.token else {}
+
+        async def read_list(session: aiohttp.ClientSession, resource: str) -> list[dict[str, Any]]:
+            async with session.get(f"{connection.url}/{resource}", allow_redirects=False) as response:
+                if response.status != 200:
+                    raise RuntimeError(f"Home Assistant {resource} returned HTTP {response.status}")
+                result = await response.json()
+            if not isinstance(result, list):
+                raise RuntimeError(f"Home Assistant returned invalid {resource}")
+            return result
+
         try:
             async with aiohttp.ClientSession(headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as session:
-                async with session.get(f"{url}/states", allow_redirects=False) as response:
-                    if response.status != 200:
-                        raise RuntimeError(f"Home Assistant entity list returned HTTP {response.status}")
-                    states = await response.json()
+                states = await read_list(session, "states")
+                notification_error = None
+                try:
+                    services = await read_list(session, "services")
+                except (aiohttp.ClientError, TimeoutError, RuntimeError):
+                    services = []
+                    notification_error = "Phone notification actions could not be loaded"
         except (aiohttp.ClientError, TimeoutError) as exc:
-            raise RuntimeError("Cannot load entities. Check the saved Home Assistant connection settings.") from exc
-        if not isinstance(states, list):
-            raise ValueError("Home Assistant returned an invalid entity list")
+            raise RuntimeError("Home Assistant could not be reached") from exc
         entities = []
         for state in states:
             if not isinstance(state, dict) or not ENTITY_ID.fullmatch(str(state.get("entity_id", ""))):
@@ -325,7 +326,25 @@ class ConfigurationFile:
             entities.append({
                 "entity_id": entity_id, "name": str(attributes.get("friendly_name", entity_id))[:255],
                 "state": str(state.get("state", "unknown"))[:120],
-                "unit": str(attributes.get("unit_of_measurement", ""))[:30],
+                "unit": str(attributes.get("unit_of_measurement") or "")[:30],
             })
         entities.sort(key=lambda entity: (entity["name"].casefold(), entity["entity_id"]))
-        return {"entities": entities, "source": "Home Assistant", "synthetic": False}
+        targets = [{**entity, "kind": "entity"} for entity in entities if entity["entity_id"].startswith("notify.")]
+        known = {target["entity_id"] for target in targets}
+        for domain in services:
+            if not isinstance(domain, dict) or domain.get("domain") != "notify":
+                continue
+            actions = domain.get("services", {})
+            if not isinstance(actions, dict):
+                continue
+            for key, metadata in actions.items():
+                identifier = f"notify.{key}"
+                if (not ENTITY_ID.fullmatch(identifier) or identifier in known
+                        or key in ("notify", "send_message", "persistent_notification")):
+                    continue
+                name = metadata.get("name") if isinstance(metadata, dict) else None
+                targets.append({"entity_id": identifier, "name": str(name or key.replace("_", " "))[:255],
+                                "state": "", "unit": "", "kind": "action"})
+        targets.sort(key=lambda target: (target["name"].casefold(), target["entity_id"]))
+        return {"entities": entities, "notification_targets": targets, "notification_error": notification_error,
+                "source": "Home Assistant", "synthetic": False}

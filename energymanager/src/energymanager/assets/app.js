@@ -11,7 +11,10 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
 let state, page = 'overview',
   offset = 0,
   loading = false,
-  pointerUntil = 0;
+  pointerUntil = 0,
+  hardwareChanging = false,
+  hardwareIntent = false,
+  hardwareError = null;
 const colors = {
   grid: '#dc2626',
   ess: '#007ac2',
@@ -98,7 +101,8 @@ function points(series, soc = false) {
       planned.push([Date.parse(last.end), value]);
     }
   }
-  const observed = state.observed.map(observation => {
+  const observed = state.observed.filter(observation =>
+    observation.quality === (state.demo ? 'SYNTHETIC' : 'measured')).map(observation => {
     let value;
     if (soc) {
       value = series === 'ev' ?
@@ -186,8 +190,19 @@ function viewLocked() {
   return $('goal-dialog').open || $('detail-dialog').open || Date.now() < pointerUntil;
 }
 
+function renderHardware() {
+  $('hardware-controls').hidden = page !== 'overview';
+  const hardware = state.hardware_control;
+  $('hardware-toggle').checked = hardwareChanging ? hardwareIntent : !!hardware?.requested;
+  $('hardware-toggle').disabled = hardwareChanging || (!hardware?.requested && !hardware?.can_enable);
+  $('hardware-status').textContent = hardwareChanging ? 'Applying…' : hardwareError || hardware?.reason ||
+    (hardware?.enabled ? 'On' : 'Off');
+}
+
 function render() {
-  if (!state || viewLocked()) return;
+  if (!state) return;
+  renderHardware();
+  if (viewLocked()) return;
   $('app-version').textContent = ` ${state.version}`;
   document.title = `EnergyManager · ${state.version}`;
   $('dashboard').hidden = page === 'settings';
@@ -198,7 +213,7 @@ function render() {
   $('connection').textContent = state.status === 'planning' ? '● Calculating · control responsive' : state
     .status === 'ready' ? '● Plan ready' : '● ' + state.status;
   document.querySelector('footer').textContent =
-    `${state.control_enabled ? 'Commissioned control enabled' : 'Hardware control disabled'} / Forecasts and planned costs are estimates.`;
+    `${state.control_enabled ? 'Hardware control enabled' : 'Hardware control disabled'} / Forecasts and planned costs are estimates.`;
   document.body.classList.toggle('planning', page === 'planning');
   if (page === 'settings') return;
   const o = state.observation,
@@ -211,7 +226,7 @@ function render() {
     'Power · actual / planned · kW';
   $('navigation').hidden = page === 'planning';
   $('provenance').textContent =
-    `${state.provenance} · ${state.demo?'Deterministic local demonstration':'Configured inputs'} · ${state.control_enabled ? 'Commissioned controller enabled' : 'Hardware control disabled'}`;
+    `${state.provenance} · ${state.demo?'Deterministic local demonstration':'Configured inputs'} · ${state.control_enabled ? 'Hardware control enabled' : 'Hardware control disabled'}`;
   const live = [
     ['Grid', o.house_kw + o.ev_power_kw - o.pv_ac_kw - o.ess_power_kw, 'kW', 'Quarter-hour import ' + num(o
       .quarter_import_kwh) + ' kWh', 'grid'],
@@ -224,9 +239,13 @@ function render() {
       false ? 'State unknown / charging held' : o.connected ? 'Connected' : 'Away / disconnected', 'ev'
     ]
   ];
-  $('live').innerHTML = live.map(([name, value, unit, label, key]) =>
-    `<article class="live-item"><span class="muted">${name}</span><strong style="color:${colors[key]}">${num(value,unit==='%'?0:2)} <small style="display:inline;font-size:13px">${unit}</small></strong><small>${esc(label)}</small>${unit==='%'?`<div class="meter"><i style="width:${value}%;background:${colors[key]}"></i></div>`:''}</article>`
-  ).join('');
+  const measurementAge = (Date.parse(state.now) - Date.parse(o.at)) / 1000;
+  const liveKnown = state.demo || o.quality === 'measured' && measurementAge >= -5 &&
+    measurementAge <= state.policy.measurement_max_age_seconds;
+  $('live').innerHTML = live.map(([name, value, unit, label, key]) => {
+    if (!liveKnown) { value = null; label = 'Waiting for live input'; }
+    return     `<article class="live-item"><span class="muted">${name}</span><strong style="color:${colors[key]}">${num(value,unit==='%'?0:2)} <small style="display:inline;font-size:13px">${unit}</small></strong><small>${esc(label)}</small>${unit==='%' && value !== null ?`<div class="meter"><i style="width:${value}%;background:${colors[key]}"></i></div>`:''}</article>`;
+  }).join('');
   $('status').innerHTML =
     `<p class="status-line">${plan?`Plan updated ${time(plan.intervals[0].start)} · ${plan.summary.intervals} intervals · ${num(plan.seconds,1)} s calculation`:'Waiting for the first validated joint plan. The independent control loop is running.'}${state.actuator_health?.delivery_fault ? '<span class="error"> / EV delivery fault: stopped; diagnose before restart</span>' : ''}${state.error?` · <span class="error">${esc(state.error)}</span>`:''}</p>`;
   $('power').innerHTML = chart();
@@ -376,6 +395,20 @@ $('goal-form').onsubmit = async event => {
     await refresh()
   } catch (error) {
     $('form-error').textContent = error.message
+  }
+};
+$('hardware-toggle').onchange = async event => {
+  hardwareIntent = event.target.checked;
+  hardwareChanging = true;
+  hardwareError = null;
+  render();
+  try {
+    await api('control', 'POST', {enabled: hardwareIntent});
+  } catch (error) {
+    hardwareError = error.message;
+  } finally {
+    hardwareChanging = false;
+    await refresh();
   }
 };
 $('refresh').onclick = async () => {

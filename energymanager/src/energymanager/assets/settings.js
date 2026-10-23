@@ -9,12 +9,13 @@ class EntityPicker extends HTMLElement {
   configure(field, value, entities) {
     this.field = field;
     this.entities = entities;
-    this.selected = value || '';
+    this.selected = value?.id || value || '';
+    this.selectedKind = value?.kind || 'entity';
     this.replaceChildren();
     this.input = element('input');
     this.input.id = `setting-${field.path.replaceAll('.', '-')}`;
     this.input.type = 'text';
-    this.input.required = true;
+    this.input.required = field.required;
     this.input.autocomplete = 'off';
     this.input.spellcheck = false;
     this.input.setAttribute('role', 'combobox');
@@ -28,7 +29,11 @@ class EntityPicker extends HTMLElement {
     this.list.hidden = true;
     this.input.setAttribute('aria-controls', this.list.id);
     this.summary = element('small', 'entity-selection');
-    this.append(this.input, this.summary, this.list);
+    this.clearButton = element('button', 'entity-clear', '×');
+    this.clearButton.type = 'button';
+    this.clearButton.setAttribute('aria-label', `Clear ${field.label}`);
+    this.clearButton.onclick = () => this.choose('');
+    this.append(this.input, this.clearButton, this.summary, this.list);
     this.showSelection();
     this.input.addEventListener('focus', () => {
       this.input.value = '';
@@ -47,8 +52,15 @@ class EntityPicker extends HTMLElement {
     });
   }
 
-  get value() { return this.selected; }
-  set value(value) { this.selected = value || ''; this.showSelection(); }
+  get value() {
+    if (this.field.kind !== 'notification') return this.selected;
+    return this.selected ? {id: this.selected, kind: this.selectedKind} : null;
+  }
+  set value(value) {
+    this.selected = value?.id || value || '';
+    this.selectedKind = value?.kind || 'entity';
+    this.showSelection();
+  }
 
   updateEntities(entities) {
     this.entities = entities;
@@ -59,10 +71,11 @@ class EntityPicker extends HTMLElement {
   showSelection() {
     const match = this.entities.find(entity => entity.entity_id === this.selected);
     this.input.value = match ? match.name : this.selected;
+    this.clearButton.hidden = !this.selected;
     this.summary.textContent = match ?
-      `${match.entity_id} · ${match.state}${match.unit ? ' ' + match.unit : ''}` :
-      this.selected ? `${this.selected} · not in the current entity list` :
-        'Choose an entity, or enter its ID if Home Assistant is unavailable.';
+      `${match.entity_id}${match.state ? ' · ' + match.state : ''}${match.unit ? ' ' + match.unit : ''}` :
+      this.selected;
+
   }
 
   open() {
@@ -84,7 +97,7 @@ class EntityPicker extends HTMLElement {
       row.setAttribute('role', 'option');
       row.setAttribute('aria-selected', 'false');
       row.append(element('strong', '', entity.name),
-        element('small', '', `${entity.entity_id} · ${entity.state}${entity.unit ? ' ' + entity.unit : ''}`));
+        element('small', '', `${entity.entity_id}${entity.state ? ' · ' + entity.state : ''}${entity.unit ? ' ' + entity.unit : ''}`));
       this.list.append(row);
     }
     if (!matches.length) this.list.append(element('div', 'entity-empty',
@@ -100,6 +113,8 @@ class EntityPicker extends HTMLElement {
     if (commitTypedId && !this.list.hidden && /^[a-z_][a-z0-9_]*\.[a-z0-9_]+$/.test(typed) &&
         typed !== this.selected) {
       this.selected = typed;
+      this.selectedKind = this.entities.find(entity => entity.entity_id === typed)?.kind ||
+        (typed.startsWith('notify.mobile_app_') ? 'action' : 'entity');
       this.dispatchEvent(new Event('change', {bubbles: true}));
     }
     this.list.hidden = true;
@@ -110,6 +125,7 @@ class EntityPicker extends HTMLElement {
 
   choose(entityId) {
     this.selected = entityId;
+    this.selectedKind = this.entities.find(entity => entity.entity_id === entityId)?.kind || 'entity';
     this.close(false);
     this.dispatchEvent(new Event('change', {bubbles: true}));
   }
@@ -144,6 +160,8 @@ export class SettingsPage {
     this.container = container;
     this.api = api;
     this.entities = [];
+    this.notificationTargets = [];
+    this.entitiesLoaded = false;
     this.dirty = false;
     this.controls = new Map();
     window.addEventListener('beforeunload', event => {
@@ -152,7 +170,7 @@ export class SettingsPage {
   }
 
   async show() {
-    if (this.document) return;
+    if (this.dirty) return;
     await this.load();
   }
 
@@ -177,13 +195,18 @@ export class SettingsPage {
     try {
       const result = await this.api('settings/entities');
       this.entities = result.entities;
+      this.notificationTargets = result.notification_targets || [];
+      this.entitiesLoaded = true;
+      this.notificationsLoaded = !result.notification_error;
       this.entityStatus.textContent = `${result.entities.length} Home Assistant entities loaded`;
       for (const control of this.controls.values()) {
-        if (control instanceof EntityPicker) control.updateEntities(this.entities);
+        if (control instanceof EntityPicker) control.updateEntities(
+          control.field.kind === 'notification' ? this.notificationTargets : this.entities);
       }
     } catch (error) {
       this.entityStatus.textContent = `${error.message} Current mappings are kept; you can still edit settings.`;
     } finally {
+      this.validateFields();
       this.entityButton.disabled = false;
     }
   }
@@ -210,18 +233,10 @@ export class SettingsPage {
     this.entityButton.onclick = () => this.loadEntities();
     entityBar.append(this.entityStatus, this.entityButton);
     this.container.append(entityBar);
-    if (this.document.addon) {
-      const connection = element('button', '', 'Use Home Assistant connection');
-      connection.type = 'button';
-      connection.onclick = () => {
-        this.controls.get('home_assistant_url').value = 'http://supervisor/core/api';
-        this.controls.get('token_environment').value = 'SUPERVISOR_TOKEN';
-        this.controls.get('allow_remote').checked = true;
-        this.markDirty();
-        this.message.textContent = 'Home Assistant connection selected. Save settings to keep it.';
-      };
-      entityBar.append(connection);
-    }
+    this.issueSummary = element('p', 'settings-issues');
+    this.issueSummary.id = 'settings-issues';
+    this.issueSummary.setAttribute('role', 'status');
+    this.container.append(this.issueSummary);
     this.form = element('form', 'settings-form');
     this.form.noValidate = true;
     const groups = new Map();
@@ -229,7 +244,7 @@ export class SettingsPage {
       if (!groups.has(field.group)) {
         const card = element('section', 'card settings-group');
         const content = element('div', 'settings-fields');
-        if (['Advanced', 'Commissioning'].includes(field.group)) {
+        if (field.group === 'Advanced') {
           const details = element('details');
           details.append(element('summary', '', field.group), content);
           card.append(details);
@@ -245,9 +260,9 @@ export class SettingsPage {
       label.htmlFor = id;
       let control;
       const value = this.document.values[field.path];
-      if (field.kind === 'entity') {
+      if (['entity', 'notification'].includes(field.kind)) {
         control = document.createElement('em-entity-picker');
-        control.configure(field, value, this.entities);
+        control.configure(field, value, field.kind === 'notification' ? this.notificationTargets : this.entities);
       } else if (field.kind === 'phases') {
         control = element('select');
         for (const [val, text] of [['1', 'Single phase'], ['3', 'Three phase'], ['1,3', 'Single and three phase']]) {
@@ -270,16 +285,16 @@ export class SettingsPage {
           control.step = field.kind === 'integer' ? '1' : 'any';
           control.inputMode = 'decimal';
         }
-        control.required = !['boolean', 'optional_url'].includes(field.kind) && field.path !== '_description';
+        control.required = field.required && field.kind !== 'boolean';
         control.autocomplete = 'off';
       }
-      if (field.kind !== 'entity') control.id = id;
+      if (!(control instanceof EntityPicker)) control.id = id;
       control.dataset.path = field.path;
       this.controls.set(field.path, control);
       if (field.kind === 'boolean') {
         wrapper.append(control, label);
       } else wrapper.append(label, control);
-      wrapper.append(element('small', 'muted field-help', field.help || ''));
+      if (field.help) wrapper.append(element('small', 'muted field-help', field.help));
       const error = element('small', 'error field-error');
       error.id = `${id}-error`;
       error.setAttribute('aria-live', 'polite');
@@ -307,12 +322,49 @@ export class SettingsPage {
     this.form.append(actions);
     this.form.onsubmit = event => { event.preventDefault(); this.save(); };
     this.container.append(this.form);
+    this.validateFields();
   }
 
   markDirty() {
     this.dirty = true;
     this.message.textContent = 'Unsaved changes';
     this.message.className = '';
+    this.validateFields();
+  }
+
+  validateFields() {
+    if (!this.form) return;
+    let count = 0;
+    for (const field of this.document.fields) {
+      const control = this.controls.get(field.path);
+      const input = control.input || control;
+      let message = '';
+      if (control instanceof EntityPicker) {
+        const identifier = control.selected;
+        const rows = field.kind === 'notification' ? this.notificationTargets : this.entities;
+        const loaded = field.kind === 'notification' ? this.notificationsLoaded : this.entitiesLoaded;
+        const match = rows.find(row => row.entity_id === identifier);
+        if (field.required && (!identifier || identifier.split('.')[1]?.startsWith('replace_')))
+          message = 'Select an entity';
+        else if (identifier && loaded && !match) message = 'Not found in Home Assistant';
+        else if (match && (match.state === 'unavailable' || match.state === 'unknown' && field.kind !== 'notification'))
+          message = 'Value unavailable';
+        else if (match && field.units.length && match.unit && !field.units.includes(match.unit))
+          message = 'Incompatible unit';
+      } else if (field.required && control.value.trim() === '') message = 'Required';
+      else if (control.validity && !control.validity.valid) message = 'Check this value';
+      const wrapper = control.closest('.setting-field');
+      wrapper.classList.toggle('field-missing', !!message);
+      wrapper.querySelector('.field-error').textContent = message;
+      if (message) {
+        input.setAttribute('aria-invalid', 'true');
+        count += 1;
+        const details = control.closest('details');
+        if (details) details.open = true;
+      } else input.removeAttribute('aria-invalid');
+    }
+    this.issueSummary.textContent = count ? `${count} setting${count === 1 ? '' : 's'} need attention.` : '';
+    this.issueSummary.hidden = !count;
   }
 
   async save() {
@@ -322,6 +374,7 @@ export class SettingsPage {
       control.closest('.setting-field').querySelector('.field-error').textContent = '';
       (control.input || control).removeAttribute('aria-invalid');
       if (field.kind === 'boolean') values[field.path] = control.checked;
+      else if (field.kind === 'notification') values[field.path] = control.value;
       else if (field.kind === 'phases') values[field.path] = control.value.split(',').filter(Boolean).map(Number);
       else if (['number', 'integer'].includes(field.kind)) values[field.path] =
         control.value.trim() === '' ? null : Number(control.value);
@@ -333,6 +386,7 @@ export class SettingsPage {
       const result = await this.api('settings', 'POST', {revision: this.document.revision, values});
       this.document = result;
       this.dirty = false;
+      this.validateFields();
       this.message.className = 'settings-success';
       const restart = result.mode === 'demo' && result.addon ?
         'Choose configured in the HA app Configuration tab and restart to apply them.' :

@@ -88,7 +88,7 @@ def main() -> None:
     args.data.parent.mkdir(parents=True, exist_ok=True)
     store = Store(args.data)
     application = (
-        configured_application(args.config, store)
+        configured_application(args.config, store, addon=args.addon)
         if args.config
         else Application(store, policy=policy, snapshot=snapshot, demo=not bool(args.fixture))
     )

@@ -8,7 +8,8 @@ from aiohttp.test_utils import TestServer
 from energymanager.domain import Goal
 from energymanager.domain import daily_goals
 from zoneinfo import ZoneInfo
-from energymanager.notifications import Notifications
+from energymanager.notifications import Notifications, NotificationTarget
+from energymanager.adapters import HomeAssistantAdapter
 from energymanager.optimization import JointModel
 from energymanager.planner import Planner
 from energymanager.store import Store
@@ -64,7 +65,7 @@ def test_month_boundary_does_not_carry_incurred_allowance_into_next_month():
     )
 
 
-async def test_peak_notice_is_deduplicated_through_real_local_webhook(tmp_path):
+async def test_peak_notice_is_deduplicated_through_real_local_ha_notify_action(tmp_path):
     delivered = []
 
     async def receive(request):
@@ -72,16 +73,20 @@ async def test_peak_notice_is_deduplicated_through_real_local_webhook(tmp_path):
         return web.json_response({"received": True})
 
     fake = web.Application()
-    fake.router.add_post("/notice", receive)
+    fake.router.add_post("/services/notify/mobile_app_phone", receive)
     store = Store(tmp_path / "notices.sqlite")
     async with TestServer(fake) as server:
-        notices = Notifications(store, str(server.make_url("/notice")))
+        ha = HomeAssistantAdapter(str(server.make_url("")), {})
+        await ha.__aenter__()
+        notices = Notifications(store, ha, NotificationTarget("notify.mobile_app_phone", "action"))
         body = {"kind": "peak_precharge", "peak_kw": 3.1, "avoided_peak_kw": 5.0, "day": "2026-10-23"}
         await notices.inform("peak-precharge", body)
         await notices.inform("peak-precharge", {**body, "peak_kw": 3.104, "forecast_id": "new-issue"})
         assert len(delivered) == 1
         await notices.inform("peak-precharge", {**body, "peak_kw": 3.5})
         assert len(delivered) == 2
+        assert delivered[0]["message"].startswith("Battery charging")
+        await ha.__aexit__()
         assert sum(e["kind"] == "notification_delivered" for e in store.events()) == 2
     store.close()
 

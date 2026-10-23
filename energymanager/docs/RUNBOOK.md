@@ -53,7 +53,7 @@ limits can change incumbents; replay does not promise bit-identical optimization
 
 ## Main-project version 4 update
 
-`config.yaml` now advertises **4.0.5** for the existing `energy_manager` Home Assistant
+`config.yaml` now advertises **4.0.6** for the existing `energy_manager` Home Assistant
 app and `ghcr.io/nxt-1/energymanager` image. It keeps ingress port8099 and manual startup.
 The packaged Python distribution, CLI and module are all named `energymanager`. The
 former standalone candidate has been moved into this main app; the old V3 modules,
@@ -80,7 +80,7 @@ need the reviewed V4 resource/configuration update; no live dashboard was change
 Docker is unavailable locally. The V4.0.0 CI and image workflows verified the Linux
 container build and publication; evidence is in VERIFICATION.md and ci-verification.json.
 Supervisor installation and physical deployment remain separate checks. A target host
-can run `docker build --build-arg BUILD_VERSION=4.0.5 -t energymanager:4.0.5 .` from this
+can run `docker build --build-arg BUILD_VERSION=4.0.6 -t energymanager:4.0.6 .` from this
 directory. The repository publish workflow targets the existing GHCR image when
 config.yaml is pushed to main; inspect the workflow for the version being installed.
 
@@ -98,9 +98,12 @@ Search by friendly name or entity ID; pickers show state and units and filter co
 domains/units. In the HA app, entity discovery uses read-only `GET /core/api/states`
 through the Supervisor, even when planning is in demo mode. The server reads the
 Supervisor token from its environment; it never sends the token to the browser.
-**Use Home Assistant connection** fills the API URL, token variable name and network
-access flag. Save still requires an explicit click. Standalone discovery uses the
-saved HA connection and named token variable instead.
+The installed HA app uses this same Supervisor connection automatically for live
+measurements, actuators, forecasts and entity/notification discovery. No API URL,
+token-variable name, network-access checkbox or forecast endpoint is configured in
+the GUI. Standalone tools can supply ENERGY_MANAGER_HA_URL, ENERGY_MANAGER_HA_TOKEN
+and ENERGY_MANAGER_ALLOW_REMOTE through their environment; old standalone connection
+values remain readable for compatibility.
 
 **Save settings** validates the complete configuration, preserves unknown fields and
 writes a dated `*.backup-*.json` beside the configuration before atomic replacement.
@@ -108,7 +111,7 @@ External or concurrent edits produce a conflict instead of being overwritten. Di
 failure leaves current mappings and other settings editable. Credentials remain in
 environment variables. Restart explicitly to apply saved changes. The HA Configuration
 tab's `mode` dropdown selects demo/configured; saving JSON does not change that mode or
-the currently running controller. Physical commissioning confirmations still apply.
+the currently running controller. Hardware control is managed separately by the immediate Overview switch.
 
 For local demo use, a missing `energymanager.json` is created beside the state database
 so Settings is available without supplying `--config`. Such a demo still uses synthetic
@@ -124,10 +127,9 @@ remains available for backup/recovery and is not needed for routine configuratio
 
 For standalone use, `--config path/to/new-file.json` also creates a missing file and
 parent folders. Alternatively copy `configuration.example.json` yourself. The starter is
-labelled synthetic and contains every required physical field. `allow_remote`,
-`commissioning_reviewed`, `exclusive_controller_confirmed` and `policy.control_enabled`
-are false. No old options file is imported. For local fake integration, keep remote
-access false and use loopback URLs. Start with `--config path/to/new-file.json`.
+labelled synthetic and contains every required physical field. Hardware control starts
+off. No old options file is imported. For local fake integration, use loopback endpoints.
+Start with `--config path/to/new-file.json`.
 
 | New field | Source to review in old configuration | Required interpretation |
 |---|---|---|
@@ -195,19 +197,15 @@ be reviewed; old ESS aggregate caps must not be copied onto independent DC charg
 The provisional2.5kW floor,4kW automatic ceiling,30km reserve and tariffs are not claimed
 as installation settings.
 
-HA REST base URL includes `/api`, e.g. `http://127.0.0.1:8129/api` for a fake. A later
-authorized HA add-on setup may use `http://supervisor/core/api`, remote access explicitly
-enabled, and `token_environment: SUPERVISOR_TOKEN`. Standalone HA tokens are read only
-from the named environment variable; never put credentials in URLs, snapshots or commits.
-Notification webhook is omitted by default; notices stay in local SQLite. A configured
-webhook must be reviewed separately and was exercised only against a loopback fake.
+See [Settings and hardware control](SETTINGS.md) for the single Overview switch,
+missing-field highlights and the optional phone notification picker. Notifications use
+Home Assistant notify entities or phone-specific actions, with no webhook URL.
 
 Configured mode now creates its forecasts internally. It reads latitude and longitude
 from HA `zone.home`, then calls the original Open-Meteo `knmi_seamless` source for each
 of the four recovered PV planes. No separate forecast service or forecast URL is needed.
-The legacy forecast URL field remains visibly unused until the connection settings are
-reviewed separately. Existing files do not need a new forecast setting. Network access
-must already be enabled for configured HA/Open-Meteo operation; saving does not change it.
+The legacy forecast URL field is removed. Existing HA files do not need new connection
+settings; the app connects automatically.
 
 See [forecast sources and exact installation parameters](FORECASTING.md). Roof-front
 and roof-rear production feed the AC channel; shed production feeds the DC channel.
@@ -244,11 +242,11 @@ and15-minute desired completion margin are provisional.
    emergency/manual operation and notification destination. Confirm actual host runtime
    and storage growth; no purge policy is enabled.
 4. Only after separate authorization, establish one exclusive controller: stop old EV/
-   ESS writers, verify stop/setpoint behavior, then explicitly review both commissioning
-   flags and the new control flag. Restart reconciliation initially revokes recorded
-   commands. Never run competing enabled controllers.
+   ESS writers and verify stop/setpoint behavior. Then use the Overview hardware switch.
+   Startup reconciliation initially revokes recorded commands. The removed commissioning
+   flags have no authority. Never run competing enabled controllers.
 5. To roll back, stop the new controller and verify EV stopped/ESS at the reviewed safe
-   handover setting. Disable its control flag. Restore/re-enable the previously reviewed
+   handover setting. Switch hardware control off in Overview. Restore/re-enable the previously reviewed
    V3 image/controller/configuration and dashboard, and verify sole authority. Preserve
    the V4 database and logs for diagnosis. Source promotion did not modify historical
    installation database files; never point V3 at the V4 SQLite database.

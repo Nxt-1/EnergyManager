@@ -396,7 +396,7 @@ class GuardedActuator:
         self.delivery_fault = False
 
     async def write(self, domain: str, service: str, key: str, value_key: str, value: Any) -> None:
-        if self.generation and self.generation() != self.command_generation:
+        if not self.enabled or self.generation and self.generation() != self.command_generation:
             raise StaleDispatch()
         await self.client.service(domain, service, {"entity_id": self.entities[key], value_key: value})
         if self.on_write:
@@ -410,6 +410,28 @@ class GuardedActuator:
                     value_key: value,
                 }
             )
+
+    async def stop(self, generation: int) -> None:
+        """Stop EV charging and clear the ESS setpoint after ordinary writes are revoked."""
+        self.enabled = False
+        errors = []
+        async with self.lock:
+            for domain, service, key, value_key, value in (
+                ("select", "select_option", "force", "option", "1"),
+                ("number", "set_value", "ess_setpoint", "value", 0),
+            ):
+                try:
+                    await self.client.service(domain, service, {"entity_id": self.entities[key], value_key: value})
+                    if self.on_write:
+                        self.on_write({"generation": generation, "reason": "Hardware control disabled",
+                                       "entity_id": self.entities[key], value_key: value})
+                except (OSError, RuntimeError, KeyError) as exc:
+                    errors.append(str(exc))
+            self.last = None
+            self.target_phase = self.awaiting_phase = None
+            self.stopped_at = self.zero_since = None
+        if errors:
+            raise RuntimeError("Hardware control is off, but a stop command failed: " + "; ".join(errors))
 
     async def apply(self, command: Command, generation: int, observation: Observation) -> None:
         async with self.lock:

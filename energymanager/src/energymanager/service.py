@@ -25,6 +25,7 @@ from .store import Store
 from .notifications import Notifications
 from .validation import validate
 from .worker import watch_parent
+from .hardware import HardwareControl
 
 
 class Application:
@@ -75,6 +76,8 @@ class Application:
         self.demo_origin = self.observation.at
         self.last_control_replan: datetime | None = None
         self.notifications = Notifications(store)
+        self.hardware: HardwareControl | None = None
+        self.configuration_error: str | None = None
 
     def now(self) -> datetime:
         return (
@@ -84,6 +87,8 @@ class Application:
         )
 
     async def start(self) -> None:
+        if self.hardware:
+            self.hardware.start()
         self.worker = ProcessPoolExecutor(
             max_workers=1, mp_context=get_context("spawn"), initializer=watch_parent
         )
@@ -93,11 +98,13 @@ class Application:
             await self.ha.__aenter__()
             self.observation = replace(self.observation, quality="unknown")
             self.input_task = asyncio.create_task(self.input_loop())
-        else:
+        elif not self.configuration_error:
             self.requested.set()
 
     async def close(self) -> None:
         self.shutdown = True
+        if self.hardware:
+            await self.hardware.close()
         self.revision += 1
         at = self.now()
         await self.actuator.apply(
@@ -173,6 +180,8 @@ class Application:
             self.store.event("protective_command", command)
 
     def build_snapshot(self) -> Snapshot:
+        if self.configuration_error:
+            raise ValueError("Complete the highlighted settings")
         if not self.demo and self.forecast and self.forecast_data is None:
             raise ValueError("Configured forecasts are not ready")
         if self.forecast_data is not None:
@@ -599,6 +608,7 @@ class Application:
             "now": self.now().isoformat(),
             "demo": self.demo,
             "control_enabled": bool(getattr(self.actuator, "enabled", False)),
+            "hardware_control": self.hardware.state() if self.hardware else None,
             "actuator_health": {
                 "delivery_fault": bool(getattr(self.actuator, "delivery_fault", False)),
                 "write_failures": getattr(self.actuator, "failures", 0),

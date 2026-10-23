@@ -1,6 +1,6 @@
 # First release implementation specification
 
-This is the shipping specification for the EnergyManager 4.0.5 application. The
+This is the shipping specification for the EnergyManager 4.0.6 application. The
 authorized handoff and confirmed decisions govern behavior. All supplied development
 capacities, tariffs and efficiencies are **synthetic provisional parameters**.
 PV plane geometry and correction tables are recovered installation values; verification
@@ -128,7 +128,7 @@ economics including losses and inventory. It is disabled for ordinary arbitrage 
 standing insurance. Required EV feasibility may be restored through ESS household
 support only against a feasible higher-peak counterfactual. Adopted exceptions produce
 deduplicated informational events; the default destination is local SQLite. An optional
-configured webhook is separately testable. No external notice was sent in development.
+configured HA phone notification destination receives deduplicated notices. No external notice was sent in development.
 
 ## Continuity, control and publication
 
@@ -166,14 +166,15 @@ latches EV stopping. A solver-parent watchdog prevents orphan workers after serv
 
 ## Boundaries
 
-The main project is now EnergyManager 4.0.5. Its fresh joint core replaces V3 under the
+The main project is now EnergyManager 4.0.6. Its fresh joint core replaces V3 under the
 `energymanager` Python package and existing `energy_manager` add-on/image identity. V3
 source/tests/dashboard were replaced; historical evidence remains in Git and labelled
 reports. V3 installation options and database files are not automatically imported. V4
 uses its own JSON configuration and SQLite file, with control disabled by default. Only
 the selected configuration file is initialized when missing: add-on startup (including
-demo mode) and standalone `--config` copy a bundled synthetic starter with remote access,
-commissioning confirmations and hardware control disabled. Existing files, including
+demo mode) and standalone `--config` copy a bundled synthetic starter. The new single
+hardware switch starts off and is the only control authority; legacy commissioning
+flags and the old JSON control flag cannot enable it. Existing files, including
 unfinished files, are preserved. Creation failures stop startup with the path and reason.
 The Settings page edits that same JSON using typed controls and searchable entity
 pickers. Discovery is read-only through the server-side Supervisor token, or the saved
@@ -181,7 +182,13 @@ standalone HA connection. Tokens and unknown configuration fields are not return
 the editor. Validated edits preserve unknown fields, create a dated backup and replace
 the file atomically; revision conflicts prevent overwriting concurrent edits. File I/O
 runs outside the control event loop. Saving affects the next explicit restart, not the
-active controller. Local demo starts also initialize a missing file beside the database.
+active installation settings. The Overview hardware switch applies immediately and
+persists in SQLite; turning it off revokes in-flight writes, stops EV charging and clears
+the ESS setpoint. Enabling checks saved/runtime settings, entity availability and fresh
+critical measurements. Restart waits for these checks before resuming a saved on state.
+Incomplete saved settings keep the editor available without planning or command authority.
+HA connections are automatic; phone notifications use selected HA notify entities/actions.
+See SETTINGS.md for upgrade and control-state behavior. Local demo starts also initialize a missing file beside the database.
 The add-on's app configuration mount is writable for initialization and editing. Only
 amd64 packaging is declared. Deferred PV/storage expansion, market pricing, V2G, appliances, automatic
 travel/external charging, learned policy, live deployment and historical retention

@@ -11,7 +11,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from energymanager import __main__ as entrypoint
 from energymanager.configuration import configured_application, create_configuration_if_missing
-from energymanager.control import FakeActuator
+from energymanager.control import GuardedActuator
 from energymanager.store import Store
 
 
@@ -22,14 +22,14 @@ def test_missing_configuration_creates_complete_disabled_starter(tmp_path: Path)
     example = Path(__file__).parents[1] / "configuration.example.json"
     assert data == json.loads(example.read_text(encoding="utf-8"))
     assert data["_description"].startswith("SYNTHETIC EXAMPLE ONLY")
-    assert not data["allow_remote"]
-    assert not data["commissioning_reviewed"]
-    assert not data["exclusive_controller_confirmed"]
-    assert not data["policy"]["control_enabled"]
+    assert "allow_remote" not in data
+    assert "commissioning_reviewed" not in data
+    assert "exclusive_controller_confirmed" not in data
+    assert "control_enabled" not in data["policy"]
     store = Store(tmp_path / "state.sqlite")
     try:
         application = configured_application(path, store)
-        assert isinstance(application.actuator, FakeActuator)
+        assert isinstance(application.actuator, GuardedActuator) and not application.actuator.enabled
         assert not application.demo
         assert application.observation.quality == "unknown"
     finally:
@@ -49,7 +49,7 @@ def test_concurrent_startups_do_not_replace_each_others_configuration(tmp_path: 
     with ThreadPoolExecutor(max_workers=8) as workers:
         created = list(workers.map(create_configuration_if_missing, [path] * 8))
     assert created.count(True) == 1
-    assert json.loads(path.read_text(encoding="utf-8"))["policy"]["control_enabled"] is False
+    assert "control_enabled" not in json.loads(path.read_text(encoding="utf-8"))["policy"]
 
 
 @pytest.mark.parametrize("mode", ["demo", "configured"])
@@ -113,7 +113,7 @@ def test_cli_creates_configuration_without_supervisor(tmp_path: Path, monkeypatc
         sys, "argv", ["energymanager", "--config", str(path), "--data", str(tmp_path / "state.sqlite")]
     )
     entrypoint.main()
-    assert not json.loads(path.read_text(encoding="utf-8"))["policy"]["control_enabled"]
+    assert "control_enabled" not in json.loads(path.read_text(encoding="utf-8"))["policy"]
 
 
 def test_configuration_creation_error_is_reported_before_service_start(

@@ -218,3 +218,51 @@ access or deployment. No application work remains for this forecasting request.
 NEXT: commit/push the remote evidence and inspect that documentation commit's CI,
 then finish. User's next action is update the HA app to4.0.5; forecast URL is unused,
 location comes from HA zone.home. Existing connection/commissioning setup unchanged.
+
+
+## 4.0.6 settings/control update — implementation in progress
+
+User requests automatic HA connections, no connection/commissioning fields, a phone
+notification destination picker, immediate Overview hardware switch (explicitly confirmed),
+missing-setting highlights and shorter entity subtitles. Skill code-writer applies.
+IMPLEMENTED so far: shared Supervisor connection resolution for runtime/discovery;
+HA notify entity/action adapter replacing webhook; removed UI connection/commission
+fields; required/placeholder field issues, phone destination discovery; live switch API
+and stop/revoke sequencing with persisted SQLite switch authority. Legacy commission
+flags cannot enable the new switch. New switch starts off until explicitly enabled,
+then resumes after restart only once current settings/measurements are valid.
+UI implementation underway: one Overview switch, missing-field styling, picker clear
+actions and no extra entity-help text; unverified live cards display dashes.
+NEXT: adapt/add meaningful tests and full fake-HA E2E, verify UI, fix integration
+issues, bump4.0.6 and package/release. Existing billing-boundary timestamp problem
+still needs live diagnostics; no stale-data guard has been bypassed.
+No live HA/database/hardware/phone notifications accessed. Initial workspace clean.
+
+
+4.0.6 milestone: implementation integrated;131 tests45.45s/Ruff/mypy27/JS passed
+before three additional switch-failure regressions. Local fake Supervisor E2E passed
+2,018 intervals30.006s/max tick2.571ms; automatic URL/token, zero startup writes,
+immediate switch ON/OFF stop/clear and fake phone delivery verified. Browser first
+pass: switch acts immediately; missing entity and empty numeric field highlighted
+before Save; phone autocomplete/save/backup succeeded; connection/commissioning
+controls and entity explanations absent. Service still8102 for verification;8100
+untouched. Metadata bumped4.0.6 after that first run; final4.0.6 E2E/browser still
+needed. NEXT: final UI pass/source review, remaining tests, docs, packaging/release.
+No live HA/DB/hardware or real notification access. Existing timestamp guard intact.
+
+
+4.0.6 LOCAL COMPLETE: automatic Supervisor runtime/discovery; phone notify entity/action
+picker replaces webhook; Connections/Commissioning removed; one immediate Overview
+switch with persisted SQLite state, required-input checks and OFF stop/clear/revocation.
+Missing fields highlighted on opening/edit; entity explanations removed; incomplete
+files retain editor and no plan/authority, unverified live values show dashes. Old
+commission flags cannot enable new switch; first upgrade off, later resumes gated.
+TESTED:135 tests39.32s +final27 focused0.98s; Ruff/mypy27/JS passed. New automatic-
+Supervisor seven-day E2E26.521s/2,018 intervals/max tick2.718ms/5 fake service calls.
+Browser switch, highlights, phone save/reload/backup, removed fields, pending values
+and console checks passed. Wheel/sdist33 source/installed files match; isolated
+startup verified. Local8102/8103 fixtures and tabs closed;8100 preserved.
+NEXT: final diff review, commit/push4.0.6 and inspect CI/image. Shipping authority
+SPECIFICATION.md/RUNBOOK.md/SETTINGS.md; evidence settings-control-verification.json
+and VERIFICATION.md. Persistent real billing timestamp issue not bypassed; live
+telemetry/phone/physical commissioning remains unverified. No live access occurred.

@@ -69,11 +69,6 @@ def test_editor_covers_template_and_preserves_future_fields_and_backup(tmp_path)
     {"policy.daily_time": "25:01"},
     {"policy.control_period_seconds": 0},
     {"policy.import_eur_kwh": float("nan")},
-    {"policy.control_enabled": True},
-    {"allow_remote": "false"},
-    {"home_assistant_url": "http://host.example/api"},
-    {"home_assistant_url": "http://user:password@127.0.0.1/api"},
-    {"token_environment": "a secret token"},
     {"measurements.ev_soc": "sensor.bad entity"},
     {"actuators.current": "sensor.current"},
     {"capabilities.minimum_current_a": 6.5},
@@ -183,7 +178,9 @@ async def test_real_ha_entity_discovery_is_read_only_and_keeps_credentials_serve
     fake.router.add_get("/api/states", states)
     monkeypatch.setenv("ENERGY_MANAGER_HA_TOKEN", "synthetic-test-credential")
     async with TestServer(fake) as server:
-        editor.save(editor.read()["revision"], {"home_assistant_url": str(server.make_url("/api"))})
+        document = json.loads(editor.path.read_bytes())
+        document["home_assistant_url"] = str(server.make_url("/api"))
+        editor.path.write_text(json.dumps(document), encoding="utf-8")
         result = await editor.entities()
         assert calls == [("GET", "/api/states")]
         assert result["entities"][0] == {
@@ -231,7 +228,7 @@ async def test_addon_discovers_entities_via_real_local_supervisor_proxy_fixture(
     assert calls == [("GET", "/core/api/states", "Bearer synthetic-supervisor-token")]
     assert result["entities"][0]["entity_id"] == "sensor.real_entity"
     assert "synthetic-supervisor-token" not in json.dumps(result)
-    assert editor.read()["values"]["allow_remote"] is False
+    assert "allow_remote" not in editor.read()["values"]
 
 
 async def test_discovery_outage_does_not_block_editing_or_expose_error_body(tmp_path):
@@ -243,7 +240,9 @@ async def test_discovery_outage_does_not_block_editing_or_expose_error_body(tmp_
     fake = web.Application()
     fake.router.add_get("/api/states", denied)
     async with TestServer(fake) as server:
-        editor.save(editor.read()["revision"], {"home_assistant_url": str(server.make_url("/api"))})
+        document = json.loads(editor.path.read_bytes())
+        document["home_assistant_url"] = str(server.make_url("/api"))
+        editor.path.write_text(json.dumps(document), encoding="utf-8")
         snapshot = tiny()
         application = Application(Store(tmp_path / "state.sqlite"), snapshot=snapshot, policy=snapshot.policy)
         async with TestClient(TestServer(create_web(application, configuration=editor))) as client:

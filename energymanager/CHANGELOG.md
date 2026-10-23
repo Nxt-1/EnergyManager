@@ -1,3 +1,12 @@
+## 4.0.6 — Automatic HA connection and one hardware switch
+
+- Remove connection and commissioning options; use the built-in HA Supervisor connection automatically.
+- Replace notification webhooks with a phone destination picker supporting notify entities and phone notification actions.
+- Add one immediate, persisted hardware-control switch to Overview, with input checks and stop/clear behavior on disable.
+- Highlight missing/placeholder/unavailable settings before Save and remove extra entity-help explanations.
+- Keep the editor available for incomplete installations and hide unverified live-card values.
+- Start the new switch off on first upgrade; retired commissioning and JSON control flags cannot enable it.
+
 ## 4.0.5 — Restore built-in installation forecasts
 
 - Fetch the original Open-Meteo KNMI weather at the HA home location; no prepared forecast service is needed.

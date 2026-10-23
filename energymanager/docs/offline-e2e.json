@@ -1,10 +1,10 @@
 {
-  "version": "4.0.5",
+  "version": "4.0.6",
   "provenance": "SYNTHETIC local weather fixture \u00b7 Open-Meteo KNMI \u00b7 four installed PV planes \u00b7 correction 2026-10-03-seed \u00b7 household baseline learning (samples: 1)",
-  "accepted_seconds": 29.40837910026312,
+  "accepted_seconds": 26.521419200114906,
   "intervals": 2018,
-  "control_max_seconds": 0.004617400001734495,
-  "fake_service_calls": 26,
+  "control_max_seconds": 0.002717999741435051,
+  "fake_service_calls": 5,
   "weather_queries": [
     {
       "latitude": "50.0",
@@ -60,7 +60,7 @@
     "weather_error": null,
     "load_stage": "learning",
     "synthetic": true,
-    "weather_at": "2026-10-23T17:18:08.376276+00:00",
+    "weather_at": "2026-10-23T18:51:15.677363+00:00",
     "load_methods": [
       "recent_baseline"
     ],
@@ -74,7 +74,9 @@
     "phase_source": "goe_selector"
   },
   "checks": [
-    "configured JSON and HA HTTP inputs",
+    "configured JSON and automatic Supervisor connection with local fake DNS/auth",
+    "no hardware calls before the Overview switch; immediate enable and stop/clear on disable",
+    "phone notification action delivered only to local fake HA",
     "built-in Open-Meteo pipeline with four original planes and correction tables",
     "persisted measured household baseline; no prepared forecast endpoint",
     "separate P1 powers, kW quarter demand and go-e selector readback",

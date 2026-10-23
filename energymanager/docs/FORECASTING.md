@@ -1,8 +1,9 @@
-# Installation forecasting in 4.0.5
+# Installation forecasting
 
-The configured application now builds its own forecasts. It uses the original weather
-source and recovered installation parameters below. Connection-address setup is unchanged;
-the former prepared-forecast URL is retained as an explicitly unused legacy field.
+The configured application builds its own forecasts using the original weather source
+and recovered installation parameters below, restored in4.0.5. Since4.0.6 the HA
+connection is automatic and the legacy forecast URL field is removed. See SETTINGS.md
+for the current connection, notification and hardware-switch behavior.
 
 ## Recovered source and PV installation
 

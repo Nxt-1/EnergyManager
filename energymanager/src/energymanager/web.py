@@ -1,8 +1,9 @@
-"""Same-origin standalone/HA-ingress API; no hardware-authority endpoint."""
+"""Same-origin standalone/HA-ingress API, including the explicit hardware control switch."""
 
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from importlib.resources import files
 from typing import Any
 from urllib.parse import urlsplit
@@ -12,9 +13,12 @@ from aiohttp import web
 from .domain import json_data
 from .service import Application
 from .settings import ConfigurationConflict, ConfigurationFile, SettingsValidationError
+from .hardware import HardwareControl
 
 
 def create_web(application: Application, *, configuration: ConfigurationFile | None = None) -> web.Application:
+    if configuration:
+        application.hardware = HardwareControl(application, configuration)
     @web.middleware
     async def boundary(request: web.Request, handler: Any) -> web.StreamResponse:
         peer = request.transport.get_extra_info("peername") if request.transport else None
@@ -78,6 +82,17 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
     async def state(request: web.Request) -> web.Response:
         return web.json_response(application.state())
 
+    async def control(request: web.Request) -> web.Response:
+        if application.hardware is None:
+            return web.json_response({"error": "No installation settings are available"}, status=503)
+        body = await request.json()
+        if not isinstance(body, dict) or set(body) != {"enabled"} or type(body["enabled"]) is not bool:
+            raise ValueError("A hardware control state is required")
+        try:
+            return web.json_response(await application.hardware.set_requested(body["enabled"]))
+        except (RuntimeError, OSError, sqlite3.Error) as exc:
+            return web.json_response({"error": str(exc)}, status=503)
+
     async def goals(request: web.Request) -> web.Response:
         return web.json_response(json_data(application.upsert_goal(await request.json())), status=201)
 
@@ -133,6 +148,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
     app.add_routes(
         [
             web.get("/api/state", state),
+            web.post("/api/control", control),
             web.get("/api/settings", settings),
             web.post("/api/settings", settings),
             web.get("/api/settings/entities", entities),

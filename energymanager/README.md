@@ -1,6 +1,6 @@
 # EnergyManager 4
 
-Version **4.0.5**, the main Energy Manager application. One joint seven-day EV/ESS MILP
+Version **4.0.6**, the main Energy Manager application. One joint seven-day EV/ESS MILP
 feeds independent responsive control. The application includes configured input/actuator
 boundaries, persisted goals/approvals/decisions and the functional Overview/Planning GUI.
 
@@ -44,7 +44,7 @@ default. Missing critical physical settings prevent enabling configured control.
 
 Open **Settings** for searchable entity pickers and normal controls for capacities,
 tariffs and policy. The HA app can discover entities through its Supervisor proxy;
-choose **Use Home Assistant connection** to fill that connection. Save writes the same
+the connection is automatic; no address or token setting is needed. Save writes the same
 JSON file, preserves unknown fields and creates a dated backup. Conflicting edits are
 rejected. Restart explicitly to apply changes; the running controller stays unchanged.
 Local demo starts also create `energymanager.json` alongside the selected state database.
@@ -57,3 +57,7 @@ Find it through Samba, SSH or an editor in `app_configs/<repository-id>_energy_m
 (some tools expose `addon_configs`). Replace the labelled example settings before
 using configured inputs. Review migration before installation; V3 configuration
 and databases are not automatically imported. No live controller was enabled here.
+
+Hardware control uses one immediate switch on Overview. Connections and Commissioning
+settings have been removed. Settings highlights missing values and offers a phone
+notification picker. See [settings and control](docs/SETTINGS.md).
