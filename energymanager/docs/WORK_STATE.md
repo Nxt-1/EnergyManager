@@ -266,3 +266,25 @@ NEXT: final diff review, commit/push4.0.6 and inspect CI/image. Shipping authori
 SPECIFICATION.md/RUNBOOK.md/SETTINGS.md; evidence settings-control-verification.json
 and VERIFICATION.md. Persistent real billing timestamp issue not bypassed; live
 telemetry/phone/physical commissioning remains unverified. No live access occurred.
+
+
+4.0.6 remote CI/publication passed135 tests, but CI timing exposed4.276s during control
+switching. Investigated instead of closing task: disabled GuardedActuator.apply waited
+for the stop lock. Added slow-stop regression; reproduced failure on4.0.6, then fixed
+with a disabled fast path before lock acquisition (serial guard still rechecks).
+Version4.0.7 prepared to preserve the already-published4.0.6 image history. E2E now
+reports baseline versus switch timing. NEXT:136-test verification, full-horizon E2E,
+package and CI/publication for4.0.7, then final evidence. No live operation.
+
+
+4.0.7 LOCAL COMPLETE: disabled actuator dispatch bypasses the stop lock; regression
+failed before the fix and passes after it. All 136 tests passed in 39.25 s; Ruff,
+mypy (27 modules), JS and isolated wheel/startup checks passed. 33 installed files
+match source. Seven-day fake-Supervisor E2E: 2,018 intervals, 27.346 s, max tick
+2.811 ms, post-switch 1.927 ms (one sample), five fake-only service calls.
+Final browser ON/OFF, phone autocomplete and no console warnings/errors verified;
+local fixture/tab closed, existing 8100 preview preserved. No live operation.
+Clarification of preceding entry: the 4.0.6 CI 4.276 s tick was measured BEFORE
+switching, so its cause is unestablished. The disabled-stop lock wait is a separate
+reproduced bug, now fixed. Timing reports now separate baseline/post-switch samples.
+NEXT: commit/push 4.0.7, inspect CI and container publication, record final evidence.

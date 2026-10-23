@@ -53,7 +53,7 @@ limits can change incumbents; replay does not promise bit-identical optimization
 
 ## Main-project version 4 update
 
-`config.yaml` now advertises **4.0.6** for the existing `energy_manager` Home Assistant
+`config.yaml` now advertises **4.0.7** for the existing `energy_manager` Home Assistant
 app and `ghcr.io/nxt-1/energymanager` image. It keeps ingress port8099 and manual startup.
 The packaged Python distribution, CLI and module are all named `energymanager`. The
 former standalone candidate has been moved into this main app; the old V3 modules,
@@ -80,7 +80,7 @@ need the reviewed V4 resource/configuration update; no live dashboard was change
 Docker is unavailable locally. The V4.0.0 CI and image workflows verified the Linux
 container build and publication; evidence is in VERIFICATION.md and ci-verification.json.
 Supervisor installation and physical deployment remain separate checks. A target host
-can run `docker build --build-arg BUILD_VERSION=4.0.6 -t energymanager:4.0.6 .` from this
+can run `docker build --build-arg BUILD_VERSION=4.0.7 -t energymanager:4.0.7 .` from this
 directory. The repository publish workflow targets the existing GHCR image when
 config.yaml is pushed to main; inspect the workflow for the version being installed.
 

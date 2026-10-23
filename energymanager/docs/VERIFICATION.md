@@ -1,5 +1,33 @@
 # EnergyManager 4 verification
 
+## Version 4.0.7 — responsive disabled control during final stop
+
+Includes the settings/control update below. A disabled actuator now returns before
+acquiring the dispatch lock. The serial path retains its enabled/generation checks.
+A regression holds the fake EV stop request open and verifies that a disabled control
+tick completes independently. The regression failed before the fix.
+
+Local verification: **136 tests passed in 39.25 s**; Ruff, mypy (27 modules) and
+JavaScript checks passed. Wheel/source archives built; all 33 installed package files
+match source. Isolated installed startup verified automatic Supervisor connection,
+missing-field reporting, editor availability and hardware control off.
+
+The synthetic configured seven-day E2E passed with 2,018 intervals in 27.346 s,
+maximum control tick 2.811 ms and five fake service calls. The report now measures
+all ticks and separates pre-switch and post-switch samples: baseline 2.811 ms,
+post-switch 1.927 ms (one completed tick). No startup hardware writes occurred.
+These are local observations, not a physical timing guarantee. The earlier 4.0.6
+CI outlier was captured before switching and is retained without an inferred cause.
+
+Final 4.0.7 browser checks verified immediate Overview ON/OFF, removed settings groups,
+phone autocomplete and no console warnings/errors. Screenshots: settings-v407-*.png;
+missing-field/save/reload checks from 4.0.6 remain applicable to unchanged GUI assets.
+Temporary local fixtures/tabs were stopped; the user's existing 8100 preview was preserved.
+No live HA, installation database, hardware or real notification was accessed.
+Billing timestamp rejection remains guarded and needs actual telemetry diagnostics.
+
+Remote CI and version 4.0.7 container publication: pending.
+
 ## Version 4.0.6 — automatic HA connection and one hardware switch
 
 Removed the connection and commissioning options and explanatory entity subtitles.
@@ -35,7 +63,15 @@ startup verified automatic Supervisor access, removed groups, missing-field repo
 and disabled control. No live HA, installation DB, hardware, real notifications or
 deployment was accessed. Actual billing timestamps and hardware/phone commissioning
 remain unverified. Evidence: settings-control-verification.json and offline-e2e.json.
-Remote CI/container publication pending.
+Remote4.0.6 code d58b97d4c9ec4c3ed44bb751227459d075f7b790 passed
+[CI40008621110](https://github.com/Nxt-1/EnergyManager/actions/runs/40008621110)
+(135 tests37.78s, configured E2E32.219s and package/container checks) and
+[publication40008621112](https://github.com/Nxt-1/EnergyManager/actions/runs/40008621112)
+(135 tests42.43s). Image digest:
+`sha256:16fb0bc43e69e8a2989285a4316dd78bd51525ce8f4a5070fe21a38f4a1c0208`.
+The CI timing report recorded a 4.276 s control tick before switching; its cause is
+not established. Follow-up investigation separately found that disabled dispatch could
+wait behind a slow final stop. A regression reproduced that lock wait; 4.0.7 fixes it.
 
 ## Version 4.0.5 — original installation forecasting restored
 

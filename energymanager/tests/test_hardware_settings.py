@@ -191,6 +191,31 @@ async def test_off_cancels_an_enable_waiting_for_discovery(installation):
     assert not calls and app.store.get("hardware_control_enabled") is False
 
 
+async def test_disabled_control_tick_does_not_wait_for_slow_stop_requests(installation):
+    app, _, control, _, _ = installation
+    await control.set_requested(True)
+    await asyncio.gather(*app.protective_tasks)
+    started, release = asyncio.Event(), asyncio.Event()
+    original = app.ha.service
+
+    async def delayed_stop(domain, service, body):
+        if body.get("entity_id") == "select.force" and body.get("option") == "1":
+            started.set()
+            await release.wait()
+        await original(domain, service, body)
+
+    app.ha.service = delayed_stop
+    disabling = asyncio.create_task(control.set_requested(False))
+    await asyncio.wait_for(started.wait(), 1)
+    command = Command(app.revision, None, app.now(), 0, 0, 1, 0, 4, "Control is off")
+    try:
+        await asyncio.wait_for(app.actuator.apply(command, app.revision, app.observation), 0.1)
+    finally:
+        release.set()
+        await disabling
+    assert not app.actuator.enabled
+
+
 async def test_enable_persistence_failure_never_grants_authority(installation, monkeypatch):
     app, _, control, _, calls = installation
 

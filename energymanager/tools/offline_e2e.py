@@ -167,6 +167,8 @@ async def run(*, serve: bool = False) -> None:
                 assert application.forecast_data["intervals"][0]["pv_ac_kw"] > 0
                 assert application.forecast_data["intervals"][0]["pv_dc_kw"] > 0
                 assert not calls  # Startup and planning do not enable hardware.
+                baseline_control_max = max(application.response_seconds, default=0)
+                baseline_ticks = len(application.response_seconds)
                 headers = {"X-EnergyManager": "1"}
                 response = await client.post("/api/control", json={"enabled": True}, headers=headers)
                 assert response.status == 200, await response.text()
@@ -178,6 +180,10 @@ async def run(*, serve: bool = False) -> None:
                 assert not application.actuator.enabled
                 assert calls[-2]["entity_id"] == "select.force" and calls[-2]["option"] == "1"
                 assert calls[-1]["entity_id"] == "number.ess_setpoint" and calls[-1]["value"] == 0
+                # Observe a completed tick after switching; zero samples must not imply zero latency.
+                async with asyncio.timeout(10):
+                    while len(application.response_seconds) == baseline_ticks:
+                        await asyncio.sleep(0.05)
                 application.notifications = Notifications(store, application.ha,
                     NotificationTarget("notify.mobile_app_verification_phone", "action"))
                 await application.notifications.inform("verification-only", {"message": "SYNTHETIC local test only"})
@@ -189,7 +195,10 @@ async def run(*, serve: bool = False) -> None:
                     "provenance": current["provenance"],
                     "accepted_seconds": monotonic() - before,
                     "intervals": len(current["accepted"]["intervals"]),
-                    "control_max_seconds": current["control_max_seconds"],
+                    "control_max_seconds": max(application.response_seconds, default=0),
+                    "baseline_control_max_seconds": baseline_control_max,
+                    "switch_control_max_seconds": max(application.response_seconds[baseline_ticks:], default=0),
+                    "switch_control_ticks": len(application.response_seconds) - baseline_ticks,
                     "fake_service_calls": len(calls),
                     "weather_queries": weather_queries,
                     "forecast_status": current["forecast_status"],

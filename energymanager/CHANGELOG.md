@@ -1,3 +1,9 @@
+## 4.0.7 — Keep disabled control responsive during stop
+
+- Return immediately from disabled actuator dispatch instead of waiting behind a slow stop request.
+- Add a slow-stop responsiveness regression and separate baseline/switch timing evidence.
+- Includes the automatic HA setup, phone picker, missing-setting highlights and single Overview switch introduced in4.0.6.
+
 ## 4.0.6 — Automatic HA connection and one hardware switch
 
 - Remove connection and commissioning options; use the built-in HA Supervisor connection automatically.

@@ -1,6 +1,6 @@
 # First release implementation specification
 
-This is the shipping specification for the EnergyManager 4.0.6 application. The
+This is the shipping specification for the EnergyManager 4.0.7 application. The
 authorized handoff and confirmed decisions govern behavior. All supplied development
 capacities, tariffs and efficiencies are **synthetic provisional parameters**.
 PV plane geometry and correction tables are recovered installation values; verification
@@ -166,7 +166,7 @@ latches EV stopping. A solver-parent watchdog prevents orphan workers after serv
 
 ## Boundaries
 
-The main project is now EnergyManager 4.0.6. Its fresh joint core replaces V3 under the
+The main project is now EnergyManager 4.0.7. Its fresh joint core replaces V3 under the
 `energymanager` Python package and existing `energy_manager` add-on/image identity. V3
 source/tests/dashboard were replaced; historical evidence remains in Git and labelled
 reports. V3 installation options and database files are not automatically imported. V4

@@ -434,6 +434,8 @@ class GuardedActuator:
             raise RuntimeError("Hardware control is off, but a stop command failed: " + "; ".join(errors))
 
     async def apply(self, command: Command, generation: int, observation: Observation) -> None:
+        if not self.enabled:
+            return  # Disabled control ticks must not wait behind the final hardware stop.
         async with self.lock:
             await self.apply_serial(command, generation, observation)
 
