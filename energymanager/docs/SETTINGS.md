@@ -29,6 +29,14 @@ and failed check. The hardware switch still requires valid critical measurements
 The HA app's own Configuration tab still selects `demo` or `configured`. Demo mode
 cannot operate hardware. Choose `configured` and restart to use installation inputs.
 
+## Power units
+
+Power limits and entity-state previews are displayed in W. A 2.5 kW saved limit appears
+as 2500 W; saving 3100 W writes 3.1 to the existing kW field. The capacity tariff is
+displayed in EUR/W/month (a saved 4 EUR/kW/month appears as 0.004 EUR/W/month).
+Energy, battery capacity and energy tariffs retain kWh units. These are display/input
+conversions only: existing files need no migration, and unchanged numbers are preserved.
+
 ## One immediate hardware switch
 
 Overview contains the only Hardware control switch. It applies immediately and saves

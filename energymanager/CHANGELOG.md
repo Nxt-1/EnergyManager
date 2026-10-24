@@ -1,3 +1,9 @@
+## 4.0.10 — Journey pickers and watt display
+
+- Choose journey/SoC dates with a calendar and 24-hour clock, or type them; use the installation timezone and handle clock changes explicitly.
+- Display power in W across charts, live cards, peak permissions, settings and entity previews; retain kWh for energy and existing API/configuration units.
+- Preserve existing requirements and architecture references in tracked documentation, with a current V4.1 handoff and deferred EV calendar/page idea.
+
 ## 4.0.9 — Trust HA availability and watch successful input reads
 
 - Use Home Assistant's current available states without per-entity timestamp expiry or zero-value exceptions.

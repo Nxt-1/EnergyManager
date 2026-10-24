@@ -155,6 +155,9 @@ async def test_settings_round_trip_http_conflict_validation_and_same_origin(tmp_
         assert response.status == 400
         response = await client.get("/settings.js")
         assert response.status == 200 and "EntityPicker" in await response.text()
+        for asset in ("display.js", "date-time.js", "datetime-picker.js"):
+            response = await client.get("/" + asset)
+            assert response.status == 200 and response.content_type == "text/javascript"
 
 
 async def test_real_ha_entity_discovery_is_read_only_and_keeps_credentials_server_side(tmp_path, monkeypatch):

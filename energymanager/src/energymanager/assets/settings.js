@@ -1,3 +1,5 @@
+import {displaySetting, entityState, powerText, settingLabel, storedSetting} from './display.js';
+
 const element = (tag, className, text) => {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -73,7 +75,7 @@ class EntityPicker extends HTMLElement {
     this.input.value = match ? match.name : this.selected;
     this.clearButton.hidden = !this.selected;
     this.summary.textContent = match ?
-      `${match.entity_id}${match.state ? ' · ' + match.state : ''}${match.unit ? ' ' + match.unit : ''}` :
+      `${match.entity_id}${match.state ? ' · ' + entityState(match) : ''}` :
       this.selected;
 
   }
@@ -97,7 +99,7 @@ class EntityPicker extends HTMLElement {
       row.setAttribute('role', 'option');
       row.setAttribute('aria-selected', 'false');
       row.append(element('strong', '', entity.name),
-        element('small', '', `${entity.entity_id}${entity.state ? ' · ' + entity.state : ''}${entity.unit ? ' ' + entity.unit : ''}`));
+        element('small', '', `${entity.entity_id}${entity.state ? ' · ' + entityState(entity) : ''}`));
       this.list.append(row);
     }
     if (!matches.length) this.list.append(element('div', 'entity-empty',
@@ -255,7 +257,7 @@ export class SettingsPage {
         this.form.append(card);
       }
       const wrapper = element('div', `setting-field${field.kind === 'boolean' ? ' boolean-field' : ''}`);
-      const label = element('label', '', field.label);
+      const label = element('label', '', settingLabel(field));
       const id = `setting-${field.path.replaceAll('.', '-')}`;
       label.htmlFor = id;
       let control;
@@ -277,16 +279,17 @@ export class SettingsPage {
           ['number', 'integer'].includes(field.kind) ? 'number' :
             ['url', 'optional_url'].includes(field.kind) ? 'url' : field.kind === 'time' ? 'time' : 'text';
         if (field.kind === 'boolean') control.checked = value === true;
-        else control.value = value ?? '';
+        else control.value = ['number', 'integer'].includes(field.kind) ? displaySetting(field, value) : value ?? '';
         if (['number', 'integer'].includes(field.kind)) {
-          if (field.minimum !== null) control.min = field.minimum;
-          if (field.maximum !== null) control.max = field.maximum;
+          if (field.minimum !== null) control.min = displaySetting(field, field.minimum);
+          if (field.maximum !== null) control.max = displaySetting(field, field.maximum);
           // Keep exact existing tariffs/efficiencies; server validation enforces physical bounds.
           control.step = field.kind === 'integer' ? '1' : 'any';
           control.inputMode = 'decimal';
         }
         control.required = field.required && field.kind !== 'boolean';
         control.autocomplete = 'off';
+        control.dataset.savedValue = control.value;
       }
       if (!(control instanceof EntityPicker)) control.id = id;
       control.dataset.path = field.path;
@@ -377,7 +380,7 @@ export class SettingsPage {
       else if (field.kind === 'notification') values[field.path] = control.value;
       else if (field.kind === 'phases') values[field.path] = control.value.split(',').filter(Boolean).map(Number);
       else if (['number', 'integer'].includes(field.kind)) values[field.path] =
-        control.value.trim() === '' ? null : Number(control.value);
+        control.value === control.dataset.savedValue ? this.document.values[field.path] : storedSetting(field, control.value);
       else values[field.path] = control.value.trim();
     }
     this.saveButton.disabled = true;
@@ -385,6 +388,10 @@ export class SettingsPage {
     try {
       const result = await this.api('settings', 'POST', {revision: this.document.revision, values});
       this.document = result;
+      for (const field of this.document.fields) {
+        const control = this.controls.get(field.path);
+        if (['number', 'integer'].includes(field.kind)) control.dataset.savedValue = control.value;
+      }
       this.dirty = false;
       this.validateFields();
       this.message.className = 'settings-success';
@@ -400,7 +407,7 @@ export class SettingsPage {
       for (const [path, message] of Object.entries(error.fields || {})) {
         const control = this.controls.get(path);
         if (!control) continue;
-        control.closest('.setting-field').querySelector('.field-error').textContent = message;
+        control.closest('.setting-field').querySelector('.field-error').textContent = powerText(message);
         (control.input || control).setAttribute('aria-invalid', 'true');
         const details = control.closest('details');
         if (details) details.open = true;

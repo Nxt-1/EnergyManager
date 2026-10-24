@@ -368,3 +368,41 @@ old available states accepted and read watchdog expiry verified. Local fixtures/
 closed, existing 8100 preview preserved. No live access or operation. Actual integration
 outage reporting remains live-unverified. NEXT: final scoped diff review, ONE release
 commit/push, inspect CI/image. Record remote results only in ignored checkpoint/final.
+
+
+4.0.10 IN PROGRESS (24 October 2026): user authorized Android-style journey date/time
+pickers, all frontend power values in W, EV schedule/calendar deferral and a durable
+V4.1 handoff with current requirements/decisions. No scheduler behavior change authorized.
+Confirmed prior question: daily SoC goals have zero withdrawal; only explicit journeys
+consume predicted EV energy. No learned daily driving or automatic trip assumed.
+Implemented: calendar/24-hour clock and keyboard option, installation-timezone conversion,
+DST skipped/repeated-time handling; W display and reversible settings conversion with
+API/JSON retaining existing units. Added five frontend tests, all pass; Ruff/mypy28/JS
+pass. Full Python suite running. Initial tracked Git tree clean, baseline17279c2.
+NEXT: reconcile/copy architecture references into tracked docs, browser journeys/settings
+and watts verification with local fake HA, package and complete focused4.0.10 release.
+No actual HA/database/hardware/phone access; EV calendar/new page remains deferred.
+
+
+4.0.10 LOCAL VERIFICATION: 151 Python tests passed40.46s; final19 settings/asset checks
+passed0.36s; five frontend tests cover W/rate conversions, calendar/clock, timezone/DST.
+Ruff/mypy28/JS passed. Full-horizon fake-Supervisor E2E26.594s/2,018 intervals,
+max tick2.823ms; five fake-only calls. Browser create/edit/Cancel/Clear, exact-minute
+entry, repeated-hour persistence, skipped-time rejection, keyboard navigation and
+390x844 layout passed. W cards/chart/peak/entity previews/settings verified; on-disk
+2750W ->2.75kW and second-save reversal plus exact unedited numeric preservation checked.
+Fixed a tariff floating-display artifact; no scheduler policy change. Current decisions,
+V4.1 handoff and all original architecture references/backlog are now tracked with app;
+ARCH-009 EV calendar/page remains deferred. Wheel/sdist built; final source install check
+and release review remain. NEXT: package final assets, stop local preview, commit/push
+one4.0.10 update and inspect CI/image; no separate verification-only commit. No live access.
+
+
+4.0.10 LOCAL COMPLETE: final wheel/sdist built; isolated4.0.10 import and all37 code/
+asset byte comparisons passed. Final frontend tests/syntax and19 settings/asset tests
+passed after fixes. Historical architecture references preserved in tracked docs with
+supersession notes; current HANDOFF/DECISIONS/SPECIFICATION/DEFERRED_WORK ready for a
+new V4.1 chat. No new chat or V4.1 feature created. Local8102 preview/tab closed;
+pre-existing tabs/8100 untouched. No actual HA/hardware/database/phone/deployment.
+NEXT: final diff review, one4.0.10 release commit/push, inspect CI/image; append remote
+completion only to ignored checkpoint/final reply. Future code needs explicit permission.

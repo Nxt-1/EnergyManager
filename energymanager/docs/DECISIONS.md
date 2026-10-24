@@ -1,0 +1,120 @@
+# Current requirements and decisions
+
+Maintained 24 October 2026 for 4.0.10. This records confirmed product preferences and
+implementation outcomes from the V4 implementation chat. It supplements the complete
+original [architecture decisions](architecture/Architecture_Decisions.md); the
+[shipping specification](SPECIFICATION.md) describes the resulting implementation.
+New explicit user instructions take precedence. Deferred ideas are not authorization.
+
+## Architecture and EV behavior retained
+
+- One joint EV/ESS MILP, full seven elapsed days and intervals no longer than five
+  minutes; an independent responsive control loop and persisted, validated decisions.
+- Keep the original required/optional energy, source, cost, peak permission and
+  continuity policies. Their complete original context is preserved in
+  [the handoff](architecture/Implementation_Handoff.md) and
+  [proposal](architecture/Architecture_Proposal.md). Mathematical implementation is
+  specified in SPECIFICATION.md; old text saying implementation is still pending is
+  historical, not a request to rebuild it.
+- The morning target is a timed minimum, initially 50% at 07:00 local. It is not a
+  permanent floor and does not imply a daily journey or energy use. With these targets
+  alone, predicted EV SoC can only stay level or rise. Entered total-distance journeys
+  withdraw estimated travel energy; actual SoC reconciles the next planning snapshot.
+  No automatic driving schedule or post-trip restore-to-50% rule is agreed.
+
+## Project update and persistent configuration
+
+- The user explicitly promoted the fresh `energymanager-next/` implementation into
+  the main `energymanager/` project and named it version 4. Do not recreate the
+  temporary tree or wrap the legacy scheduler. Keep the existing add-on/image identity.
+- Create a missing selected configuration file from the bundled starter; preserve
+  existing files. The configuration persists through image updates. Synthetic defaults
+  are examples, not installation evidence. The editor writes the same file with a
+  backup, atomic replacement and revision conflict checking.
+- Provide HA-style searchable entity selectors and typed settings rather than require
+  plain-text edits. Highlight missing mappings, placeholders, unavailable values,
+  incompatible units and blank required fields immediately. Remove long explanatory
+  entity subtitles. Installation settings take effect after restart.
+- HA connection is automatic through Supervisor. Remove connection-address choices,
+  the old notification webhook and the Commissioning tab. Standalone environment
+  overrides remain tooling boundaries, outside the normal Settings page.
+- Provide one hardware-control switch on Overview. The user explicitly chose immediate
+  application. It persists independently of JSON settings, checks valid inputs/settings
+  before enabling and revokes commands/stops EV/clears ESS on disable. First migration
+  to the new switch starts off. Old commissioning/control flags cannot enable it.
+- Optional phone destination is a searchable HA notify entity or mobile-app action.
+  Keep existing deduplication and failure evidence. Development must not send real
+  notifications. See SETTINGS.md for the complete control/configuration contract.
+
+## Installation inputs and forecasting
+
+- P1 import/export are separate sensors:
+  `sensor.p1_dongle_momentary_active_import` and
+  `sensor.p1_dongle_momentary_active_export`.
+- `sensor.p1_dongle_current_quarter_average_demand` is kW with a fixed full-quarter
+  denominator. The user confirmed it drops near zero at each quarter and builds up.
+  Convert demand to quarter-import energy using 0.25 h. Do not ask for a measurement
+  type or treat it as an elapsed-time average.
+- There is no dedicated uncontrolled-house-demand sensor. Derive it from separate
+  P1 import/export, AC solar, ESS AC output and EV charging, using the specified signs.
+  Do not double-count DC solar or expose a nonexistent house sensor mapping.
+- The user uses go-e APIv2 Connect. Use the existing phase selector readback for
+  forced one/three-phase modes; no extra phase-count sensor or phase-source choice.
+  Auto/unavailable readback is unknown; preserve stop/zero/dwell protections.
+- Daily readiness settings belong with EV settings.
+- Forecasting must use the original source, PV setups and applicable correction
+  factors. These were recovered and restored: Open-Meteo KNMI seamless at HA home,
+  four installed planes and original corrections. FORECASTING.md contains the exact
+  recovered values and provenance. Never invent replacement installation parameters.
+
+## Availability, watchdogs and display failures
+
+- The user approved trusting HA's current available state rather than enforcing
+  per-entity timestamp freshness or enumerating exceptions for zero/unchanged values.
+  HA integrations own device availability. Retain numeric/unit/physical validation.
+- Report timestamps are diagnostic. A successful validated HA read renews the input
+  snapshot; the existing configurable watchdog (default 30 s) restricts control when
+  successful reads cease. Forecast expiry remains separate. Device outage availability
+  reporting is still an installation commissioning check.
+- Do not infer a billing-quarter mismatch from an unchanged entity's report time.
+  Preserve the actual quarter prefix/reset and fixed-denominator energy accounting.
+- One failed input or forecast must not hide every available live summary. Show
+  available readings independently and identify the failed entity/check. A validated
+  control snapshot and command authority may still be withheld when required inputs
+  fail. Actual charts use validated observations rather than invented measurements.
+
+## GUI and next-version scope
+
+- Keep Overview/Planning inspired by the original first two dashboard pages: live
+  summaries, actual/planned power and SoC, time navigation, grouped sessions and the
+  full seven-day view. Keep ESS blue and EV green; expose reasons/approvals without
+  putting implementation detail into the normal household flow.
+- Display power in W, including charts, card components, settings, peak/approval values
+  and entity previews. Keep energy in kWh. Existing API/configuration/model units
+  stay compatible. Capacity tariff display converts to EUR/W/month consistently.
+- Journey and timed-SoC date/time fields use an Android-inspired calendar/24-hour clock
+  with keyboard entry, the installation timezone, Cancel and optional-return Clear.
+  Reject nonexistent clock-change times and expose both repeated-hour occurrences.
+- A more visual car schedule, perhaps a calendar on a dedicated EV page, is explicitly
+  deferred as ARCH-009. No EV page/calendar is implemented by this update.
+- A new V4.1 chat is a sensible context boundary, not a product requirement or an
+  automatically created chat. [HANDOFF.md](HANDOFF.md) is the entry point. No additional
+  V4.1 feature is approved merely because it appears in the backlog.
+
+## Engineering/release rules from the user
+
+- Do not write code without explicit permission. Questions, screenshots and error
+  reports are discussion unless the user asks for implementation. Once authorized,
+  finish that scope; ask before unrelated fixes/features and keep responses concise.
+- Use the user's `code-writer` skill. Preserve unrelated working/staged changes and
+  historical evidence. Do not access live HA/databases, operate hardware, send real
+  notifications or deploy without separate authorization.
+- Existing release authorization covers the agreed updates. Use one implementation
+  commit with relevant docs; do not add optional "record successful release" commits.
+  Record subsequent CI/publication results in the ignored checkpoint and final reply.
+- Maintain shipping requirements, decisions, deferred work, run instructions and
+  meaningful verification alongside code. Preserve the original architecture as
+  labelled history. On resumption compare checkpoint claims with the actual workspace.
+- Do not buy/reset usage credits or switch to paid API usage. Do not promise automatic
+  resumption or create an automation as a workaround. Resume from the checkpoint when
+  the user returns after a normal reset.

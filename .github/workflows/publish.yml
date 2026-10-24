@@ -47,6 +47,10 @@ jobs:
           python -m energymanager --version
           node --check energymanager/src/energymanager/assets/app.js
           node --check energymanager/src/energymanager/assets/settings.js
+          node --check energymanager/src/energymanager/assets/display.js
+          node --check energymanager/src/energymanager/assets/date-time.js
+          node --check energymanager/src/energymanager/assets/datetime-picker.js
+          node --test energymanager/tools/frontend.test.mjs
           node --check energymanager-dashboard/energymanager-card.js
 
       - name: Read app version

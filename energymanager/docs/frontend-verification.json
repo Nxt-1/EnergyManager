@@ -1,0 +1,36 @@
+{
+  "version": "4.0.10",
+  "provenance": "SYNTHETIC local fake Supervisor/HA/weather only",
+  "checks": [
+    "Android-inspired calendar and 24-hour clock at desktop and 390x844 viewport",
+    "create/edit persisted journey; clock hour/minute and typed exact-minute entry",
+    "Cancel preserves original value; Clear removes optional return",
+    "second repeated DST occurrence persists through save/edit; nonexistent spring time rejected",
+    "calendar arrow-key navigation and focus; responsive picker without horizontal overflow",
+    "W live cards, AC/DC/ESS subtitles, Overview/Planning charts and peak values",
+    "2750 W saves as 2.75 kW; two-save reversal restores 2.5 kW",
+    "all unedited physical/policy numbers preserved exactly in saved JSON",
+    "capacity tariff display/save/reload converts EUR/W/month consistently",
+    "browser console contains no warnings or errors"
+  ],
+  "frontend_unit_tests": 5,
+  "python_tests": 151,
+  "python_seconds": 40.46,
+  "affected_settings_tests": 19,
+  "full_horizon_seconds": 26.594171300064772,
+  "intervals": 2018,
+  "control_max_seconds": 0.0028234999626874924,
+  "screenshots": [
+    "journey-v4010-calendar.png",
+    "journey-v4010-clock.png",
+    "journey-v4010-mobile.png",
+    "power-v4010-watts.png"
+  ],
+  "live_verified": false,
+  "packaging": {
+    "wheel": "energymanager-4.0.10-py3-none-any.whl",
+    "sdist": "energymanager-4.0.10.tar.gz",
+    "isolated_import_version": "4.0.10",
+    "source_asset_byte_matches": 37
+  }
+}

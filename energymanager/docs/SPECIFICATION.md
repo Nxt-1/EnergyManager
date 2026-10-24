@@ -1,6 +1,6 @@
 # First release implementation specification
 
-This is the shipping specification for the EnergyManager 4.0.9 application. The
+This is the shipping specification for the EnergyManager 4.0.10 application. The
 authorized handoff and confirmed decisions govern behavior. All supplied development
 capacities, tariffs and efficiencies are **synthetic provisional parameters**.
 PV plane geometry and correction tables are recovered installation values; verification
@@ -53,6 +53,21 @@ Overlapping goals constrain the same battery trajectory. Unknown return remains 
 external or physically unachievable travel leaves dependent EV state unknown until a
 measured reconnection. No external charging is fabricated. Priority then deadline order
 locks best-effort outcomes only after proven hard infeasibility. Timeout is distinct.
+
+## Frontend units and journey dates
+
+The frontend converts power to whole W for live summaries, AC/DC components, actual and
+planned charts, peak/approval values, settings and entity previews. Energy remains kWh.
+Settings converts limits back to the existing kW JSON/API values, preserving unchanged
+numbers exactly; capacity tariff is displayed in EUR/W/month and stored in EUR/kW/month.
+Raw technical evidence retains original named units for reproducible replay.
+
+Journey and timed-SoC date/time fields use a Monday-first calendar, a 24-hour clock and
+an optional keyboard mode. They use the configured installation timezone rather than
+the viewing device's timezone. Nonexistent DST times are rejected; repeated times expose
+both offsets and retain the selected occurrence on edit. Cancel leaves the saved field
+unchanged; the optional return can be cleared. This does not add a travel forecast:
+standing morning targets withdraw no energy, and no daily driving is inferred.
 
 ## Joint MILP and source accounting
 
@@ -168,7 +183,7 @@ latches EV stopping. A solver-parent watchdog prevents orphan workers after serv
 
 ## Boundaries
 
-The main project is now EnergyManager 4.0.9. Its fresh joint core replaces V3 under the
+The main project is now EnergyManager 4.0.10. Its fresh joint core replaces V3 under the
 `energymanager` Python package and existing `energy_manager` add-on/image identity. V3
 source/tests/dashboard were replaced; historical evidence remains in Git and labelled
 reports. V3 installation options and database files are not automatically imported. V4

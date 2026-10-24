@@ -1,5 +1,36 @@
 # EnergyManager 4 verification
 
+## 4.0.10 — Journey date/time controls and watt display
+
+Scope: Android-inspired date/time fields, W power presentation, and durable requirements/
+decision/backlog handoff. The EV schedule/calendar page is deferred as ARCH-009. No
+scheduler policy, physical limits, forecast source, device control or stored units changed.
+
+- 151 Python tests passed in40.46s; final19 affected settings/asset tests passed in0.36s.
+  Ruff, mypy28 and JavaScript syntax checks passed. Five Node frontend tests cover signed/
+  missing W values, energy-unit preservation, reversible limits/rates, leap dates,
+  installation timezone, skipped/repeated DST times and 24-hour clock selection.
+- Real configured seven-day E2E: 2,018 intervals in26.594s, max control tick2.823ms,
+  switch tick1.008ms (one sample), five fake-only service calls. All entity report
+  metadata was three hours old; HA availability/read-watchdog behavior is unchanged.
+- Browser: journey create/edit persistence, calendar/clock and exact-minute typing,
+  Cancel, optional-return Clear, second DST occurrence retained on edit and missing
+  spring hour rejected. Calendar arrow keys/focus and390x844 picker layout verified.
+  Overview/Planning power, card components, peaks, entity previews and settings show W;
+  energy remains kWh. No browser console warnings/errors.
+- Wheel/sdist built; isolated installed wheel imports4.0.10 and all37 source/asset
+  files match the final source byte-for-byte, including all three new JS modules.
+- Saved2750W was independently read from JSON as2.75kW; a second save restored2.5kW.
+  All unedited physical/policy numbers were exactly preserved. Capacity tariff save/
+  reload used EUR/W/month display with existing EUR/kW/month storage. A binary floating
+  display artifact found during verification was fixed before packaging.
+
+Evidence: frontend-verification.json, offline-e2e.json and screenshots/journey-v4010-*.png,
+screenshots/power-v4010-watts.png. These show **synthetic local fixtures**, not actual
+installation readings. Physical devices, HA installation and phone delivery remain
+live-unverified. Current development entry point: HANDOFF.md; original architecture
+references are preserved under architecture/ with explicit supersession notes.
+
 ## Version 4.0.9 — HA availability and successful-read watchdog
 
 User-approved scope: use current available HA states, remove per-entity age gates and

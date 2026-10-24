@@ -128,7 +128,8 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
 
     async def asset(request: web.Request) -> web.Response:
         name = request.match_info.get("name", "index.html")
-        if name not in ("index.html", "app.js", "settings.js", "style.css", "ha-card.js"):
+        if name not in ("index.html", "app.js", "settings.js", "display.js", "date-time.js",
+                        "datetime-picker.js", "style.css", "ha-card.js"):
             raise web.HTTPNotFound()
         content_type = {"html": "text/html", "js": "text/javascript", "css": "text/css"}[
             name.rsplit(".", 1)[1]

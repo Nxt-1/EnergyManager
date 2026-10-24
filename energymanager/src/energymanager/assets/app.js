@@ -1,4 +1,6 @@
 import {SettingsPage} from './settings.js';
+import {powerText, watts} from './display.js';
+import {DateTimePicker} from './datetime-picker.js';
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -54,6 +56,9 @@ async function api(path, method = 'GET', body) {
   return result;
 }
 const settingsPage = new SettingsPage($('settings-panel'), api);
+const dateTimePicker = new DateTimePicker(() => state.policy.timezone, () => state.now);
+dateTimePicker.bind($('goal-form').elements.deadline, 'Deadline / departure', true);
+dateTimePicker.bind($('goal-form').elements.return_at, 'Return time');
 
 function range() {
   const now = Date.parse(state.now);
@@ -87,7 +92,7 @@ function points(series, soc = false) {
           house: interval.house_kw,
           ev: flows.pv_ev[index] + flows.grid_ev[index] + flows.solar_dis_ev[index]
         };
-        value = powers[series];
+        value = powers[series] * 1000;
       }
       planned.push([Date.parse(interval.start), value]);
       if (!soc) planned.push([Date.parse(interval.end), value]);
@@ -117,7 +122,7 @@ function points(series, soc = false) {
         solar: observation.pv_ac_kw + observation.pv_dc_kw,
         house: observation.house_kw,
         ev: observation.ev_power_kw
-      } [series];
+      } [series] * 1000;
     }
     return [Date.parse(observation.at), value];
   });
@@ -136,14 +141,14 @@ function chart(soc = false) {
   const visible = series.flatMap(s => [...s.planned, ...s.observed]).filter(p => p[0] >= start && p[0] <=
     end && p[1] !== null);
   let low = soc ? 0 : Math.min(0, ...visible.map(p => p[1])),
-    high = soc ? 100 : Math.max(1, ...visible.map(p => p[1]));
+    high = soc ? 100 : Math.max(1000, ...visible.map(p => p[1]));
   if (!soc) {
     low = Math.floor(low);
-    high = Math.ceil(high * 1.1);
+    high = Math.ceil(high * 1.1 / 100) * 100;
   }
   const width = Math.max(280, $(soc ? 'soc' : 'power').clientWidth || 1000),
     height = 255,
-    left = 48,
+    left = soc ? 48 : 58,
     right = 15,
     top = 12,
     bottom = 32;
@@ -155,7 +160,7 @@ function chart(soc = false) {
     const value = low + (high - low) * tick / 4,
       pos = y(value);
     svg +=
-      `<line class="grid" x1="${left}" x2="${width-right}" y1="${pos}" y2="${pos}"/><text class="axis" x="${left-9}" y="${pos+4}" text-anchor="end">${num(value, soc?0:1)}</text>`;
+      `<line class="grid" x1="${left}" x2="${width-right}" y1="${pos}" y2="${pos}"/><text class="axis" x="${left-9}" y="${pos+4}" text-anchor="end">${num(value, 0)}</text>`;
   }
   const timeTicks = width < 550 ? 2 : 4;
   for (let tick = 0; tick <= timeTicks; tick++) {
@@ -222,18 +227,18 @@ function render() {
   $('page-title').textContent = page === 'overview' ? 'Overview' : 'Planning';
   const [start, end] = range();
   $('period').textContent = `${time(start)} — ${time(end)} · ${state.policy.timezone}`;
-  $('power-title').textContent = page === 'planning' ? '7 days · Power · actual / planned' :
-    'Power · actual / planned · kW';
+  $('power-title').textContent = page === 'planning' ? '7 days · Power · actual / planned · W' :
+    'Power · actual / planned · W';
   $('navigation').hidden = page === 'planning';
   $('provenance').textContent =
     `${state.provenance} · ${state.demo?'Deterministic local demonstration':'Configured inputs'} · ${state.control_enabled ? 'Hardware control enabled' : 'Hardware control disabled'}`;
   const live = [
-    ['Grid', o.house_kw + o.ev_power_kw - o.pv_ac_kw - o.ess_power_kw, 'kW', 'Quarter-hour import ' + num(o
+    ['Grid', o.house_kw + o.ev_power_kw - o.pv_ac_kw - o.ess_power_kw, 'W', 'Quarter-hour import ' + num(o
       .quarter_import_kwh) + ' kWh', 'grid'],
-    ['Solar', o.pv_ac_kw + o.pv_dc_kw, 'kW', `AC ${num(o.pv_ac_kw)} · DC ${num(o.pv_dc_kw)} kW`, 'solar'],
-    ['House', o.house_kw, 'kW', 'Uncontrolled demand', 'house'],
+    ['Solar', o.pv_ac_kw + o.pv_dc_kw, 'W', `AC ${watts(o.pv_ac_kw)} W · DC ${watts(o.pv_dc_kw)} W`, 'solar'],
+    ['House', o.house_kw, 'W', 'Uncontrolled demand', 'house'],
     ['ESS', o.ess_kwh / c.ess_capacity_kwh * 100, '%',
-      `Minimum ${num(c.ess_min_kwh/c.ess_capacity_kwh*100,0)}% · ${num(o.ess_power_kw)} kW`, 'ess'
+      `Minimum ${num(c.ess_min_kwh/c.ess_capacity_kwh*100,0)}% · ${watts(o.ess_power_kw)} W`, 'ess'
     ],
     ['EV', o.ev_state_known === false ? null : o.ev_kwh / c.ev_capacity_kwh * 100, '%', o.ev_state_known ===
       false ? 'State unknown / charging held' : o.connected ? 'Connected' : 'Away / disconnected', 'ev'
@@ -249,11 +254,16 @@ function render() {
       value = reading?.value ?? null;
       label = reading?.label || 'Waiting for live input';
       issues = reading?.issues || [];
+      const inputs = state.live_inputs.readings;
+      if (key === 'solar' && inputs.pv_ac_kw && inputs.pv_dc_kw)
+        label = `AC ${watts(inputs.pv_ac_kw.value)} W · DC ${watts(inputs.pv_dc_kw.value)} W`;
+      if (key === 'ess' && inputs.ess_kw)
+        label = `Minimum ${num(c.ess_min_kwh/c.ess_capacity_kwh*100,0)}% · ${watts(inputs.ess_kw.value)} W`;
     } else if (!liveKnown) { value = null; label = 'Waiting for live input'; }
-    return     `<article class="live-item"><span class="muted">${name}</span><strong style="color:${colors[key]}">${num(value,unit==='%'?0:2)} <small style="display:inline;font-size:13px">${unit}</small></strong><small>${esc(label)}</small>${issues.map(issue=>`<small class="error">${esc(issue)}</small>`).join('')}${unit==='%' && value !== null ?`<div class="meter"><i style="width:${Math.max(0,Math.min(100,value))}%;background:${colors[key]}"></i></div>`:''}</article>`;
+    return     `<article class="live-item"><span class="muted">${name}</span><strong style="color:${colors[key]}">${unit==='W'?watts(value):num(value,0)} <small style="display:inline;font-size:13px">${unit}</small></strong><small>${esc(label)}</small>${issues.map(issue=>`<small class="error">${esc(powerText(issue))}</small>`).join('')}${unit==='%' && value !== null ?`<div class="meter"><i style="width:${Math.max(0,Math.min(100,value))}%;background:${colors[key]}"></i></div>`:''}</article>`;
   }).join('');
   $('status').innerHTML =
-    `<p class="status-line">${plan?`Plan updated ${time(plan.intervals[0].start)} · ${plan.summary.intervals} intervals · ${num(plan.seconds,1)} s calculation`:'Waiting for the first validated joint plan. The independent control loop is running.'}${state.actuator_health?.delivery_fault ? '<span class="error"> / EV delivery fault: stopped; diagnose before restart</span>' : ''}${state.error?` · <span class="error">${esc(state.error)}</span>`:''}</p>`;
+    `<p class="status-line">${plan?`Plan updated ${time(plan.intervals[0].start)} · ${plan.summary.intervals} intervals · ${num(plan.seconds,1)} s calculation`:'Waiting for the first validated joint plan. The independent control loop is running.'}${state.actuator_health?.delivery_fault ? '<span class="error"> / EV delivery fault: stopped; diagnose before restart</span>' : ''}${state.error?` · <span class="error">${esc(powerText(state.error))}</span>`:''}</p>`;
   $('power').innerHTML = chart();
   $('soc').innerHTML = chart(true);
   const sessions = plan?.sessions || [];
@@ -275,7 +285,7 @@ function render() {
     '');
   if (!goals.length) $('goals').innerHTML = '<p class="empty">Add a journey or timed SoC goal.</p>';
   $('approvals').innerHTML = state.issues.length ? state.issues.map(i =>
-    `<section class="issue"><strong>${esc(i.title||goals.find(g=>g.id===i.goal_id)?.title||'EV goal')}</strong><p>${esc(i.text)}</p><p>${i.kind==='ess_peak'?'Specific forecast peak':i.shortfall_kwh===null?'Awaiting measured reconnection':num(i.shortfall_kwh)+' kWh short'} · ${esc(i.state)}</p>${i.proposed_peak_kw && i.state === 'pending'?`<p>Requested ceiling ${num(i.proposed_peak_kw)} kW</p><button data-approve="${esc(i.goal_id)}">Approve</button> <button data-reject="${esc(i.goal_id)}">Reject</button>`:''}</section>`
+    `<section class="issue"><strong>${esc(i.title||goals.find(g=>g.id===i.goal_id)?.title||'EV goal')}</strong><p>${esc(powerText(i.text))}</p><p>${i.kind==='ess_peak'?'Specific forecast peak':i.shortfall_kwh===null?'Awaiting measured reconnection':num(i.shortfall_kwh)+' kWh short'} · ${esc(i.state)}</p>${i.proposed_peak_kw && i.state === 'pending'?`<p>Requested ceiling ${watts(i.proposed_peak_kw)} W</p><button data-approve="${esc(i.goal_id)}">Approve</button> <button data-reject="${esc(i.goal_id)}">Reject</button>`:''}</section>`
   ).join('') : '<p class="empty">No pending permission decisions.</p>';
   if (plan) {
     const v = plan.summary;
@@ -288,20 +298,15 @@ function render() {
         ['Comparison including energy assets', money(v.comparison_eur), 'total']
       ].map(([a, b, cls = '']) => `<div class="money ${cls}"><span>${a}</span><span>${b}</span></div>`).join(
         '') +
-      `<p class="subtle">Seven-day forecast. Stored value is an assumption, not realized savings. Peak ${num(v.peak_kw)} kW.</p>`;
+      `<p class="subtle">Seven-day forecast. Stored value is an assumption, not realized savings. Peak ${watts(v.peak_kw)} W.</p>`;
   } else $('costs').innerHTML = '<p class="empty">Costs appear after independent plan validation.</p>';
-  $('reasons').innerHTML = (plan?.reasons || []).map(r => `<p>${esc(r.text)}</p>`).join('') ||
+  $('reasons').innerHTML = (plan?.reasons || []).map(r => `<p>${esc(powerText(r.text))}</p>`).join('') ||
     '<p>Required goals establish the charging need. Source and peak permissions remain binding.</p>';
   $('sessions').innerHTML = sessions.map((s, t) =>
-    `<div class="session"><button data-session="${esc(s.id)}"><strong>${esc(s.title)} · ${time(s.start)} — ${time(s.end)}</strong><br><small>${num(s.energy_kwh)} kWh battery energy · ${esc(s.reason)}</small></button>${(() => {const next=sessions.slice(t+1).find(other=>other.resource===s.resource);return next ? `<small>Resumes ${time(next.start)}<br>Pause ${num((Date.parse(next.start)-Date.parse(s.end))/3600000,1)} h</small>` : ''})()}</div>`
+    `<div class="session"><button data-session="${esc(s.id)}"><strong>${esc(s.title)} · ${time(s.start)} — ${time(s.end)}</strong><br><small>${num(s.energy_kwh)} kWh battery energy · ${esc(powerText(s.reason))}</small></button>${(() => {const next=sessions.slice(t+1).find(other=>other.resource===s.resource);return next ? `<small>Resumes ${time(next.start)}<br>Pause ${num((Date.parse(next.start)-Date.parse(s.end))/3600000,1)} h</small>` : ''})()}</div>`
   ).join('') || '<p class="empty">No charging sessions selected.</p>';
   $('evidence').innerHTML =
     `<p>Control response observed locally: ${num(state.control_max_seconds*1000,2)} ms maximum. This is not hardware latency.</p>${plan?`<pre>${esc(JSON.stringify({status:plan.status,stages:plan.stages,input_digest:plan.input_digest},null,2))}</pre>`:''}`;
-}
-
-function localInput(iso) {
-  const d = new Date(iso);
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 }
 
 function openGoal(goal) {
@@ -312,8 +317,8 @@ function openGoal(goal) {
   form.elements.kind.value = goal?.kind || 'manual';
   form.elements.target_soc_percent.value = goal?.target_soc_percent ?? 70;
   form.elements.distance_km.value = goal?.distance_km || 120;
-  form.elements.deadline.value = localInput(goal?.deadline || new Date(Date.parse(state.now) + 24 * 3600000));
-  form.elements.return_at.value = goal?.return_at ? localInput(goal.return_at) : '';
+  dateTimePicker.setValue(form.elements.deadline, goal?.deadline || new Date(Date.parse(state.now) + 24 * 3600000).toISOString());
+  dateTimePicker.setValue(form.elements.return_at, goal?.return_at || null);
   form.elements.priority.value = goal?.priority ?? 50;
   $('form-title').textContent = goal ? 'Edit EV goal' : 'Add an EV goal';
   $('form-error').textContent = '';
@@ -382,19 +387,19 @@ $('goal-form').elements.kind.onchange = toggleKind;
 $('goal-form').onsubmit = async event => {
   event.preventDefault();
   const f = event.target.elements;
-  const body = {
-    title: f.title.value,
-    kind: f.kind.value,
-    target_soc_percent: Number(f.target_soc_percent.value),
-    deadline: new Date(f.deadline.value).toISOString(),
-    priority: Number(f.priority.value)
-  };
-  if (f.id.value) body.id = f.id.value;
-  if (body.kind === 'trip') {
-    body.distance_km = Number(f.distance_km.value);
-    body.return_at = f.return_at.value ? new Date(f.return_at.value).toISOString() : null
-  }
   try {
+    const body = {
+      title: f.title.value,
+      kind: f.kind.value,
+      target_soc_percent: Number(f.target_soc_percent.value),
+      deadline: dateTimePicker.instant(f.deadline),
+      priority: Number(f.priority.value)
+    };
+    if (f.id.value) body.id = f.id.value;
+    if (body.kind === 'trip') {
+      body.distance_km = Number(f.distance_km.value);
+      body.return_at = dateTimePicker.instant(f.return_at)
+    }
     await api('goals', 'POST', body);
     $('goal-dialog').close();
     pointerUntil = 0;
@@ -439,13 +444,13 @@ document.addEventListener('click', async event => {
       const g = state.goals.find(g => g.id === button.dataset.detail) || (state.accepted?.goals || [])
         .find(g => g.id === button.dataset.detail);
       detail(g.title,
-        `<p>Deadline ${time(g.deadline)}</p><p>${g.kind==='trip'?`Total journey ${num(g.distance_km,0)} km, arrival reserve ${state.policy.arrival_reserve_km} km. ${g.return_at?'Expected return '+time(g.return_at):'Return unknown; unavailable until reconnection.'}`:'Timed state-of-charge requirement. No journey or withdrawal is assumed.'}</p><p>Priority ${g.priority}. ${g.approval_state==='granted'?'Approved task ceiling '+num(g.approved_peak_kw)+' kW':'Normal automatic peak policy applies.'}</p><p>Power changes stay within grouped charging sessions.</p>`
+        `<p>Deadline ${time(g.deadline)}</p><p>${g.kind==='trip'?`Total journey ${num(g.distance_km,0)} km, arrival reserve ${state.policy.arrival_reserve_km} km. ${g.return_at?'Expected return '+time(g.return_at):'Return unknown; unavailable until reconnection.'}`:'Timed state-of-charge requirement. No journey or withdrawal is assumed.'}</p><p>Priority ${g.priority}. ${g.approval_state==='granted'?'Approved task ceiling '+watts(g.approved_peak_kw)+' W':'Normal automatic peak policy applies.'}</p><p>Power changes stay within grouped charging sessions.</p>`
       )
     }
     if (button.dataset.session) {
       const s = state.accepted.sessions.find(s => s.id === button.dataset.session);
       detail(s.title,
-        `<p>${time(s.start)} — ${time(s.end)}</p><p>${num(s.energy_kwh)} kWh to the battery</p><p>${esc(s.reason)}</p><p>${s.resource === "ev" ? `Contributes to ${s.goal_ids.length} shared goals. Energy is counted once.` : "Source-specific reservations preserve required EV and household peak support."}</p>`
+        `<p>${time(s.start)} — ${time(s.end)}</p><p>${num(s.energy_kwh)} kWh to the battery</p><p>${esc(powerText(s.reason))}</p><p>${s.resource === "ev" ? `Contributes to ${s.goal_ids.length} shared goals. Energy is counted once.` : "Source-specific reservations preserve required EV and household peak support."}</p>`
       )
     }
     if (button.dataset.approve || button.dataset.reject) {

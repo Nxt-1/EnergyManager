@@ -19,6 +19,13 @@ the displayed revision. Hardware control is disabled by default. The demo advanc
 explicitly synthetic device model and does not use installation inputs or databases.
 Settings can separately read HA's entity list to prepare the configured installation.
 
+Power is displayed in W, energy in kWh. Settings converts displayed watt limits to the
+existing configuration units. Goal dates use the installation timezone: choose a day
+on the calendar, an hour/minute on the clock, and OK; keyboard entry is also available.
+Cancel keeps the previous value. Clear removes an optional return. During a repeated
+DST hour select the first or second occurrence; nonexistent local times cannot be saved.
+Morning SoC targets alone do not imply driving or a battery withdrawal.
+
 This workspace's prepared environment is `.venv313/Scripts/python.exe`. Dependencies
 are isolated, not registered system-wide. `requirements.lock` and `requirements-dev.lock`
 contain the tested exact Windows3.13 resolution; Linux wheels/container must be checked
@@ -30,6 +37,7 @@ wheel under `dist/` supports a separate installation without repository imports.
 .\.venv313\Scripts\python.exe -m ruff check src tests tools
 .\.venv313\Scripts\python.exe -m mypy src/energymanager
 node --check src/energymanager/assets/app.js
+node --test tools/frontend.test.mjs
 .\.venv313\Scripts\python.exe tools/offline_e2e.py
 .\.venv313\Scripts\python.exe tools/benchmark.py --case mixed --budget 120
 .\.venv313\Scripts\python.exe tools/benchmark.py --case winter --budget 120
@@ -53,7 +61,7 @@ limits can change incumbents; replay does not promise bit-identical optimization
 
 ## Main-project version 4 update
 
-`config.yaml` now advertises **4.0.9** for the existing `energy_manager` Home Assistant
+`config.yaml` now advertises **4.0.10** for the existing `energy_manager` Home Assistant
 app and `ghcr.io/nxt-1/energymanager` image. It keeps ingress port8099 and manual startup.
 The packaged Python distribution, CLI and module are all named `energymanager`. The
 former standalone candidate has been moved into this main app; the old V3 modules,
@@ -80,7 +88,7 @@ need the reviewed V4 resource/configuration update; no live dashboard was change
 Docker is unavailable locally. The V4.0.0 CI and image workflows verified the Linux
 container build and publication; evidence is in VERIFICATION.md and ci-verification.json.
 Supervisor installation and physical deployment remain separate checks. A target host
-can run `docker build --build-arg BUILD_VERSION=4.0.9 -t energymanager:4.0.9 .` from this
+can run `docker build --build-arg BUILD_VERSION=4.0.10 -t energymanager:4.0.10 .` from this
 directory. The repository publish workflow targets the existing GHCR image when
 config.yaml is pushed to main; inspect the workflow for the version being installed.
 
