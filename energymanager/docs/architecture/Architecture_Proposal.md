@@ -143,13 +143,24 @@ layout and card implementation, so future dashboard changes require no YAML/file
 The bootstrap protocol stays stable for UI releases. Personal dashboards are not rewritten;
 keep personal additions separate from the generated EnergyManager layout.
 
-Native tiles receive HA state changes directly and use the normal more-info/history
-dialogs. Custom live summaries use a read-only frontend projection of current HA states,
+The duplicate top sensor strip is removed in4.2.1. Custom live summaries receive HA
+state changes directly and use the normal more-info/history dialogs. They use a read-only frontend projection of current HA states,
 with unit/numeric/availability checks and the same AC household-balance formula. Source
 changes update only live summaries rather than repainting full trajectories. Combined
 solar/net-grid/household summaries offer the contributing sensors' histories, without
 inventing a measured household entity. HA tiles/dialogs retain their entity units;
 EnergyManager's custom power summaries and planning charts retain W.
+
+The five live boxes also show today's estimated energy in kWh: separate grid import/
+export, AC/DC solar, household demand, EV charging and ESS AC charge/discharge. These
+are integrations of the existing validated recorded powers, not HA meter counters or
+battery energy changes. Integration uses the installation-local midnight (including
+23/25-hour days), holds each power only until the next read or its input-read watchdog,
+deduplicates cached snapshots and excludes missing/invalid or other-mode data. Missing
+coverage is labelled partial; no coverage is unavailable. Summaries refresh every30s.
+An expression index on measurement timestamps covers legacy events too; range reads
+use a separate read-only SQLite connection in a worker, outside the control event loop.
+Creating this index can take time on the first startup with a large existing archive.
 
 HA Recorder supplies the native historical view under its own coverage/retention settings.
 It does not import EnergyManager's SQLite archive; ARCH-010 remains deferred for older

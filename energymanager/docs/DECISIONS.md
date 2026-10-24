@@ -1,6 +1,6 @@
 # Current requirements and decisions
 
-Maintained 24 October 2026 for 4.2.0. This records confirmed product preferences and
+Maintained 24 October 2026 for 4.2.1. This records confirmed product preferences and
 implementation outcomes from the V4 implementation chat. It supplements the complete
 original [architecture decisions](architecture/Architecture_Decisions.md); the
 [maintained architecture](architecture/Architecture_Proposal.md) describes the resulting implementation.
@@ -133,3 +133,12 @@ New explicit user instructions take precedence. Deferred ideas are not authoriza
 - Do not buy/reset usage credits or switch to paid API usage. Do not promise automatic
   resumption or create an automation as a workaround. Resume from the checkpoint when
   the user returns after a normal reset.
+
+## 24 October 2026 — 4.2.1 scope and graph-history follow-up
+
+The user requests removing the duplicate native sensor strip, retaining the clickable
+underlying-value chooser and adding daily energy to the live boxes. Release/push4.2.1
+with that scope. Daily values integrate recorded power, show separate opposing flows
+and explicitly mark partial coverage; no daily meter entities have been configured.
+After that release, implement ARCH-010 graph archive loading, but do not commit or push
+that work yet. This specific hold overrides standing ready-release permission for it.

@@ -24,6 +24,7 @@ def read_archive(value: str | bytes) -> str:
 
 class Store:
     def __init__(self, path: str | Path) -> None:
+        self.path = Path(path).resolve()
         self.connection = sqlite3.connect(str(path))
         self.connection.execute("PRAGMA journal_mode=WAL")
         self.connection.executescript("""
@@ -34,6 +35,8 @@ class Store:
                 id TEXT PRIMARY KEY, at TEXT NOT NULL, disposition TEXT NOT NULL,
                 digest TEXT NOT NULL, snapshot TEXT NOT NULL, result TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS load_samples (at REAL PRIMARY KEY, power_w REAL NOT NULL);
+            CREATE INDEX IF NOT EXISTS measurement_time ON events
+                (julianday(json_extract(body,'$.at')), sequence) WHERE kind='measurement';
         """)
 
     def close(self) -> None:

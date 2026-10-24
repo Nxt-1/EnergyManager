@@ -16,6 +16,7 @@ from .settings import ConfigurationConflict, ConfigurationFile, SettingsValidati
 from .hardware import HardwareControl
 from . import __version__
 from .dashboard import dashboard_manifest
+from .energy import daily_energy
 
 
 def create_web(application: Application, *, configuration: ConfigurationFile | None = None) -> web.Application:
@@ -83,6 +84,12 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
 
     async def state(request: web.Request) -> web.Response:
         return web.json_response(application.state())
+
+    async def energy(request: web.Request) -> web.Response:
+        result = await asyncio.to_thread(daily_energy, application.store.path, application.now(),
+                                        application.policy.timezone,
+                                        application.policy.measurement_max_age_seconds, application.demo)
+        return web.json_response(result, headers={"Cache-Control": "no-store"})
 
     async def dashboard(request: web.Request) -> web.Response:
         return web.json_response(dashboard_manifest(application), headers={"Cache-Control": "no-store"})
@@ -158,6 +165,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
     app.add_routes(
         [
             web.get("/api/state", state),
+            web.get("/api/daily-energy", energy),
             web.get("/api/dashboard", dashboard),
             web.post("/api/control", control),
             web.get("/api/settings", settings),

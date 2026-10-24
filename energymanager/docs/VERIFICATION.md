@@ -1,5 +1,18 @@
 # EnergyManager 4 verification
 
+## 4.2.1 — Daily energy in live boxes
+
+161 Python tests passed40.58s,14 Node tests, Ruff/mypy30 and all packaged JS syntax.
+Daily-energy fixtures cover old event backfill, repeated timestamps, watchdog failures,
+gaps/unknown/demo separation, opposing flows, restart, local midnight and both DST
+changes. API/ingress boundary and stale-day labels checked. Configured fake E2E accepted
+2,018 intervals27.722s; max observed control tick3.285ms, five fake-only calls.
+Wheel/sdist built;45 packaged source/assets match; isolated wheel import passed.
+Labelled HA-contract browser preview confirms no sensor strip, today's energy in all
+five boxes, grid source chooser and correct native more-info event. No warnings/errors.
+Screenshot: screenshots/native-v421-desktop.png. Actual HA installation remains unverified;
+no live database/hardware/deployment. Custom graph archive loading follows separately.
+
 ## 4.2.0 — Native managed HA dashboard
 
 Native strategy, tiles/history actions and custom planning/EV/settings cards replace

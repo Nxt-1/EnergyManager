@@ -1,5 +1,21 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work — 4.2.1 live boxes, then uncommitted graph history
+
+AUTHORIZED: remove the top sensor strip, add daily energy to live boxes, retain sensor
+choosers, release/push4.2.1. Then implement ARCH-010 graph history without committing it.
+IMPLEMENTED4.2.1: no duplicate sensor strip; existing boxes show installation-local daily
+energy estimated from recorded power, separate opposing flows, partial/missing coverage.
+Timestamp index includes legacy events; worker uses a read-only connection. Native
+history choices include EV/ESS power. Controller and live installation remain untouched.
+VERIFIED:161 Python tests40.58s;14 Node tests; Ruff/mypy30/all JS syntax passed. Configured
+fake E2E27.722s/2,018 intervals/max tick3.285ms/five fake-only calls. Wheel/sdist and45
+packaged source/assets checked; isolated wheel import passed. Browser preview confirms
+strip removal, five energy boxes, underlying chooser and native more-info event; no
+warnings/errors. HA built-ins/Supervisor are simulated; actual HA remains unverified.
+NEXT: commit/push4.2.1, inspect workflows; then graph history implementation remains
+uncommitted per user. Remote results go only in ignored checkpoint/final reply.
+
 ## Current work — native managed HA dashboard, 24 October 2026
 
 AUTHORIZED: replace the iframe dashboard with real HA views/cards and automatic future

@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {displaySetting, entityState, powerText, settingLabel, storedSetting, watts}
+import {dailyEnergyText, displaySetting, entityState, powerText, settingLabel, storedSetting, watts}
   from '../src/energymanager/assets/display.js';
 import {clockValue, localDateTime, localInstants, monthDays, validLocal}
   from '../src/energymanager/assets/date-time.js';
 import {eventsOnDay, evSchedule, scheduleDays} from '../src/energymanager/assets/ev-schedule.js';
-import {nativeLiveState, sensorTiles} from '../src/energymanager/assets/native-live.js';
+import {nativeLiveState} from '../src/energymanager/assets/native-live.js';
 
 test('power display preserves signs, missing values and energy units', () => {
   assert.equal(watts(1.68), '1680');
@@ -145,13 +145,9 @@ test('EV agenda uses half-open day boundaries for returns and simultaneous targe
   assert.equal(eventsOnDay(events, day, 150, 180).length, 0);
 });
 
-test('native sensor tiles use HA entities and more-info without mixing demo measurements', () => {
+test('native live values use HA states without mixing demo measurements', () => {
   const manifest = {demo: false, entities: {ev_soc: 'sensor.car', ess_soc: 'sensor.battery',
     connected: 'binary_sensor.car'}};
-  const tiles = sensorTiles(manifest);
-  assert.equal(tiles.length, 3);
-  assert.ok(tiles.every(tile => tile.type === 'tile' && tile.tap_action.action === 'more-info'));
-  assert.deepEqual(sensorTiles({...manifest, demo: true}), []);
   const backend = {accepted: {id: 'unchanged'}, live_inputs: {cards: {ev: {value: 40}}}};
   const hass = {states: {'sensor.car': {state: '55', attributes: {unit_of_measurement: '%'}},
     'binary_sensor.car': {state: 'on'}}};
@@ -201,7 +197,7 @@ test('managed strategy generates actual HA cards and adopts new release layout w
   const config = {type: 'custom:energymanager'};
   const layout = generateDashboard(config, manifest, {addon: 'synthetic_energy_manager', manifest});
   assert.deepEqual(layout.views.map(view => view.path), ['overview', 'planning', 'ev', 'settings']);
-  assert.ok(layout.views[0].sections[0].cards.some(card => card.type === 'tile'));
+  assert.ok(layout.views.every(view => view.sections.every(section => section.cards.every(card => card.type !== 'tile'))));
   assert.ok(layout.views[0].sections.some(section => section.cards.some(card => card.type === 'history-graph')));
   assert.ok(!JSON.stringify(layout).includes('iframe'));
   const future = {...manifest, version: '4.3.0'};
@@ -258,4 +254,17 @@ test('stable loader uses authenticated HA discovery, versioned assets and safe s
     assert.ok(calls.every(call => call.type === 'supervisor/api'));
     await assert.rejects(connectDashboard({...hass, user: {is_admin: false}}), /administrator/);
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test('daily energy labels separate opposing flows and reject yesterday totals', () => {
+  const summary = {date: '2026-10-25', timezone: 'Europe/Brussels', partial: true,
+    kwh: {import: 4, export: 2, ess_charge: 1.5, ess_discharge: 1, solar: 6, solar_ac: 5, solar_dc: 1,
+      house: 3, ev: 2}};
+  const label = key => dailyEnergyText(summary, key, '2026-10-24T23:00:00Z', 'Europe/Brussels');
+  assert.match(label('grid'), /Today \(partial\): Import 4.00 kWh · export 2.00 kWh/);
+  assert.match(label('ess'), /AC charge 1.50 kWh · discharge 1.00 kWh/);
+  assert.match(label('solar'), /6.00 kWh · AC 5.00 kWh \/ DC 1.00 kWh/);
+  assert.match(label('house'), /3.00 kWh/);
+  assert.match(dailyEnergyText(summary, 'house', '2026-10-25T23:00Z', 'Europe/Brussels'), /unavailable/);
+  assert.match(dailyEnergyText(null, 'ev', '2026-10-25T00:00Z', 'Europe/Brussels'), /unavailable/);
 });

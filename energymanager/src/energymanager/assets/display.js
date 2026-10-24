@@ -9,6 +9,18 @@ export function powerText(text) {
     (_, value) => `${watts(value)} W`);
 }
 
+export function dailyEnergyText(summary, key, now, timezone) {
+  const date = new Intl.DateTimeFormat('en-CA', {timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit'}).format(new Date(now));
+  if (!summary?.kwh || summary.date !== date || summary.timezone !== timezone)
+    return 'Today: energy unavailable';
+  const energy = name => `${summary.kwh[name].toFixed(2)} kWh`;
+  const label = key === 'grid' ? `Import ${energy('import')} · export ${energy('export')}` :
+    key === 'ess' ? `AC charge ${energy('ess_charge')} · discharge ${energy('ess_discharge')}` :
+    key === 'solar' ? `${energy('solar')} · AC ${energy('solar_ac')} / DC ${energy('solar_dc')}` : energy(key);
+  return `Today${summary.partial ? ' (partial)' : ''}: ${label} · estimated`;
+}
+
 export function entityState(entity) {
   if (entity.unit === 'kW' && entity.state !== '' && Number.isFinite(Number(entity.state)))
     return `${watts(entity.state)} W`;

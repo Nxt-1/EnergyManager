@@ -57,29 +57,3 @@ export function nativeLiveState(state, hass, manifest) {
     }
   };
 }
-
-export function sensorTiles(manifest) {
-  if (manifest.demo) return [];
-  const labels = {
-    grid_import_kw: 'Grid import',
-    grid_export_kw: 'Grid export',
-    pv_ac_kw: 'AC solar',
-    pv_dc_kw: 'DC solar',
-    ess_soc: 'ESS battery',
-    ev_soc: 'EV battery',
-    ev_kw: 'EV charging',
-    ess_kw: 'ESS power',
-    connected: 'EV connected'
-  };
-  return Object.entries(labels).filter(([key]) => manifest.entities[key]).map(([key, name]) => ({
-    type: 'tile',
-    entity: manifest.entities[key],
-    name,
-    tap_action: {
-      action: 'more-info'
-    },
-    icon_tap_action: {
-      action: 'more-info'
-    }
-  }));
-}

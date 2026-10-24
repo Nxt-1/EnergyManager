@@ -3,7 +3,8 @@ import {
 } from './settings.js';
 import {
   powerText,
-  watts
+  watts,
+  dailyEnergyText
 } from './display.js';
 import {
   DateTimePicker
@@ -30,6 +31,7 @@ export async function mountApplication(root, options = {}) {
     hardwareChanging = false,
     hardwareIntent = false,
     hardwareError = null;
+  let dailyEnergy = null, energyRequestedAt = 0;
   const colors = {
     grid: '#dc2626',
     ess: '#007ac2',
@@ -353,7 +355,8 @@ export async function mountApplication(root, options = {}) {
         value = null;
         label = 'Waiting for live input';
       }
-      return `<article class="live-item" data-live="${key}" ${options.native ? 'role="button" tabindex="0"' : ''}><span class="muted">${name}</span><strong style="color:${colors[key]}">${unit==='W'?watts(value):num(value,0)} <small style="display:inline;font-size:13px">${unit}</small></strong><small>${esc(label)}</small>${issues.map(issue=>`<small class="error">${esc(powerText(issue))}</small>`).join('')}${unit==='%' && value !== null ?`<div class="meter"><i style="width:${Math.max(0,Math.min(100,value))}%;background:${colors[key]}"></i></div>`:''}</article>`;
+      const energy = dailyEnergyText(dailyEnergy, key, state.now, state.policy.timezone);
+      return `<article class="live-item" data-live="${key}" ${options.native ? 'role="button" tabindex="0"' : ''}><span class="muted">${name}</span><strong style="color:${colors[key]}">${unit==='W'?watts(value):num(value,0)} <small style="display:inline;font-size:13px">${unit}</small></strong><small>${esc(label)}</small><small class="daily-energy">${esc(energy)}</small>${issues.map(issue=>`<small class="error">${esc(powerText(issue))}</small>`).join('')}${unit==='%' && value !== null ?`<div class="meter"><i style="width:${Math.max(0,Math.min(100,value))}%;background:${colors[key]}"></i></div>`:''}</article>`;
     }).join('');
   }
 
@@ -409,7 +412,16 @@ export async function mountApplication(root, options = {}) {
       if (!viewLocked()) {
         backendState = nextState;
         state = options.liveState ? options.liveState(backendState) : backendState;
-        render()
+        render();
+        if (['overview', 'planning'].includes(page) && Date.now() - energyRequestedAt > 30000) {
+          energyRequestedAt = Date.now();
+          try {
+            dailyEnergy = await api('daily-energy');
+          } catch {
+            dailyEnergy = null;
+          }
+          if (!lifecycle.signal.aborted && !viewLocked()) renderLive();
+        }
       }
     } catch (error) {
       $('connection').textContent = 'Connection unavailable';

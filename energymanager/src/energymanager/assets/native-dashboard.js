@@ -2,8 +2,7 @@ import {
   mountApplication
 } from './application-view.js';
 import {
-  nativeLiveState,
-  sensorTiles
+  nativeLiveState
 } from './native-live.js';
 
 const runtimes = new Map();
@@ -94,8 +93,8 @@ export function generateDashboard(config, manifest, connection) {
           this.liveEvents = new AbortController();
           const openHistory = key => {
             const keys = {
-              ev: ['ev_soc'],
-              ess: ['ess_soc'],
+              ev: ['ev_soc', 'ev_kw', 'connected'],
+              ess: ['ess_soc', 'ess_kw'],
               solar: ['pv_ac_kw', 'pv_dc_kw'],
               grid: ['grid_import_kw', 'grid_export_kw'],
               house: ['grid_import_kw', 'grid_export_kw', 'pv_ac_kw', 'ess_kw', 'ev_kw']
@@ -161,14 +160,6 @@ export function generateDashboard(config, manifest, connection) {
       }
     }];
     const sections = [];
-    if (path === 'overview' || path === 'ev') {
-      const tiles = sensorTiles(manifest).filter(tile => path === 'overview' || [manifest.entities.ev_soc, manifest.entities.connected, manifest.entities.ev_kw].includes(tile.entity));
-      if (tiles.length) sections.push({
-        type: 'grid',
-        column_span: 3,
-        cards: tiles
-      });
-    }
     sections.push({
       type: 'grid',
       column_span: 3,

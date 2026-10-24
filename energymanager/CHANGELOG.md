@@ -1,3 +1,13 @@
+## 4.2.1 — Daily energy in the live boxes
+
+- Remove the duplicate sensor strip from the native dashboard. Keep clickable live
+  boxes and their underlying HA sensor/history chooser, including EV/ESS power.
+- Show today's estimated grid import/export, AC/DC solar, household demand, EV charging
+  and ESS charge/discharge energy in those boxes. Integrate recorded powers in the
+  installation timezone; mark missing coverage as partial and never invent measurements.
+- Query the existing indexed measurement archive through a read-only worker connection;
+  update energy summaries every 30 seconds without changing controller behavior.
+
 ## 4.2.0 — Native, managed Home Assistant dashboard
 
 - Replace the iframe wrapper with actual HA views, live sensor tiles, native history

@@ -1,6 +1,6 @@
 # Native EnergyManager dashboard
 
-EnergyManager4.2.0 provides real HA dashboard views, sensor tiles, Recorder battery
+EnergyManager4.2.1 provides real HA dashboard views, live boxes, Recorder battery
 history and custom planning/EV/settings cards. It uses no iframe. The same reusable
 components remain available through the add-on sidebar for standalone/fallback use.
 
@@ -45,12 +45,19 @@ is maintained by the installed release rather than copied into editable card YAM
 
 ## Live values, history and controller boundaries
 
-Native tiles use `hass.states`; custom live summaries update from the same HA changes
+Live summaries use `hass.states` and update from HA changes
 without waiting for the add-on's measurement polling or its two-second plan-state poll.
 Custom summaries retain W/kWh display. HA's own tiles/dialogs use their entity's units.
-Click EV/ESS summaries for the standard HA more-info dialog. Combined solar, net grid
+Click live boxes to choose underlying sensors and open the standard HA more-info dialog. Combined solar, net grid
 and calculated household-demand summaries offer the contributing entities' histories;
 this release does not create a fictitious measured household sensor.
+
+The boxes include today's estimated energy, integrated from EnergyManager's recorded
+powers in the installation timezone. Grid import/export and ESS charge/discharge are
+separate; solar includes AC/DC totals. These are not meter counters. Missing coverage
+is labelled partial, absent coverage unavailable; gaps are not filled. Totals refresh
+every30 seconds. The first startup creates an index over existing measurement events,
+which can take longer with a large archive.
 
 HA Recorder supplies native sensor history, subject to its configured coverage and
 retention. It does not import EnergyManager's separate SQLite archive. ARCH-010 remains
