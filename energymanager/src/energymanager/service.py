@@ -16,7 +16,7 @@ from uuid import uuid4
 from . import __version__
 from .control import Actuator, Command, FakeActuator, FastControl
 from .adapters import ForecastSource, HomeAssistantAdapter, JsonForecastAdapter
-from .domain import Goal, Observation, PeakPermission, Policy, Snapshot, json_data
+from .domain import Goal, Observation, PeakPermission, Policy, Snapshot, daily_goals, json_data
 from .publication import rebase
 from .demo_plant import DemoPlant
 from .forecasts import demo_snapshot
@@ -603,12 +603,18 @@ class Application:
             self.changed("resource_progress", ess=observation.ess_kwh < previous.ess_kwh - 0.2)
 
     def state(self) -> dict[str, Any]:
+        now = self.now()
+        daily_approvals = self.store.get("daily_approvals", {})
+        requirements = []
+        for goal in daily_goals(now, now + timedelta(hours=168), self.policy, self.goals):
+            approved = daily_approvals.get(goal.id)
+            requirements.append(Goal.from_dict(approved) if approved and approved["revision"] == goal.revision else goal)
         return {
             "version": __version__,
             "status": self.status,
             "error": self.error,
             "revision": self.revision,
-            "now": self.now().isoformat(),
+            "now": now.isoformat(),
             "demo": self.demo,
             "control_enabled": bool(getattr(self.actuator, "enabled", False)),
             "hardware_control": self.hardware.state() if self.hardware else None,
@@ -625,7 +631,9 @@ class Application:
             "capabilities": json_data(self.snapshot.capabilities),
             "policy": json_data(self.policy),
             "goals": json_data(self.goals),
+            "schedule_goals": json_data((*self.goals, *requirements)),
             "accepted": self.accepted,
+            "ev_plan_valid": self.ev_valid,
             "issues": list(self.store.get("issues", {}).values()),
             "command": self.last_command,
             "observed": self.observed,

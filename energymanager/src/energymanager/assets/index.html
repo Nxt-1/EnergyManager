@@ -3,7 +3,7 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>EnergyManager 4</title><link rel="stylesheet" href="./style.css"></head>
 <body><header><div><span class="brand">◉</span> <strong>EnergyManager</strong><span class="muted" id="app-version"> 4</span></div>
-<nav aria-label="Main navigation"><button id="overview" aria-selected="true">Overview</button><button id="planning" aria-selected="false">Planning</button><button id="settings" aria-selected="false">Settings</button></nav>
+<nav aria-label="Main navigation"><button id="overview" aria-selected="true">Overview</button><button id="planning" aria-selected="false">Planning</button><button id="ev" aria-selected="false">EV</button><button id="settings" aria-selected="false">Settings</button></nav>
 <div id="connection" role="status">Connecting…</div></header>
 <main><div id="dashboard"><div class="notice" id="provenance">Loading application inputs…</div>
 <section class="page-heading"><div><h1 id="page-title">Overview</h1><p id="period" class="muted"></p></div>
@@ -22,7 +22,7 @@
 </aside></div>
 <article class="card"><details id="sessions-detail"><summary>Session details and expected pauses</summary><div id="sessions"></div></details></article>
 <article class="card"><details id="diagnostics"><summary>Decision history & technical evidence</summary><div id="evidence"></div><button id="history">Load decisions</button><div id="history-list"></div></details></article>
-</div><section id="settings-panel" hidden aria-label="EnergyManager settings"></section>
+</div><section id="ev-panel" hidden aria-label="EV schedule"></section><section id="settings-panel" hidden aria-label="EnergyManager settings"></section>
 <footer>Control disabled · Local verification application · Forecasts and planned costs are estimates.</footer>
 </main>
 <dialog id="goal-dialog"><form id="goal-form"><div class="card-heading"><h2 id="form-title">Add an EV goal</h2><button type="button" id="close-dialog" aria-label="Close">×</button></div>

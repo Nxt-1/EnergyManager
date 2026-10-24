@@ -1,9 +1,9 @@
 # Current requirements and decisions
 
-Maintained 24 October 2026 for 4.0.10. This records confirmed product preferences and
+Maintained 24 October 2026 for 4.1.0. This records confirmed product preferences and
 implementation outcomes from the V4 implementation chat. It supplements the complete
 original [architecture decisions](architecture/Architecture_Decisions.md); the
-[shipping specification](SPECIFICATION.md) describes the resulting implementation.
+[maintained architecture](architecture/Architecture_Proposal.md) describes the resulting implementation.
 New explicit user instructions take precedence. Deferred ideas are not authorization.
 
 ## Architecture and EV behavior retained
@@ -13,9 +13,9 @@ New explicit user instructions take precedence. Deferred ideas are not authoriza
 - Keep the original required/optional energy, source, cost, peak permission and
   continuity policies. Their complete original context is preserved in
   [the handoff](architecture/Implementation_Handoff.md) and
-  [proposal](architecture/Architecture_Proposal.md). Mathematical implementation is
-  specified in SPECIFICATION.md; old text saying implementation is still pending is
-  historical, not a request to rebuild it.
+  [maintained architecture](architecture/Architecture_Proposal.md). Its current
+  specification resolves the original mathematical proposals; historical pending-work
+  statements are not a request to rebuild the application.
 - The morning target is a timed minimum, initially 50% at 07:00 local. It is not a
   permanent floor and does not imply a daily journey or energy use. With these targets
   alone, predicted EV SoC can only stay level or rise. Entered total-distance journeys
@@ -83,7 +83,7 @@ New explicit user instructions take precedence. Deferred ideas are not authoriza
   control snapshot and command authority may still be withheld when required inputs
   fail. Actual charts use validated observations rather than invented measurements.
 
-## GUI and next-version scope
+## GUI and future scope
 
 - Keep Overview/Planning inspired by the original first two dashboard pages: live
   summaries, actual/planned power and SoC, time navigation, grouped sessions and the
@@ -95,11 +95,14 @@ New explicit user instructions take precedence. Deferred ideas are not authoriza
 - Journey and timed-SoC date/time fields use an Android-inspired calendar/24-hour clock
   with keyboard entry, the installation timezone, Cancel and optional-return Clear.
   Reject nonexistent clock-change times and expose both repeated-hour occurrences.
-- A more visual car schedule, perhaps a calendar on a dedicated EV page, is explicitly
-  deferred as ARCH-009. No EV page/calendar is implemented by this update.
-- A new V4.1 chat is a sensible context boundary, not a product requirement or an
-  automatically created chat. [HANDOFF.md](HANDOFF.md) is the entry point. No additional
-  V4.1 feature is approved merely because it appears in the backlog.
+- On 24 October 2026 the user explicitly authorized ARCH-009 implementation. The EV
+  page uses a seven-day calendar and selected-day agenda for journeys, away periods,
+  morning/manual targets and accepted charging sessions. The existing scheduler and
+  permissions remain authoritative; unknown returns and outdated plan results are explicit.
+- Continue across chats and versions using the same maintained
+  [architecture document](architecture/Architecture_Proposal.md). The user explicitly
+  prefers updating it in place over creating version-specific handoffs. Backlog entries
+  require separate authorization; a new chat does not authorize their implementation.
 
 ## Engineering/release rules from the user
 
@@ -112,9 +115,13 @@ New explicit user instructions take precedence. Deferred ideas are not authoriza
 - Existing release authorization covers the agreed updates. Use one implementation
   commit with relevant docs; do not add optional "record successful release" commits.
   Record subsequent CI/publication results in the ignored checkpoint and final reply.
-- Maintain shipping requirements, decisions, deferred work, run instructions and
-  meaningful verification alongside code. Preserve the original architecture as
-  labelled history. On resumption compare checkpoint claims with the actual workspace.
+- On 24 October 2026 the user supplied standing authorization to commit and push
+  versions when ready for release, including the existing image-publication workflow.
+  Live installation deployment and hardware operation still need separate authorization.
+- Maintain the same architecture document, decision log, deferred work, run
+  instructions and meaningful verification alongside code. Preserve superseded design
+  evidence in Git history and labelled historical records. On resumption compare
+  checkpoint claims with the actual workspace.
 - Do not buy/reset usage credits or switch to paid API usage. Do not promise automatic
   resumption or create an automation as a workaround. Resume from the checkpoint when
   the user returns after a normal reset.

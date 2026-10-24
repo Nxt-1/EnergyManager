@@ -50,6 +50,7 @@ jobs:
           node --check energymanager/src/energymanager/assets/display.js
           node --check energymanager/src/energymanager/assets/date-time.js
           node --check energymanager/src/energymanager/assets/datetime-picker.js
+          node --check energymanager/src/energymanager/assets/ev-schedule.js
           node --test energymanager/tools/frontend.test.mjs
           node --check energymanager-dashboard/energymanager-card.js
 

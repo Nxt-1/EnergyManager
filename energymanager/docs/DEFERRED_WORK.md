@@ -127,14 +127,19 @@ This does not add a standing reserve to the initial release or authorize experim
 
 ## ARCH-009 — Visual EV schedule and dedicated EV page
 
-Recorded: 24 October 2026. Status: **deferred**, explicitly requested by the user.
+Recorded: 24 October 2026. Status: **implemented locally in 4.1.0**, after the user
+explicitly authorized starting ARCH-009 and writing code on the same date. Retained
+here to preserve the original deferred intent and its resolution.
 
-Make the car schedule easier to understand visually, perhaps using a calendar on a
+Original intent: make the car schedule easier to understand visually, perhaps using a calendar on a
 new page dedicated to the EV. Preserve journeys, expected away/return periods, morning
 and manual SoC requirements, and planned charging sessions without implying measured
-activity or inventing a learned driving routine. The exact layout and interactions
-remain undecided. Consider this for later feature work, including V4.1 discussion.
+activity or inventing a learned driving routine. Layout and interactions were left
+undecided for later feature work, including V4.1 discussion.
 
-This entry does not authorize an EV page or calendar implementation. The Android-style
-journey date/time field picker and W power display are separately authorized 4.0.10 work;
-they do not complete this schedule-visualization idea.
+The dedicated EV page now combines a seven-day calendar with a selected-day agenda,
+expected away/return periods, morning/manual/departure targets and accepted charging
+sessions. Existing forms support explicit goal changes. Unknown returns remain explicit;
+obsolete plan outcomes are withheld while current requirements remain visible. This
+builds on the separate 4.0.10 date/time controls and W display. See the maintained
+architecture for the implemented contract and VERIFICATION.md for local evidence.

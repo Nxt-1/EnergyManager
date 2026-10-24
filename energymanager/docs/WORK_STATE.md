@@ -1,5 +1,32 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work — ARCH-009, 24 October 2026
+
+User explicitly authorized implementing ARCH-009 and writing code. Implemented a
+dedicated EV calendar/selected-day agenda, goal actions through existing forms, current
+requirements before a plan, revision-safe charging/outcomes and installation-local DST
+boundaries. Added read-only schedule_goals state projection; scheduling/control unchanged.
+Version prepared as 4.1.0. Preserved pre-existing staged/unstaged documentation changes.
+The user subsequently authorized committing/pushing release-ready versions and the
+existing release workflow. Live installation deployment remains separately authorized.
+
+LOCAL COMPLETE: 153 Python tests passed39.36s; nine frontend tests and all packaged JS
+syntax checks passed; Ruff/mypy28 passed. Final configured synthetic E2E passed27.672s/
+2,018 intervals/max tick2.791ms/five local fake-only service calls. Wheel/sdist built;
+all38 packaged source/assets match, isolated extracted-wheel import/state projection
+passed with control disabled. See ev-schedule-package-verification.json.
+
+Browser confirmed direct EV reload/navigation, day agenda, accepted charging details,
+morning targets, journey create/edit/overnight return, unknown-return span, manual goal
+create/remove and daily Settings link. Requirements persist while outdated/unvalidated
+outcomes are withheld. Desktop and390x844 screenshots saved; no console warnings/errors.
+Mobile calendar scrolls within its card and selected-day agenda stays single-column.
+The8102 synthetic preview and its test tab are stopped; viewport reset; existing8100
+preview untouched. No live HA/database/hardware/real notification/deployment access.
+Final diff whitespace check passed. Release-ready implementation and current architecture/
+instructions reviewed. Next concrete action: one4.1.0 release commit/push, then check CI
+and image publication. Record remote outcomes only in the ignored checkpoint/final reply.
+
 COMPLETE: the user explicitly authorized replacing the old main project with the new
 implementation and naming it version4. Main app now energymanager/, package/module/CLI
 energymanager, version4.0.0. Candidate directory removed. Existing add-on slug/image
@@ -406,3 +433,13 @@ new V4.1 chat. No new chat or V4.1 feature created. Local8102 preview/tab closed
 pre-existing tabs/8100 untouched. No actual HA/hardware/database/phone/deployment.
 NEXT: final diff review, one4.0.10 release commit/push, inspect CI/image; append remote
 completion only to ignored checkpoint/final reply. Future code needs explicit permission.
+
+
+24 October 2026 DOCUMENTATION CORRECTION: user prefers one maintained architecture
+across versions/chats, with no per-version handoff documents. Updated the existing
+tracked docs/architecture/Architecture_Proposal.md with current requirements and resolved
+implementation contracts; SPECIFICATION.md is now a compatibility link. Removed the
+new HANDOFF.md, updated active links/pointers and recorded the preference in DECISIONS.md.
+Original draft/history remains in Git and local historical records. Documentation only;
+no application code, version bump or release. NEXT: keep this same architecture current
+with future authorized changes; deferred ideas remain deferred.

@@ -1,6 +1,7 @@
 import {SettingsPage} from './settings.js';
 import {powerText, watts} from './display.js';
 import {DateTimePicker} from './datetime-picker.js';
+import {EVSchedulePage} from './ev-schedule.js';
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -56,6 +57,23 @@ async function api(path, method = 'GET', body) {
   return result;
 }
 const settingsPage = new SettingsPage($('settings-panel'), api);
+const evPage = new EVSchedulePage($('ev-panel'), {
+  add: kind => openGoal(null, kind),
+  edit: id => openGoal(state.goals.find(goal => goal.id === id)),
+  goal: id => showGoalDetail(id),
+  session: id => showSessionDetail(id),
+  remove: async id => {
+    await api(`goals/${encodeURIComponent(id)}`, 'DELETE', {});
+    pointerUntil = 0;
+    await refresh();
+  },
+  settings: () => showPage('settings'),
+  replan: async () => {
+    await api('replan', 'POST', {});
+    pointerUntil = 0;
+    await refresh();
+  }
+});
 const dateTimePicker = new DateTimePicker(() => state.policy.timezone, () => state.now);
 dateTimePicker.bind($('goal-form').elements.deadline, 'Deadline / departure', true);
 dateTimePicker.bind($('goal-form').elements.return_at, 'Return time');
@@ -210,9 +228,10 @@ function render() {
   if (viewLocked()) return;
   $('app-version').textContent = ` ${state.version}`;
   document.title = `EnergyManager · ${state.version}`;
-  $('dashboard').hidden = page === 'settings';
+  $('dashboard').hidden = page === 'settings' || page === 'ev';
+  $('ev-panel').hidden = page !== 'ev';
   $('settings-panel').hidden = page !== 'settings';
-  for (const name of ['overview', 'planning', 'settings']) {
+  for (const name of ['overview', 'planning', 'ev', 'settings']) {
     $(name).setAttribute('aria-selected', String(page === name));
   }
   $('connection').textContent = state.status === 'planning' ? '● Calculating · control responsive' : state
@@ -221,6 +240,10 @@ function render() {
     `${state.control_enabled ? 'Hardware control enabled' : 'Hardware control disabled'} / Forecasts and planned costs are estimates.`;
   document.body.classList.toggle('planning', page === 'planning');
   if (page === 'settings') return;
+  if (page === 'ev') {
+    evPage.render(state);
+    return;
+  }
   const o = state.observation,
     c = state.capabilities,
     plan = state.accepted;
@@ -309,12 +332,12 @@ function render() {
     `<p>Control response observed locally: ${num(state.control_max_seconds*1000,2)} ms maximum. This is not hardware latency.</p>${plan?`<pre>${esc(JSON.stringify({status:plan.status,stages:plan.stages,input_digest:plan.input_digest},null,2))}</pre>`:''}`;
 }
 
-function openGoal(goal) {
+function openGoal(goal, kind = 'manual') {
   const form = $('goal-form');
   form.reset();
   form.elements.id.value = goal?.id || '';
   form.elements.title.value = goal?.title || '';
-  form.elements.kind.value = goal?.kind || 'manual';
+  form.elements.kind.value = goal?.kind || kind;
   form.elements.target_soc_percent.value = goal?.target_soc_percent ?? 70;
   form.elements.distance_km.value = goal?.distance_km || 120;
   dateTimePicker.setValue(form.elements.deadline, goal?.deadline || new Date(Date.parse(state.now) + 24 * 3600000).toISOString());
@@ -336,6 +359,19 @@ function toggleKind() {
 function detail(title, body) {
   $('detail-body').innerHTML = `<h2>${esc(title)}</h2>${body}`;
   $('detail-dialog').showModal()
+}
+function showGoalDetail(id) {
+  const goal = state.goals.find(goal => goal.id === id) || state.schedule_goals.find(goal => goal.id === id);
+  if (!goal) return;
+  detail(goal.title,
+    `<p>Deadline ${time(goal.deadline)}</p><p>${goal.kind === 'trip' ? `Total journey ${num(goal.distance_km, 0)} km, arrival reserve ${state.policy.arrival_reserve_km} km. ${goal.return_at ? 'Expected return ' + time(goal.return_at) : 'Return unknown; unavailable until reconnection.'}` : 'Timed state-of-charge requirement. No journey or withdrawal is assumed.'}</p><p>Priority ${goal.priority}. ${goal.approval_state === 'granted' ? 'Approved task ceiling ' + watts(goal.approved_peak_kw) + ' W' : 'Normal automatic peak policy applies.'}</p><p>Power changes stay within grouped charging sessions.</p>`);
+}
+
+function showSessionDetail(id) {
+  const session = state.accepted?.sessions.find(session => session.id === id);
+  if (!session) return;
+  detail(session.title,
+    `<p>${time(session.start)} — ${time(session.end)}</p><p>${num(session.energy_kwh)} kWh to the battery</p><p>${esc(powerText(session.reason))}</p><p>${session.resource === 'ev' ? `Contributes to ${session.goal_ids.length} shared goals. Energy is counted once.` : 'Source-specific reservations preserve required EV and household peak support.'}</p>`);
 }
 async function refresh() {
   if (loading) return;
@@ -364,7 +400,7 @@ function showPage(name) {
   render();
   if (name === 'settings') settingsPage.show();
 }
-for (const name of ['overview', 'planning', 'settings']) $(name).onclick = () => showPage(name);
+for (const name of ['overview', 'planning', 'ev', 'settings']) $(name).onclick = () => showPage(name);
 $('back').onclick = () => {
   pointerUntil = 0;
   offset -= 12;
@@ -441,17 +477,10 @@ document.addEventListener('click', async event => {
       await refresh()
     }
     if (button.dataset.detail) {
-      const g = state.goals.find(g => g.id === button.dataset.detail) || (state.accepted?.goals || [])
-        .find(g => g.id === button.dataset.detail);
-      detail(g.title,
-        `<p>Deadline ${time(g.deadline)}</p><p>${g.kind==='trip'?`Total journey ${num(g.distance_km,0)} km, arrival reserve ${state.policy.arrival_reserve_km} km. ${g.return_at?'Expected return '+time(g.return_at):'Return unknown; unavailable until reconnection.'}`:'Timed state-of-charge requirement. No journey or withdrawal is assumed.'}</p><p>Priority ${g.priority}. ${g.approval_state==='granted'?'Approved task ceiling '+watts(g.approved_peak_kw)+' W':'Normal automatic peak policy applies.'}</p><p>Power changes stay within grouped charging sessions.</p>`
-      )
+      showGoalDetail(button.dataset.detail);
     }
     if (button.dataset.session) {
-      const s = state.accepted.sessions.find(s => s.id === button.dataset.session);
-      detail(s.title,
-        `<p>${time(s.start)} — ${time(s.end)}</p><p>${num(s.energy_kwh)} kWh to the battery</p><p>${esc(powerText(s.reason))}</p><p>${s.resource === "ev" ? `Contributes to ${s.goal_ids.length} shared goals. Energy is counted once.` : "Source-specific reservations preserve required EV and household peak support."}</p>`
-      )
+      showSessionDetail(button.dataset.session);
     }
     if (button.dataset.approve || button.dataset.reject) {
       const id = button.dataset.approve || button.dataset.reject;
@@ -487,7 +516,7 @@ $('history-list').onclick = async event => {
     )
   }
 };
-page = ['#planning', '#settings'].includes(location.hash) ? location.hash.slice(1) : 'overview';
+page = ['#planning', '#ev', '#settings'].includes(location.hash) ? location.hash.slice(1) : 'overview';
 await refresh();
 if (page === 'settings') await settingsPage.show();
 setInterval(refresh, 2000);

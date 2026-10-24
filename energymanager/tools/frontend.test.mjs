@@ -4,6 +4,7 @@ import {displaySetting, entityState, powerText, settingLabel, storedSetting, wat
   from '../src/energymanager/assets/display.js';
 import {clockValue, localDateTime, localInstants, monthDays, validLocal}
   from '../src/energymanager/assets/date-time.js';
+import {eventsOnDay, evSchedule, scheduleDays} from '../src/energymanager/assets/ev-schedule.js';
 
 test('power display preserves signs, missing values and energy units', () => {
   assert.equal(watts(1.68), '1680');
@@ -69,4 +70,76 @@ test('clock face selects all 24 hours and exact minutes', () => {
   assert.equal(clockValue(-105, 0, 'hour'), 9);
   const angle = 37 / 60 * Math.PI * 2;
   assert.equal(clockValue(Math.sin(angle) * 100, -Math.cos(angle) * 100, 'minute'), 37);
+});
+
+test('EV calendar keeps local days and elapsed time across both clock changes', () => {
+  const autumn = scheduleDays(Date.parse('2026-10-24T10:00Z'), Date.parse('2026-10-31T10:00Z'), 'Europe/Brussels');
+  assert.equal(autumn.length, 8); // Partial first and last days, seven elapsed days.
+  assert.equal(autumn[1].date, '2026-10-25');
+  assert.equal((autumn[1].end - autumn[1].start) / 3600000, 25);
+  const spring = scheduleDays(Date.parse('2026-03-28T10:00Z'), Date.parse('2026-03-30T10:00Z'), 'Europe/Brussels');
+  assert.equal((spring[1].end - spring[1].start) / 3600000, 23);
+  const india = scheduleDays(Date.parse('2026-10-24T20:00Z'), Date.parse('2026-10-25T20:00Z'), 'Asia/Kolkata');
+  assert.equal(india[0].date, '2026-10-25');
+  const midnightShift = scheduleDays(Date.parse('2026-09-06T04:00Z'), Date.parse('2026-09-07T04:00Z'), 'America/Santiago');
+  assert.ok(midnightShift.every(day => Number.isFinite(day.start) && day.end > day.start));
+});
+
+function syntheticSchedule() {
+  return {now: '2026-10-24T10:00Z', revision: 2, ev_plan_valid: true, policy: {timezone: 'Europe/Brussels'},
+    schedule_goals: [
+      {id: 'overnight', revision: 1, kind: 'trip', title: 'SYNTHETIC overnight',
+        deadline: '2026-10-24T20:00Z', return_at: '2026-10-25T08:00Z'},
+      {id: 'unknown', revision: 1, kind: 'trip', title: 'SYNTHETIC unknown return',
+        deadline: '2026-10-26T06:00Z', return_at: null},
+      {id: 'morning', revision: 1, kind: 'daily', deadline: '2026-10-25T06:00Z'}
+    ],
+    accepted: {revision: 2, intervals: [{end: '2026-10-31T10:00Z'}],
+      goals: [{id: 'morning', revision: 1, planned_kwh: 30, status: 'scheduled'}],
+      sessions: [
+        {id: 'ev-one', resource: 'ev', start: '2026-10-24T23:00Z', end: '2026-10-25T02:00Z'},
+        {id: 'ess-one', resource: 'ess', start: '2026-10-24T12:00Z', end: '2026-10-24T13:00Z'}
+      ]}};
+}
+
+test('EV calendar splits overnight events without duplicating energy or inventing a return', () => {
+  const schedule = evSchedule(syntheticSchedule());
+  const first = eventsOnDay(schedule.events, schedule.days[0], schedule.start, schedule.end);
+  const second = eventsOnDay(schedule.events, schedule.days[1], schedule.start, schedule.end);
+  assert.equal(first.find(event => event.type === 'away').right, schedule.days[0].end);
+  assert.equal(second.find(event => event.type === 'away').left, schedule.days[1].start);
+  assert.equal(second.filter(event => event.type === 'return').length, 1);
+  assert.equal(schedule.events.filter(event => event.type === 'return').length, 1);
+  assert.equal(schedule.events.find(event => event.type === 'away' && event.goal.id === 'unknown').end, schedule.end);
+  assert.deepEqual(schedule.events.filter(event => event.type === 'charge').map(event => event.session.id), ['ev-one']);
+  assert.equal(schedule.goals.find(goal => goal.kind === 'daily').planned_kwh, 30);
+  assert.equal(schedule.events.filter(event => event.type === 'away').length, 2);
+});
+
+test('EV schedule shows requirements without presenting an obsolete plan as current', () => {
+  const state = syntheticSchedule();
+  state.revision++;
+  const obsolete = evSchedule(state);
+  assert.equal(obsolete.current, false);
+  assert.equal(obsolete.events.some(event => event.type === 'charge'), false);
+  assert.equal(obsolete.goals.find(goal => goal.kind === 'daily').planned_kwh, undefined);
+  assert.equal(obsolete.events.some(event => event.type === 'daily'), true);
+  state.accepted = null;
+  assert.equal(evSchedule(state).events.filter(event => event.type === 'away').length, 2);
+  const restarted = syntheticSchedule();
+  restarted.ev_plan_valid = false;
+  assert.equal(evSchedule(restarted).events.some(event => event.type === 'charge'), false);
+});
+
+test('EV agenda uses half-open day boundaries for returns and simultaneous targets', () => {
+  const day = {start: 100, end: 200};
+  const events = [
+    {type: 'away', start: 50, end: 100},
+    {type: 'return', start: 100, end: 100},
+    {type: 'daily', start: 100, end: 100},
+    {type: 'manual', start: 100, end: 100},
+    {type: 'trip', start: 200, end: 200}
+  ];
+  assert.deepEqual(eventsOnDay(events, day, 0, 300).map(event => event.type), ['daily', 'manual', 'return']);
+  assert.equal(eventsOnDay(events, day, 150, 180).length, 0);
 });

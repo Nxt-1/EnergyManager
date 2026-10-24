@@ -155,7 +155,7 @@ async def test_settings_round_trip_http_conflict_validation_and_same_origin(tmp_
         assert response.status == 400
         response = await client.get("/settings.js")
         assert response.status == 200 and "EntityPicker" in await response.text()
-        for asset in ("display.js", "date-time.js", "datetime-picker.js"):
+        for asset in ("display.js", "date-time.js", "datetime-picker.js", "ev-schedule.js"):
             response = await client.get("/" + asset)
             assert response.status == 200 and response.content_type == "text/javascript"
 

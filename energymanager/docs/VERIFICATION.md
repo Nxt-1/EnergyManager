@@ -1,5 +1,34 @@
 # EnergyManager 4 verification
 
+## 4.1.0 — ARCH-009 visual EV schedule
+
+Local verification before the authorized release commit/push. Dedicated EV calendar and
+daily agenda use existing goals, daily-readiness rules and accepted EV sessions. No
+scheduling formulas, physical limits, source/peak permissions or hardware policy changed.
+
+- 153 Python tests passed in39.36s. Ruff and mypy28 passed. Nine Node frontend tests
+  and syntax checks for every packaged JS asset passed. New checks cover requirements
+  without a plan, morning suppression while away, saved morning approvals, 23/25-hour
+  days, a midnight clock change, overnight clipping, simultaneous targets, unknown
+  returns, half-open day boundaries and withholding obsolete/unvalidated plan data.
+- Configured full-horizon fake-HA/weather E2E: 2,018 intervals accepted in27.672s,
+  max observed control tick2.791ms, five fake-only calls. These are synthetic local
+  results, not installation or hardware latency measurements. See offline-e2e.json.
+- Browser: direct EV navigation/reload, day selection, accepted charging details,
+  journey creation/edit/overnight return, unknown return span, morning suppression,
+  manual goal creation/removal and daily Settings navigation passed. Current requirements
+  remained visible during recalculation. At390x844, the calendar scrolls within its card
+  and selecting a day brings its single-column agenda into view. No console warnings/errors.
+- Release metadata prepared as4.1.0; wheel/source builds succeeded. All38 packaged files
+  match source. Isolated extracted-wheel import and synthetic state projection passed,
+  with control disabled (ev-schedule-package-verification.json). Package assets include
+  the EV module and retain same-origin/ingress boundaries. Temporary8102 preview/tab
+  stopped and viewport reset; existing8100 preview preserved.
+
+Screenshots: screenshots/ev-v410-desktop.png and screenshots/ev-v410-mobile.png.
+All preview data and goal edits were explicitly SYNTHETIC and loopback-only. No live
+HA/database, physical device, real notification, deployment or remote publication used.
+
 ## 4.0.10 — Journey date/time controls and watt display
 
 Scope: Android-inspired date/time fields, W power presentation, and durable requirements/
@@ -28,8 +57,8 @@ scheduler policy, physical limits, forecast source, device control or stored uni
 Evidence: frontend-verification.json, offline-e2e.json and screenshots/journey-v4010-*.png,
 screenshots/power-v4010-watts.png. These show **synthetic local fixtures**, not actual
 installation readings. Physical devices, HA installation and phone delivery remain
-live-unverified. Current development entry point: HANDOFF.md; original architecture
-references are preserved under architecture/ with explicit supersession notes.
+live-unverified. Current architecture and specification: architecture/Architecture_Proposal.md;
+historical design records retain explicit supersession notes.
 
 ## Version 4.0.9 — HA availability and successful-read watchdog
 

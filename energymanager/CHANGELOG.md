@@ -1,3 +1,13 @@
+## 4.1.0 — Visual EV schedule
+
+- Dedicated EV page with a seven-day calendar, expected away periods, charging sessions
+  and morning/manual/departure SoC requirements. Select a day for its detailed agenda.
+- Add, inspect, edit and remove journeys and timed goals using the existing forms.
+  Daily readiness links to Settings. Unknown returns remain explicit.
+- Installation-local calendar boundaries handle clock changes and overnight events.
+  Requirements remain visible before a plan exists; obsolete charging/outcome data is
+  withheld until a current plan is accepted. Scheduling and hardware policy are unchanged.
+
 ## 4.0.10 — Journey pickers and watt display
 
 - Choose journey/SoC dates with a calendar and 24-hour clock, or type them; use the installation timezone and handle clock changes explicitly.

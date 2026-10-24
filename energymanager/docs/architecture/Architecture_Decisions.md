@@ -1,7 +1,7 @@
 # Architecture decisions
 
-> Preserved original design reference. Read [the current handoff](../HANDOFF.md),
-> [decisions](../DECISIONS.md) and [shipping specification](../SPECIFICATION.md) first.
+> Preserved original design reference. Read [the maintained architecture](Architecture_Proposal.md)
+> and [current decisions](../DECISIONS.md) first.
 > Historical pending-work statements and chat restrictions are not current instructions.
 
 
@@ -245,7 +245,7 @@ Sources checked:
 - The user says unused EV energy can be valued equally to other charged EV energy. Apply a consistent unit-valuation rule; energy must not become worthless merely because its use lies beyond the seven-day horizon.
 - This establishes continuity of valuation across the horizon, not a separate standing charge target. The 80%/100% policy, source restrictions, peak permissions and rolling 24-hour rule for indirect imports continue to apply.
 - The precise monetary accounting remains to be formulated. Do not infer that every stored kWh is independently proven to replace a future grid purchase; future solar is still uncertain. Avoid double-counting a benefit already represented through reduced purchases for requirements within the horizon.
-- The user subsequently reviewed the planning/fast-control contract as fair and requested integrating it into the main architecture document. Its content now lives in components 3–5 of [Architecture_Proposal.md](Architecture_Proposal.md); the separate contract file was removed. Numerical details and experimental validation remain open.
+- The user subsequently reviewed the planning/fast-control contract as fair and requested integrating it into the main architecture document. Its content now lives in components 3–5 of [Architecture_Proposal.md](https://github.com/Nxt-1/EnergyManager/blob/9d8a6944c20472df5b7b30b04cf14dcabea195c3/energymanager/docs/architecture/Architecture_Proposal.md); the separate contract file was removed. Numerical details and experimental validation remain open.
 
 ## 22 October 2026 — Future ESS reserve for unplanned peaks
 
@@ -255,7 +255,7 @@ Sources checked:
 ## 22 October 2026 — Whole-system comparison accounting under specification
 
 - The user agrees that counting conversion losses, capacity costs and actual energy makes sense across tasks.
-- A common comparison formula and joint reference/candidate mechanism are now proposed in [Architecture_Proposal.md](Architecture_Proposal.md#whole-system-economic-comparison--proposed-calculation). They are technical proposals, not yet a validated solver formulation.
+- A common comparison formula and joint reference/candidate mechanism are now proposed in [Architecture_Proposal.md](https://github.com/Nxt-1/EnergyManager/blob/9d8a6944c20472df5b7b30b04cf14dcabea195c3/energymanager/docs/architecture/Architecture_Proposal.md#whole-system-economic-comparison--proposed-calculation). They are technical proposals, not yet a validated solver formulation.
 - Proposed accounting charges imports, subtracts export income, includes only incremental household capacity costs and values the change in useful stored energy once. Physical losses enter energy balances rather than a duplicated loss penalty.
 - The user accepts the assistant's recommendation to include useful residual energy at the 24-hour boundary. Limit forecast-dependent operating effects and cash flows to the window, while applying the agreed stored-energy valuation at its end. Extra EV inventory can therefore justify some indirect household imports even if used later. This supersedes the earlier stricter interpretation; it does not permit direct optional EV grid charging or remove peak/commitment constraints.
 - Show assumed residual-energy value separately from predicted cash bills and realized savings. The draft now proposes efficiency-adjusted replacement-value coefficients as an initial engineering model; reference efficiencies, calibration and sensitivity checks remain work before implementation.

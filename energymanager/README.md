@@ -1,8 +1,8 @@
 # EnergyManager 4
 
-Version **4.0.10**, the main Energy Manager application. One joint seven-day EV/ESS MILP
+Version **4.1.0**, the main Energy Manager application. One joint seven-day EV/ESS MILP
 feeds independent responsive control. The application includes configured input/actuator
-boundaries, persisted goals/approvals/decisions and the functional Overview/Planning GUI.
+boundaries, persisted goals/approvals/decisions and Overview/Planning/EV pages.
 
 ## Local deterministic demo
 
@@ -22,6 +22,10 @@ and tariffs are synthetic assumptions. Demo planning/control never uses installa
 inputs or databases. Settings can read HA's entity list to prepare the real configuration.
 Default local state is `runtime/energymanager-v4.sqlite3`.
 
+The **EV** tab shows a seven-day calendar and daily agenda for entered journeys,
+expected away periods, morning/manual SoC targets and accepted charging sessions.
+Use its Journey and SoC goal buttons to add requirements and its agenda to edit them.
+
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m ruff check src tests tools
@@ -37,7 +41,7 @@ V4 JSON input configuration and creates a disabled starter file if it is missing
 Remote addresses and hardware control are disabled by
 default. Missing critical physical settings prevent enabling configured control.
 
-- [Shipping specification](docs/SPECIFICATION.md)
+- [Architecture](docs/architecture/Architecture_Proposal.md)
 - [Runbook, V3 mapping and rollback](docs/RUNBOOK.md)
 - [Verification](docs/VERIFICATION.md)
 - [Current checkpoint](docs/WORK_STATE.md)

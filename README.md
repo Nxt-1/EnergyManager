@@ -1,7 +1,7 @@
 # EnergyManager 4
 
-Version **4.0.10** replaces the previous Energy Manager application with a joint EV/ESS
-MILP scheduler, independent responsive control and functional Overview/Planning pages.
+Version **4.1.0** replaces the previous Energy Manager application with a joint EV/ESS
+MILP scheduler, independent responsive control and Overview/Planning/EV pages.
 The complete seven-day horizon uses planning intervals no longer than five minutes.
 Goals, scoped peak permissions, reasons, measured progress and immutable decisions are
 persisted. Demo mode uses explicitly synthetic inputs and disables hardware control.
@@ -33,10 +33,10 @@ node --test energymanager/tools/frontend.test.mjs
 .\.venv\Scripts\python.exe -m build --no-isolation energymanager
 ```
 
-- [Continue development / V4.1 handoff](energymanager/docs/HANDOFF.md)
+- [Architecture](energymanager/docs/architecture/Architecture_Proposal.md)
+- [Project instructions for chats](AGENTS.md)
 - [Current decisions](energymanager/docs/DECISIONS.md)
 - [Deferred work](energymanager/docs/DEFERRED_WORK.md)
-- [Specification](energymanager/docs/SPECIFICATION.md)
 - [Run, configure, migrate and roll back](energymanager/docs/RUNBOOK.md)
 - [Verification and remaining commissioning checks](energymanager/docs/VERIFICATION.md)
 - [Release notes](energymanager/CHANGELOG.md)

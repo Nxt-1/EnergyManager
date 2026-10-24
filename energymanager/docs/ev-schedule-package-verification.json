@@ -1,0 +1,7 @@
+{
+  "version": "4.1.0",
+  "matching_package_files": 38,
+  "isolated_wheel_import": true,
+  "synthetic_state_projection": true,
+  "result": "passed"
+}
