@@ -143,3 +143,24 @@ sessions. Existing forms support explicit goal changes. Unknown returns remain e
 obsolete plan outcomes are withheld while current requirements remain visible. This
 builds on the separate 4.0.10 date/time controls and W display. See the maintained
 architecture for the implemented contract and VERIFICATION.md for local evidence.
+
+## ARCH-010 — Longer graph history from archived measurements
+
+Recorded: 24 October 2026. Status: **deferred future work**, explicitly requested by the user.
+
+The graphs currently receive only the latest 2,000 control-loop samples. At the default
+one-second control interval this covers roughly 33 minutes, although Overview's initial
+time axis extends six hours into the past. Backward navigation does not load older
+measurements. Measurement events remain in SQLite; this display limit is separate from
+archival retention and does not imply that older stored measurements were deleted.
+
+Future work should load archived measurements for the requested graph time range so
+users can inspect earlier power and battery SoC history. Choose an appropriate query,
+indexing and aggregation strategy to keep long ranges responsive without sending the
+entire archive to the browser or blocking independent control. Preserve measurement
+quality, gaps, timezone/clock-change handling and the distinction between observed and
+planned values; never fill missing history with synthetic readings.
+
+The supported history range, navigation controls and aggregation detail remain to be
+decided. This entry does not select a retention/deletion policy or authorize implementation,
+live database access or data-collection experiments.

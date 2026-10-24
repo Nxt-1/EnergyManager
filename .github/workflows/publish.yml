@@ -46,6 +46,9 @@ jobs:
         run: |
           python -m energymanager --version
           node --check energymanager/src/energymanager/assets/app.js
+          node --check energymanager/src/energymanager/assets/native-dashboard.js
+          node --check energymanager/src/energymanager/assets/application-view.js
+          node --check energymanager/src/energymanager/assets/native-live.js
           node --check energymanager/src/energymanager/assets/settings.js
           node --check energymanager/src/energymanager/assets/display.js
           node --check energymanager/src/energymanager/assets/date-time.js

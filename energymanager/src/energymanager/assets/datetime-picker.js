@@ -6,7 +6,7 @@ const dateLabel = (value, options) => new Date(value + 'T12:00Z').toLocaleDateSt
 });
 
 export class DateTimePicker {
-  constructor(zone, now) {
+  constructor(zone, now, root = document.body) {
     this.zone = zone;
     this.now = now;
     this.fields = new Map();
@@ -26,7 +26,7 @@ export class DateTimePicker {
         <button type="button" id="picker-clear">Clear</button><span></span>
         <button type="button" id="picker-cancel">Cancel</button>
         <button type="button" class="primary" id="picker-apply">OK</button></div>`;
-    document.body.append(this.dialog);
+    (root.nodeType === 9 ? root.body : root).append(this.dialog);
     this.body = this.dialog.querySelector('#picker-body');
     this.error = this.dialog.querySelector('#picker-error');
     this.dialog.querySelector('#picker-cancel').onclick = () => this.dialog.close();

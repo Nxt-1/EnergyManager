@@ -66,7 +66,7 @@ class EntityPicker extends HTMLElement {
 
   updateEntities(entities) {
     this.entities = entities;
-    if (document.activeElement !== this.input) this.showSelection();
+    if (this.getRootNode().activeElement !== this.input) this.showSelection();
     else this.open();
   }
 
@@ -158,7 +158,7 @@ class EntityPicker extends HTMLElement {
 if (!customElements.get('em-entity-picker')) customElements.define('em-entity-picker', EntityPicker);
 
 export class SettingsPage {
-  constructor(container, api) {
+  constructor(container, api, signal) {
     this.container = container;
     this.api = api;
     this.entities = [];
@@ -168,7 +168,7 @@ export class SettingsPage {
     this.controls = new Map();
     window.addEventListener('beforeunload', event => {
       if (this.dirty) { event.preventDefault(); event.returnValue = ''; }
-    });
+    }, {signal});
   }
 
   async show() {

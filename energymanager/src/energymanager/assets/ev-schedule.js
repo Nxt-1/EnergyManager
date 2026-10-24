@@ -171,7 +171,8 @@ export class EVSchedulePage {
   render(state) {
     const scroller = this.root.querySelector('.ev-calendar-scroll');
     const scrollLeft = scroller?.scrollLeft || 0;
-    const focused = this.root.contains(document.activeElement) ? document.activeElement : null;
+    const active = this.root.getRootNode().activeElement;
+    const focused = this.root.contains(active) ? active : null;
     const focusAttribute = focused?.getAttributeNames().find(name => name.startsWith('data-ev-'));
     const focusValue = focusAttribute ? focused.getAttribute(focusAttribute) : null;
     const matchingButtons = focusAttribute ? [...this.root.querySelectorAll(`[${focusAttribute}]`)]

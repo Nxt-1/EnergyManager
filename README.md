@@ -1,6 +1,6 @@
 # EnergyManager 4
 
-Version **4.1.0** replaces the previous Energy Manager application with a joint EV/ESS
+Version **4.2.0** replaces the previous Energy Manager application with a joint EV/ESS
 MILP scheduler, independent responsive control and Overview/Planning/EV pages.
 The complete seven-day horizon uses planning intervals no longer than five minutes.
 Goals, scoped peak permissions, reasons, measured progress and immutable decisions are
@@ -40,7 +40,7 @@ node --test energymanager/tools/frontend.test.mjs
 - [Run, configure, migrate and roll back](energymanager/docs/RUNBOOK.md)
 - [Verification and remaining commissioning checks](energymanager/docs/VERIFICATION.md)
 - [Release notes](energymanager/CHANGELOG.md)
-- [Optional Home Assistant dashboard card](energymanager-dashboard/README.md)
+- [Native managed Home Assistant dashboard setup](energymanager-dashboard/README.md)
 
 ## Updating from V3
 

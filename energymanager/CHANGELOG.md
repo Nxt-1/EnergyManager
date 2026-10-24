@@ -1,3 +1,14 @@
+## 4.2.0 — Native, managed Home Assistant dashboard
+
+- Replace the iframe wrapper with actual HA views, live sensor tiles, native history
+  actions and custom planning/EV/settings cards. Keep the standalone sidebar interface.
+- Install one small resource and dashboard strategy once; subsequent add-on updates
+  deliver versioned layouts/cards/styles on HA page reload, without copying new YAML.
+- Receive current live values from HA state changes. Keep planner/control permissions
+  and backend input polling unchanged; HA Recorder owns native sensor history.
+- Share scoped UI components between native cards and standalone mode, with lifecycle
+  cleanup and release-mismatch handling. Add installation instructions/download in Settings.
+
 ## 4.1.0 — Visual EV schedule
 
 - Dedicated EV page with a seven-day calendar, expected away periods, charging sessions

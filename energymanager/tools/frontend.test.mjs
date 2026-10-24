@@ -5,6 +5,7 @@ import {displaySetting, entityState, powerText, settingLabel, storedSetting, wat
 import {clockValue, localDateTime, localInstants, monthDays, validLocal}
   from '../src/energymanager/assets/date-time.js';
 import {eventsOnDay, evSchedule, scheduleDays} from '../src/energymanager/assets/ev-schedule.js';
+import {nativeLiveState, sensorTiles} from '../src/energymanager/assets/native-live.js';
 
 test('power display preserves signs, missing values and energy units', () => {
   assert.equal(watts(1.68), '1680');
@@ -142,4 +143,119 @@ test('EV agenda uses half-open day boundaries for returns and simultaneous targe
   ];
   assert.deepEqual(eventsOnDay(events, day, 0, 300).map(event => event.type), ['daily', 'manual', 'return']);
   assert.equal(eventsOnDay(events, day, 150, 180).length, 0);
+});
+
+test('native sensor tiles use HA entities and more-info without mixing demo measurements', () => {
+  const manifest = {demo: false, entities: {ev_soc: 'sensor.car', ess_soc: 'sensor.battery',
+    connected: 'binary_sensor.car'}};
+  const tiles = sensorTiles(manifest);
+  assert.equal(tiles.length, 3);
+  assert.ok(tiles.every(tile => tile.type === 'tile' && tile.tap_action.action === 'more-info'));
+  assert.deepEqual(sensorTiles({...manifest, demo: true}), []);
+  const backend = {accepted: {id: 'unchanged'}, live_inputs: {cards: {ev: {value: 40}}}};
+  const hass = {states: {'sensor.car': {state: '55', attributes: {unit_of_measurement: '%'}},
+    'binary_sensor.car': {state: 'on'}}};
+  const next = nativeLiveState(backend, hass, manifest);
+  assert.equal(next.live_inputs.cards.ev.value, 55);
+  assert.equal(next.live_inputs.cards.ev.label, 'Connected');
+  assert.equal(backend.live_inputs.cards.ev.value, 40);
+  assert.equal(next.accepted, backend.accepted);
+  hass.states['sensor.car'].state = 'unavailable';
+  assert.equal(nativeLiveState(backend, hass, manifest).live_inputs.cards.ev.value, null);
+  assert.equal(nativeLiveState(backend, hass, {...manifest, demo: true}), backend);
+});
+
+test('native live power reconstructs the AC balance and isolates unavailable sources', () => {
+  const values = {grid_import_kw: [0, 'W'], grid_export_kw: [600, 'W'], pv_ac_kw: [1000, 'W'],
+    pv_dc_kw: [1, 'kW'], ess_kw: [0, 'W'], ev_kw: [0, 'W'], ev_soc: [57, '%'], ess_soc: [50, '%']};
+  const manifest = {demo: false, entities: Object.fromEntries(Object.keys(values).map(key => [key, `sensor.${key}`]))};
+  const hass = {states: Object.fromEntries(Object.entries(values).map(([key, [value, unit]]) =>
+    [`sensor.${key}`, {state: String(value), attributes: {unit_of_measurement: unit}}]))};
+  const backend = {observation: {ev_kwh: 20}, hardware_control: {can_enable: false}};
+  const result = nativeLiveState(backend, hass, manifest);
+  assert.equal(result.live_inputs.cards.grid.value, -0.6);
+  assert.equal(result.live_inputs.cards.solar.value, 2);
+  assert.equal(result.live_inputs.cards.house.value, 0.4);
+  assert.equal(result.hardware_control.can_enable, false);
+  assert.equal(result.observation, backend.observation);
+  hass.states['sensor.pv_dc_kw'].state = 'unavailable';
+  assert.equal(nativeLiveState(backend, hass, manifest).live_inputs.cards.solar.value, null);
+  assert.equal(nativeLiveState(backend, hass, manifest).live_inputs.cards.house.value, 0.4);
+  hass.states['sensor.ev_soc'].state = ' ';
+  assert.equal(nativeLiveState(backend, hass, manifest).live_inputs.cards.ev.value, null);
+});
+
+function browserContract() {
+  const registry = new Map();
+  globalThis.HTMLElement = class {};
+  globalThis.customElements = {get: name => registry.get(name), define: (name, element) => registry.set(name, element)};
+  globalThis.window = {customStrategies: []};
+  globalThis.document = {};
+  globalThis.location = {protocol: 'https:'};
+}
+
+test('managed strategy generates actual HA cards and adopts new release layout without changing YAML', async () => {
+  browserContract();
+  const {generateDashboard} = await import('../src/energymanager/assets/native-dashboard.js');
+  const manifest = {version: '4.2.0', demo: false, entities: {ev_soc: 'sensor.car', ess_soc: 'sensor.battery'}};
+  const config = {type: 'custom:energymanager'};
+  const layout = generateDashboard(config, manifest, {addon: 'synthetic_energy_manager', manifest});
+  assert.deepEqual(layout.views.map(view => view.path), ['overview', 'planning', 'ev', 'settings']);
+  assert.ok(layout.views[0].sections[0].cards.some(card => card.type === 'tile'));
+  assert.ok(layout.views[0].sections.some(section => section.cards.some(card => card.type === 'history-graph')));
+  assert.ok(!JSON.stringify(layout).includes('iframe'));
+  const future = {...manifest, version: '4.3.0'};
+  const updated = generateDashboard(config, future, {addon: 'synthetic_energy_manager', manifest: future});
+  assert.notEqual(layout.views[1].sections[0].cards[0].type, updated.views[1].sections[0].cards[0].type);
+  assert.deepEqual(config, {type: 'custom:energymanager'});
+  const Card = customElements.get(layout.views[1].sections[0].cards[0].type.slice(7));
+  const instance = new Card();
+  instance.setConfig({view: 'overview', addon: 'synthetic_energy_manager'});
+  let disposed = 0;
+  instance.controller = {dispose() { disposed++; }};
+  instance.setConfig({view: 'ev', addon: 'synthetic_energy_manager'});
+  assert.equal(disposed, 1); // HA may reuse a card while switching views.
+  assert.equal(instance.controller, null);
+});
+
+test('stable loader uses authenticated HA discovery, versioned assets and safe session renewal', async () => {
+  browserContract();
+  const {connectDashboard, ingressBase} = await import('../src/energymanager/assets/ha-card.js');
+  assert.throws(() => ingressBase('https://outside.test/'), /ingress/);
+  assert.throws(() => ingressBase('/api/hassio_ingress/token/../../'), /ingress/);
+  const calls = [];
+  let sessionCount = 0, version = '4.2.0', expire = false;
+  const hass = {connection: {}, user: {is_admin: true}, async callWS(message) {
+    calls.push(message);
+    if (message.endpoint === '/addons') return {addons: [{slug: 'synthetic_energy_manager'}]};
+    if (message.endpoint === '/addons/synthetic_energy_manager/info')
+      return {ingress_url: '/api/hassio_ingress/synthetic-token'};
+    if (message.endpoint === '/ingress/session') return {session: `synthetic-session-${++sessionCount}`};
+    throw new Error('Unexpected Supervisor endpoint');
+  }};
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    requests.push({url, options});
+    if (expire) { expire = false; return new Response('{}', {status: 401}); }
+    return new Response(JSON.stringify({protocol: 1, version, entities: {}}));
+  };
+  try {
+    const initial = await connectDashboard(hass);
+    assert.equal(initial.assets, '/api/hassio_ingress/synthetic-token/frontend/4.2.0/');
+    assert.match(document.cookie, /SameSite=Strict;Secure/);
+    assert.equal(await connectDashboard(hass), initial);
+    expire = true;
+    await initial.request('state');
+    assert.equal(sessionCount, 2);
+    const before = requests.length;
+    expire = true;
+    await assert.rejects(initial.request('goals', 'POST', {title: 'SYNTHETIC'}));
+    assert.equal(requests.length, before + 1); // Never replay a mutation automatically.
+    assert.equal(requests.at(-1).options.headers['X-EnergyManager'], '1');
+    version = '4.3.0';
+    assert.match((await connectDashboard(hass, {}, true)).assets, /frontend\/4.3.0\/$/);
+    assert.ok(calls.every(call => call.type === 'supervisor/api'));
+    await assert.rejects(connectDashboard({...hass, user: {is_admin: false}}), /administrator/);
+  } finally { globalThis.fetch = originalFetch; }
 });

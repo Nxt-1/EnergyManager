@@ -1,11 +1,4 @@
-# Register /local/energymanager-card.js as a JavaScript module resource.
-# Replace the placeholder with this installation's authenticated ingress URL.
-title: EnergyManager 4
-views:
-  - title: EnergyManager
-    path: energymanager
-    icon: mdi:chart-timeline-variant
-    panel: true
-    cards:
-      - type: custom:energymanager-card
-        url: /api/hassio_ingress/REPLACE_WITH_AUTHENTICATED_INGRESS_PATH/
+# One-time setup: register /local/energymanager-card.js as a JavaScript module resource.
+# Later layout/card updates come from the installed add-on on dashboard reload.
+strategy:
+  type: custom:energymanager

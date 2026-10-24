@@ -1,5 +1,38 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work — native managed HA dashboard, 24 October 2026
+
+AUTHORIZED: replace the iframe dashboard with real HA views/cards and automatic future
+UI updates. Use code-writer skill. Existing ARCH-010 graph-history backlog edit must
+remain. Plan/controller/installation permissions unchanged; no live HA/deployment.
+Chosen design: one-time stable resource loader uses HA's existing supervisor/api WS
+bridge to discover the add-on and create/renew ingress sessions. A dashboard strategy
+loads versioned layout/card modules from the installed add-on. Native HA tiles receive
+state changes and open more-info/history; custom planning/EV/settings components retain
+existing features and scoped backend actions. No separate custom integration needed.
+Version targeted4.2.0. Initial installation needs one loader resource and strategy config;
+later add-on updates need only a dashboard/browser reload. Preserve admin ingress boundary.
+IMPLEMENTED: versioned manifest/asset routes, stable Supervisor-authenticated loader,
+generated native views/tiles/history and scoped shared planning/EV/settings components.
+HA state changes update live summaries directly; more-info opens native sensor history,
+with source selection for aggregate values. Lifecycle disposal and release mismatch
+handling are explicit. Standalone UI and one-time setup/download remain available.
+
+VERIFIED so far:156 Python tests39.60s,13 Node tests, Ruff/mypy29/all JS syntax passed.
+Configured fake E2E27.041s/2,018 intervals/max tick2.616ms/five fake-only calls. Labelled
+HA-contract browser harness verified native views,45→57% frontend updates independent
+of backend45%, more-info event, journey picker/create/remove, Settings save/backup/
+restart message, navigation and390px layout. Built-in HA cards/Supervisor are simulated;
+no actual HA frontend/Companion installation claimed. Screenshots native-v420-*.png.
+LOCAL COMPLETE: wheel/sdist built, all44 packaged code/assets match source and isolated
+extracted-wheel import/manifest smoke passed with control disabled. Browser warnings/
+errors absent, native and standalone navigation/forms verified. The8102/8103 fixtures
+are stopped, temporary tabs are closed and viewport reset; existing8100 untouched.
+Source/asset syntax and diff checks passed. No live HA/hardware/deployment.
+NEXT: one4.2.0 release commit/push under standing authorization, then inspect CI/image;
+record remote results only in ignored checkpoint/final reply. Target HA installation
+needs the documented one-time loader/strategy setup and remains live-unverified.
+
 ## Current work — ARCH-009, 24 October 2026
 
 User explicitly authorized implementing ARCH-009 and writing code. Implemented a

@@ -1,0 +1,50 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SYNTHETIC HA dashboard contract preview</title>
+<style>
+:root{font-family:system-ui;color:#263440;background:#f4f6f8;--primary-text-color:#263440;--secondary-text-color:#647585;--card-background-color:#fff;--divider-color:#e1e7ed;--primary-color:#007ac2}
+body{margin:0}header{padding:12px 24px;background:#fff;border-bottom:1px solid #ddd;position:sticky;top:0;z-index:2}header strong{display:block;margin-bottom:10px}nav{display:flex;gap:12px}button{padding:10px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer}button[aria-current=true]{border-color:#007ac2;color:#007ac2}main{max-width:1400px;margin:auto;padding:18px}.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}.tiles button{text-align:left}.tiles b{display:block;font-size:20px;margin-top:8px}.history{background:#fff;padding:18px;border:1px solid #ddd;border-radius:12px}dialog{max-width:90vw;border:1px solid #ddd;border-radius:12px}#result{color:#007ac2}@media(max-width:620px){.tiles{grid-template-columns:1fr 1fr}main{padding:10px}nav{gap:4px}}
+</style>
+<header><strong>SYNTHETIC HA-contract preview · fixtures only · HA built-in cards simulated</strong><nav id="tabs"></nav><button id="update">Simulate incoming EV sensor update → 57%</button><span id="result" role="status"></span></header>
+<main id="cards"></main><dialog id="history"><h2>HA more-info event received</h2><p id="entity"></p><p>Sensor history is supplied by HA Recorder in the actual dashboard. No historical measurements are fabricated here.</p><button id="close">Close sensor history</button></dialog>
+<script type="module">
+await import('/ha-card.js');
+const socket = new WebSocket(`ws://${location.host}/api/websocket`);
+await new Promise(resolve => socket.addEventListener('open',resolve,{once:true}));
+let id=0;
+const pending=new Map();
+socket.onmessage=event=>{const message=JSON.parse(event.data);pending.get(message.id)(message.result);pending.delete(message.id)};
+const hass={connection:socket,user:{is_admin:true},states:{},callWS(message){return new Promise(resolve=>{const key=++id;pending.set(key,resolve);socket.send(JSON.stringify({...message,id:key}))})}};
+hass.states=await hass.callWS({type:'synthetic/states'});
+const strategy=customElements.get('ll-strategy-dashboard-energymanager');
+const config=await strategy.generate({type:'custom:energymanager'},hass);
+let components=[];
+function show(path){
+  const view=config.views.find(item=>item.path===path)||config.views[0];
+  document.querySelector('#cards').replaceChildren();components=[];
+  for(const button of document.querySelectorAll('[data-view]'))button.setAttribute('aria-current',String(button.dataset.view===view.path));
+  history.replaceState(null,'',`/native-preview/${view.path}`);
+  for(const section of view.sections){
+    const container=document.createElement('div');container.className=section.cards.some(card=>card.type==='tile')?'tiles':'';
+    document.querySelector('#cards').append(container);
+    for(const card of section.cards){
+      if(card.type==='tile'){
+        const button=document.createElement('button');button.dataset.entity=card.entity;
+        button.onclick=()=>window.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:card.entity}}));
+        container.append(button);components.push({tile:button,config:card});
+      }else if(card.type==='history-graph'){
+        const label=document.createElement('p');label.className='history';label.textContent=`Native HA ${card.title} · ${card.hours_to_show} hours · ${card.entities.join(', ')}`;container.append(label);
+      }else{
+        const component=document.createElement(card.type.slice(7));component.setConfig(card);component.hass=hass;container.append(component);components.push({element:component});
+      }
+    }
+  }
+  update();
+}
+function update(){for(const item of components){if(item.element)item.element.hass=hass;else{const entity=hass.states[item.config.entity];item.tile.replaceChildren(document.createTextNode(item.config.name));const value=document.createElement('b');value.textContent=`${entity?.state??'unavailable'} ${entity?.attributes.unit_of_measurement||''}`;item.tile.append(value)}}}
+for(const view of config.views){const button=document.createElement('button');button.dataset.view=view.path;button.textContent=view.title;button.onclick=()=>show(view.path);document.querySelector('#tabs').append(button)}
+document.querySelector('#update').onclick=async()=>{hass.states=await hass.callWS({type:'synthetic/ev_update'});update();document.querySelector('#result').textContent='Incoming HA state delivered';};
+window.addEventListener('hass-more-info',event=>{document.querySelector('#entity').textContent=event.detail.entityId;document.querySelector('#history').showModal()});
+window.addEventListener('location-changed',()=>show(location.pathname.split('/').at(-1)));
+document.querySelector('#close').onclick=()=>document.querySelector('#history').close();
+show(location.pathname.split('/').at(-1));
+</script></html>

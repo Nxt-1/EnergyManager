@@ -1,0 +1,8 @@
+{
+  "version": "4.2.0",
+  "matching_package_files": 44,
+  "isolated_extracted_wheel_import": true,
+  "demo_manifest_excludes_ha": true,
+  "control_disabled": true,
+  "result": "passed"
+}

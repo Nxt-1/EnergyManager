@@ -14,6 +14,8 @@ from .domain import json_data
 from .service import Application
 from .settings import ConfigurationConflict, ConfigurationFile, SettingsValidationError
 from .hardware import HardwareControl
+from . import __version__
+from .dashboard import dashboard_manifest
 
 
 def create_web(application: Application, *, configuration: ConfigurationFile | None = None) -> web.Application:
@@ -82,6 +84,9 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
     async def state(request: web.Request) -> web.Response:
         return web.json_response(application.state())
 
+    async def dashboard(request: web.Request) -> web.Response:
+        return web.json_response(dashboard_manifest(application), headers={"Cache-Control": "no-store"})
+
     async def control(request: web.Request) -> web.Response:
         if application.hardware is None:
             return web.json_response({"error": "No installation settings are available"}, status=503)
@@ -127,9 +132,13 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         return web.json_response(application.store.events())
 
     async def asset(request: web.Request) -> web.Response:
+        if "version" in request.match_info and request.match_info["version"] != __version__:
+            raise web.HTTPConflict(text="EnergyManager was updated. Reload the dashboard.")
         name = request.match_info.get("name", "index.html")
         if name not in ("index.html", "app.js", "settings.js", "display.js", "date-time.js",
-                        "datetime-picker.js", "ev-schedule.js", "style.css", "ha-card.js"):
+                        "datetime-picker.js", "ev-schedule.js", "style.css", "ha-card.js",
+                        "application-view.js", "view.html", "native-dashboard.js", "native-dashboard.css",
+                        "native-live.js"):
             raise web.HTTPNotFound()
         content_type = {"html": "text/html", "js": "text/javascript", "css": "text/css"}[
             name.rsplit(".", 1)[1]
@@ -149,6 +158,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
     app.add_routes(
         [
             web.get("/api/state", state),
+            web.get("/api/dashboard", dashboard),
             web.post("/api/control", control),
             web.get("/api/settings", settings),
             web.post("/api/settings", settings),
@@ -161,6 +171,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
             web.get("/api/decisions/{id}", decision),
             web.get("/api/events", events),
             web.get("/", asset),
+            web.get("/frontend/{version}/{name}", asset),
             web.get("/{name}", asset),
         ]
     )

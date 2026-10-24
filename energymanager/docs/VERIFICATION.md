@@ -1,5 +1,37 @@
 # EnergyManager 4 verification
 
+## 4.2.0 — Native managed HA dashboard
+
+Native strategy, tiles/history actions and custom planning/EV/settings cards replace
+the iframe wrapper. One-time loader/YAML setup; subsequent UI releases load versioned
+assets from the installed add-on on HA page reload. No scheduler/controller policy or
+backend five-second measurement cadence changed. No live HA deployment performed.
+
+- 156 Python tests passed39.60s. Ruff/mypy29 and packaged JS syntax passed.13 Node tests
+ cover managed layout/version updates without YAML changes, HA-native history bindings,
+ direct current-state normalization/AC balance/partial unavailability, unchanged backend
+ authority, discovery/session renewal/path validation/admin boundary, no POST replay and
+ view-reuse cleanup. Versioned HTTP assets reject stale releases and disallowed paths;
+ the manifest exposes active entities without credentials and excludes HA data in demo.
+- Configured fake-HA/weather E2E:2,018 intervals accepted27.041s, max observed control
+ tick2.616ms, five fake-only service calls. All measurements/weather explicitly synthetic.
+- Browser harness: native views mount without iframe; an incoming45→57% HA state changes
+ native live displays while backend remains45%. EV sensor click emits `hass-more-info`
+ with the correct entity. Journey calendar/date picker/create/remove, Settings discovery/
+ save/backup/restart message and native view navigation passed.390px layout and the
+ standalone fallback/setup download were inspected. No browser warnings/errors.
+- This is a labelled HA-contract harness with simulated HA built-in cards, more-info
+ dialog and Supervisor WS responses. Versioned custom components, authenticated-style
+ session transport, backend/settings API and configured real-solver fixture run locally.
+ It is not evidence of installation on actual HA Core, Supervisor or Companion clients.
+
+Screenshots: screenshots/native-v420-desktop.png and native-v420-mobile.png. Wheel/sdist
+built; all44 code/assets match source; isolated extracted-wheel manifest/import passed
+with control disabled (native-dashboard-package-verification.json). Temporary8102/8103
+fixtures and browser tabs closed, viewport reset; existing8100 preserved. No actual HA/database, hardware
+or real notifications used. ARCH-010 remains deferred for the custom graphs' SQLite
+archive; native Recorder history is a separate source under HA's retention configuration.
+
 ## 4.1.0 — ARCH-009 visual EV schedule
 
 Local verification before the authorized release commit/push. Dedicated EV calendar and

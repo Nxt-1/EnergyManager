@@ -1,6 +1,6 @@
 # Current requirements and decisions
 
-Maintained 24 October 2026 for 4.1.0. This records confirmed product preferences and
+Maintained 24 October 2026 for 4.2.0. This records confirmed product preferences and
 implementation outcomes from the V4 implementation chat. It supplements the complete
 original [architecture decisions](architecture/Architecture_Decisions.md); the
 [maintained architecture](architecture/Architecture_Proposal.md) describes the resulting implementation.
@@ -84,6 +84,14 @@ New explicit user instructions take precedence. Deferred ideas are not authoriza
   fail. Actual charts use validated observations rather than invented measurements.
 
 ## GUI and future scope
+
+- User authorized a full native HA dashboard with automatic future UI updates, retaining
+  the current interface's useful presentation, immediate HA state updates and clickable
+  sensor history. No iframe. Use HA's existing authenticated Supervisor bridge and a
+  stable loader plus release-owned strategy/cards, avoiding a separate custom integration.
+  Initial setup is once; subsequent add-on UI updates take effect on HA page reload.
+  Personal dashboards are preserved. Backend polling/control policy and archived custom
+  graph history are separate; ARCH-010 remains deferred. See the maintained architecture.
 
 - Keep Overview/Planning inspired by the original first two dashboard pages: live
   summaries, actual/planned power and SoC, time navigation, grouped sessions and the

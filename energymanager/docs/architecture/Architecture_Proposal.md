@@ -119,6 +119,52 @@ locks best-effort outcomes only after proven hard infeasibility. Timeout is dist
 
 ## Frontend units and journey dates
 
+### Native managed Home Assistant dashboard
+
+Version4.2.0 replaces the optional iframe wrapper with a real HA dashboard strategy,
+native sensor tiles/Recorder battery-history card and custom planning, EV and settings
+cards. The add-on remains the planner, controller and persistent configuration owner.
+The sidebar/standalone interface remains available using the same reusable components.
+
+One-time setup installs the small `energymanager-card.js` resource and the strategy
+configuration documented in [the dashboard guide](../../../energymanager-dashboard/README.md).
+The loader discovers the installed add-on through HA's authenticated `supervisor/api`
+WebSocket API, creates/renews the standard ingress session and obtains `/api/dashboard`.
+That read-only manifest contains bootstrap protocol1, the installed release version,
+demo mode and active HA entity mappings, never credentials or unsaved installation values.
+No custom integration, additional listening port or weakened ingress boundary is needed;
+HA OS/Supervisor and the existing administrator access are required.
+
+The strategy and cards are served from `/frontend/{version}/{asset}`. Relative imports,
+templates and styles stay within that release namespace. Stale versions return409;
+an already-open card that detects a different backend release requests a reload and
+withholds further actions. On HA page reload the installed version supplies the whole
+layout and card implementation, so future dashboard changes require no YAML/file copying.
+The bootstrap protocol stays stable for UI releases. Personal dashboards are not rewritten;
+keep personal additions separate from the generated EnergyManager layout.
+
+Native tiles receive HA state changes directly and use the normal more-info/history
+dialogs. Custom live summaries use a read-only frontend projection of current HA states,
+with unit/numeric/availability checks and the same AC household-balance formula. Source
+changes update only live summaries rather than repainting full trajectories. Combined
+solar/net-grid/household summaries offer the contributing sensors' histories, without
+inventing a measured household entity. HA tiles/dialogs retain their entity units;
+EnergyManager's custom power summaries and planning charts retain W.
+
+HA Recorder supplies the native historical view under its own coverage/retention settings.
+It does not import EnergyManager's SQLite archive; ARCH-010 remains deferred for older
+data in the custom graphs. Accepted plans/decisions/settings still use the add-on API.
+Frontend HA values never grant control authority or satisfy backend enablement checks.
+Backend HA input polling remains five seconds; native display updates are independent.
+Shared views mount inside the native card's shadow root, use HA theme variables and
+dispose listeners/timers/dialogs on removal. Existing goal revision, approval, settings
+conflict/backup/restart and hardware-switch validation remain authoritative. Mutating
+requests are never automatically replayed after an ingress-session failure.
+
+Offline verification uses a labelled HA-contract harness with simulated built-in cards
+and Supervisor messages, real versioned components and a configured fake backend.
+Actual HA frontend/Companion/Supervisor installation remains a separate target check.
+
 The EV page combines a calendar for the next 168 elapsed hours with a selected-day
 agenda. Installation-local days can be 23 or 25 hours and the horizon may span partial
 first/last days. Separate lanes show entered away periods, accepted EV charging sessions

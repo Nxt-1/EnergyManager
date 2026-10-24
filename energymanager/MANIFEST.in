@@ -1,6 +1,7 @@
 include README.md DOCS.md CHANGELOG.md Dockerfile config.yaml configuration.example.json requirements*.lock
 recursive-include docs *.md *.json *.png
 recursive-include tools *.py
+recursive-include tools *.html *.mjs
 recursive-include tests *.py
 recursive-include src/energymanager/assets *
 recursive-include src/energymanager/defaults *.json

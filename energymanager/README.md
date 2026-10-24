@@ -1,6 +1,6 @@
 # EnergyManager 4
 
-Version **4.1.0**, the main Energy Manager application. One joint seven-day EV/ESS MILP
+Version **4.2.0**, the main Energy Manager application. One joint seven-day EV/ESS MILP
 feeds independent responsive control. The application includes configured input/actuator
 boundaries, persisted goals/approvals/decisions and Overview/Planning/EV pages.
 
@@ -25,6 +25,10 @@ Default local state is `runtime/energymanager-v4.sqlite3`.
 The **EV** tab shows a seven-day calendar and daily agenda for entered journeys,
 expected away periods, morning/manual SoC targets and accepted charging sessions.
 Use its Journey and SoC goal buttons to add requirements and its agenda to edit them.
+
+For native HA views, immediate sensor-state updates and clickable sensor history, follow
+the [native dashboard guide](../energymanager-dashboard/README.md). Install its loader and
+strategy once; later add-on updates deliver the dashboard layout/cards on HA page reload.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
