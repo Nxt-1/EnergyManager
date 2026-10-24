@@ -1,5 +1,29 @@
 # EnergyManager 4 verification
 
+## 4.2.3 — Compact dashboard and numeric cursors
+
+170 Python tests passed43.45s;20 frontend tests, Ruff/mypy31, all JavaScript syntax
+and CLI4.2.3 passed. New checks cover recorded subtotal plus only remaining-day flows,
+directional AC accounting, stale/unknown/unreconciled plans, insufficient coverage and
+23/25-hour local days. Frontend checks cover symbols, partial/stale totals, prediction
+identity, cursor interpolation, missing spans, exact step boundaries and window clipping.
+
+Configured fake E2E seeded32,522 synthetic archive records and accepted2,018 intervals
+in26.912s, max observed control tick2.866ms, five fake-only service calls. Wheel/sdist
+built; all48 packaged source/assets match and isolated4.2.3 wheel import passed.
+See compact-dashboard-package-verification.json and offline-e2e.json.
+
+Labelled native HA-contract and standalone browser checks passed for compact energy
+rows, day-end predictions across local midnight, connection symbols, source chooser/
+more-info, pointer/keyboard W/% cursors, gaps and planned window edges. Both graph and
+session-track endpoints align within0.02px on desktop and exactly at390px width;
+power height360px, SoC255px. No browser warnings/errors. Screenshots and geometry are
+in screenshots/compact-v423-desktop.png, compact-v423-mobile.png and
+compact-dashboard-browser-verification.json. Temporary servers/tabs closed.
+
+HA built-ins/Supervisor were simulated; actual HA/Companion installation remains
+unverified. No live HA/database/hardware access, real notifications or deployment.
+
 ## 4.2.2 — Archived graph history
 
 Final 4.2.2 release checks: 165 Python tests passed in 42.64s; 18 frontend tests,

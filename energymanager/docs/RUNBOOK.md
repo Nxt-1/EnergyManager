@@ -66,7 +66,7 @@ limits can change incumbents; replay does not promise bit-identical optimization
 
 ## Main-project version 4 update
 
-`config.yaml` now advertises **4.2.2** for the existing `energy_manager` Home Assistant
+`config.yaml` now advertises **4.2.3** for the existing `energy_manager` Home Assistant
 app and `ghcr.io/nxt-1/energymanager` image. It keeps ingress port8099 and manual startup.
 The packaged Python distribution, CLI and module are all named `energymanager`. The
 former standalone candidate has been moved into this main app; the old V3 modules,
@@ -86,7 +86,8 @@ The app configuration mount follows the
 Ingress accepts Supervisor172.30.32.2 with its authenticated ingress path; direct dev
 access remains localhost only, following the
 [ingress boundary](https://developers.home-assistant.io/docs/apps/presentation/).
-Version 4.2.0 introduced the native HA dashboard strategy; 4.2.2 adds archived graph history.
+Version4.2.0 introduced the native HA dashboard strategy;4.2.2 adds archived graph history
+and4.2.3 adds compact day-end energy projections and numeric graph cursors.
 Follow the [one-time installation/migration guide](../../energymanager-dashboard/README.md):
 download the loader from the add-on's Settings, register it as a module resource and
 create a new dashboard with `strategy: {type: custom:energymanager}`. Later add-on UI
@@ -97,7 +98,7 @@ No live dashboard was installed or modified during development.
 Docker is unavailable locally. The V4.0.0 CI and image workflows verified the Linux
 container build and publication; evidence is in VERIFICATION.md and ci-verification.json.
 Supervisor installation and physical deployment remain separate checks. A target host
-can run `docker build --build-arg BUILD_VERSION=4.2.2 -t energymanager:4.2.2 .` from this
+can run `docker build --build-arg BUILD_VERSION=4.2.3 -t energymanager:4.2.3 .` from this
 directory. The repository publish workflow targets the existing GHCR image when
 config.yaml is pushed to main; inspect the workflow for the version being installed.
 
@@ -286,8 +287,8 @@ ARCH-010 is included in 4.2.2. The user authorized committing and pushing the
 previously held implementation. Updating the add-on and reloading HA loads the new graphs.
 Overview's History day selects a local calendar day; arrows shift12 elapsed hours,
 and Now restores the original live24-hour window. Power/SoC graphs load the selected
-archive range. Missing history remains blank; the coverage/detail message distinguishes
-loading, absent data and archive errors. Legacy battery percentages use current runtime
+archive range. Missing history remains blank; from4.2.3 normal detail/loading metadata
+is in collapsed diagnostics and archive errors remain visible. Legacy battery percentages use current runtime
 capacities where the archive did not record them; the chart explicitly labels this.
 
 Offline browser verification only, from `energymanager/`:
@@ -306,3 +307,10 @@ authority. Choose the previous calendar day; verify a full day of power/SoC, lin
 12-hour navigation, Now and a day outside the fixture (blank). HA built-ins/Supervisor
 remain simulated. Stop both test processes after inspection. Do not use an installation
 database or substitute synthetic fixture values as evidence of live historical coverage.
+
+For4.2.3 also inspect symbolic recorded ⇢ day-end energy rows, partial-coverage tooltips,
+and unavailable forecasts when the accepted plan is obsolete or inputs unknown. Compare
+both graph edges with session tracks on desktop and390px widths. Use pointer/touch and
+keyboard cursor controls; check historical gaps, planned values at window edges and
+offset-labelled repeated-hour times. Native sensor choosers must still open more-info.
+Updating the add-on and reloading HA delivers these UI changes through the existing loader.

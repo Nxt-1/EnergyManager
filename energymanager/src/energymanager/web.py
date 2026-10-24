@@ -16,7 +16,7 @@ from .settings import ConfigurationConflict, ConfigurationFile, SettingsValidati
 from .hardware import HardwareControl
 from . import __version__
 from .dashboard import dashboard_manifest
-from .energy import daily_energy
+from .energy import daily_energy, end_of_day_energy
 from .graph_history import graph_history
 
 
@@ -88,9 +88,20 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         return web.json_response(application.state())
 
     async def energy(request: web.Request) -> web.Response:
-        result = await asyncio.to_thread(daily_energy, application.store.path, application.now(),
+        plan, revision = application.accepted, application.revision
+        now = application.now()
+        age = (now - application.observation.at).total_seconds()
+        inputs_known = application.demo or (application.observation.quality == "measured"
+                       and -5 <= age <= application.policy.measurement_max_age_seconds)
+        result = await asyncio.to_thread(daily_energy, application.store.path, now,
                                         application.policy.timezone,
                                         application.policy.measurement_max_age_seconds, application.demo)
+        result["prediction_revision"] = revision
+        result["prediction_plan_id"] = plan["id"] if plan else None
+        result["predicted_kwh"] = end_of_day_energy(
+            result, plan, revision, application.policy.forecast_max_age_seconds,
+            application.snapshot.capabilities.ac_discharge_efficiency
+        ) if inputs_known and application.ess_valid and revision == application.revision else None
         return web.json_response(result, headers={"Cache-Control": "no-store"})
 
     async def history(request: web.Request) -> web.Response:
@@ -162,7 +173,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         if name not in ("index.html", "app.js", "settings.js", "display.js", "date-time.js",
                         "datetime-picker.js", "ev-schedule.js", "style.css", "ha-card.js",
                         "application-view.js", "view.html", "native-dashboard.js", "native-dashboard.css",
-                        "native-live.js", "graph-history.js"):
+                        "native-live.js", "graph-history.js", "graph-cursor.js"):
             raise web.HTTPNotFound()
         content_type = {"html": "text/html", "js": "text/javascript", "css": "text/css"}[
             name.rsplit(".", 1)[1]

@@ -97,7 +97,7 @@ main {
   display:flex;
   justify-content:space-between;
   align-items:center;
-  margin:24px 0 18px;
+  margin:8px 0 12px;
   gap:16px
 }
 h1 {
@@ -139,15 +139,29 @@ p {
   display:grid;
   grid-template-columns:repeat(5,1fr);
   gap:14px;
-  margin-bottom:20px
+  margin-bottom:12px
 }
 .live-item {
   min-width:0;
   border:1px solid var(--line);
   background:var(--surface);
   border-radius:10px;
-  padding:16px 18px
+  padding:11px 14px;
+  position:relative
 }
+.live-label {display:flex;align-items:center;justify-content:space-between}
+.connection-icon {width:21px;height:21px;vertical-align:middle}
+.connection-icon.connected {color:#16a34a}
+.connection-icon.disconnected {color:var(--muted)}
+.connection-icon.unknown {color:#b77915}
+.live-components {font-size:11px;min-height:16px}
+.daily-energy {font-size:12px;font-variant-numeric:tabular-nums;margin-top:4px}
+.energy-row {display:flex;align-items:baseline;gap:4px;white-space:nowrap;line-height:1.65}
+.energy-symbol {min-width:10px;font-size:15px}
+.energy-symbol:empty {display:none}
+.energy-unit {color:var(--muted);font-size:10px}
+.prediction-arrow {color:var(--muted)}
+.input-warning {position:absolute;top:9px;right:34px;color:#b77915;font-size:12px}
 .live-item strong {
   display:block;
   font-size:24px;
@@ -198,6 +212,16 @@ p {
   height:auto;
   min-height:180px
 }
+.plot {position:relative;touch-action:pan-y;outline:none}
+.plot:focus-visible {outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+.cursor-line {stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}
+.cursor-values {position:absolute;top:10px;z-index:1;pointer-events:none;padding:9px 11px;
+  border:1px solid var(--line);border-radius:8px;background:var(--surface);
+  box-shadow:0 3px 12px #0002;font-size:11px;max-width:100%;font-variant-numeric:tabular-nums}
+.cursor-values strong {font-size:12px}
+.cursor-values table {border-collapse:collapse;margin-top:5px}
+.cursor-values td,.cursor-values th {padding:2px 0 2px 9px;text-align:right;white-space:nowrap}
+.cursor-values td:first-child,.cursor-values th:first-child {padding-left:0;text-align:left}
 .plot .axis {
   fill:var(--muted);
   font-size:11px
@@ -303,8 +327,10 @@ p {
   background:#edf3f0;
   position:relative;
   border-radius:5px;
-  margin:14px 0 8px
+  overflow:hidden;
+  margin:0
 }
+.timeline-lane {display:grid;grid-template-columns:var(--plot-left) minmax(0,1fr) var(--plot-right);align-items:center;margin:8px 0}
 .timeline-run {
   position:absolute;
   top:4px;
@@ -320,7 +346,9 @@ p {
   display:flex;
   justify-content:space-between;
   font-size:11px;
-  color:var(--muted)
+  color:var(--muted);
+  padding-left:var(--plot-left);
+  padding-right:var(--plot-right)
 }
 details summary {
   cursor:pointer;
@@ -551,17 +579,29 @@ body.planning aside .card {
     padding:12px
   }
   .page-heading {
-    align-items:flex-start
+    align-items:flex-start;
+    flex-wrap:wrap;
+    gap:8px
   }
+  .page-heading>div:first-child {flex:1 1 100%}
   .page-heading .actions {
-    flex-direction:column
+    flex-direction:row;
+    flex-wrap:wrap;
+    justify-content:space-between;
+    align-items:center;
+    width:100%;
+    gap:6px
   }
+  .page-heading .actions button {padding:8px 9px}
+  .page-heading .hardware-switch {font-size:12px;gap:8px}
   h1 {
     font-size:23px
   }
   .live {
-    grid-template-columns:repeat(3,1fr)
+    grid-template-columns:repeat(2,1fr)
   }
+  .daily-energy {font-size:11px}
+  .energy-row {gap:3px}
   .live-item strong {
     font-size:18px
   }

@@ -3,7 +3,8 @@ import {
   localInstants
 } from './date-time.js';
 import {
-  powerText
+  powerText,
+  connectionIcon
 } from './display.js';
 
 const hour = 3600000;
@@ -265,10 +266,10 @@ export class EVSchedulePage {
       <button class="ev-agenda-title" ${action(event)}>${esc(event.title)}</button><p>${esc(description(event))}</p>
       ${event.goal && ['trip', 'manual', 'daily'].includes(event.type) ? `<p>${event.goal.planned_kwh === undefined || event.goal.planned_kwh === null ? '' : `${number(event.goal.planned_kwh / state.capabilities.ev_capacity_kwh * 100)}% planned at deadline · `}${event.type === 'trip' ? `${number(event.goal.distance_km)} km total · ${state.policy.arrival_reserve_km} km arrival reserve` : 'No journey or battery withdrawal assumed'}</p>${event.goal.external_charging_required ? '<p class="error">Charging away must be arranged. Return SoC is unknown.</p>' : ''}${event.type === 'daily' ? '<button data-ev-settings="true">Daily readiness settings</button>' : ''}` : ''}${editActions(event)}
     </section>`).join('');
-    this.root.innerHTML = `<div class="notice">${esc(state.provenance)} · ${state.demo ? 'SYNTHETIC demonstration' : 'Configured inputs'}</div>
+    this.root.innerHTML = `
       <section class="page-heading"><div><h1>EV schedule</h1><p class="muted">${stamp(schedule.start)} — ${stamp(schedule.end)} · ${esc(zone)}</p></div>
       <div class="actions"><button data-ev-add="trip" class="primary">＋ Journey</button><button data-ev-add="manual">＋ SoC goal</button></div></section>
-      <div class="ev-summary"><article class="live-item"><span class="muted">Current EV SoC</span><strong class="ev-soc">${number(soc)}%</strong><small>${esc(connection)}</small>${(reading?.issues || []).map(issue => `<small class="error">${esc(powerText(issue))}</small>`).join('')}</article>
+      <div class="ev-summary"><article class="live-item"><span class="live-label muted">Current EV SoC${connectionIcon(connection === 'Connected' ? true : connection === 'Away / disconnected' ? false : null)}</span><strong class="ev-soc">${number(soc)}%</strong>${(reading?.issues || []).map(issue => `<small class="error">${esc(powerText(issue))}</small>`).join('')}</article>
       <article class="live-item"><span class="muted">Next requirement</span><strong>${nextGoal ? `${number(target(nextGoal))}%` : '—'}</strong><small>${nextGoal ? `${esc(nextGoal.title)} · ${stamp(nextGoal.deadline)}` : 'No upcoming requirements'}</small></article>
       <article class="live-item"><span class="muted">Planned EV charging</span><strong>${schedule.current ? charging.length : '—'} <small>sessions</small></strong><small>${charging[0] ? `Next ${stamp(Math.max(schedule.start, charging[0].start))}` : schedule.current ? 'No charging selected' : 'Awaiting a current validated plan'}</small></article></div>
       <p class="ev-message error" role="alert">${esc(this.error || '')}</p>

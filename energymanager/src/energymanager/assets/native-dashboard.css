@@ -6,7 +6,7 @@
 }
 header,footer { display:none; }
 main { max-width:none; padding:0; }
-.page-heading { margin-top:8px; }
+.page-heading { margin-top:0; }
 .page-heading h1 { display:none; }
 .card,.live-item { border-radius:var(--ha-card-border-radius,12px); }
 .card { box-shadow:var(--ha-card-box-shadow,none); }

@@ -165,20 +165,6 @@ export function generateDashboard(config, manifest, connection) {
       column_span: 3,
       cards
     });
-    if (path === 'overview' && !manifest.demo && manifest.entities.ev_soc && manifest.entities.ess_soc)
-      sections.push({
-        type: 'grid',
-        column_span: 3,
-        cards: [{
-          type: 'history-graph',
-          title: 'Battery history',
-          hours_to_show: 24,
-          entities: [manifest.entities.ev_soc, manifest.entities.ess_soc],
-          grid_options: {
-            columns: 'full'
-          }
-        }]
-      });
     return {
       title: name,
       path,

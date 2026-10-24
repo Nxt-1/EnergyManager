@@ -1,3 +1,15 @@
+## 4.2.3 — Compact dashboard and graph cursors
+
+- Pair compact daily energy values with expected totals at today's end: recorded
+  energy so far plus the current plan until local midnight. Use directional grid,
+  AC/DC solar and car-connection symbols with accessible explanations.
+- Inspect power and battery SoC values with a shared pointer, touch or keyboard cursor.
+  Preserve gaps and mark interpolated values.
+- Enlarge the power graph, align both graphs with session bars, combine time/plan
+  metadata and move normal provenance/history details into diagnostics.
+- Remove the duplicate native battery-history chart; sensor history remains available
+  through the live boxes. Planning and hardware-control policy are unchanged.
+
 ## 4.2.2 — Archived graph history
 
 - Load older power and battery measurements for the visible graph range from SQLite.

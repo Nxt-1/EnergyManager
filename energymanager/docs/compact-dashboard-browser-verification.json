@@ -1,0 +1,51 @@
+{
+  "version": "4.2.3",
+  "provenance": "SYNTHETIC HA-contract preview; HA built-ins and Supervisor simulated",
+  "desktop": {
+    "power": {
+      "height": 360.078125,
+      "left": 98.01381829733162,
+      "right": 811.1836880559085
+    },
+    "sessions": {
+      "left": 98,
+      "right": 811.1875
+    },
+    "soc": {
+      "height": 255.046875,
+      "left": 98.01381829733162,
+      "right": 811.1836880559085
+    }
+  },
+  "mobile390": {
+    "power": {
+      "height": 360,
+      "left": 82,
+      "right": 335
+    },
+    "sessions": {
+      "left": 82,
+      "right": 335
+    },
+    "soc": {
+      "height": 255,
+      "left": 82,
+      "right": 335
+    }
+  },
+  "checks": [
+    "symbolic actual-to-day-end energy rows",
+    "phone energy rows fit",
+    "pointer and keyboard cursors show W and percent",
+    "cursor does not bridge a historical gap",
+    "window-edge cursor values",
+    "UTC offset in cursor time",
+    "underlying sensor chooser and native more-info event",
+    "standalone cursor and energy projections",
+    "EV connection icon",
+    "no duplicate battery history card",
+    "no normal history status or provenance box"
+  ],
+  "actual_ha_installation_verified": false,
+  "result": "passed"
+}

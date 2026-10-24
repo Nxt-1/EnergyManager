@@ -9,16 +9,31 @@ export function powerText(text) {
     (_, value) => `${watts(value)} W`);
 }
 
-export function dailyEnergyText(summary, key, now, timezone) {
+export function dailyEnergyRows(summary, key, state) {
+  const {now, policy: {timezone}} = state;
   const date = new Intl.DateTimeFormat('en-CA', {timeZone: timezone,
     year: 'numeric', month: '2-digit', day: '2-digit'}).format(new Date(now));
-  if (!summary?.kwh || summary.date !== date || summary.timezone !== timezone)
-    return 'Today: energy unavailable';
-  const energy = name => `${summary.kwh[name].toFixed(2)} kWh`;
-  const label = key === 'grid' ? `Import ${energy('import')} · export ${energy('export')}` :
-    key === 'ess' ? `AC charge ${energy('ess_charge')} · discharge ${energy('ess_discharge')}` :
-    key === 'solar' ? `${energy('solar')} · AC ${energy('solar_ac')} / DC ${energy('solar_dc')}` : energy(key);
-  return `Today${summary.partial ? ' (partial)' : ''}: ${label} · estimated`;
+  const current = summary?.date === date && summary.timezone === timezone;
+  const prediction = current && summary.prediction_revision === state.revision &&
+    summary.prediction_plan_id === state.accepted?.id ? summary.predicted_kwh : null;
+  const definitions = {
+    grid: [['←', 'import', 'Grid import'], ['→', 'export', 'Grid export']],
+    solar: [['∿', 'solar_ac', 'AC solar'], ['⎓', 'solar_dc', 'DC solar']],
+    ess: [['↓', 'ess_charge', 'ESS AC charge'], ['↑', 'ess_discharge', 'ESS AC discharge']],
+    house: [['', 'house', 'Household energy']], ev: [['', 'ev', 'EV charging energy']]
+  };
+  const number = value => Number.isFinite(value) ? value.toFixed(2) : '—';
+  return definitions[key].map(([symbol, name, label]) => ({symbol, label,
+    actual: number(current ? summary.kwh?.[name] : null), predicted: number(prediction?.[name]),
+    partial: current && !!summary.partial}));
+}
+
+export function connectionIcon(connected) {
+  const label = connected === true ? 'Connected' : connected === false ? 'Disconnected' : 'Connection unknown';
+  const mark = connected === false ? '<path d="M3 3L21 21"/>' : connected !== true ?
+    '<text x="16" y="9" stroke="none" fill="currentColor" font-size="10">?</text>' : '';
+  const status = connected === true ? 'connected' : connected === false ? 'disconnected' : 'unknown';
+  return `<svg class="connection-icon ${status}" viewBox="0 0 24 24" role="img" aria-label="${label}"><title>${label}</title><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v5m8-5v5M6 8h12v3a6 6 0 0 1-12 0zm6 9v4"/>${mark}</g></svg>`;
 }
 
 export function entityState(entity) {

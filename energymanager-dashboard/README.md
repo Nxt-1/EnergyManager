@@ -59,6 +59,20 @@ is labelled partial, absent coverage unavailable; gaps are not filled. Totals re
 every30 seconds. The first startup creates an index over existing measurement events,
 which can take longer with a large archive.
 
+From4.2.3 each compact energy row shows recorded kWh followed by ⇢ expected kWh at
+today's end (recorded so far plus the current plan until local midnight). Grid ←/→
+mean import/export, solar ∿/⎓ mean AC/DC, and ESS ↓/↑ mean AC charge/discharge.
+Hover or focus for descriptions; ◐ marks partial recorded coverage, including the
+projection's baseline. Missing or obsolete predictions show —. Car connection uses
+a plug symbol, slashed when disconnected and marked ? when unknown.
+
+Hover over either graph to inspect numbers, click/touch to pin the cursor, or focus
+the graph and use Left/Right, Shift+arrow (one minute), Home/End and Escape. Values
+follow plotted lines; ≈ means interpolation and — means no value. The cursor time
+includes its UTC offset. The larger power graph, SoC graph and session tracks share
+time boundaries. Normal provenance/history details are in collapsed diagnostics;
+actual archive errors remain visible. The duplicate battery-history card is removed.
+
 HA Recorder supplies native sensor history, subject to its configured coverage and
 retention. It does not import EnergyManager's separate SQLite archive. From 4.2.2,
 custom power/SoC graphs load the visible range from EnergyManager's archive.

@@ -122,7 +122,7 @@ locks best-effort outcomes only after proven hard infeasibility. Timeout is dist
 ### Native managed Home Assistant dashboard
 
 Version4.2.0 replaces the optional iframe wrapper with a real HA dashboard strategy,
-native sensor tiles/Recorder battery-history card and custom planning, EV and settings
+native sensor history actions and custom planning, EV and settings
 cards. The add-on remains the planner, controller and persistent configuration owner.
 The sidebar/standalone interface remains available using the same reusable components.
 
@@ -161,6 +161,30 @@ coverage is labelled partial; no coverage is unavailable. Summaries refresh ever
 An expression index on measurement timestamps covers legacy events too; range reads
 use a separate read-only SQLite connection in a worker, outside the control event loop.
 Creating this index can take time on the first startup with a large existing archive.
+
+From4.2.3, compact rows use left/right arrows for grid import/export, alternating/direct
+current symbols for AC/DC solar and downward/upward arrows for ESS AC charge/discharge.
+Every recorded subtotal is followed by a forecast arrow and expected end-of-today total:
+recorded energy so far plus only the current plan's remaining intervals through the next
+installation-local midnight. Partial intervals and23/25-hour days use elapsed time.
+Forecasts require a reconciled valid plan at the current revision, a fresh forecast,
+successful current input reads, an actual subtotal and continuous remaining-day coverage.
+Unavailable forecasts remain blank. Revision/plan identity prevents mixing obsolete plans.
+Missing recorded coverage is not backfilled; the partial symbol and tooltip apply to
+both subtotal and projection. ESS AC output includes DC passthrough after converter
+efficiency, matching observed converter power rather than battery-inventory change.
+Summaries also refresh when the accepted plan or local date changes. Connection status
+uses accessible plug/slashed-plug/unknown symbols. The sensor/history chooser is retained.
+
+Power and battery SoC graphs share a time cursor: hover inspects, click/touch pins,
+arrows move, Shift+arrow moves one minute, Home/End select window edges and Escape clears.
+Numeric W/% values follow displayed lines; interpolation is marked approximately and
+missing values remain blank without extrapolation or bridging gaps. Cursor timestamps
+include the UTC offset to distinguish repeated local hours. Both charts and session
+tracks use58px left/16px right insets, redrawn on resize. The power plot is360px high.
+The time bar includes the plan update moment; normal provenance/history-detail text is
+in collapsed diagnostics while actual errors remain visible. The duplicate native
+battery-history card is removed; the archived SoC plot remains.
 
 HA Recorder supplies the native historical view under its own coverage/retention settings.
 It does not import EnergyManager's SQLite archive. Accepted plans/decisions/settings

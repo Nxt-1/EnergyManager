@@ -4,7 +4,8 @@ import {
 import {
   powerText,
   watts,
-  dailyEnergyText
+  dailyEnergyRows,
+  connectionIcon
 } from './display.js';
 import {
   DateTimePicker
@@ -13,6 +14,7 @@ import {
   EVSchedulePage
 } from './ev-schedule.js';
 import {GraphHistory, historyDayRange, observedPoints} from './graph-history.js';
+import {GraphCursor, plotInsets, clipSeries} from './graph-cursor.js';
 
 
 export async function mountApplication(root, options = {}) {
@@ -32,7 +34,8 @@ export async function mountApplication(root, options = {}) {
     hardwareChanging = false,
     hardwareIntent = false,
     hardwareError = null;
-  let dailyEnergy = null, energyRequestedAt = 0;
+  let dailyEnergy = null, energyRequestedAt = 0, energyPlanId = null, energyDay = null;
+  const graphModels = {};
   let selectedRange = null;
   const graphHistory = new GraphHistory(api, () => {
     if (state && !viewLocked() && ['overview', 'planning'].includes(page)) renderCharts();
@@ -97,6 +100,22 @@ export async function mountApplication(root, options = {}) {
   const dateTimePicker = new DateTimePicker(() => state.policy.timezone, () => state.now, root);
   dateTimePicker.bind($('goal-form').elements.deadline, 'Deadline / departure', true);
   dateTimePicker.bind($('goal-form').elements.return_at, 'Return time');
+  const graphCursor = new GraphCursor(root, at => new Date(at).toLocaleString('en-GB', {
+    timeZone: state.policy.timezone, day: '2-digit', month: 'short',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'shortOffset'
+  }), colors, lifecycle.signal);
+  const charts = root.querySelector('.charts');
+  charts.style.setProperty('--plot-left', `${plotInsets.left}px`);
+  charts.style.setProperty('--plot-right', `${plotInsets.right}px`);
+  let chartWidth = 0;
+  const resizeObserver = new ResizeObserver(entries => {
+    const width = entries[0].contentRect.width;
+    if (Math.abs(width - chartWidth) < 0.5) return;
+    chartWidth = width;
+    if (!lifecycle.signal.aborted && state && ['overview', 'planning'].includes(page)) renderCharts();
+  });
+  resizeObserver.observe(charts);
+  lifecycle.signal.addEventListener('abort', () => resizeObserver.disconnect(), {once: true});
 
   function range() {
     const now = Date.parse(state.now);
@@ -126,7 +145,8 @@ export async function mountApplication(root, options = {}) {
             grid: flows.grid_ev[index] + flows.grid_house[index] + flows.grid_store[index] - flows.export[
               index],
             ess: flows.solar_dis_ev[index] + flows.solar_dis_house[index] + flows.grid_dis_house[index] -
-              flows.pv_store[index] - flows.grid_store[index],
+              flows.pv_store[index] - flows.grid_store[index] +
+              (flows.dc_invert?.[index] || 0) * capabilities.ac_discharge_efficiency,
             solar: interval.pv_ac_kw + interval.pv_dc_kw,
             house: interval.house_kw,
             ev: flows.pv_ev[index] + flows.grid_ev[index] + flows.solar_dis_ev[index]
@@ -158,6 +178,8 @@ export async function mountApplication(root, options = {}) {
       name,
       ...points(name, soc)
     }));
+    for (const item of series) for (const kind of ['observed', 'planned'])
+      item[kind] = clipSeries(item[kind], start, end);
     const visible = series.flatMap(s => [...s.planned, ...s.observed]).filter(p => p[0] >= start && p[0] <=
       end && p[1] !== null);
     let low = soc ? 0 : Math.min(0, ...visible.map(p => p[1])),
@@ -166,12 +188,10 @@ export async function mountApplication(root, options = {}) {
       low = Math.floor(low);
       high = Math.ceil(high * 1.1 / 100) * 100;
     }
-    const width = Math.max(280, $(soc ? 'soc' : 'power').clientWidth || 1000),
-      height = 255,
-      left = soc ? 48 : 58,
-      right = 15,
-      top = 12,
-      bottom = 32;
+    const width = $(soc ? 'soc' : 'power').clientWidth || 1000,
+      height = soc ? 255 : 360;
+    const {left, right, top, bottom} = plotInsets;
+    graphModels[soc ? 'soc' : 'power'] = {start, end, width, height, low, high, series, now: Date.parse(state.now)};
     const x = value => left + (value - start) / (end - start) * (width - left - right);
     const y = value => height - bottom - (value - low) / (high - low) * (height - top - bottom);
     let svg =
@@ -208,7 +228,7 @@ export async function mountApplication(root, options = {}) {
     const now = Date.parse(state.now);
     if (now >= start && now <= end) svg +=
       `<line x1="${x(now)}" x2="${x(now)}" y1="${top}" y2="${height-bottom}" stroke="#718697" stroke-dasharray="3 3"/>`;
-    return svg + '</svg>';
+    return svg + '<g class="cursor-overlay" pointer-events="none"></g></svg><div class="cursor-values" role="status" hidden></div>';
   }
 
   function viewLocked() {
@@ -218,7 +238,10 @@ export async function mountApplication(root, options = {}) {
   function renderCharts() {
     $('power').innerHTML = chart();
     $('soc').innerHTML = chart(true);
-    $('graph-history-status').textContent = graphHistory.status;
+    graphCursor.update(graphModels);
+    $('graph-history-status').hidden = !graphHistory.error;
+    $('graph-history-status').textContent = graphHistory.error ? 'Archive history unavailable' : '';
+    $('graph-history-status').title = graphHistory.error || '';
   }
 
   function renderHardware() {
@@ -243,8 +266,8 @@ export async function mountApplication(root, options = {}) {
     for (const name of ['overview', 'planning', 'ev', 'settings']) {
       $(name).setAttribute('aria-selected', String(page === name));
     }
-    $('connection').textContent = state.status === 'planning' ? '● Calculating · control responsive' : state
-      .status === 'ready' ? '● Plan ready' : '● ' + state.status;
+    $('connection').textContent = (state.provenance.startsWith('SYNTHETIC') ? 'SYNTHETIC · ' : '') + (state.status === 'planning' ? '● Calculating · control responsive' : state
+      .status === 'ready' ? '● Plan ready' : '● ' + state.status);
     root.querySelector('footer').textContent =
       `${state.control_enabled ? 'Hardware control enabled' : 'Hardware control disabled'} / Forecasts and planned costs are estimates.`;
     (options.native ? root.host : document.body).classList.toggle('planning', page === 'planning');
@@ -259,20 +282,19 @@ export async function mountApplication(root, options = {}) {
       plan = state.accepted;
     $('page-title').textContent = page === 'overview' ? 'Overview' : 'Planning';
     const [start, end] = range();
-    $('period').textContent = `${time(start)} — ${time(end)} · ${state.policy.timezone}`;
+    $('period').textContent = `${time(start)} — ${time(end)}${plan ? ` · Plan ${time(plan.intervals[0].start,false)}` : ''}`;
+    $('period').title = `${state.policy.timezone}${plan ? ` · ${plan.summary.intervals} intervals · ${num(plan.seconds,1)} s calculation` : ''}`;
     $('power-title').textContent = page === 'planning' ? '7 days · Power · actual / planned · W' :
       'Power · actual / planned · W';
     $('navigation').hidden = page === 'planning';
-    $('provenance').textContent =
-      `${state.provenance} · ${state.demo?'Deterministic local demonstration':'Configured inputs'} · ${state.control_enabled ? 'Hardware control enabled' : 'Hardware control disabled'}`;
     renderLive();
     $('status').innerHTML =
-      `<p class="status-line">${plan?`Plan updated ${time(plan.intervals[0].start)} · ${plan.summary.intervals} intervals · ${num(plan.seconds,1)} s calculation`:'Waiting for the first validated joint plan. The independent control loop is running.'}${state.actuator_health?.delivery_fault ? '<span class="error"> / EV delivery fault: stopped; diagnose before restart</span>' : ''}${state.error?` · <span class="error">${esc(powerText(state.error))}</span>`:''}</p>`;
+      `${!plan ? '<p class="status-line">Waiting for a validated plan.</p>' : ''}${state.actuator_health?.delivery_fault ? '<p class="error">EV delivery fault: stopped; diagnose before restart</p>' : ''}${state.error ? `<p class="error">${esc(powerText(state.error))}</p>` : ''}`;
     graphHistory.load(start, end, Date.parse(state.now));
     renderCharts();
     const sessions = plan?.sessions || [];
     $('timeline').innerHTML = ['ev', 'ess'].map(resource =>
-        `<small>${resource.toUpperCase()}</small><div class="timeline-track">${sessions.filter(s=>s.resource===resource&&Date.parse(s.end)>start&&Date.parse(s.start)<end).map(s=>{const left=Math.max(start,Date.parse(s.start)),right=Math.min(end,Date.parse(s.end));return `<button class="timeline-run" data-session="${esc(s.id)}" style="background:${colors[resource]};left:${(left-start)/(end-start)*100}%;width:${(right-left)/(end-start)*100}%" title="${esc(s.title)} / ${esc(time(s.start))}" aria-label="${resource.toUpperCase()} session ${esc(time(s.start))}"></button>`}).join('')}</div>`
+        `<div class="timeline-lane"><small>${resource.toUpperCase()}</small><div class="timeline-track">${sessions.filter(s=>s.resource===resource&&Date.parse(s.end)>start&&Date.parse(s.start)<end).map(s=>{const left=Math.max(start,Date.parse(s.start)),right=Math.min(end,Date.parse(s.end));return `<button class="timeline-run" data-session="${esc(s.id)}" style="background:${colors[resource]};left:${(left-start)/(end-start)*100}%;width:${(right-left)/(end-start)*100}%" title="${esc(s.title)} / ${esc(time(s.start))}" aria-label="${resource.toUpperCase()} session ${esc(time(s.start))}"></button>`}).join('')}</div></div>`
       ).join('') +
       `<div class="timeline-labels"><span>${time(start)}</span><span>${sessions.length} grouped sessions</span><span>${time(end)}</span></div>`;
     const goals = [...state.goals.map(g => ({
@@ -310,7 +332,7 @@ export async function mountApplication(root, options = {}) {
       `<div class="session"><button data-session="${esc(s.id)}"><strong>${esc(s.title)} · ${time(s.start)} — ${time(s.end)}</strong><br><small>${num(s.energy_kwh)} kWh battery energy · ${esc(powerText(s.reason))}</small></button>${(() => {const next=sessions.slice(t+1).find(other=>other.resource===s.resource);return next ? `<small>Resumes ${time(next.start)}<br>Pause ${num((Date.parse(next.start)-Date.parse(s.end))/3600000,1)} h</small>` : ''})()}</div>`
     ).join('') || '<p class="empty">No charging sessions selected.</p>';
     $('evidence').innerHTML =
-      `<p>Control response observed locally: ${num(state.control_max_seconds*1000,2)} ms maximum. This is not hardware latency.</p>${plan?`<pre>${esc(JSON.stringify({status:plan.status,stages:plan.stages,input_digest:plan.input_digest},null,2))}</pre>`:''}`;
+      `<p>${esc(state.provenance)}</p><p>${esc(graphHistory.status)}</p><p>Control response observed locally: ${num(state.control_max_seconds*1000,2)} ms maximum. This is not hardware latency.</p>${plan?`<pre>${esc(JSON.stringify({status:plan.status,stages:plan.stages,input_digest:plan.input_digest},null,2))}</pre>`:''}`;
   }
 
 
@@ -348,8 +370,20 @@ export async function mountApplication(root, options = {}) {
         value = null;
         label = 'Waiting for live input';
       }
-      const energy = dailyEnergyText(dailyEnergy, key, state.now, state.policy.timezone);
-      return `<article class="live-item" data-live="${key}" ${options.native ? 'role="button" tabindex="0"' : ''}><span class="muted">${name}</span><strong style="color:${colors[key]}">${unit==='W'?watts(value):num(value,0)} <small style="display:inline;font-size:13px">${unit}</small></strong><small>${esc(label)}</small><small class="daily-energy">${esc(energy)}</small>${issues.map(issue=>`<small class="error">${esc(powerText(issue))}</small>`).join('')}${unit==='%' && value !== null ?`<div class="meter"><i style="width:${Math.max(0,Math.min(100,value))}%;background:${colors[key]}"></i></div>`:''}</article>`;
+      let compact = '';
+      const readings = state.live_inputs?.readings;
+      if (key === 'solar') compact = `<span title="AC solar">∿ ${watts(readings ? readings.pv_ac_kw?.value : liveKnown ? o.pv_ac_kw : null)} W</span> · <span title="DC solar">⎓ ${watts(readings ? readings.pv_dc_kw?.value : liveKnown ? o.pv_dc_kw : null)} W</span>`;
+      if (key === 'ess') compact = `<span title="Minimum battery state of charge">≥ ${num(c.ess_min_kwh/c.ess_capacity_kwh*100,0)}%</span> · ${watts(readings ? readings.ess_kw?.value : liveKnown ? o.ess_power_kw : null)} W`;
+      let connected = liveKnown ? o.connected : null;
+      if (!state.demo && state.live_inputs) {
+        const connection = state.live_inputs.cards.ev?.label;
+        connected = connection === 'Connected' ? true : connection === 'Away / disconnected' ? false : null;
+      }
+      const rows = dailyEnergyRows(dailyEnergy, key, state).map(row => {
+        const coverage = row.partial ? ' Partial recorded coverage; the projection starts from that subtotal.' : '';
+        return `<span class="energy-row" title="${esc(row.label)}: recorded today ⇢ expected at local midnight. Power integration estimates.${coverage}" aria-label="${esc(row.label)}: ${row.actual} kWh recorded, ${row.predicted} kWh expected at day end${row.partial ? ', partial coverage' : ''}"><span class="energy-symbol" aria-hidden="true">${row.symbol}</span><span>${row.actual}</span><span class="prediction-arrow" aria-hidden="true">⇢</span><span>${row.predicted}</span><span class="energy-unit">kWh${row.partial ? ' ◐' : ''}</span></span>`;
+      }).join('');
+      return `<article class="live-item" data-live="${key}" ${options.native ? 'role="button" tabindex="0"' : ''}><span class="live-label muted">${name}${key === 'ev' ? connectionIcon(connected) : ''}</span><strong style="color:${colors[key]}">${unit==='W'?watts(value):num(value,0)} <small style="display:inline;font-size:13px">${unit}</small></strong>${compact ? `<small class="live-components">${compact}</small>` : ''}<div class="daily-energy">${rows}</div>${issues.length ? `<span class="input-warning" title="${esc(issues.map(powerText).join('; '))}" aria-label="${esc(issues.map(powerText).join('; '))}">⚠</span>` : ''}${unit==='%' && value !== null ?`<div class="meter"><i style="width:${Math.max(0,Math.min(100,value))}%;background:${colors[key]}"></i></div>`:''}</article>`;
     }).join('');
   }
 
@@ -406,8 +440,13 @@ export async function mountApplication(root, options = {}) {
         backendState = nextState;
         state = options.liveState ? options.liveState(backendState) : backendState;
         render();
-        if (['overview', 'planning'].includes(page) && Date.now() - energyRequestedAt > 30000) {
+        const energyDate = new Intl.DateTimeFormat('en-CA', {timeZone: state.policy.timezone,
+          year: 'numeric', month: '2-digit', day: '2-digit'}).format(new Date(state.now));
+        if (['overview', 'planning'].includes(page) && (Date.now() - energyRequestedAt > 30000 ||
+            energyPlanId !== state.accepted?.id || energyDay !== energyDate)) {
           energyRequestedAt = Date.now();
+          energyPlanId = state.accepted?.id;
+          energyDay = energyDate;
           try {
             dailyEnergy = await api('daily-energy');
           } catch {

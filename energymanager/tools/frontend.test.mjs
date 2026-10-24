@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {dailyEnergyText, displaySetting, entityState, powerText, settingLabel, storedSetting, watts}
+import {dailyEnergyRows, connectionIcon, displaySetting, entityState, powerText, settingLabel, storedSetting, watts}
   from '../src/energymanager/assets/display.js';
 import {clockValue, localDateTime, localInstants, monthDays, validLocal}
   from '../src/energymanager/assets/date-time.js';
@@ -198,7 +198,7 @@ test('managed strategy generates actual HA cards and adopts new release layout w
   const layout = generateDashboard(config, manifest, {addon: 'synthetic_energy_manager', manifest});
   assert.deepEqual(layout.views.map(view => view.path), ['overview', 'planning', 'ev', 'settings']);
   assert.ok(layout.views.every(view => view.sections.every(section => section.cards.every(card => card.type !== 'tile'))));
-  assert.ok(layout.views[0].sections.some(section => section.cards.some(card => card.type === 'history-graph')));
+  assert.ok(layout.views.every(view => view.sections.every(section => section.cards.every(card => card.type !== 'history-graph'))));
   assert.ok(!JSON.stringify(layout).includes('iframe'));
   const future = {...manifest, version: '4.3.0'};
   const updated = generateDashboard(config, future, {addon: 'synthetic_energy_manager', manifest: future});
@@ -256,17 +256,34 @@ test('stable loader uses authenticated HA discovery, versioned assets and safe s
   } finally { globalThis.fetch = originalFetch; }
 });
 
-test('daily energy labels separate opposing flows and reject yesterday totals', () => {
+test('compact daily energy separates flows, pairs day-end predictions and rejects stale totals/plans', () => {
   const summary = {date: '2026-10-25', timezone: 'Europe/Brussels', partial: true,
-    kwh: {import: 4, export: 2, ess_charge: 1.5, ess_discharge: 1, solar: 6, solar_ac: 5, solar_dc: 1,
-      house: 3, ev: 2}};
-  const label = key => dailyEnergyText(summary, key, '2026-10-24T23:00:00Z', 'Europe/Brussels');
-  assert.match(label('grid'), /Today \(partial\): Import 4.00 kWh · export 2.00 kWh/);
-  assert.match(label('ess'), /AC charge 1.50 kWh · discharge 1.00 kWh/);
-  assert.match(label('solar'), /6.00 kWh · AC 5.00 kWh \/ DC 1.00 kWh/);
-  assert.match(label('house'), /3.00 kWh/);
-  assert.match(dailyEnergyText(summary, 'house', '2026-10-25T23:00Z', 'Europe/Brussels'), /unavailable/);
-  assert.match(dailyEnergyText(null, 'ev', '2026-10-25T00:00Z', 'Europe/Brussels'), /unavailable/);
+    prediction_revision: 2, prediction_plan_id: 'synthetic',
+    kwh: {import: 4, export: 2, ess_charge: 1.5, ess_discharge: 1, solar_ac: 5, solar_dc: 1, house: 3, ev: 2},
+    predicted_kwh: {import: 6, export: 3, ess_charge: 2, ess_discharge: 1.5, solar_ac: 7, solar_dc: 2, house: 5, ev: 4}};
+  const state = {now: '2026-10-24T23:00:00Z', policy: {timezone: 'Europe/Brussels'}, revision: 2, accepted: {id: 'synthetic'}};
+  assert.deepEqual(dailyEnergyRows(summary, 'grid', state).map(row => [row.symbol,row.actual,row.predicted]),
+    [['←','4.00','6.00'],['→','2.00','3.00']]);
+  assert.deepEqual(dailyEnergyRows(summary, 'solar', state).map(row => row.symbol), ['∿','⎓']);
+  assert.ok(dailyEnergyRows(summary, 'ess', state).every(row => row.partial));
+  assert.equal(dailyEnergyRows(summary, 'house', {...state, revision: 3})[0].predicted, '—');
+  assert.equal(dailyEnergyRows(summary, 'house', {...state, now:'2026-10-25T23:00Z'})[0].actual, '—');
+  assert.equal(dailyEnergyRows(null, 'ev', state)[0].actual, '—');
+  assert.match(connectionIcon(true), /aria-label="Connected"/);
+  assert.match(connectionIcon(false), /aria-label="Disconnected"/);
+  assert.match(connectionIcon(null), /aria-label="Connection unknown"/);
+});
+
+const {valueAt, clipSeries} = await import('../src/energymanager/assets/graph-cursor.js');
+test('graph cursor follows displayed lines and preserves gaps and planned step boundaries', () => {
+  const readings = [[0,100],[10,200],[20,null],[30,300]];
+  assert.deepEqual(valueAt(readings, 5), {value:150, approximate:true});
+  assert.deepEqual(valueAt(readings, 10), {value:200, approximate:false});
+  assert.equal(valueAt(readings, -1), null);
+  assert.equal(valueAt(readings, 15), null);
+  assert.equal(valueAt(readings, 25), null);
+  assert.equal(valueAt(readings, 31), null);
+  assert.deepEqual(valueAt([[0,100],[10,100],[10,200],[20,200]],10), {value:200,approximate:false});
 });
 
 // Synthetic archive transport and measurements; no HA access.
@@ -337,4 +354,13 @@ test('a ring of repeated expired snapshots cannot erase the valid archived readi
     observed: [{at: new Date(start).toISOString(), quality: 'unknown'}]};
   const archive = {series: {house: [[start, 400], [start + 30000, null]]}};
   assert.deepEqual(observedPoints(state, archive, 'house'), archive.series.house);
+});
+
+
+test('graph window boundaries keep bracketing line values without extrapolating across missing data', () => {
+  const clipped = clipSeries([[0,100],[10,100],[10,200],[20,200]], 5, 15);
+  assert.deepEqual(valueAt(clipped, 5), {value:100,approximate:true});
+  assert.deepEqual(valueAt(clipped, 15), {value:200,approximate:true});
+  assert.deepEqual(valueAt(clipped, 10), {value:200,approximate:false});
+  assert.deepEqual(clipSeries([[0,100],[10,null],[20,200]], 5, 15), [[10,null]]);
 });

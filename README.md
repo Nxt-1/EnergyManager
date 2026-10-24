@@ -1,6 +1,6 @@
 # EnergyManager 4
 
-Version **4.2.2** replaces the previous Energy Manager application with a joint EV/ESS
+Version **4.2.3** replaces the previous Energy Manager application with a joint EV/ESS
 MILP scheduler, independent responsive control and Overview/Planning/EV pages.
 The complete seven-day horizon uses planning intervals no longer than five minutes.
 Goals, scoped peak permissions, reasons, measured progress and immutable decisions are

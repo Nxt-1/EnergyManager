@@ -46,6 +46,7 @@ jobs:
           node --check energymanager/src/energymanager/assets/application-view.js
           node --check energymanager/src/energymanager/assets/native-live.js
           node --check energymanager/src/energymanager/assets/graph-history.js
+          node --check energymanager/src/energymanager/assets/graph-cursor.js
           node --check energymanager/src/energymanager/assets/settings.js
           node --check energymanager/src/energymanager/assets/display.js
           node --check energymanager/src/energymanager/assets/date-time.js

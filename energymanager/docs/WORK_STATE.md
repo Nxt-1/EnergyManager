@@ -1,5 +1,27 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work — 4.2.3 compact dashboard and graph inspection
+
+AUTHORIZED: simplify energy/connection labels with symbols; append expected end-of-today
+energy after each recorded subtotal (explicit user answer); add numeric graph cursors;
+remove provenance/history-detail clutter and duplicate native battery-history card;
+combine plan-update/time bar, enlarge power plot and align power/SoC/session time axes.
+Standing ready-release commit/push/publication permission applies. No live HA/hardware.
+IMPLEMENTED: end-of-day projection clipped to local midnight with revision/forecast/
+coverage guards; compact icon rows and partial-coverage tooltips; keyboard/pointer/touch
+cursor follows displayed lines without bridging gaps; shared plot insets and360px power
+height; simplified header and hidden normal history status, failures remain visible.
+Native source/history choices remain available. Planner/controller authority unchanged.
+LOCAL COMPLETE:170 Python43.45s/20 Node tests, Ruff/mypy31/JS syntax/CLI4.2.3 pass.
+Native/standalone synthetic browser checks pass, including compact rows across midnight,
+numeric cursors/gaps/window edges, source chooser and390px geometry. Graph/session
+endpoints within0.02px desktop/exact phone;360px power plot. No browser warnings/errors.
+Configured fake E2E26.912s/2,018 intervals/max tick2.866ms/five fake-only calls passes.
+Wheel/sdist built;48 packaged code/assets match, isolated4.2.3 import passes. Relevant
+architecture/decisions/runbook/guide/changelog/verification updated. No live deployment.
+NEXT: final scoped diff review, one release commit/push and inspect CI/image publication.
+Remote outcomes belong only in ignored checkpoint/final; no extra verification commit.
+
 ## Current work — 4.2.2 graph-history release
 
 The user authorized committing and pushing the completed ARCH-010 implementation,

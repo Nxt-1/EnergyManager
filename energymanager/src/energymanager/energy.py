@@ -105,3 +105,44 @@ def daily_energy(path: Path, now: datetime, timezone: str, max_age_seconds: floa
             "kwh": totals if covered > 0 else None, "covered_seconds": covered,
             "elapsed_seconds": elapsed, "partial": elapsed - covered > 1,
             "source": "SYNTHETIC power integration" if demo else "Recorded power integration"}
+
+
+def end_of_day_energy(summary: dict[str, Any], plan: dict[str, Any] | None,
+                      revision: int, forecast_max_age: float,
+                      discharge_efficiency: float) -> dict[str, float] | None:
+    """Add the current plan's remaining AC flows to the recorded daily subtotal."""
+    if summary["kwh"] is None or not plan or not plan.get("valid") or plan.get("revision") != revision:
+        return None
+    at = instant(summary["as_of"])
+    issued = instant(plan["forecast_at"])
+    if not 0 <= (at - issued).total_seconds() <= forecast_max_age:
+        return None
+    local = at.astimezone(ZoneInfo(summary["timezone"]))
+    end = (local.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).astimezone(UTC)
+    totals = dict(summary["kwh"])
+    cursor = at
+    flows = plan["flows"]
+    for index, interval in enumerate(plan["intervals"]):
+        left, right = max(at, instant(interval["start"])), min(end, instant(interval["end"]))
+        if right <= left:
+            continue
+        if left != cursor:
+            return None  # Never treat an uncovered part of the remainder as zero energy.
+        hours = (right - left).total_seconds() / 3600
+        imported = sum(flows[key][index] for key in ("grid_ev", "grid_house", "grid_store"))
+        charge = flows["pv_store"][index] + flows["grid_store"][index]
+        discharge = sum(flows[key][index] for key in ("solar_dis_ev", "solar_dis_house", "grid_dis_house"))
+        discharge += flows["dc_invert"][index] * discharge_efficiency
+        powers = {"import": imported, "export": flows["export"][index],
+                  "solar_ac": interval["pv_ac_kw"], "solar_dc": interval["pv_dc_kw"],
+                  "solar": interval["pv_ac_kw"] + interval["pv_dc_kw"], "house": interval["house_kw"],
+                  "ev": flows["pv_ev"][index] + flows["grid_ev"][index] + flows["solar_dis_ev"][index],
+                  "ess_charge": charge, "ess_discharge": discharge}
+        if any(not math.isfinite(value) or value < -1e-6 for value in powers.values()):
+            return None
+        for key, power in powers.items():
+            totals[key] += max(0, power) * hours
+        cursor = right
+        if cursor == end:
+            return totals
+    return None

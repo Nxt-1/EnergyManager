@@ -1,6 +1,6 @@
 # Current requirements and decisions
 
-Maintained 24 October 2026 for 4.2.2. This records confirmed product preferences and
+Maintained 25 October 2026 for 4.2.3. This records confirmed product preferences and
 implementation outcomes from the V4 implementation chat. It supplements the complete
 original [architecture decisions](architecture/Architecture_Decisions.md); the
 [maintained architecture](architecture/Architecture_Proposal.md) describes the resulting implementation.
@@ -150,3 +150,16 @@ committing and pushing it. This lifts the earlier hold for ARCH-010. Prepare rel
 4.2.2 with the completed code, tests, documentation and offline evidence. Existing
 publication workflows are authorized; live HA deployment and hardware operation are
 still separate actions. No additional dashboard or controller feature is added here.
+
+## 25 October 2026 — Compact dashboard and graph inspection
+
+The user requested compact symbolic energy/connection rows, numeric graph cursors,
+more vertical power-graph space, aligned graph/session time axes and removal of the
+duplicate battery-history chart. Keep the underlying-sensor chooser and archived SoC
+graph. Move normal provenance/history details into diagnostics and combine plan-update
+time with the selected time window. Existing error visibility remains.
+
+The user explicitly chose expected total by the end of today after each energy value:
+recorded energy so far plus the current plan for the rest of the installation-local
+day. This is a projection, with partial actual coverage still marked, and does not
+change scheduler or hardware authority. Prepare4.2.3 under standing release permission.
