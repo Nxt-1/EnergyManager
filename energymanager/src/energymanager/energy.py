@@ -9,13 +9,18 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 from zoneinfo import ZoneInfo
+from time import monotonic
 
 from .domain import instant
 
 
-def measurements(path: Path, start: datetime, end: datetime) -> Iterator[dict[str, Any]]:
+def measurements(path: Path, start: datetime, end: datetime, *,
+                 timeout_seconds: float | None = None) -> Iterator[dict[str, Any]]:
     """Stream timestamp-ordered records using a separate, read-only SQLite connection."""
     connection = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)
+    deadline = monotonic() + timeout_seconds if timeout_seconds else None
+    if deadline is not None:
+        connection.set_progress_handler(lambda: int(monotonic() > deadline), 1000)
     try:
         rows = connection.execute(
             "SELECT body FROM events WHERE kind='measurement' "
@@ -25,6 +30,8 @@ def measurements(path: Path, start: datetime, end: datetime) -> Iterator[dict[st
         )
         previous: dict[str, Any] | None = None
         for (body,) in rows:
+            if deadline is not None and monotonic() > deadline:
+                raise TimeoutError("Archive query exceeded its time budget; choose a shorter range")
             sample = json.loads(body)
             # The loop archives cached snapshots too. Count a validated read only once.
             if previous is not None and instant(sample["at"]) != instant(previous["at"]):
@@ -36,6 +43,10 @@ def measurements(path: Path, start: datetime, end: datetime) -> Iterator[dict[st
             previous = sample
         if previous is not None:
             yield previous
+    except sqlite3.OperationalError as exc:
+        if deadline is not None and monotonic() > deadline:
+            raise TimeoutError("Archive query exceeded its time budget; choose a shorter range") from exc
+        raise
     finally:
         connection.close()
 

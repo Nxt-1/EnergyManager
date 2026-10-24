@@ -10,13 +10,14 @@ from urllib.parse import urlsplit
 
 from aiohttp import web
 
-from .domain import json_data
+from .domain import instant, json_data
 from .service import Application
 from .settings import ConfigurationConflict, ConfigurationFile, SettingsValidationError
 from .hardware import HardwareControl
 from . import __version__
 from .dashboard import dashboard_manifest
 from .energy import daily_energy
+from .graph_history import graph_history
 
 
 def create_web(application: Application, *, configuration: ConfigurationFile | None = None) -> web.Application:
@@ -47,6 +48,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
             return web.json_response({"error": str(exc)}, status=400)
 
     app = web.Application(middlewares=[boundary], client_max_size=64 * 1024)
+    archive_readers = asyncio.Semaphore(2)
 
     async def settings(request: web.Request) -> web.Response:
         if configuration is None:
@@ -89,6 +91,21 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         result = await asyncio.to_thread(daily_energy, application.store.path, application.now(),
                                         application.policy.timezone,
                                         application.policy.measurement_max_age_seconds, application.demo)
+        return web.json_response(result, headers={"Cache-Control": "no-store"})
+
+    async def history(request: web.Request) -> web.Response:
+        start = instant(request.query["start"])
+        end = instant(request.query["end"])
+        points = int(request.query.get("points", "1200"))
+        async with archive_readers:
+            try:
+                result = await asyncio.to_thread(
+                    graph_history, application.store.path, start, end, application.now(), points,
+                    application.policy.measurement_max_age_seconds,
+                    application.snapshot.capabilities.ev_capacity_kwh,
+                    application.snapshot.capabilities.ess_capacity_kwh, application.demo)
+            except (TimeoutError, sqlite3.OperationalError) as exc:
+                return web.json_response({"error": f"Archive history unavailable: {exc}"}, status=503)
         return web.json_response(result, headers={"Cache-Control": "no-store"})
 
     async def dashboard(request: web.Request) -> web.Response:
@@ -145,7 +162,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         if name not in ("index.html", "app.js", "settings.js", "display.js", "date-time.js",
                         "datetime-picker.js", "ev-schedule.js", "style.css", "ha-card.js",
                         "application-view.js", "view.html", "native-dashboard.js", "native-dashboard.css",
-                        "native-live.js"):
+                        "native-live.js", "graph-history.js"):
             raise web.HTTPNotFound()
         content_type = {"html": "text/html", "js": "text/javascript", "css": "text/css"}[
             name.rsplit(".", 1)[1]
@@ -166,6 +183,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         [
             web.get("/api/state", state),
             web.get("/api/daily-energy", energy),
+            web.get("/api/history", history),
             web.get("/api/dashboard", dashboard),
             web.post("/api/control", control),
             web.get("/api/settings", settings),

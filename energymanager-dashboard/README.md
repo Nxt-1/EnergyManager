@@ -1,6 +1,6 @@
 # Native EnergyManager dashboard
 
-EnergyManager4.2.1 provides real HA dashboard views, live boxes, Recorder battery
+EnergyManager 4.2.2 provides real HA dashboard views, live boxes, Recorder battery
 history and custom planning/EV/settings cards. It uses no iframe. The same reusable
 components remain available through the add-on sidebar for standalone/fallback use.
 
@@ -60,8 +60,12 @@ every30 seconds. The first startup creates an index over existing measurement ev
 which can take longer with a large archive.
 
 HA Recorder supplies native sensor history, subject to its configured coverage and
-retention. It does not import EnergyManager's separate SQLite archive. ARCH-010 remains
-deferred for the custom graphs' older archived measurements. Planned curves, goals,
+retention. It does not import EnergyManager's separate SQLite archive. From 4.2.2,
+custom power/SoC graphs load the visible range from EnergyManager's archive.
+Use History day to inspect any retained local day, the arrows to shift 12 hours, or Now
+to return to the live window. Missing readings remain blank. Older battery percentages
+use current capacities when the original record did not store capacities; the chart
+labels this assumption. Planned curves, goals,
 permissions and settings still come from EnergyManager. Frontend HA readings cannot
 satisfy backend enablement checks or grant hardware authority. The controller's current
 five-second HA input polling and all safety/permission rules remain unchanged.

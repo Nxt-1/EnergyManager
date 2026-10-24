@@ -1,3 +1,12 @@
+## 4.2.2 — Archived graph history
+
+- Load older power and battery measurements for the visible graph range from SQLite.
+  Add an installation-local History day selector; keep12-hour arrows and Now.
+- Bound archive queries and plotted detail, retain extrema and leave missing/invalid
+  measurements blank. Cache ranges and prevent old responses replacing newer views.
+- Record capacities for future historical SoC; explicitly label the current-capacity
+  assumption used for older records. Keep control and archival retention unchanged.
+
 ## 4.2.1 — Daily energy in the live boxes
 
 - Remove the duplicate sensor strip from the native dashboard. Keep clickable live

@@ -1,5 +1,45 @@
 # EnergyManager 4 verification
 
+## 4.2.2 — Archived graph history
+
+Final 4.2.2 release checks: 165 Python tests passed in 42.64s; 18 frontend tests,
+Ruff/mypy31, all JavaScript syntax and CLI version passed. Configured fake E2E with
+47,942 seeded synthetic archive records accepted 2,018 intervals in 27.108s, max
+observed control tick 3.180ms, five fake-only service calls. No live installation access.
+Final wheel/sdist built: all47 code/assets match source and isolated4.2.2 wheel import
+passed (graph-history-package-verification.json).
+
+Initial implementation/browser/load evidence (unchanged graph code):
+
+165 Python tests passed43.50s; targeted12 tests passed again after adding503 coverage.
+18 Node tests, Ruff/mypy31 and all JS syntax passed. Tests cover legacy events outside
+the ring, index use, bounded responses, retained peaks, gaps/invalid/demo separation,
+unknown EV SoC, recorded/legacy capacity handling, range/point/timezone validation,
+read timeout, HTTP boundary and a held worker query while /api/state still responds.
+Frontend checks cover23/25-hour dates, obsolete-response suppression, cache/error
+backoff, merging recent samples and preserving valid archived readings after cached
+watchdog failures. The user subsequently authorized the 4.2.2 release; final release
+checks are recorded below before the single implementation commit.
+
+The load check used245,924 explicitly synthetic archive records with two concurrent
+24-hour queries. Each returned16,561 distinct samples as at most683 points per series
+and125,847 response bytes, in1.294/1.282s.87 fake database writes continued; maximum
+observed5ms heartbeat delay10.760ms. These are local read/write/event-loop measurements,
+not installation control or hardware latency. See graph-history-load-verification.json.
+
+Configured fake E2E with44,924 seeded old graph records:2,018 intervals accepted27.381s,
+max initial control tick2.650ms, five local fake-only calls. After browser history reads,
+max observed controller tick7.002ms and hardware control off. Browser native/standalone
+checks show the previous day's full power and SoC history, deliberate noon outage,
+EV-only unknown interval, correct date/12h/Now navigation and an absent day with zero
+actual paths.390px controls fit; screenshots graph-history-v422-desktop/mobile.png.
+The local ingress fixture now preserves query parameters. HA built-ins/Supervisor are
+simulated; actual HA installation and existing installation archive remain unverified.
+No browser warnings/errors after fixing the local proxy. Temporary8102/8103 servers
+stopped, normal browser viewport restored.47 packaged code/assets match source and
+isolated extracted-wheel import passed for the initial local implementation. The final
+4.2.2 wheel/sdist is built separately under dist/ before publication. No live database/hardware/deployment.
+
 ## 4.2.1 — Daily energy in live boxes
 
 161 Python tests passed40.58s,14 Node tests, Ruff/mypy30 and all packaged JS syntax.

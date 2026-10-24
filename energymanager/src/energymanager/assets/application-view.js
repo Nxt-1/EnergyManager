@@ -12,6 +12,7 @@ import {
 import {
   EVSchedulePage
 } from './ev-schedule.js';
+import {GraphHistory, historyDayRange, observedPoints} from './graph-history.js';
 
 
 export async function mountApplication(root, options = {}) {
@@ -32,6 +33,10 @@ export async function mountApplication(root, options = {}) {
     hardwareIntent = false,
     hardwareError = null;
   let dailyEnergy = null, energyRequestedAt = 0;
+  let selectedRange = null;
+  const graphHistory = new GraphHistory(api, () => {
+    if (state && !viewLocked() && ['overview', 'planning'].includes(page)) renderCharts();
+  });
   const colors = {
     grid: '#dc2626',
     ess: '#007ac2',
@@ -98,6 +103,7 @@ export async function mountApplication(root, options = {}) {
     if (page === 'planning') return [state.accepted ? Date.parse(state.accepted.intervals[0].start) : now, state
       .accepted ? Date.parse(state.accepted.intervals.at(-1).end) : now + 168 * 3600000
     ];
+    if (selectedRange) return selectedRange;
     return [now - 6 * 3600000 + offset * 3600000, now + 18 * 3600000 + offset * 3600000];
   }
 
@@ -139,26 +145,7 @@ export async function mountApplication(root, options = {}) {
         planned.push([Date.parse(last.end), value]);
       }
     }
-    const observed = state.observed.filter(observation =>
-      observation.quality === (state.demo ? 'SYNTHETIC' : 'measured')).map(observation => {
-      let value;
-      if (soc) {
-        value = series === 'ev' ?
-          (observation.ev_state_known !== false ? observation.ev_kwh / capabilities.ev_capacity_kwh * 100 :
-            null) :
-          observation.ess_kwh / capabilities.ess_capacity_kwh * 100;
-      } else {
-        value = {
-          grid: observation.house_kw + observation.ev_power_kw - observation.pv_ac_kw - observation
-            .ess_power_kw,
-          ess: observation.ess_power_kw,
-          solar: observation.pv_ac_kw + observation.pv_dc_kw,
-          house: observation.house_kw,
-          ev: observation.ev_power_kw
-        } [series] * 1000;
-      }
-      return [Date.parse(observation.at), value];
-    });
+    const observed = observedPoints(state, graphHistory.data, series, soc);
     return {
       planned,
       observed
@@ -228,6 +215,12 @@ export async function mountApplication(root, options = {}) {
     return $('goal-dialog').open || $('detail-dialog').open || Date.now() < pointerUntil;
   }
 
+  function renderCharts() {
+    $('power').innerHTML = chart();
+    $('soc').innerHTML = chart(true);
+    $('graph-history-status').textContent = graphHistory.status;
+  }
+
   function renderHardware() {
     $('hardware-controls').hidden = page !== 'overview';
     const hardware = state.hardware_control;
@@ -275,8 +268,8 @@ export async function mountApplication(root, options = {}) {
     renderLive();
     $('status').innerHTML =
       `<p class="status-line">${plan?`Plan updated ${time(plan.intervals[0].start)} · ${plan.summary.intervals} intervals · ${num(plan.seconds,1)} s calculation`:'Waiting for the first validated joint plan. The independent control loop is running.'}${state.actuator_health?.delivery_fault ? '<span class="error"> / EV delivery fault: stopped; diagnose before restart</span>' : ''}${state.error?` · <span class="error">${esc(powerText(state.error))}</span>`:''}</p>`;
-    $('power').innerHTML = chart();
-    $('soc').innerHTML = chart(true);
+    graphHistory.load(start, end, Date.parse(state.now));
+    renderCharts();
     const sessions = plan?.sessions || [];
     $('timeline').innerHTML = ['ev', 'ess'].map(resource =>
         `<small>${resource.toUpperCase()}</small><div class="timeline-track">${sessions.filter(s=>s.resource===resource&&Date.parse(s.end)>start&&Date.parse(s.start)<end).map(s=>{const left=Math.max(start,Date.parse(s.start)),right=Math.min(end,Date.parse(s.end));return `<button class="timeline-run" data-session="${esc(s.id)}" style="background:${colors[resource]};left:${(left-start)/(end-start)*100}%;width:${(right-left)/(end-start)*100}%" title="${esc(s.title)} / ${esc(time(s.start))}" aria-label="${resource.toUpperCase()} session ${esc(time(s.start))}"></button>`}).join('')}</div>`
@@ -451,18 +444,34 @@ export async function mountApplication(root, options = {}) {
   for (const name of ['overview', 'planning', 'ev', 'settings']) $(name).onclick = () => showPage(name);
   $('back').onclick = () => {
     pointerUntil = 0;
-    offset -= 12;
+    if (selectedRange) selectedRange = selectedRange.map(at => at - 12 * 3600000);
+    else offset -= 12;
+    $('history-date').value = '';
     render()
   };
   $('forward').onclick = () => {
     pointerUntil = 0;
-    offset += 12;
+    if (selectedRange) selectedRange = selectedRange.map(at => at + 12 * 3600000);
+    else offset += 12;
+    $('history-date').value = '';
     render()
   };
   $('now').onclick = () => {
     pointerUntil = 0;
     offset = 0;
+    selectedRange = null;
+    $('history-date').value = '';
     render()
+  };
+  $('history-date').onchange = () => {
+    pointerUntil = 0;
+    if (!$('history-date').value) return;
+    try {
+      selectedRange = historyDayRange($('history-date').value, state.policy.timezone);
+      render();
+    } catch (error) {
+      $('graph-history-status').textContent = error.message;
+    }
   };
   $('new-goal').onclick = () => openGoal();
   $('close-dialog').onclick = $('cancel-dialog').onclick = () => $('goal-dialog').close();
@@ -581,6 +590,7 @@ export async function mountApplication(root, options = {}) {
     },
     dispose() {
       lifecycle.abort();
+      graphHistory.dispose();
       clearInterval(timer);
       for (const dialog of root.querySelectorAll('dialog[open]')) dialog.close();
     }

@@ -146,21 +146,28 @@ architecture for the implemented contract and VERIFICATION.md for local evidence
 
 ## ARCH-010 — Longer graph history from archived measurements
 
-Recorded: 24 October 2026. Status: **deferred future work**, explicitly requested by the user.
+Recorded: 24 October 2026. Status: **implemented in 4.2.2**. The user authorized
+committing and pushing the completed history fix after reviewing the local result.
 
-The graphs currently receive only the latest 2,000 control-loop samples. At the default
-one-second control interval this covers roughly 33 minutes, although Overview's initial
-time axis extends six hours into the past. Backward navigation does not load older
-measurements. Measurement events remain in SQLite; this display limit is separate from
-archival retention and does not imply that older stored measurements were deleted.
+Original issue (through released4.2.1): graphs receive only the latest2,000 control-loop
+samples, roughly33 minutes at a one-second loop. Overview shows six hours into the past
+but backward navigation does not load older measurements. Measurement events remain in
+SQLite; this is a display limit, not archival deletion.
 
-Future work should load archived measurements for the requested graph time range so
-users can inspect earlier power and battery SoC history. Choose an appropriate query,
-indexing and aggregation strategy to keep long ranges responsive without sending the
-entire archive to the browser or blocking independent control. Preserve measurement
-quality, gaps, timezone/clock-change handling and the distinction between observed and
-planned values; never fill missing history with synthetic readings.
+The implemented fix loads the requested graph range from the indexed existing
+measurement archive in a read-only worker. Overview keeps12-hour navigation/Now and
+adds installation-local History day selection, including23/25-hour days. Any retained
+day can be requested; the API bounds each query to eight elapsed days and100–2,000
+points per series. The UI requests1,200. First/min/max/last reduction preserves peaks
+within continuous buckets; buckets containing gaps are conservatively left blank.
+Unknown/other-mode samples and expired reads break lines. Requests are cached and
+obsolete navigation responses cannot repaint another range. Older graph data is merged
+with recent samples rather than shipping the full archive to the browser.
 
-The supported history range, navigation controls and aggregation detail remain to be
-decided. This entry does not select a retention/deletion policy or authorize implementation,
-live database access or data-collection experiments.
+New records retain battery capacities. Older archived kWh records use current runtime
+capacities to estimate percentages, explicitly labelled in the graph. No missing data is
+fabricated, no HA Recorder history is imported, and no retention/deletion policy is adopted.
+
+Offline verification uses clearly labelled synthetic archives/local fake endpoints.
+Actual installation history remains unverified; live database access was not authorized.
+The earlier hold on committing/pushing was lifted by the user for the 4.2.2 release.

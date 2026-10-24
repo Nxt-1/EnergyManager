@@ -31,7 +31,7 @@ async def test_versioned_native_bundle_is_complete_and_rejects_stale_versions(tm
         assert response.headers["Cache-Control"] == "no-store"
         assert (await response.json())["version"] == __version__
         for name in ("native-dashboard.js", "native-live.js", "native-dashboard.css",
-                     "application-view.js", "view.html", "settings.js", "datetime-picker.js", "style.css"):
+                     "application-view.js", "graph-history.js", "view.html", "settings.js", "datetime-picker.js", "style.css"):
             response = await client.get(f"/frontend/{__version__}/{name}")
             assert response.status == 200, name
             assert response.headers["Cache-Control"] == "no-cache"

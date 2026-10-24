@@ -1,6 +1,22 @@
 # V4 promotion checkpoint — 23 October 2026
 
-## Current work — 4.2.1 live boxes, then uncommitted graph history
+## Current work — 4.2.2 graph-history release
+
+The user authorized committing and pushing the completed ARCH-010 implementation,
+lifting the earlier hold. Release 4.2.2 includes the reviewed archive queries, bounded
+plot data, gap preservation, History day/12-hour/Now navigation and recorded capacities.
+No new feature or controller policy change is introduced during release preparation.
+Prior local verification: 165 Python tests, 18 Node tests, Ruff/mypy31/JS syntax,
+configured fake E2E, synthetic archive load check and native/standalone/390px browser
+checks. Actual HA installation remains unverified. See VERIFICATION.md for evidence.
+FINAL LOCAL CHECKS: 165 Python tests42.64s,18 frontend tests, Ruff/mypy31/all JS syntax
+and CLI4.2.2 passed. Configured fake E2E27.108s/2,018 intervals/max tick3.180ms,
+47,942 synthetic archived samples and five fake-only calls passed.
+FINAL PACKAGE: wheel/sdist built; all47 packaged code/assets match source and isolated
+4.2.2 wheel import passed. NEXT: commit/push the single release and inspect CI/image.
+Record remote results only in the ignored checkpoint/final reply; no extra docs commit.
+
+## Previous checkpoint — 4.2.1 live boxes and history follow-up
 
 AUTHORIZED: remove the top sensor strip, add daily energy to live boxes, retain sensor
 choosers, release/push4.2.1. Then implement ARCH-010 graph history without committing it.
@@ -13,8 +29,8 @@ fake E2E27.722s/2,018 intervals/max tick3.285ms/five fake-only calls. Wheel/sdis
 packaged source/assets checked; isolated wheel import passed. Browser preview confirms
 strip removal, five energy boxes, underlying chooser and native more-info event; no
 warnings/errors. HA built-ins/Supervisor are simulated; actual HA remains unverified.
-NEXT: commit/push4.2.1, inspect workflows; then graph history implementation remains
-uncommitted per user. Remote results go only in ignored checkpoint/final reply.
+COMPLETED: 4.2.1 was committed/pushed and its workflows passed. The later user
+authorization to release the graph-history fix as 4.2.2 supersedes the original hold.
 
 ## Current work — native managed HA dashboard, 24 October 2026
 

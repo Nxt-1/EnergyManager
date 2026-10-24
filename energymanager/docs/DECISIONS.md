@@ -1,6 +1,6 @@
 # Current requirements and decisions
 
-Maintained 24 October 2026 for 4.2.1. This records confirmed product preferences and
+Maintained 24 October 2026 for 4.2.2. This records confirmed product preferences and
 implementation outcomes from the V4 implementation chat. It supplements the complete
 original [architecture decisions](architecture/Architecture_Decisions.md); the
 [maintained architecture](architecture/Architecture_Proposal.md) describes the resulting implementation.
@@ -91,7 +91,7 @@ New explicit user instructions take precedence. Deferred ideas are not authoriza
   stable loader plus release-owned strategy/cards, avoiding a separate custom integration.
   Initial setup is once; subsequent add-on UI updates take effect on HA page reload.
   Personal dashboards are preserved. Backend polling/control policy and archived custom
-  graph history are separate; ARCH-010 remains deferred. See the maintained architecture.
+  graph history are separate; ARCH-010 adds custom archive history in 4.2.2. See the maintained architecture.
 
 - Keep Overview/Planning inspired by the original first two dashboard pages: live
   summaries, actual/planned power and SoC, time navigation, grouped sessions and the
@@ -142,3 +142,11 @@ with that scope. Daily values integrate recorded power, show separate opposing f
 and explicitly mark partial coverage; no daily meter entities have been configured.
 After that release, implement ARCH-010 graph archive loading, but do not commit or push
 that work yet. This specific hold overrides standing ready-release permission for it.
+
+## 24 October 2026 — Publish the graph-history fix
+
+After reviewing the completed local implementation, the user explicitly authorized
+committing and pushing it. This lifts the earlier hold for ARCH-010. Prepare release
+4.2.2 with the completed code, tests, documentation and offline evidence. Existing
+publication workflows are authorized; live HA deployment and hardware operation are
+still separate actions. No additional dashboard or controller feature is added here.

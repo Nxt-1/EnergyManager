@@ -461,10 +461,11 @@ class Application:
             self.response_seconds.append(monotonic() - before)
             if len(self.response_seconds) > 10000:
                 self.response_seconds = self.response_seconds[-10000:]
-            self.observed.append({**json_data(self.observation), "provenance": self.snapshot.provenance})
-            self.store.event(
-                "measurement", {**json_data(self.observation), "provenance": self.snapshot.provenance}
-            )
+            measurement = {**json_data(self.observation), "provenance": self.snapshot.provenance,
+                           "ev_capacity_kwh": self.snapshot.capabilities.ev_capacity_kwh,
+                           "ess_capacity_kwh": self.snapshot.capabilities.ess_capacity_kwh}
+            self.observed.append(measurement)
+            self.store.event("measurement", measurement)
             # No retention policy: records remain in events. This is only a bounded GUI projection.
             if len(self.observed) > 2000:
                 self.observed = self.observed[-2000:]

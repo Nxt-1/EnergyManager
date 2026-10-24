@@ -1,0 +1,25 @@
+{
+  "provenance": "SYNTHETIC archive; no installation measurements or hardware",
+  "raw_archive_rows": 245924,
+  "distinct_seeded_samples": 61481,
+  "concurrent_reads": 2,
+  "queries": [
+    {
+      "query_seconds": 1.2937159002758563,
+      "samples": 16561,
+      "max_points_per_series": 683,
+      "response_bytes": 125847,
+      "contains_gaps": true
+    },
+    {
+      "query_seconds": 1.281903900206089,
+      "samples": 16561,
+      "max_points_per_series": 683,
+      "response_bytes": 125847,
+      "contains_gaps": true
+    }
+  ],
+  "heartbeat_max_delay_seconds": 0.01076040033251047,
+  "fake_database_writes": 87,
+  "result": "passed"
+}

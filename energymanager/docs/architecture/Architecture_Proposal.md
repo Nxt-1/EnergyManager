@@ -163,8 +163,27 @@ use a separate read-only SQLite connection in a worker, outside the control even
 Creating this index can take time on the first startup with a large existing archive.
 
 HA Recorder supplies the native historical view under its own coverage/retention settings.
-It does not import EnergyManager's SQLite archive; ARCH-010 remains deferred for older
-data in the custom graphs. Accepted plans/decisions/settings still use the add-on API.
+It does not import EnergyManager's SQLite archive. Accepted plans/decisions/settings
+still use the add-on API.
+
+**From 4.2.2:** ARCH-010 loads archived power and battery
+measurements for the custom graphs' visible range via `GET /api/history`. It streams the
+indexed existing measurement events through a separate read-only worker connection,
+with two concurrent archive reads and a five-second scan budget. Each query is limited
+to eight elapsed days and100–2,000 points per series; the UI requests1,200 and can select
+any retained local day. No retention/deletion or installation data migration is added.
+First/min/max/last per time bucket retains extrema. A bucket containing invalid data or
+a gap is suppressed rather than joining readings across the gap; empty spans remain
+blank. Cached snapshots are deduplicated and read freshness bounds continuity. Current
+measured and demo histories stay separate. Recent samples overlay the archive with the
+same gap rules. The UI caches up to six ranges for30s, backs off failures and ignores
+obsolete range responses or disposed views. Errors explicitly show recent-only history.
+History day uses installation-local midnight boundaries, including23/25-hour dates;
+12-hour elapsed navigation and Now remain. Future observations are not invented.
+New measurement records also include EV/ESS capacities, without changing the Observation
+used by planning/control. Historical percentages prefer those recorded capacities;
+legacy records fall back to current runtime capacities with an explicit chart label.
+Old capacity changes cannot be reconstructed from those legacy measurement events alone.
 Frontend HA values never grant control authority or satisfy backend enablement checks.
 Backend HA input polling remains five seconds; native display updates are independent.
 Shared views mount inside the native card's shadow root, use HA theme variables and

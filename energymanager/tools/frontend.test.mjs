@@ -268,3 +268,73 @@ test('daily energy labels separate opposing flows and reject yesterday totals', 
   assert.match(dailyEnergyText(summary, 'house', '2026-10-25T23:00Z', 'Europe/Brussels'), /unavailable/);
   assert.match(dailyEnergyText(null, 'ev', '2026-10-25T00:00Z', 'Europe/Brussels'), /unavailable/);
 });
+
+// Synthetic archive transport and measurements; no HA access.
+const {GraphHistory, historyDayRange, observedPoints} = await import('../src/energymanager/assets/graph-history.js');
+
+test('graph history selects installation-local calendar days across clock changes', () => {
+  const autumn = historyDayRange('2026-10-25', 'Europe/Brussels');
+  const spring = historyDayRange('2026-03-29', 'Europe/Brussels');
+  assert.equal((autumn[1] - autumn[0]) / 3600000, 25);
+  assert.equal((spring[1] - spring[0]) / 3600000, 23);
+  assert.equal(new Date(historyDayRange('2026-10-25', 'Asia/Kolkata')[0]).toISOString(), '2026-10-24T18:30:00.000Z');
+});
+
+test('graph history ignores obsolete responses, caches ranges and exposes archive failure', async () => {
+  const pending = [];
+  let renders = 0;
+  const history = new GraphHistory(path => new Promise((resolve, reject) => pending.push({path, resolve, reject})), () => renders++);
+  history.load(0, 3600000, 7200000);
+  history.load(0, 3600000, 7200000);
+  assert.equal(pending.length, 1);
+  history.load(3600000, 7200000, 7200000);
+  const old = [...history.requests.values()][0];
+  const next = [...history.requests.values()][1];
+  pending[1].resolve({sample_count: 2, bucket_seconds: 12, series: {house: [[3600000, 400]]}});
+  await next;
+  pending[0].resolve({sample_count: 1, series: {house: [[0, 100]]}});
+  await old;
+  assert.equal(history.data.sample_count, 2);
+  assert.equal(renders, 1);
+  history.load(0, 3600000, 7200000);
+  assert.equal(history.data.sample_count, 1);
+  assert.equal(pending.length, 2);
+  history.load(7200000, 10800000, 10800000);
+  const failure = [...history.requests.values()][0];
+  pending[2].reject(new Error('SYNTHETIC archive timeout'));
+  await failure;
+  assert.match(history.status, /unavailable.*recent samples only.*timeout/);
+  history.load(7200000, 10800000, 10800000);
+  assert.equal(pending.length, 3); // Back off a failed archive rather than hammering it every state poll.
+  history.dispose();
+  history.load(0, 3600000, 7200000);
+  assert.equal(pending.length, 3);
+});
+
+test('observed graphs merge older archive with recent snapshots while preserving missing readings', () => {
+  const start = Date.parse('2026-10-24T00:00Z');
+  const sample = {at: new Date(start).toISOString(), quality: 'measured', house_kw: 0.4,
+    pv_ac_kw: 1, pv_dc_kw: 0, ev_power_kw: 0, ess_power_kw: 0, ev_kwh: 24, ess_kwh: 7};
+  const state = {demo: false, now: new Date(start + 150000).toISOString(), policy: {measurement_max_age_seconds: 30},
+    capabilities: {ev_capacity_kwh: 60, ess_capacity_kwh: 14}, observed: [
+      sample, {...sample, quality: 'unknown'}, {...sample, at: new Date(start + 5000).toISOString()},
+      {...sample, at: new Date(start + 90000).toISOString(), ev_state_known: false}
+    ]};
+  const archive = {series: {house: [[start - 3600000, 200], [start, 399]], ev_soc: [[start - 3600000, 40]]}};
+  const house = observedPoints(state, archive, 'house');
+  assert.deepEqual(house, [[start - 3600000, 200], [start - 3570000, null], [start, 400], [start + 5000, 400],
+    [start + 35000, null], [start + 90000, 400], [start + 120000, null]]);
+  const ev = observedPoints(state, archive, 'ev', true);
+  assert.equal(ev.find(point => point[0] === start)[1], 40);
+  assert.equal(ev.find(point => point[0] === start + 90000)[1], null);
+  assert.equal(state.observed[0], sample); // Projection does not change backend evidence.
+});
+
+test('a ring of repeated expired snapshots cannot erase the valid archived reading', () => {
+  const start = Date.parse('2026-10-24T00:00Z');
+  const state = {demo: false, now: new Date(start + 120000).toISOString(),
+    capabilities: {ev_capacity_kwh: 60, ess_capacity_kwh: 14}, policy: {measurement_max_age_seconds: 30},
+    observed: [{at: new Date(start).toISOString(), quality: 'unknown'}]};
+  const archive = {series: {house: [[start, 400], [start + 30000, null]]}};
+  assert.deepEqual(observedPoints(state, archive, 'house'), archive.series.house);
+});

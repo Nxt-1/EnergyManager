@@ -126,9 +126,15 @@ p {
 }
 #navigation {
   display:flex;
-  flex-shrink:0;
-  gap:3px
+  align-items:center;
+  flex-wrap:wrap;
+  gap:6px;
+  max-width:100%
 }
+.history-heading {flex-wrap:wrap}
+.history-date {display:flex;align-items:center;gap:6px;font-size:12px;margin:0}
+.history-date input {width:145px;padding:7px}
+#graph-history-status {font-size:12px}
 .live {
   display:grid;
   grid-template-columns:repeat(5,1fr);
@@ -519,6 +525,7 @@ body.planning aside .card {
   }
 }
 @media(max-width:620px) {
+  .history-date { flex-basis:100%; }
   header {
     height:auto;
     min-height:64px;

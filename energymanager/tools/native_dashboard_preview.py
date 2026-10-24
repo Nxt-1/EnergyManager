@@ -64,7 +64,7 @@ async def preview() -> None:
                 if key in request.headers:
                     headers[key] = request.headers[key]
             async with session.request(request.method, backend + request.match_info["path"],
-                                       headers=headers, data=await request.read()) as response:
+                                       headers=headers, params=request.query, data=await request.read()) as response:
                 return web.Response(body=await response.read(), status=response.status,
                                     headers={"Content-Type": response.headers["Content-Type"],
                                              "Cache-Control": "no-store"})

@@ -39,7 +39,8 @@ class VerificationResolver(AbstractResolver):
         pass
 
 
-async def run(*, serve: bool = False, preview_fault: str | None = None) -> None:
+async def run(*, serve: bool = False, preview_fault: str | None = None,
+              history_fixture: bool = False) -> None:
     issued = datetime.now(UTC)
     calls = []
     weather_queries = []
@@ -154,6 +155,11 @@ async def run(*, serve: bool = False, preview_fault: str | None = None) -> None:
         }):
             application = configured_application(path, store, addon=True,
                                                   weather_url=str(endpoint.make_url("/weather")))
+            if history_fixture:
+                from graph_history_fixture import seed_history
+
+                seeded = seed_history(store, issued, application.snapshot.capabilities)
+                print(f"SYNTHETIC archived graph fixture: {seeded} records; intentional gaps", flush=True)
             assert application.goals == ()
             assert not application.actuator.enabled
             assert application.ha.url == "http://supervisor/core/api"
@@ -241,9 +247,12 @@ async def run(*, serve: bool = False, preview_fault: str | None = None) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--serve", action="store_true", help="Keep synthetic verification UI on localhost:8102")
+    parser.add_argument("--history-fixture", action="store_true",
+                        help="Seed explicitly SYNTHETIC old graph measurements, including gaps")
     parser.add_argument("--input-fault", choices=("quarter", "stale", "unavailable", "read_failure"),
                         help="Inject old metadata, unavailability or HA read failure after local verification")
     arguments = parser.parse_args()
     if arguments.input_fault and not arguments.serve:
         parser.error("--input-fault requires --serve")
-    asyncio.run(run(serve=arguments.serve, preview_fault=arguments.input_fault))
+    asyncio.run(run(serve=arguments.serve, preview_fault=arguments.input_fault,
+                    history_fixture=arguments.history_fixture))
