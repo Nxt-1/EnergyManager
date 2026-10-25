@@ -1,6 +1,12 @@
 {
   "calendars": [],
-  "ev_diagnostics": {"ev_status": "", "charger_status": "", "charger_error": "", "charge_allowed": ""},
+  "ev_diagnostics": {
+    "ev_status": "",
+    "charger_status": "",
+    "charger_error": "",
+    "charge_allowed": "",
+    "heartbeat": ""
+  },
   "_description": "SYNTHETIC EXAMPLE ONLY. Review capacities, tariffs and entity mappings.",
   "capabilities": {
     "ev_capacity_kwh": 60.0,

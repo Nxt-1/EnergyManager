@@ -29,17 +29,46 @@ and failed check. The hardware switch still requires valid critical measurements
 The HA app's own Configuration tab still selects `demo` or `configured`. Demo mode
 cannot operate hardware. Choose `configured` and restart to use installation inputs.
 
-## EV fault recovery (4.3.1)
+## EV charging supervision (4.3.2)
+
+After updating, select these go-e APIv2 Connect entities under EV fault recovery:
+
+| Field | go-e entity | Typical suffix before HA renaming |
+|---|---|---|
+| Car state [CODE] | Numeric car state | `car` |
+| Status [CODE] | Numeric charging-logic status | `modelstatus` |
+| Error [CODE] | Numeric error;0 means none | `err` |
+| Last Status change age | Age in **seconds** | `lmsc_delta` |
+
+The three raw [CODE] sensors may need enabling in HA's device entity list; integration
+2026.10.3 disables them by default. Do not select their translated text counterparts
+(`*_value`). The age sensor is enabled by default. **Time since boot** is unsuitable:
+the integration rounds it to whole hours. Suffixes are guidance, never a hardcoded
+device identity. Select your actual entities, save and restart.
+
+These mappings gate EV control only. They remain optional for the overall settings so
+ESS can operate while EV is paused. A status line explains what EV is waiting for.
+Two advancing age readings establish freshness; repeated HA reads or entity change
+timestamps alone do not prove fresh device data. The device/read watchdog is30seconds.
+Planning uses the intersection of the current number's min/max and configured limits;
+it never raises the configured maximum. Disjoint limits pause EV.
+
+## EV fault recovery
 
 In Settings → EV fault recovery, select the optional charger reboot **button**. This
-opts into one automatic reboot after a delivery fault; leave it blank to keep the EV
+opts into one automatic reboot after an eligible delivery fault; leave it blank to keep the EV
 stopped and escalate immediately. No installation entity ID is built in. Select the
-optional EV/charger status, error and charging-permission entities for richer evidence.
+numeric EV/charger status/error entities above and optional charging permission.
 Existing EV measurements and actuator states are collected without extra mappings.
 Choose the destination under Phone notifications, then save and restart.
 
-The existing watchdog detects requested charging below100W for90seconds. This does not
-prove a charger defect. Recovery requires hardware control enabled and fresh connected
+The90second watchdog starts only after current/force readback confirms the request and
+go-e reports a charging state. Normal car waits, minimum pauses and phase transitions
+do not trigger it. Persistent blocking escalates after15minutes; command readbacks
+have30second deadlines and phase sequencing has a bounded deadline. These blocked or
+failed-command cases never permit reboot. All nonzero errors, unknown values and stale
+data also prohibit it. This does not prove a charger defect. Recovery requires
+hardware control enabled and fresh connected
 EV inputs. It stops charging, records the attempt before pressing the button, waits
 60seconds and verifies actual charging through normal control. An unsuccessful attempt
 leaves EV stopped and sends a timestamped alert through HA. There is no repeat reboot
@@ -51,6 +80,8 @@ states are sampled every five seconds after installation/configuration; older mi
 states cannot be recovered. After diagnosis, Acknowledge clears the latch only with
 fresh connected inputs and requests a new plan. It does not reboot or force charging.
 “Sent to Home Assistant” confirms HA accepted the alert, not delivery to the phone.
+A continuing power draw after a normal stop or an unconfirmed hardware-off stop is
+also escalated. Switching off never re-enables hardware for verification or recovery.
 
 ## EV calendars (4.3.0)
 

@@ -85,7 +85,7 @@ class HardwareControl:
                 self.error = None
                 try:
                     if was_enabled and isinstance(actuator, GuardedActuator):
-                        await actuator.stop(app.revision)
+                        await actuator.stop(app.revision, at=app.now())
                     if persistence_error:
                         raise RuntimeError("Hardware control is off; its saved state could not be updated")
                 except RuntimeError as exc:
@@ -121,6 +121,8 @@ class HardwareControl:
             app.store.put("hardware_control_enabled", True)
             self.requested, self.error = True, None
             actuator.last, actuator.phase = None, None
+            if actuator.goe_control:
+                actuator.goe_control.reset()
             actuator.enabled = True
             self.update_policy(True)
             app.store.event("hardware_control", {"enabled": True})

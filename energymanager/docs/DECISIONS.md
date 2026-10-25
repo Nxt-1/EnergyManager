@@ -1,6 +1,6 @@
 # Current requirements and decisions
 
-Maintained 25 October 2026 for 4.3.1. This records confirmed product preferences and
+Maintained 25 October 2026 for 4.3.2. This records confirmed product preferences and
 implementation outcomes from the V4 implementation chat. It supplements the complete
 original [architecture decisions](architecture/Architecture_Decisions.md); the
 [maintained architecture](architecture/Architecture_Proposal.md) describes the resulting implementation.
@@ -192,3 +192,13 @@ Pause Maps without losing the work. Preserve the prepared code/tests/docs locall
 outside the active package and keep it out of this release. The future referee policy
 is confirmed: HA home for both legs, arrive60minutes early, leave the venue two elapsed
 hours after event start. No Google credential input or live routing is activated.
+
+## 25 October2026 — Implement the go-e source-review findings
+
+The user approved status-aware charging, command confirmation, bounded phase waits,
+restricted reboot eligibility and charger-limit/health validation. Explicitly confirmed:
+numeric car/status/error and a device heartbeat may be required for EV control while
+ESS stays available. Source inspection corrected the heartbeat choice: integration
+2026.10.3 rounds uptime to whole hours; use its existing last Status change age in
+seconds instead. No new physical phase sensor, direct charger connection, live access
+or Maps activation. Keep HA as the control boundary and verify only fake endpoints.

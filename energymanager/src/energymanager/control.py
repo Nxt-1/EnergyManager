@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 from collections.abc import Callable
 import asyncio
 
 from .domain import Capabilities, Observation, Policy, instant
+from .goe import GoEReadings, GoEControl
 
 
 @dataclass(frozen=True)
@@ -376,6 +377,7 @@ class GuardedActuator:
         enabled: bool = False,
         generation: Callable[[], int] | None = None,
         on_write: Callable[[dict[str, Any]], None] | None = None,
+        charger: GoEReadings | None = None,
     ) -> None:
         self.client, self.entities, self.c, self.enabled = client, entities, capabilities, enabled
         self.generation = generation
@@ -396,6 +398,10 @@ class GuardedActuator:
         self.delivery_fault = False
         self.delivery_fault_at: datetime | None = None
         self.on_delivery_fault: Callable[[Command, Observation, datetime], None] | None = None
+        self.charger = charger
+        self.goe_control = GoEControl(self, charger) if charger else None
+        self.delivery_reason = "Requested charging but EV power remained below 100 W for 90 seconds"
+        self.delivery_reboot_allowed = charger is None  # Legacy synthetic adapter; configured mode always has supervision.
 
     async def reboot_ev(self, entity: str, permitted: Callable[[], bool], before_press: Callable[[], None]) -> None:
         """Stop first; persist the single attempt before a generation-guarded button press."""
@@ -432,9 +438,12 @@ class GuardedActuator:
                 }
             )
 
-    async def stop(self, generation: int) -> None:
+    async def stop(self, generation: int, *, at: datetime | None = None) -> None:
         """Stop EV charging and clear the ESS setpoint after ordinary writes are revoked."""
         self.enabled = False
+        if self.goe_control:
+            self.goe_control.reset()
+            self.goe_control.disabled_stop_at = at or datetime.now(UTC)
         errors = []
         async with self.lock:
             for domain, service, key, value_key, value in (
@@ -477,6 +486,9 @@ class GuardedActuator:
             await self.write(
                 "number", "set_value", "ess_setpoint", "value", round(-command.ess_kw * 1000 / 10) * 10
             )
+            if self.goe_control:
+                await self.goe_control.apply(command, observation)
+                return
             if self.awaiting_phase is not None:
                 if (observation.ev_phase_known and observation.ev_phases == self.awaiting_phase
                         and self.switched_at is not None and observation.at > self.switched_at):

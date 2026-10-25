@@ -1,0 +1,10 @@
+{
+  "version": "4.3.2",
+  "wheel": "dist/energymanager-4.3.2-py3-none-any.whl",
+  "sdist": "dist/energymanager-4.3.2.tar.gz",
+  "source_assets_match": 51,
+  "isolated_import": "4.3.2",
+  "maps_excluded": true,
+  "unrelated_backlog_excluded": true,
+  "result": "passed"
+}

@@ -1,7 +1,7 @@
 <header><div><span class="brand">◉</span> <strong>EnergyManager</strong><span class="muted" id="app-version"> 4</span></div>
 <nav aria-label="Main navigation"><button id="overview" aria-selected="true">Overview</button><button id="planning" aria-selected="false">Planning</button><button id="ev" aria-selected="false">EV</button><button id="settings" aria-selected="false">Settings</button></nav>
 <div id="connection" role="status">Connecting…</div></header>
-<main><section id="ev-fault-banner" class="notice ev-fault-banner" role="alert" hidden></section><div id="dashboard">
+<main><p id="charger-status" class="status-line" role="status" hidden></p><section id="ev-fault-banner" class="notice ev-fault-banner" role="alert" hidden></section><div id="dashboard">
 <section class="page-heading"><div><h1 id="page-title">Overview</h1><p id="period" class="muted"></p></div>
 <div class="actions"><div id="hardware-controls"><label class="hardware-switch"><span>Hardware control</span><input id="hardware-toggle" type="checkbox" disabled role="switch" aria-label="Hardware control"><span class="switch-track" aria-hidden="true"></span></label><small id="hardware-status" role="status"></small></div><button id="refresh">Recalculate</button><button class="primary" id="new-goal">＋ Add goal</button></div></section>
 <div id="live" class="live"></div>

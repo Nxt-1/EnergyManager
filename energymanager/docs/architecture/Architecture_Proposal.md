@@ -405,24 +405,61 @@ work. Restart initially revokes all recorded command authority until fresh recon
 Actuator failures are explicit events; repeated failure backs off, and non-delivery
 latches EV stopping. A solver-parent watchdog prevents orphan workers after service loss.
 
-### EV non-delivery incidents and bounded reboot recovery (4.3.1)
+### EV charging supervision and incident recovery (4.3.2)
 
-The existing watchdog detects90seconds of requested EV power above100W while measured
-EV power stays below100W, connected and without an active phase transition. This is
+The configured actuator uses GoEReadings/GoEControl. The five-second sampler reads
+mapped force/current/phase plus numeric `ev_status` (`car`), `charger_status`
+(`modelStatus`), `charger_error` (`err`) and `heartbeat` (go-e `lmsc_delta`, seconds).
+These four additional mappings gate EV only, as explicitly approved by the user;
+missing mappings cannot disable otherwise valid ESS balancing. Settings stays editable
+and shows numeric [CODE] labels. Translated text, invalid/unknown states and coarse
+uptime are rejected. Integration2026.10.3 rounds `rbt` to whole hours; it is not a
+heartbeat. Two distinct seconds-age samples establish device freshness; repeated HA
+reads do not renew it. A30second sampler/device watchdog holds EV stopped. HA entity
+change/report timestamps remain diagnostic and do not expire an otherwise steady state.
+
+Current number min/max are intersected with configured capabilities. A changed usable
+range updates runtime controller/snapshot capabilities, invalidates EV authority and
+requests planning without rewriting JSON or raising the configured maximum. Disjoint
+ranges fail the EV guard. Sampler frames retain actual limit evidence.
+
+EV writes are staged across sampler frames, never sleeps under the control lock.
+Current must match before forced start. Reductions stop first when the previous
+readback exceeds the new target. Pending writes require a later advancing device frame;
+HA service acceptance alone is not a charger acknowledgement. A superseded pending
+write is followed by the newly desired command even if an older frame already shows
+that value. Missing confirmation after30seconds latches/escalates without reboot.
+Stop/zero/10second preparation and configured phase dwell remain; selector echo alone
+does not complete an active modelStatus22/23 transition. Phase sequencing times out
+after max(180,configured phase dwell+180)seconds, independently of non-delivery.
+Continuing power for30seconds after stop escalates. A disabled hardware stop is also
+checked for30seconds in the incident worker; failure notifies without re-enabling or
+issuing recovery writes. Every command still passes enabled/generation guards.
+
+The delivery watchdog begins only after current/forced-start readback and an ordinary
+charging state are confirmed. Car waiting/complete/idle and documented charger waits
+pause it; persistent blockers escalate after15minutes without reboot. Unknown state
+combinations also block recovery. All nonzero error codes and explicit error/overheat
+states stop and escalate immediately, never reboot. The watchdog detects90seconds of
+confirmed EV power request above100W while measured EV power stays below100W. This is
 an EnergyManager delivery failure, not a confirmed go-e fault code. A persisted incident
 records first suspected time, detection time, original command/observation, recovery
 state, attempts and notification outcome. Incident history survives restart in SQLite.
 The dashboard banner and report show local timestamps including seconds and UTC offset.
 
 Settings optionally maps `actuators.ev_reboot` to a HA button; no installation ID is
-hardcoded or preselected. Selecting it enables one automatic reboot for this watchdog.
+hardcoded or preselected. Selecting it enables one automatic reboot only for healthy,
+confirmed non-delivery. Failed commands, phase timeouts, reported errors, ordinary
+blocking states and stale/unknown readings are ineligible. Eligibility is stored with
+the incident and rechecked against current charger status before pressing; old pending
+incidents without explicit eligibility cannot reboot after upgrade.
 Without a mapping, keep EV stopped and escalate. Recovery requires enabled hardware
 control, fresh validated connected EV/phase/SoC readings and power below100W. Under the
 actuator generation guard, send stop, recheck permission, persist the attempt, then
 press the button. A failed/unknown button response consumes the attempt. No network
 retry or restart may replay it. A persisted30-minute cooldown also spans new incidents.
 
-Wait60seconds after the attempt, then require a validated input read at/after that
+Wait60seconds after the attempt, then require an advancing device frame and input read at/after that
 boundary before permitting a normal guarded charging trial. If inputs do not return
 within180seconds, stop/escalate. Charging must be requested normally and fresh measured
 power must exceed the threshold across at least10seconds of distinct readings to
@@ -431,7 +468,7 @@ verification leaves EV latched off. Disabling hardware revokes a pending reboot;
 there are no long sleeps inside the actuator lock. ESS balancing remains available.
 Restart during verification latches unresolved; restart during reboot wait retains the
 single consumed attempt. Explicit acknowledgement requires fresh connected inputs,
-records the user decision and invalidates EV authority for a new plan. It neither
+and a cleared go-e error, records the user decision and invalidates EV authority for a new plan. It neither
 reboots nor forces charging and does not reset the cooldown.
 
 Unresolved incidents notify the existing selected phone target, deduplicated per
@@ -443,7 +480,12 @@ that physical phone receipt was confirmed. The agent uses fake endpoints only.
 A separate five-second sampler records EV power/SoC/connection, forced phase selector,
 charger force/current readbacks and optional `ev_diagnostics` status/error/allowed
 entities. Store bounded state/unit/report metadata and explicit read errors, without
-credentials or fabricated values. Diagnostic states never grant control authority.
+credentials or fabricated values. The four supervision mappings gate EV; other
+diagnostic states do not grant authority. Status code meanings, entity units and write
+semantics were checked against go-e APIv2 Connect2026.10.3 `select.py`, `number.py`,
+`button.py`, coordinator/bridge, translations and manufacturer API key/HTTP documentation.
+The integration catches some write errors and sends WebSocket commands asynchronously;
+its `stop_charging` service can return to neutral after five minutes and is not used.
 `GET /api/ev-incidents` lists the latest20 incidents. The incident endpoint reads
 T−5minutes to min(now,T+10minutes) from a separate read-only worker connection, using
 the event-time index, five-second scan budget and10,000-event cap with truncation flag.

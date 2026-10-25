@@ -76,10 +76,14 @@ def setting_fields() -> tuple[SettingField, ...]:
                                    domains=(domain,), units=units))
     result.append(SettingField("actuators.ev_reboot", "Automatic charger reboot button (optional)",
                                "EV fault recovery", "entity", domains=("button",), required=False))
-    for key, label in (("ev_status", "EV status"), ("charger_status", "Charger status"),
-                       ("charger_error", "Charger error"), ("charge_allowed", "Charging allowed")):
-        result.append(SettingField(f"ev_diagnostics.{key}", f"{label} (optional)", "EV fault recovery", "entity",
+    for key, label in (("ev_status", "Car state [CODE] · required for EV"),
+                       ("charger_status", "Status [CODE] · required for EV"),
+                       ("charger_error", "Error [CODE] · required for EV"),
+                       ("heartbeat", "Last Status change age · seconds · required for EV"),
+                       ("charge_allowed", "Charging allowed (optional)")):
+        result.append(SettingField(f"ev_diagnostics.{key}", label, "EV fault recovery", "entity",
                                    domains=("sensor", "binary_sensor", "select", "switch", "input_boolean"),
+                                   units=("s",) if key == "heartbeat" else (),
                                    required=False))
     for key, label, group, minimum, maximum in (
         ("ev_capacity_kwh", "EV capacity (kWh)", "EV and charger", 0.01, None),

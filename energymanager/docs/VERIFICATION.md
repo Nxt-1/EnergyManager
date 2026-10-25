@@ -1,5 +1,39 @@
 # EnergyManager 4 verification
 
+## 4.3.2 — Status-aware go-e charging supervision
+
+Full suite236 passed42.91s; after the final evidence-storage stop safeguard,56 targeted
+go-e/incident tests passed0.57s.22 frontend tests, Ruff/mypy34, all JS syntax and CLI4.3.2
+pass. New deterministic fake cases cover normal120second pauses, waiting/car-complete/
+OCPP states, unknown/nonnumeric inputs, all tested nonzero errors, no-reboot escalation,
+one healthy confirmed non-delivery recovery, fresh post-reboot frames, current-before-
+start, silent write failures, superseded start/stop races, cancelled current/phase
+requests, phase dwell/readback/transition deadlines, stale heartbeat despite new HA
+reads, malformed metadata, current-limit intersection/replan and ESS independence.
+Fault stop is attempted even if incident persistence raises. Hardware-off verification
+can notify but cannot re-enable or reboot. No installation entity ID is hardcoded.
+
+Configured fake E2E accepted2,018 intervals in35.467s, max control tick4.937ms, four
+fake-only service calls. It verifies advancing seconds heartbeat, numeric states,
+readbacks and a confirmed zero-power hardware-off stop before preview fault injection.
+Unchanged HA report timestamps are three hours old by design; they are not substituted
+for the advancing device signal. The final phase and persistence paths were separately
+verified by the targeted tests above. Report: offline-e2e.json.
+
+Synthetic native and standalone browser checks passed: required-for-EV CODE/seconds
+labels, clear/save/restore with backup/restart notice, unavailable-charger warning and
+clean final warning/error logs. At390px requested viewport the heartbeat field is327px
+wide at24px left, without overflow. Screenshots goe-v432-desktop/mobile/paused.png;
+see goe-browser-verification.json. Fixtures/tabs closed and viewport restored.
+
+Wheel/sdist built;51 code/assets match source and isolated4.3.2 import passes.
+Both packages exclude parked Maps code/archive; the source distribution excludes the
+separate uncommitted backlog edits. See goe-package-verification.json.
+
+HA built-ins/Supervisor were simulated. No live HA/database/hardware, real reset,
+phone notification or deployment. Maps remains parked and excluded. The pre-existing
+uncommitted ARCH-011/012 backlog edits are preserved outside this release.
+
 ## 4.3.1 — EV fault evidence and bounded recovery
 
 198 Python tests passed in51.29s, including16 new incident/recovery cases.22 frontend

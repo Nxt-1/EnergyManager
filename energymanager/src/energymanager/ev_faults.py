@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import monotonic
@@ -63,7 +64,9 @@ class EVFaults:
             return
         self.current = {"id": uuid4().hex, "started_at": since.isoformat(),
                         "detected_at": command.at.isoformat(), "status": "pending",
-                        "reason": "Requested charging but EV power remained below 100 W for 90 seconds",
+                        "reason": self.actuator.delivery_reason,
+                        "reboot_allowed": self.actuator.delivery_reboot_allowed,
+                        "charger": self.actuator.charger.view(command.at) if self.actuator.charger else None,
                         "reboot_attempts": 0, "attempted_at": None, "resolved_at": None,
                         "notification": "pending", "command": json_data(command),
                         "observation": json_data(observation)}
@@ -73,11 +76,14 @@ class EVFaults:
     def fresh(self) -> bool:
         o = self.app.observation
         age = (self.app.now() - o.at).total_seconds()
-        return (o.quality == "measured" and -5 <= age <= self.app.policy.measurement_max_age_seconds
+        return ((self.actuator.charger is None or self.actuator.charger.issue(self.app.now()) is None)
+                and o.quality == "measured" and -5 <= age <= self.app.policy.measurement_max_age_seconds
                 and o.connected and o.ev_phase_known and o.ev_state_known)
 
     def permitted(self) -> bool:
-        return self.actuator.enabled and self.fresh() and self.app.observation.ev_power_kw < .1
+        charger = self.actuator.charger
+        return (self.actuator.enabled and self.fresh() and self.app.observation.ev_power_kw < .1
+                and (charger is None or charger.reboot_issue(self.app.now()) is None and charger.code("force") == 1))
 
     def unresolved(self, reason: str) -> None:
         assert self.current is not None
@@ -95,12 +101,18 @@ class EVFaults:
             await asyncio.sleep(1)
 
     async def step(self) -> None:
+        self.check_disabled_stop()
         incident = self.current
         if not incident or incident["status"] in CLOSED:
             return
         at = self.app.now()
         if incident["status"] == "pending":
-            if not self.reboot_entity:
+            charger = self.actuator.charger
+            if not incident.get("reboot_allowed", False):
+                self.unresolved(incident["reason"] + "; automatic reboot is not eligible")
+            elif charger and charger.reboot_issue(at):
+                self.unresolved(charger.reboot_issue(at) or "Charger recovery unavailable")
+            elif not self.reboot_entity:
                 self.unresolved("No charger reboot button is configured")
             elif not self.actuator.enabled:
                 self.unresolved("Hardware control is off; no reboot was attempted")
@@ -133,24 +145,33 @@ class EVFaults:
                 return
             if not self.actuator.enabled:
                 self.unresolved("Hardware control was disabled during recovery")
-            elif self.fresh() and self.app.observation.at >= attempted + timedelta(seconds=60):
+            elif (self.fresh() and self.app.observation.at >= attempted + timedelta(seconds=60)
+                  and (self.actuator.charger is None or self.actuator.charger.device_at is not None
+                       and self.actuator.charger.device_at >= attempted + timedelta(seconds=60))):
                 incident.update(status="verifying", verification_started_at=at.isoformat(),
                                 reason="Reboot wait completed; verifying actual charging")
                 self.actuator.delivery_fault = False
                 self.actuator.delivery_fault_at = None
                 self.actuator.charging_since = None
                 self.actuator.last = self.actuator.phase = None
+                if self.actuator.goe_control:
+                    self.actuator.goe_control.reset()
                 self.power_since = None
                 self.save()
             elif at >= attempted + timedelta(seconds=180):
                 self.unresolved("Fresh connected charger inputs did not return after reboot")
         elif incident["status"] == "verifying":
             command = self.app.current_command
+            charger = self.actuator.charger
             power_ok = (self.actuator.enabled and self.fresh() and self.app.observation.ev_power_kw >= .1
-                        and command is not None and command.ev_kw > .1 and command.current_a > 0)
+                        and command is not None and command.ev_kw > .1 and command.current_a > 0
+                        and (charger is None or charger.error() is None and charger.code("force") == 2
+                             and charger.number("current") == command.current_a and charger.waiting() is None))
             if power_ok:
-                self.power_since = self.power_since or self.app.observation.at
-                if (self.app.observation.at - self.power_since).total_seconds() >= 10:
+                sample_at = charger.device_at if charger else self.app.observation.at
+                assert sample_at is not None
+                self.power_since = self.power_since or sample_at
+                if (sample_at - self.power_since).total_seconds() >= 10:
                     incident.update(status="recovered", reason="Charging delivery verified after reboot",
                                     resolved_at=at.isoformat(), notification="not needed")
                     self.save()
@@ -171,17 +192,36 @@ class EVFaults:
                 incident["notification"] = notification
                 self.save()
 
+    def check_disabled_stop(self) -> None:
+        control, charger = self.actuator.goe_control, self.actuator.charger
+        if control is None or charger is None or control.disabled_stop_at is None or self.actuator.enabled:
+            return
+        at, sent = self.app.now(), control.disabled_stop_at
+        if (charger.issue(at) is None and charger.device_at is not None and charger.device_at > sent
+                and charger.code("force") == 1 and self.app.observation.ev_power_kw < .1
+                and self.app.observation.at > sent):
+            control.disabled_stop_at = None
+        elif (at - sent).total_seconds() >= 30:
+            control.disabled_stop_at = None
+            command = Command(self.app.revision, None, at, 0, 0, self.app.observation.ev_phases, 0, 0,
+                              "Hardware control disabled")
+            control.fault(command, self.app.observation, "EV stop after disabling hardware could not be verified")
+
     def acknowledge(self, identity: str) -> None:
         if not self.current or self.current["id"] != identity or self.current["status"] != "unresolved":
             raise ValueError("Only the current unresolved EV incident can be acknowledged")
         if not self.fresh():
             raise ValueError("Fresh connected EV inputs are required before acknowledging recovery")
+        if self.actuator.charger and self.actuator.charger.error():
+            raise ValueError("The go-e fault must clear before acknowledging recovery")
         self.current.update(status="acknowledged", resolved_at=self.app.now().isoformat(),
                             reason="Acknowledged by user; normal planning and input guards still apply")
         self.save()
         self.actuator.delivery_fault = False
         self.actuator.delivery_fault_at = self.actuator.charging_since = None
         self.actuator.last = None
+        if self.actuator.goe_control:
+            self.actuator.goe_control.reset()
         self.app.changed("ev_fault_acknowledged", ev=True)
 
     async def sample_loop(self) -> None:
@@ -196,20 +236,44 @@ class EVFaults:
         entities = {ha.entities.get(key) for key in ("ev_soc", "connected", "ev_kw", "ev_phases")}
         entities.update(self.actuator.entities.get(key) for key in ("force", "phase", "current"))
         entities.update(self.diagnostics.values())
+        if self.actuator.charger:
+            entities.update(self.actuator.charger.entities.values())
         readings = {}
+        raw_rows = {}
 
         async def read(entity: str) -> None:
             try:
                 row = await ha.entity_state(entity)
+                raw_rows[entity] = row
                 state = str(row.get("state", "unknown"))
                 readings[entity] = {"state": state[:256], "truncated": len(state) > 256,
                                     "reported_at": row.get("last_reported") or row.get("last_updated"),
                                     "unit": row.get("attributes", {}).get("unit_of_measurement")}
+                if entity == self.actuator.entities.get("current"):
+                    readings[entity]["limits"] = {key: row.get("attributes", {}).get(key) for key in ("min", "max")}
             except (aiohttp.ClientError, TimeoutError, RuntimeError, ValueError, TypeError, KeyError, AttributeError) as exc:
                 readings[entity] = {"state": None, "error": type(exc).__name__}
 
         await asyncio.gather(*(read(entity) for entity in entities if entity))
+        if self.actuator.charger:
+            self.actuator.charger.update(raw_rows, self.app.now())
+            self.update_limits()
         self.app.store.event("ev_diagnostics", {"at": self.app.now().isoformat(), "entities": readings})
+
+    def update_limits(self) -> None:
+        """Replan against the intersection; never increase the configured installation maximum."""
+        charger = self.actuator.charger
+        if charger is None or charger.issue(self.app.now()):
+            return
+        minimum, maximum = charger.limits(self.actuator.c.minimum_current_a, self.actuator.c.maximum_current_a)
+        if minimum > maximum:
+            return  # The EV dispatch guard reports a disjoint range without inventing capabilities.
+        current = self.app.snapshot.capabilities
+        if (minimum, maximum) != (current.minimum_current_a, current.maximum_current_a):
+            effective = replace(current, minimum_current_a=minimum, maximum_current_a=maximum)
+            self.app.snapshot = replace(self.app.snapshot, capabilities=effective)
+            self.app.controller.c = effective
+            self.app.changed("goe_current_limits", ev=True)
 
 
 def incident_report(path: Path, incident: dict[str, Any], now: datetime) -> dict[str, Any]:

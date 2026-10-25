@@ -14,7 +14,7 @@ from typing import Any
 from uuid import uuid4
 
 from . import __version__
-from .control import Actuator, Command, FakeActuator, FastControl
+from .control import Actuator, Command, FakeActuator, FastControl, GuardedActuator
 from .adapters import ForecastSource, HomeAssistantAdapter, JsonForecastAdapter
 from .domain import Goal, Observation, PeakPermission, Policy, Snapshot, daily_goals, json_data
 from .publication import rebase
@@ -643,6 +643,9 @@ class Application:
                                     or getattr(self.actuator, "awaiting_phase", None)),
             },
             "ev_incident": self.ev_faults.current if self.ev_faults else None,
+            "charger": ({**self.actuator.charger.view(now), "control": self.actuator.goe_control.status}
+                        if isinstance(self.actuator, GuardedActuator) and self.actuator.charger
+                        and self.actuator.goe_control else None),
             "provenance": self.snapshot.provenance,
             "forecast_status": getattr(self.forecast, "status", {}),
             "observation": json_data(self.observation),

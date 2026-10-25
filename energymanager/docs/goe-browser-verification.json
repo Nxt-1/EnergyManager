@@ -1,0 +1,35 @@
+{
+  "version": "4.3.2",
+  "provenance": "SYNTHETIC fake HA; native HA built-ins/Supervisor simulated",
+  "checks": [
+    "numeric CODE fields and seconds heartbeat labels",
+    "clear/save without blocking ESS configuration",
+    "restore heartbeat/save with original-byte backup/restart notice",
+    "native EV and standalone Overview show unavailable numeric charger status",
+    "no warning/error console entries in final native and standalone tabs"
+  ],
+  "desktop": {
+    "requested_viewport": [
+      1280,
+      900
+    ],
+    "raster": [
+      1265,
+      889
+    ],
+    "heartbeat_field_width": 516
+  },
+  "phone": {
+    "requested_viewport": [
+      390,
+      844
+    ],
+    "raster": [
+      375,
+      812
+    ],
+    "heartbeat_field_width": 327,
+    "left": 24
+  },
+  "live_installation_verified": false
+}

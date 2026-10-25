@@ -59,6 +59,8 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         "monthly_peak_kw": (2.5, "kW"),
         "phase": (1, None),
         "force": (1, None), "current": (6, "A"), "ess_setpoint": (0, "W"),
+        "ev_status": (2, None), "charger_status": (4, None), "charger_error": (0, None),
+        "heartbeat": (0, "s"), "charge_allowed": ("on", None),
     }
     if calendar_fixture:
         values["ev_soc"] = (90, "%")  # Enough measured energy for both provisional trips and daily readiness.
@@ -67,6 +69,8 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         key = entity.split(".", 1)[-1]
         value, unit = values[key]
         now = datetime.now(UTC)
+        if key == "heartbeat":
+            value = int((now - issued).total_seconds())
         reported_at = issued - timedelta(hours=3)
         if active_fault == "quarter" and key == "quarter_import_kwh":
             reported_at = now.replace(minute=now.minute // 15 * 15, second=0, microsecond=0) - timedelta(seconds=1)
@@ -74,13 +78,18 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
             reported_at = now - timedelta(seconds=45)
         elif active_fault == "unavailable" and key == "pv_dc_kw":
             value = "unavailable"
+        elif active_fault == "charger" and key == "charger_status":
+            value = "unavailable"
+        attributes = {"unit_of_measurement": unit, "friendly_name": key.replace("_", " ")}
+        if key == "current":
+            attributes.update(min=6, max=16)
         return {"entity_id": entity, "state": str(value),
-                "attributes": {"unit_of_measurement": unit, "friendly_name": key.replace("_", " ")},
+                "attributes": attributes,
                 "last_updated": (issued - timedelta(hours=2)).isoformat(), "last_reported": reported_at.isoformat()}
 
     async def states(request: web.Request) -> web.Response:
         assert request.headers.get("Authorization") == "Bearer synthetic-supervisor-credential"
-        return web.json_response([state_row(entity) for group in ("measurements", "actuators")
+        return web.json_response([state_row(entity) for group in ("measurements", "actuators", "ev_diagnostics")
                                   for entity in config[group].values() if entity])
 
     async def services(request: web.Request) -> web.Response:
@@ -111,6 +120,11 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         body = await request.json()
         if body.get("entity_id") == "select.phase":
             values["phase"] = (int(body["option"]), None)
+        if body.get("entity_id") == "select.force":
+            values["force"] = (int(body["option"]), None)
+            values["charger_status"] = (4 if str(body["option"]) == "1" else 3, None)
+        if body.get("entity_id") == "number.current":
+            values["current"] = (int(body["value"]), "A")
         calls.append(
             {
                 "domain": request.match_info["domain"],
@@ -151,6 +165,8 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                 config[group][key] = f"{field.domains[0]}.{key}"
         config["token_environment"] = "UNUSED_LEGACY_TOKEN"
         config["allow_remote"] = False
+        config["ev_diagnostics"] = {key: f"sensor.{key}" for key in
+                                    ("ev_status", "charger_status", "charger_error", "heartbeat", "charge_allowed")}
         config["policy"]["planning_budget_seconds"] = 15
         if calendar_fixture:
             config["policy"]["planning_budget_seconds"] = 60
@@ -223,6 +239,11 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                 assert not application.actuator.enabled
                 assert calls[-2]["entity_id"] == "select.force" and calls[-2]["option"] == "1"
                 assert calls[-1]["entity_id"] == "number.ess_setpoint" and calls[-1]["value"] == 0
+                stop_deadline = monotonic() + 20
+                while application.actuator.goe_control.disabled_stop_at is not None and monotonic() < stop_deadline:
+                    await asyncio.sleep(.05)
+                assert application.actuator.goe_control.disabled_stop_at is None
+                assert application.ev_faults.current is None
                 # Observe a completed tick after switching; zero samples must not imply zero latency.
                 async with asyncio.timeout(10):
                     while len(application.response_seconds) == baseline_ticks:
@@ -258,6 +279,8 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                         "persisted measured household baseline; no prepared forecast endpoint",
                         "separate P1 powers, kW quarter demand and go-e selector readback",
                         "all HA states carry three-hour-old report metadata; validated input reads still drive forecasting/control",
+                        "go-e numeric states, advancing seconds heartbeat and current/force/phase readbacks on fake HA",
+                        "hardware-off stop confirmed by new device and zero-power observations before injecting preview faults",
                         "spawned real full-horizon HiGHS plan",
                         "publication against current measurements",
                         "independent guarded calls to local fake only",
@@ -299,7 +322,7 @@ if __name__ == "__main__":
                         help="Sync two SYNTHETIC calendar feeds served only by the local fake endpoint")
     parser.add_argument("--ev-fault-fixture", action="store_true",
                         help="Show a SYNTHETIC unresolved EV incident and five-minute diagnostic trace")
-    parser.add_argument("--input-fault", choices=("quarter", "stale", "unavailable", "read_failure"),
+    parser.add_argument("--input-fault", choices=("quarter", "stale", "unavailable", "read_failure", "charger"),
                         help="Inject old metadata, unavailability or HA read failure after local verification")
     arguments = parser.parse_args()
     if arguments.input_fault and not arguments.serve:

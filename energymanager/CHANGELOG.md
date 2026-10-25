@@ -1,3 +1,15 @@
+## 4.3.2 — go-e charging supervision
+
+- Interpret numeric car/status/error readings before timing non-delivery; require an
+  advancing seconds heartbeat for EV authority while ESS remains available.
+- Confirm current/force/phase readbacks without control-loop sleeps; bound failed
+  commands and phase transitions. Escalate continuing power after stop and unconfirmed
+  hardware-off stops without restoring hardware authority.
+- Reboot only confirmed healthy non-delivery, never reported errors, waiting states,
+  stale/unknown inputs or failed commands. Keep single-attempt/cooldown guards.
+- Replan within the intersection of HA charger limits and configured limits. Existing
+  installations must select numeric [CODE] sensors and last Status change age (seconds).
+
 ## 4.3.1 — EV fault evidence and one-attempt recovery
 
 - Timestamp EV non-delivery incidents and retain them across restarts. Show recovery

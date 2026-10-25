@@ -1,5 +1,23 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work - 4.3.2 go-e charging supervision
+
+AUTHORIZED: implement the reviewed go-e fixes. User confirmed numeric car/status/error
+and device heartbeat readings may gate EV while ESS continues. Actual integration
+uptime rounds to hours; use its existing last Status change age in seconds instead.
+Preserve the pre-existing ARCH-011/012 backlog edits and parked Maps archive.
+LOCAL COMPLETE: numeric status and advancing seconds heartbeat, staged current/force/
+phase confirmation, bounded phase and waiting states, error-aware reboot gate, actual
+current-limit intersection/replan, stop verification after hardware-off and visible EV
+status. Full suite236 passed42.91s; final56 go-e/incident checks after the storage-stop
+safeguard passed0.57s.22 frontend/Ruff/mypy34/JS/CLI4.3.2 pass. Fake E2E35.467s,2,018
+intervals,max tick4.937ms,four fake-only calls. Native/standalone/phone fields, save/
+backup/restart and EV-only warning verified; clean final browser logs. Fixtures closed.
+PACKAGED: wheel/sdist built,51 code/assets match and isolated4.3.2 import passes.
+NEXT: one focused4.3.2 commit/push and CI/image checks.
+Exclude pre-existing ARCH-011/012 backlog edits; preserve Maps ZIP/code/tests ignored.
+Remote results only ignored checkpoint/final; no optional release-verification commit.
+
 ## Current work —4.3.1 EV delivery fault incidents and recovery
 
 AUTHORIZED25October: implement timestamps, diagnostic history from T−5minutes, one

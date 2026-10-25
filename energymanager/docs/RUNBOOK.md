@@ -2,7 +2,15 @@
 
 ## Local use
 
-Release4.3.1 adds persisted EV delivery incidents and optional bounded reboot recovery.
+Release4.3.2 requires numeric go-e car/status/error and last Status change age (seconds)
+for EV control. Enable the raw [CODE] sensors in HA if necessary, select the four
+entities in EV fault recovery, save and restart. Existing uptime is rounded to hours
+and is not suitable. Missing mappings pause EV while ESS remains usable. See SETTINGS.md.
+HA service acceptance is distinct from charger readback and physical stopped power.
+Do not replace the force selector with the integration's `stop_charging` service:
+that service can restore neutral mode automatically after five minutes.
+
+Persisted EV delivery incidents and optional bounded reboot recovery remain available.
 Configure the reboot button, diagnostic entities and phone destination as described in
 SETTINGS.md; save/restart before relying on them. Do not acknowledge an unresolved
 incident before checking its reason and recorded states. Report JSON distinguishes
@@ -16,6 +24,8 @@ For a labelled local-only incident preview, run `python tools/offline_e2e.py --s
 This seeds synthetic T−5minute states and an unresolved fault only after the ordinary
 fake E2E completes. All service calls/notifications stay on its fake HA endpoint.
 Never point this verification fixture at an installation.
+Use `--serve --input-fault charger` to verify the EV-only unavailable-status warning
+after the baseline E2E; it changes only the local fake charger status.
 
 Use Python3.13 (also tested on3.12 during development). Run from `energymanager/`:
 

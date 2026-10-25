@@ -267,6 +267,11 @@ export async function mountApplication(root, options = {}) {
     renderHardware();
     if (viewLocked()) return;
     const fault = state.ev_incident;
+    const charger = state.charger;
+    const chargerMessage = charger?.issue || (state.control_enabled &&
+      !['EV stopped', 'Charging command confirmed'].includes(charger?.control) ? charger?.control : '');
+    $('charger-status').hidden = !chargerMessage || Boolean(evFaultText(fault, state.policy.timezone));
+    $('charger-status').textContent = chargerMessage ? `EV · ${chargerMessage}` : '';
     const faultText = evFaultText(fault, state.policy.timezone);
     $('ev-fault-banner').hidden = !faultText;
     $('ev-fault-banner').innerHTML = faultText ? `<strong>${esc(faultText)}</strong><p>Phone alert: ${esc(notificationText(fault.notification))} · Reboot attempts: ${fault.reboot_attempts}/1</p><button data-incident="${esc(fault.id)}">Incident details & logs</button>${fault.status === 'unresolved' ? ` <button data-ack-incident="${esc(fault.id)}">Acknowledge after diagnosis</button>` : ''}` : '';
