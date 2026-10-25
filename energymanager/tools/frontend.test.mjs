@@ -117,6 +117,65 @@ test('EV demo ignores installation charger faults and live readings', () => {
   assert.doesNotMatch(evStatusMarkup(state), /Installation fault/);
 });
 
+test('EV diagnostic colors distinguish a historical incident from current charger health', () => {
+  const state = syntheticEVStatus();
+  state.ev_incident = {status: 'unresolved', detected_at: state.now, reason: 'Earlier recovery failed'};
+  state.charger.states.charge_allowed = 'off';
+  state.charger.states.force = '1';
+  state.charger.states.ev_status = '3';
+  state.charger.states.charger_status = '4';
+  const model = evStatusModel(state);
+  const fields = Object.fromEntries(model.diagnostics.map(field => [field.key, field]));
+  assert.equal(model.tone, 'fault');
+  assert.equal(fields.charger_error.tone, 'good');
+  assert.equal(fields.charger_error.text, 'None (0)');
+  for (const key of ['charge_allowed', 'force', 'ev_status', 'charger_status']) {
+    assert.equal(fields[key].tone, 'neutral', key);
+  }
+  assert.equal(fields.connected.tone, 'good');
+  assert.match(evStatusMarkup(state), /data-ev-field="charger_error" class="ev-reading-good"/);
+});
+
+test('EV diagnostics color actual errors red, and stale or unknown codes remain unverified', () => {
+  const state = syntheticEVStatus();
+  state.charger.states.charger_error = '8';
+  state.charger.states.ev_status = '5';
+  state.charger.states.charger_status = '26';
+  let fields = evStatusModel(state).diagnostics;
+  for (const key of ['charger_error', 'ev_status', 'charger_status']) {
+    assert.equal(fields.find(field => field.key === key).tone, 'error', key);
+  }
+  state.now = '2026-10-25T12:01:00Z';
+  fields = evStatusModel(state).diagnostics;
+  for (const field of fields.filter(field => field.key !== 'connected')) {
+    assert.equal(field.tone, 'neutral', field.key);
+    assert.equal(field.text, 'Unverified', field.key);
+  }
+  state.now = state.observation.at;
+  state.charger.states.charger_status = '255';
+  const unknown = evStatusModel(state).diagnostics.find(field => field.key === 'charger_status');
+  assert.equal(unknown.text, 'Unknown (255)');
+  assert.equal(unknown.tone, 'neutral');
+});
+
+test('EV diagnostics separate charging permission, waiting states and selected settings', () => {
+  const state = syntheticEVStatus();
+  state.charger.states.charge_allowed = 'on';
+  state.observation.ev_power_kw = 0;
+  state.charger.states.ev_status = '3';
+  state.charger.states.charger_status = '23';
+  const fields = Object.fromEntries(evStatusModel(state).diagnostics.map(field => [field.key, field]));
+  assert.equal(fields.charge_allowed.tone, 'good');
+  assert.equal(fields.ev_status.tone, 'neutral');
+  assert.equal(fields.charger_status.text, 'Phase switching (23)');
+  assert.equal(fields.charger_status.tone, 'neutral');
+  assert.equal(fields.force.tone, 'neutral');
+  state.demo = true;
+  state.observation.quality = 'SYNTHETIC';
+  const demoFields = evStatusModel(state).diagnostics.filter(field => field.key !== 'connected');
+  assert.ok(demoFields.every(field => field.tone === 'neutral' && field.text === 'Unverified'));
+});
+
 test('power display preserves signs, missing values and energy units', () => {
   assert.equal(watts(1.68), '1680');
   assert.equal(watts(-1.345), '-1345');

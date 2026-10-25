@@ -6,6 +6,43 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
 const numeric = value => value !== null && value !== undefined && value !== '' &&
   Number.isFinite(Number(value)) ? Number(value) : null;
 
+// Match the charging/waiting groups used by GoEReadings; permission is not power delivery.
+const chargingStates = new Set([3, 7, 8, 9, 10, 11, 12, 13, 14, 15, 19, 20, 33]);
+const waitingStates = {
+  0: 'No controller data', 2: 'Waiting for authorization', 4: 'Forced stop',
+  5: 'Charger schedule', 6: 'Energy limit', 16: 'Charger tariff', 17: 'Charger tariff',
+  18: 'Automatic stop', 22: 'Simulated unplugging', 23: 'Phase switching',
+  24: 'Minimum charging pause', 27: 'Load management', 28: 'OCPP control',
+  29: 'Reconnect delay', 30: 'Adapter blocking', 31: 'Frequency protection',
+  32: 'Unbalanced-load protection', 34: 'Grid monitoring', 35: 'OCPP fallback'
+};
+
+function diagnosticReadings(healthy, states, connected) {
+  const field = (key, label, text, tone = 'neutral') => ({key, label, text, tone});
+  const coded = (key, label, names, good = [], errors = []) => {
+    const code = numeric(states[key]);
+    if (!healthy || code === null) return field(key, label, 'Unverified');
+    const text = `${names[code] || 'Unknown'} (${code})`;
+    return field(key, label, text, errors.includes(code) ? 'error' : good.includes(code) ? 'good' : 'neutral');
+  };
+  const allowed = healthy ? String(states.charge_allowed ?? '').toLowerCase() : '';
+  const chargerCode = numeric(states.charger_status);
+  const chargerNames = {...waitingStates, 1: 'Error', 26: 'Overtemperature'};
+  if (chargingStates.has(chargerCode)) chargerNames[chargerCode] = 'Charging permitted';
+  const error = numeric(states.charger_error);
+  return [
+    field('connected', 'Cable', connected === null ? 'Unknown' : connected ? 'Connected' : 'Disconnected',
+      connected === true ? 'good' : 'neutral'),
+    field('charge_allowed', 'Charge allowed', allowed === 'on' ? 'Allowed' : allowed === 'off' ? 'Blocked' : 'Unverified',
+      allowed === 'on' ? 'good' : 'neutral'),
+    coded('force', 'Force setting', {0: 'Neutral', 1: 'Stop', 2: 'Start'}),
+    coded('ev_status', 'Car state', {1: 'No car', 2: 'Charging', 3: 'Waiting', 4: 'Charging complete', 5: 'Error'}, [2, 4], [5]),
+    coded('charger_status', 'Charger status', chargerNames, [...chargingStates], [1, 26]),
+    field('charger_error', 'Charger error', !healthy || error === null ? 'Unverified' : error === 0 ? 'None (0)' : `Error (${error})`,
+      healthy && error !== null ? error > 0 ? 'error' : error === 0 ? 'good' : 'neutral' : 'neutral')
+  ];
+}
+
 // This is a display projection. Requests and selector settings are not physical measurements.
 export function evStatusModel(state) {
   const {observation = {}, policy = {}, capabilities = {}} = state;
@@ -59,7 +96,16 @@ export function evStatusModel(state) {
   const reason = activeIncident ? evFaultText(incident, policy.timezone || 'UTC') :
     charger?.issue || (deviceFault ? `go-e fault ${states.charger_error} · car ${states.ev_status} · status ${states.charger_status}` :
       charger?.waiting || charger?.control || commandKnown && command.reason || '');
-  return {soc, power, connected, phase, current, requestedPower,
+  const summary = recovering ? 'EnergyManager is checking recovery' :
+    activeIncident || deviceFault || deliveryFault ? 'EV charging needs attention' :
+    status === 'Charging' ? 'Power is reaching the car' :
+    status === 'Charging complete' ? 'Car reports charging complete' :
+    status === 'Stopped' ? 'Charger is set to stop' :
+    status === 'Disconnected' ? 'Car is disconnected' :
+    status === 'Readings unavailable' ? 'Charger state cannot currently be verified' :
+    status === 'Waiting to charge' ? 'Waiting for charging to start' : 'Car is connected';
+  return {soc, power, connected, phase, current, requestedPower, summary,
+    diagnostics: diagnosticReadings(healthy, states, connected),
     requestedPhases, status, tone, reason, healthy, states, charger,
     flowing: power > 0.1, demo: !!state.demo, controlled: !!state.control_enabled};
 }
@@ -76,8 +122,15 @@ export function evStatusMarkup(state, expanded = false) {
     ['Current setting (A)', model.states.current], ['Device status age (s)', model.states.heartbeat],
     ['HA read', time(model.charger?.at)], ['Device frame', time(model.charger?.device_at)]
   ];
+  const diagnostic = key => model.diagnostics.find(field => field.key === key);
+  const fieldTone = label => ({'Car code': diagnostic('ev_status').tone,
+    'Status code': diagnostic('charger_status').tone, 'Error code': diagnostic('charger_error').tone,
+    'Charge allowed': diagnostic('charge_allowed').tone}[label] || 'neutral');
   return `<div class="ev-status-heading"><h2>EV &amp; charger</h2><span class="ev-control-badge">${model.demo ? 'Synthetic demo' : model.controlled ? 'Hardware control on' : 'Hardware control off'}</span></div>
     <div class="ev-status-body ev-tone-${model.tone}">
+      <div class="ev-state-label"><i></i><strong>${esc(model.status)}</strong></div>
+      <div class="ev-status-verdict"><strong>${esc(model.summary)}</strong>${model.reason ? `<p class="ev-status-reason">${esc(powerText(model.reason))}</p>` : ''}</div>
+      <div class="ev-combined-layout">
       <div class="ev-flow ${model.flowing ? 'ev-flowing' : ''}">
         <svg aria-hidden="true" viewBox="0 0 500 150" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
           <rect class="ev-charger-shell" x="22" y="20" width="72" height="117" rx="12"/><path d="M14 138h89"/>
@@ -90,16 +143,16 @@ export function evStatusMarkup(state, expanded = false) {
           <rect class="ev-battery-track" x="350" y="91" width="59" height="14" rx="3" stroke="none"/>
           <rect class="ev-battery-fill" x="350" y="91" width="${model.soc === null ? 0 : 59 * model.soc / 100}" height="14" rx="3" stroke="none"/>
         </svg>
-        <div class="ev-flow-labels"><span>go-e charger</span><span>${model.soc === null ? 'Battery unavailable' : `${number(model.soc)}% battery`}</span></div>
+        <div class="ev-annotation ev-on-current"><span>Current limit</span><strong>${number(model.current)} <small>A</small></strong></div>
+        <div class="ev-annotation ev-on-power"><span>Measured power</span><strong>${watts(model.power)} <small>W</small></strong></div>
+        <div class="ev-annotation ev-on-battery"><span>Battery</span><strong>${number(model.soc)} <small>%</small></strong></div>
+        <div class="ev-annotation ev-on-phase" title="go-e phase selector setting; not physical per-phase current."><span>Phase mode</span><strong>${phaseText}</strong></div>
+        <div class="ev-annotation ev-on-request" title="Controller intent; not confirmed charger output. Hardware control must be on to apply requests."><span>Controller request</span><strong>${watts(model.requestedPower)} <small>W</small></strong></div>
       </div>
-      <div class="ev-status-readings">
-        <div class="ev-state-label"><i></i><strong>${esc(model.status)}</strong>${connectionIcon(model.connected)}</div>
-        <p class="ev-status-reason">${esc(powerText(model.reason))}</p>
-        <div class="ev-power-readings"><div><span>Measured power</span><strong>${watts(model.power)} <small>W</small></strong></div><div title="Controller intent; not a confirmed charger output. Hardware control must be on to apply requests."><span>Controller request</span><strong>${watts(model.requestedPower)} <small>W</small></strong></div></div>
-        <div class="ev-device-settings"><div><span>Current limit</span><strong>${number(model.current)} <small>A</small></strong></div>
-        <div class="ev-phase-mode" title="go-e phase selector readback. Physical per-phase currents are not available."><span>Phase mode · ${phaseText}</span><div class="ev-phase-segments">${[[1, '1 φ'], [3, '3 φ'], ['auto', 'Auto']].map(([value, label]) => `<span${model.phase === value ? ' class="selected"' : ''}>${label}</span>`).join('')}</div></div></div>
-        ${model.requestedPhases && model.requestedPhases !== model.phase ? `<p class="subtle">Requested phase mode: ${model.requestedPhases} φ · awaiting readback</p>` : ''}
+      <dl class="ev-diagnostic-readings">${model.diagnostics.map(field => `<div data-ev-field="${field.key}" class="ev-reading-${field.tone}"><dt>${field.key === 'connected' ? connectionIcon(model.connected) : '<i aria-hidden="true"></i>'}${field.label}</dt><dd>${esc(field.text)}</dd></div>`).join('')}</dl>
       </div>
+      ${model.requestedPhases && model.requestedPhases !== model.phase ? `<p class="subtle">Requested phase mode: ${model.requestedPhases} φ · awaiting readback</p>` : ''}
+      <div class="ev-status-footer"><span class="ev-reading-${model.healthy ? 'good' : 'neutral'}">Device frame · ${time(model.charger?.device_at)}${!model.healthy ? ' · unverified' : ''}</span><span>Phase mode is a setting · per-phase currents unavailable</span></div>
     </div>
-    <details class="ev-device-details"${expanded ? ' open' : ''}><summary>Charger details</summary><p class="subtle">Current limit and phase mode are settings read from the charger. Individual phase currents are not measured here.${model.demo ? ' Demo uses synthetic battery and power values; device readings are unavailable.' : !model.healthy ? ' Device readings below are unverified or unavailable.' : ''}</p><dl>${fields.map(([label, value]) => `<div><dt>${label}</dt><dd>${esc(value ?? '—')}</dd></div>`).join('')}</dl></details>`;
+    <details class="ev-device-details"${expanded ? ' open' : ''}><summary>Charger details</summary><p class="subtle">Current limit and phase mode are settings read from the charger. Individual phase currents are not measured here.${model.demo ? ' Demo uses synthetic battery and power values; device readings are unavailable.' : !model.healthy ? ' Device readings below are unverified or unavailable.' : ''}</p><dl>${fields.map(([label, value]) => `<div><dt>${label}</dt><dd class="ev-reading-${fieldTone(label)}">${esc(value ?? '—')}</dd></div>`).join('')}</dl></details>`;
 }

@@ -53,7 +53,8 @@ async def preview() -> None:
                     result = states
                 elif message["type"] == "synthetic/ev_scenario":
                     ev_scenario = message["scenario"]
-                    if ev_scenario not in ("sampled", "charging", "phase_switch", "fault", "stale", "disconnected"):
+                    if ev_scenario not in ("sampled", "charging", "phase_switch", "fault", "device_fault",
+                                           "stopped", "stale", "disconnected"):
                         raise ValueError("Unknown synthetic EV display scenario")
                     for key, value in {"ev_kw": "4140" if ev_scenario == "charging" else "0",
                                        "ev_soc": "57", "connected": "off" if ev_scenario == "disconnected" else "on"}.items():
@@ -102,6 +103,12 @@ async def preview() -> None:
                     if ev_scenario == "fault":
                         fixture["ev_incident"] = {"status": "unresolved", "detected_at": at,
                                                   "reason": "SYNTHETIC delivery fault; fixture only"}
+                    elif ev_scenario == "device_fault":
+                        fixture["charger"]["states"].update(charger_error="8", ev_status="5", charger_status="1")
+                    elif ev_scenario == "stopped":
+                        fixture["charger"]["states"].update(force="1", ev_status="3", charger_status="4",
+                                                            charge_allowed="off")
+                        fixture["command"].update(ev_kw=0, current_a=0)
                     body = json.dumps(fixture).encode()
                 return web.Response(body=body, status=response.status,
                                     headers={"Content-Type": response.headers["Content-Type"],

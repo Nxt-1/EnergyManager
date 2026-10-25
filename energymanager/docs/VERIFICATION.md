@@ -1,5 +1,29 @@
 # EnergyManager 4 verification
 
+## 4.3.6 — Annotated EV drawing and independent status colors
+
+Synthetic/local only.245 Python tests pass50.74s;36 frontend tests, Ruff/mypy35,
+all JavaScript asset syntax and CLI4.3.6 pass. New cases distinguish a latched incident
+from current None(0), reported error/car/overheat states, ordinary forced stop/waits,
+permission versus actual delivery, unknown codes, stale readbacks and demo isolation.
+No controller, recovery, API or entity-mapping contracts changed.
+
+Full-horizon fake E2E passes35.446s/2,018intervals/max tick2.850ms/four fake-only calls.
+Native browser checks the combined drawing/sidebar in light/dark themes: independently
+green OK, red reported errors and neutral rgb(238,238,238) in dark mode. Historical
+incident remains red with current charger None(0) green. Normal forced stop stays
+neutral; stale fields are Unverified. Phase transition retains awaiting-readback text.
+Expanded raw details and summary keyboard focus survive polling. At390px the native
+card is355px/scroll353px; at320px the standalone card is281px/scroll279px. Browser
+warning/error logs are empty. Screenshot: ignored artifacts/release-4.3.6-ev-desktop.jpg.
+The fixture's theme/scenario controls change display data only. No live installation,
+hardware, database, real notifications or deployment was accessed.
+
+Wheel/sdist build passes. All55 packaged code/assets match source bytes in both
+archives; an isolated extracted-wheel import reports4.3.6. Paused Maps code stays
+outside the active package. Remote CI/image results are recorded after the release
+commit only in the ignored local checkpoint and final response.
+
 ## 4.3.5 — EV charger visualization
 
 Synthetic/local only.245 Python tests pass42.97s; final three versioned-bundle tests

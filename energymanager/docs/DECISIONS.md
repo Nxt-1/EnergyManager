@@ -239,3 +239,13 @@ requested power remain separately labelled, with unavailable/stale inputs visibl
 fault/recovery reasons taking priority. Preserve the EV calendar and update only live
 status on native HA source changes. Standing ready-release commit/push permission
 applies; no live installation operation or deployment is authorized.
+
+## 25 October2026 — Combined EV drawing and diagnostic status colors
+
+The user selected the annotated drawing from the first design and diagnostic sidebar
+from the third, approved the combined preview and explicitly requested implementation.
+Release4.3.6 uses red for errors, white/normal theme text for neutral states and green
+for OK. Color each current status independently rather than coloring all readings by
+an older incident. Verified stop/wait settings are neutral; missing/stale states stay
+unverified. Future HA history clicks remain deferred. Ready-release commit/push
+permission applies; no installation access, hardware operation or deployment.

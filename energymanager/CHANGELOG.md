@@ -1,3 +1,12 @@
+## 4.3.6 — Annotated EV drawing and status colors
+
+- Put measured power, battery level, current limit, phase setting and controller
+  request around the charger/car drawing, with diagnostic states beside it.
+- Show errors in red, confirmed OK states in green and neutral states in the normal
+  theme text color (white in a dark dashboard). Waiting or forced stop is not an error.
+- Keep current charger health separate from a latched incident. Stale device states
+  remain explicitly unverified, with raw codes available in Charger details.
+
 ## 4.3.5 — EV charger visualization
 
 - Add an EV-tab charger-to-car visualization with battery level, measured/requested

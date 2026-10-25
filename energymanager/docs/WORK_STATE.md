@@ -1,5 +1,22 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.6 combined EV visualization
+
+AUTHORIZED: implement the approved annotated drawing + diagnostic sidebar with red
+errors, neutral white/theme text and green OK states. History clicks remain deferred.
+IMPLEMENTED: data labels around the drawing, overall reason above, individually colored
+connection/permission/car/charger/error readbacks beside it. Settings/waits/stops are
+neutral; stale states unverified; current charger health stays separate from an old
+incident. Raw details, phase transition, refresh/selection preservation and demo isolation
+remain. No control behavior/mapping changes. Versioned assets require only an HA reload.
+VERIFIED:245 Python50.74s;36 Node/Ruff/mypy35/JS/CLI; fake E2E35.446s/2018intervals,
+max2.850ms/four fake-only calls. Native light/dark/colors/error/stop/stale/phase checks,
+detail/focus preservation and390px fit pass; standalone320px fits. Browser logs clean.
+PACKAGE: wheel/sdist55 code/assets match source; isolated extracted-wheel4.3.6 import passes.
+NEXT: scoped review, one ready-release commit/push and existing
+CI/image workflows. Preserve unrelated backlog edits/paused Maps. No live HA/database/
+hardware/real notifications/deployment. Remote results go in ignored checkpoint/final.
+
 ## Current work —4.3.5 EV status visualization
 
 AUTHORIZED: implement an EV-tab visualization of status, powers, phases and battery.

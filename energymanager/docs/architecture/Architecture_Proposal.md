@@ -204,6 +204,19 @@ updates replace only this status card, preserving calendar position. Demo uses o
 synthetic observation/command, never installation charger readings. Both native and
 standalone layouts retain detail expansion and keyboard focus across refreshes.
 
+From4.3.6 the approved combined layout annotates current limit, measured power,
+battery SoC, phase selector and controller request around that drawing. The adjacent
+diagnostic list shows connection, charge permission, force setting, car state, charger
+status and error with their raw numeric codes. A reason above both explains the overall
+state; raw readings and HA/device frame times remain in Charger details. Each status
+is colored independently: red for reported errors, green for confirmed OK states,
+and the normal theme text color (white in dark HA) for neutral settings/waits/stops.
+Unknown and stale device states are explicitly unverified and cannot become green
+from cached codes. A historical latched incident can be red while the current charger
+error is green None(0). Normal forced stop and car waiting are neutral, not errors.
+The data display changes neither control validation nor recovery behavior. HA sensor
+history actions on these EV fields remain deferred under ARCH-014.
+
 From4.3.4 native and standalone dashboards use optional compact state polling. The
 first response projects accepted-plan display fields and at most120 recent samples;
 immutable publication/calculation evidence remains in the decision archive. Subsequent

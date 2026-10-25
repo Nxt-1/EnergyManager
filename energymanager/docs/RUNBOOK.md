@@ -2,6 +2,13 @@
 
 ## Local use
 
+Release4.3.6 combines the annotated EV drawing with a diagnostic sidebar. Red means
+reported error, green means confirmed OK, and white/normal theme text means neutral.
+Forced stop, waiting and selected settings are neutral; unverified device readings
+are labelled. A red historical incident does not mean the current charger error is
+nonzero. Raw codes/timestamps remain under Charger details. History clicks on these
+EV fields remain deferred. Reload HA after updating; no new configuration is needed.
+
 Release4.3.5 adds EV & charger above the EV calendar. Measured power is actual sensor
 power; Controller request is intent and may differ while waiting or changing phases.
 Current limit and Phase mode are charger settings, not individual phase measurements.
@@ -9,7 +16,8 @@ Charger details shows raw codes and HA/device frame timestamps; unavailable sett
 remain unverified until fresh charger data arrives. No new configuration is required.
 Reload the HA dashboard after updating to load the new versioned card automatically.
 For local visual checks, the native preview's SYNTHETIC EV display selector projects
-charging, phase-transition, fault, stale and disconnected states without changing the
+charging, phase-transition, historical fault, reported device error, normal stop,
+stale and disconnected states without changing the
 backend controller or issuing actuator calls. These are fixtures, not installation data.
 
 Release4.3.4 makes dashboard text selectable and preserves selection while polling
