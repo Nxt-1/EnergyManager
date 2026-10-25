@@ -26,6 +26,7 @@ from .notifications import Notifications
 from .validation import validate
 from .worker import watch_parent
 from .hardware import HardwareControl
+from .calendars import CalendarSync
 
 
 class Application:
@@ -78,6 +79,8 @@ class Application:
         self.notifications = Notifications(store)
         self.hardware: HardwareControl | None = None
         self.configuration_error: str | None = None
+        self.calendars: CalendarSync | None = None
+        self.calendar_items: dict[str, dict[str, Any]] = {}
 
     def now(self) -> datetime:
         return (
@@ -89,6 +92,8 @@ class Application:
     async def start(self) -> None:
         if self.hardware:
             self.hardware.start()
+        if self.calendars:
+            self.calendars.start()
         self.worker = ProcessPoolExecutor(
             max_workers=1, mp_context=get_context("spawn"), initializer=watch_parent
         )
@@ -103,6 +108,8 @@ class Application:
 
     async def close(self) -> None:
         self.shutdown = True
+        if self.calendars:
+            await self.calendars.close()
         if self.hardware:
             await self.hardware.close()
         self.revision += 1
@@ -473,6 +480,8 @@ class Application:
 
     def upsert_goal(self, data: dict[str, Any]) -> Goal:
         old = next((g for g in self.goals if g.id == data.get("id")), None)
+        if old and old.id.startswith("calendar-"):
+            raise ValueError("This journey is managed by its calendar; change the source event or calendar link")
         allowed = {
             "id",
             "title",
@@ -499,6 +508,8 @@ class Application:
         return new
 
     def delete_goal(self, identity: str) -> None:
+        if identity.startswith("calendar-"):
+            raise ValueError("This journey is managed by its calendar; remove the source event or calendar link")
         if not any(g.id == identity for g in self.goals):
             raise KeyError(identity)
         self.store.event("goal_cancelled", next(g for g in self.goals if g.id == identity))
@@ -631,8 +642,11 @@ class Application:
             "live_inputs": self.ha.inputs.view(self.now(), self.snapshot.capabilities) if self.ha else None,
             "capabilities": json_data(self.snapshot.capabilities),
             "policy": json_data(self.policy),
-            "goals": json_data(self.goals),
-            "schedule_goals": json_data((*self.goals, *requirements)),
+            "goals": [{**json_data(goal), **({"calendar": self.calendar_items[goal.id]}
+                       if goal.id in self.calendar_items else {})} for goal in self.goals],
+            "schedule_goals": [{**json_data(goal), **({"calendar": self.calendar_items[goal.id]}
+                                if goal.id in self.calendar_items else {})} for goal in (*self.goals, *requirements)],
+            "calendars": self.calendars.status() if self.calendars else [],
             "accepted": self.accepted,
             "ev_plan_valid": self.ev_valid,
             "issues": list(self.store.get("issues", {}).values()),

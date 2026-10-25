@@ -18,11 +18,14 @@ from . import __version__
 from .dashboard import dashboard_manifest
 from .energy import daily_energy, end_of_day_energy
 from .graph_history import graph_history
+from .calendars import CalendarSync
 
 
 def create_web(application: Application, *, configuration: ConfigurationFile | None = None) -> web.Application:
     if configuration:
         application.hardware = HardwareControl(application, configuration)
+        if not application.demo and not application.configuration_error:
+            application.calendars = CalendarSync(application, configuration.started_values.get("calendars"))
     @web.middleware
     async def boundary(request: web.Request, handler: Any) -> web.StreamResponse:
         peer = request.transport.get_extra_info("peername") if request.transport else None
@@ -86,6 +89,12 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
 
     async def state(request: web.Request) -> web.Response:
         return web.json_response(application.state())
+
+    async def sync_calendars(request: web.Request) -> web.Response:
+        if application.calendars is None:
+            raise ValueError("Calendar sync requires configured mode and complete installation settings")
+        await application.calendars.refresh()
+        return web.json_response({"calendars": application.calendars.status()})
 
     async def energy(request: web.Request) -> web.Response:
         plan, revision = application.accepted, application.revision
@@ -196,6 +205,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
             web.get("/api/daily-energy", energy),
             web.get("/api/history", history),
             web.get("/api/dashboard", dashboard),
+            web.post("/api/calendars/sync", sync_calendars),
             web.post("/api/control", control),
             web.get("/api/settings", settings),
             web.post("/api/settings", settings),

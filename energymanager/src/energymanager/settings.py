@@ -23,6 +23,7 @@ from .connections import HomeAssistantConnection
 from .notifications import NotificationTarget
 from .domain import Capabilities, Policy
 from .measurements import installation_configuration
+from .calendars import calendar_sources
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,8 @@ class SettingField:
 def setting_fields() -> tuple[SettingField, ...]:
     result = [SettingField("notification_target", "Phone notifications (optional)", "Notifications",
                            "notification", domains=("notify",), required=False)]
+    result.append(SettingField("calendars", "Subscribed calendars", "EV calendars", "calendars", required=False,
+                               help="Label each iCalendar link. Imported journeys use provisional 50 km total and four hours from event start. Save and restart to sync."))
     measurements = (
         ("ev_soc", "EV state of charge", ("%",)),
         ("ess_soc", "ESS state of charge", ("%",)),
@@ -181,6 +184,12 @@ class ConfigurationFile:
         errors = {}
         for field in SETTING_FIELDS:
             value = field_value(document, field.path)
+            if field.kind == "calendars":
+                try:
+                    calendar_sources(value)
+                except ValueError as exc:
+                    errors[field.path] = str(exc)
+                continue
             if not field.required and (value is None or value == ""):
                 continue
             if field.kind == "notification":
@@ -262,6 +271,11 @@ class ConfigurationFile:
                     if not isinstance(parent, dict):
                         raise ValueError(f"Configuration section {key} must be an object")
                 parent[keys[-1]] = value
+            if "calendars" in document:
+                try:
+                    document["calendars"] = calendar_sources(document["calendars"])
+                except ValueError as exc:
+                    raise SettingsValidationError({"calendars": str(exc)}) from exc
             self.validate(document)
             if document == json.loads(original):
                 return {**self.read(), "backup": None}

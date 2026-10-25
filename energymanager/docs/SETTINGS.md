@@ -29,6 +29,29 @@ and failed check. The hardware switch still requires valid critical measurements
 The HA app's own Configuration tab still selects `demo` or `configured`. Demo mode
 cannot operate hardware. Choose `configured` and restart to use installation inputs.
 
+## EV calendars (4.3.0)
+
+In Settings → EV calendars, add a label and iCalendar subscription link for each feed.
+HTTPS and webcal links are accepted (webcal uses HTTPS); use the link without sentence
+punctuation. Save and restart in configured mode. Demo mode does not fetch calendars.
+Links stay in your installation JSON/backups, so keep those files private. No calendar
+login, Google account or HA calendar entity is needed for this first integration.
+
+At startup, every four hours or via EV → Subscribed calendars → Sync calendars, the app
+imports the next90days of timed occurrences. The EV calendar shows its normal168-hour
+window. Every imported event has provisional50km **total** distance and a four-hour
+away period beginning at event start. These placeholders participate in the existing
+shared charging plan; they are not measured distances or Google estimates. Location,
+source and placeholder status appear in the agenda/details. Change imported items in
+their original calendar; remove a link and restart to remove its managed journeys.
+
+Changed events revise requirements and reset their old peak approval. Cancelled/deleted
+events disappear after a successful refresh. Failed refreshes retain last-good items
+with a warning and last-sync time; cached data is marked stale after eight hours.
+All-day entries are skipped with a count because there is no departure time. Repeating
+events, exceptions and timezones are supported; repetitions faster than daily are not.
+Use at most20 distinct links. Google Maps distance/timing is a later, unreleased step.
+
 ## Power units
 
 Power limits and entity-state previews are displayed in W. A 2.5 kW saved limit appears

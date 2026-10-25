@@ -1,3 +1,14 @@
+## 4.3.0 — Subscribed EV calendars
+
+- Add multiple labelled iCalendar links in Settings; sync at startup, every four hours
+  and from the EV page after saving/restarting in configured mode.
+- Import timed events, recurring instances and changes/cancellations into the EV
+  schedule and joint plan. Keep manual goals and deduplicate repeated feed occurrences.
+- Clearly label provisional journeys:50km total, departure at event start and return
+  four hours later. Display source/location and sync failures or skipped all-day items.
+- Retain last-good data on a failed refresh; protect subscription links and keep feed
+  downloads/parsing separate from control. Google Maps routing follows separately.
+
 ## 4.2.3 — Compact dashboard and graph cursors
 
 - Pair compact daily energy values with expected totals at today's end: recorded

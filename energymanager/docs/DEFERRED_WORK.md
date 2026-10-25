@@ -34,7 +34,8 @@ Keep this separate from ARCH-001: changing the number of days ahead and changing
 
 ## ARCH-003 — Automated trip-distance calculation and temperature compensation
 
-Recorded: 22 October 2026. Status: **deferred ideas for later releases**.
+Recorded: 22 October 2026. Updated25 October2026: **calendar import authorized for4.3.0;
+Google Maps distance/time preparation authorized afterward, unreleased**.
 
 Initial agreed approach: the user enters expected trip kilometres; estimate battery energy using an assumed average consumption. No database of previous trips or learned driving schedule is required.
 
@@ -45,7 +46,27 @@ Future extensions, independently selectable:
 
 Retain explicit user requirements and distinguish distance-derived estimates from direct SoC targets. Do not silently alter a user-entered target or assume capabilities such as en-route charging. Any future calibration approach should respect the user's preference not to maintain trip-history records.
 
-These extensions are not authorized implementation work in this architecture chat.
+The user authorized multiple labelled iCalendar subscriptions in Settings, starting with
+referee calendars. The first release imports active timed events into the EV schedule
+as provisional50km total journeys, departing at event start and returning four elapsed
+hours later (explicitly confirmed). Commit/push that release before starting Maps work.
+Stable source/event identities, refresh/update/cancellation, timezone handling and
+explicit last-good/stale/error status belong to this import scope. Actual subscription
+links stay in installation configuration; do not commit the supplied private feed.
+
+After4.3.0, prepare Google Maps routing for automated distance and travel timing. Code
+may be written if enough information is available, but **do not release the second
+version yet**. Origin, round-trip routing, arrival margin/event-duration policy, Google
+project/key/billing and failure/override policy still need resolution before enabling
+live route requests. No paid API calls or live installation operation are authorized.
+Temperature compensation remains deferred; no calibration model has been selected.
+
+Offline integration limitation observed25October2026: two synthetic50km journeys
+requiring additional charging from45%initialSoC produced no reference incumbent at
+15/60second planner budgets. No invalid plan was adopted; basic control stayed
+responsive. The90%SoC version completed. Preserve this evidence for a separately
+authorized planner/seed-budget investigation; calendar-import work does not authorize
+changing solver policy or temporal resolution.
 
 ## ARCH-004 — DHW scheduling and heating-model calibration
 

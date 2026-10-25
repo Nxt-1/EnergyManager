@@ -40,7 +40,7 @@ class VerificationResolver(AbstractResolver):
 
 
 async def run(*, serve: bool = False, preview_fault: str | None = None,
-              history_fixture: bool = False) -> None:
+              history_fixture: bool = False, calendar_fixture: bool = False) -> None:
     issued = datetime.now(UTC)
     calls = []
     weather_queries = []
@@ -60,6 +60,8 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         "phase": (1, None),
         "force": (1, None), "current": (6, "A"), "ess_setpoint": (0, "W"),
     }
+    if calendar_fixture:
+        values["ev_soc"] = (90, "%")  # Enough measured energy for both provisional trips and daily readiness.
 
     def state_row(entity: str) -> dict:
         key = entity.split(".", 1)[-1]
@@ -119,12 +121,21 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         return web.json_response([])
 
     fake = web.Application()
+    async def calendar_feed(request: web.Request) -> web.Response:
+        def item(uid: str, hours: int) -> str:
+            start = (issued + timedelta(hours=hours)).strftime("%Y%m%dT%H%M%SZ")
+            return f"BEGIN:VEVENT\r\nUID:{uid}\r\nDTSTART:{start}\r\nSUMMARY:SYNTHETIC {uid}\r\nLOCATION:Fixture hall, Test town\r\nEND:VEVENT\r\n"
+        events = item("referee-match", 24)
+        if request.match_info["name"] == "second":
+            events += item("second-match", 48)
+        return web.Response(text="BEGIN:VCALENDAR\r\nVERSION:2.0\r\n" + events + "END:VCALENDAR\r\n")
     fake.add_routes(
         [
             web.get("/core/api/states/{key}", state),
             web.get("/core/api/states", states),
             web.get("/core/api/services", services),
             web.get("/weather", weather),
+            web.get("/calendar/{name}", calendar_feed),
             web.post("/core/api/services/{domain}/{service}", service),
         ]
     )
@@ -141,6 +152,10 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         config["token_environment"] = "UNUSED_LEGACY_TOKEN"
         config["allow_remote"] = False
         config["policy"]["planning_budget_seconds"] = 15
+        if calendar_fixture:
+            config["policy"]["planning_budget_seconds"] = 60
+            config["calendars"] = [{"id": name, "label": f"SYNTHETIC {name}",
+                                     "url": f"https://calendar.example/{name}"} for name in ("referee", "second")]
         path = stem.with_suffix(".json")
         path.write_text(json.dumps(config), encoding="utf-8")
         store = Store(stem.with_suffix(".sqlite"))
@@ -150,7 +165,14 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
             kwargs.setdefault("connector", aiohttp.TCPConnector(resolver=VerificationResolver(endpoint.port)))
             return original_session(*args, **kwargs)
 
-        with patch("aiohttp.ClientSession", local_session), patch.dict("os.environ", {
+        async def local_calendar(url: str) -> bytes:
+            assert calendar_fixture and url in ("https://calendar.example/referee", "https://calendar.example/second")
+            async with original_session() as session:
+                async with session.get(endpoint.make_url("/calendar/" + url.rsplit("/", 1)[-1])) as response:
+                    assert response.status == 200
+                    return await response.read()
+
+        with patch("aiohttp.ClientSession", local_session), patch("energymanager.calendars.fetch_calendar", local_calendar), patch.dict("os.environ", {
             "SUPERVISOR_TOKEN": "synthetic-supervisor-credential"
         }):
             application = configured_application(path, store, addon=True,
@@ -166,11 +188,15 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
             configuration = ConfigurationFile(path, addon=True, mode="configured")
             before = monotonic()
             async with TestClient(TestServer(create_web(application, configuration=configuration), port=8102 if serve else None)) as client:
-                while monotonic() - before < 60 and application.accepted is None:
+                while monotonic() - before < (180 if calendar_fixture else 60) and application.accepted is None:
                     await asyncio.sleep(0.2)
                 assert application.accepted is not None, (application.status, application.error)
                 response = await client.get("/api/state")
                 current = await response.json()
+                if calendar_fixture:
+                    assert len([goal for goal in current["goals"] if goal.get("calendar")]) == 2
+                    assert len(current["calendars"]) == 2 and not any(item["error"] for item in current["calendars"])
+                    assert all(goal["distance_km"] == 50 for goal in current["goals"])
                 assert current["accepted"]["valid"] and current["provenance"].startswith("SYNTHETIC")
                 assert abs(current["observation"]["house_kw"] - 0.4) < 1e-9
                 assert current["observation"]["ev_phase_source"] == "goe_selector"
@@ -217,6 +243,9 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                     "switch_control_max_seconds": max(application.response_seconds[baseline_ticks:], default=0),
                     "switch_control_ticks": len(application.response_seconds) - baseline_ticks,
                     "fake_service_calls": len(calls),
+                    "calendar_imports": len([goal for goal in current["goals"] if goal.get("calendar")]),
+                    "calendar_fixture": calendar_fixture,
+                    "initial_ev_soc_percent": values["ev_soc"][0],
                     "weather_queries": weather_queries,
                     "forecast_status": current["forecast_status"],
                     "result": "passed",
@@ -249,10 +278,12 @@ if __name__ == "__main__":
     parser.add_argument("--serve", action="store_true", help="Keep synthetic verification UI on localhost:8102")
     parser.add_argument("--history-fixture", action="store_true",
                         help="Seed explicitly SYNTHETIC old graph measurements, including gaps")
+    parser.add_argument("--calendar-fixture", action="store_true",
+                        help="Sync two SYNTHETIC calendar feeds served only by the local fake endpoint")
     parser.add_argument("--input-fault", choices=("quarter", "stale", "unavailable", "read_failure"),
                         help="Inject old metadata, unavailability or HA read failure after local verification")
     arguments = parser.parse_args()
     if arguments.input_fault and not arguments.serve:
         parser.error("--input-fault requires --serve")
     asyncio.run(run(serve=arguments.serve, preview_fault=arguments.input_fault,
-                    history_fixture=arguments.history_fixture))
+                    history_fixture=arguments.history_fixture, calendar_fixture=arguments.calendar_fixture))

@@ -157,6 +157,56 @@ class EntityPicker extends HTMLElement {
 
 if (!customElements.get('em-entity-picker')) customElements.define('em-entity-picker', EntityPicker);
 
+class CalendarLinks extends HTMLElement {
+  configure(value) {
+    this.replaceChildren();
+    this.rows = element('div', 'calendar-links');
+    this.append(this.rows);
+    const add = element('button', '', '＋ Calendar link');
+    add.type = 'button';
+    add.onclick = () => {
+      this.add({id: crypto.randomUUID(), label: '', url: ''});
+      this.rows.lastElementChild.querySelector('input').focus();
+      this.dispatchEvent(new Event('change', {bubbles: true}));
+    };
+    this.append(add);
+    for (const entry of value || []) this.add(entry);
+  }
+
+  add(entry) {
+    const row = element('div', 'calendar-link');
+    row.dataset.id = entry.id;
+    const label = element('input');
+    label.value = entry.label;
+    label.placeholder = 'Calendar label';
+    label.setAttribute('aria-label', 'Calendar label');
+    label.maxLength = 100;
+    const url = element('input');
+    url.value = entry.url;
+    url.placeholder = 'https://…';
+    url.type = 'url';
+    url.setAttribute('aria-label', 'iCalendar link');
+    url.maxLength = 2000;
+    url.autocomplete = 'off';
+    url.spellcheck = false;
+    const remove = element('button', '', 'Remove');
+    remove.type = 'button';
+    remove.onclick = () => {
+      row.remove();
+      this.dispatchEvent(new Event('change', {bubbles: true}));
+    };
+    row.append(label, url, remove);
+    this.rows.append(row);
+  }
+
+  get value() {
+    return [...this.rows.children].map(row => ({id: row.dataset.id,
+      label: row.children[0].value.trim(), url: row.children[1].value.trim()}));
+  }
+}
+
+if (!customElements.get('em-calendar-links')) customElements.define('em-calendar-links', CalendarLinks);
+
 export class SettingsPage {
   constructor(container, api, signal) {
     this.container = container;
@@ -265,6 +315,9 @@ export class SettingsPage {
       if (['entity', 'notification'].includes(field.kind)) {
         control = document.createElement('em-entity-picker');
         control.configure(field, value, field.kind === 'notification' ? this.notificationTargets : this.entities);
+      } else if (field.kind === 'calendars') {
+        control = document.createElement('em-calendar-links');
+        control.configure(value);
       } else if (field.kind === 'phases') {
         control = element('select');
         for (const [val, text] of [['1', 'Single phase'], ['3', 'Three phase'], ['1,3', 'Single and three phase']]) {
@@ -354,6 +407,12 @@ export class SettingsPage {
           message = 'Value unavailable';
         else if (match && field.units.length && match.unit && !field.units.includes(match.unit))
           message = 'Incompatible unit';
+      } else if (field.kind === 'calendars') {
+        const rows = control.value;
+        if (rows.length > 20) message = 'Use at most 20 calendar links';
+        else if (rows.some(row => !row.label || !/^(https|webcal):\/\//.test(row.url)))
+          message = 'Give each calendar a label and an HTTPS or webcal link';
+        else if (new Set(rows.map(row => row.url)).size !== rows.length) message = 'Calendar links must be unique';
       } else if (field.required && control.value.trim() === '') message = 'Required';
       else if (control.validity && !control.validity.valid) message = 'Check this value';
       const wrapper = control.closest('.setting-field');
@@ -377,7 +436,7 @@ export class SettingsPage {
       control.closest('.setting-field').querySelector('.field-error').textContent = '';
       (control.input || control).removeAttribute('aria-invalid');
       if (field.kind === 'boolean') values[field.path] = control.checked;
-      else if (field.kind === 'notification') values[field.path] = control.value;
+      else if (['notification', 'calendars'].includes(field.kind)) values[field.path] = control.value;
       else if (field.kind === 'phases') values[field.path] = control.value.split(',').filter(Boolean).map(Number);
       else if (['number', 'integer'].includes(field.kind)) values[field.path] =
         control.value === control.dataset.savedValue ? this.document.values[field.path] : storedSetting(field, control.value);

@@ -19,6 +19,7 @@ from .connections import HomeAssistantConnection
 from .measurements import MeasurementOptions, installation_configuration
 from .forecast_service import InstallationForecast
 from .open_meteo import FORECAST_URL
+from .calendars import calendar_sources
 
 
 def create_configuration_if_missing(path: Path) -> bool:
@@ -61,6 +62,7 @@ def configured_application(path: Path, store: Store, *, weather_url: str = FOREC
         p = Policy(**{**data["policy"], "control_enabled": False})
         connection = HomeAssistantConnection.resolve(data, addon=addon)
         target = NotificationTarget.from_data(data.get("notification_target"))
+        calendar_sources(data.get("calendars"))
     except (ValueError, TypeError) as exc:
         return pending_configuration(store, str(exc))
     if not data.get("actuators", {}).get("phase"):

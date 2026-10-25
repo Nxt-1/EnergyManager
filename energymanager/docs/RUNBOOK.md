@@ -66,7 +66,7 @@ limits can change incumbents; replay does not promise bit-identical optimization
 
 ## Main-project version 4 update
 
-`config.yaml` now advertises **4.2.3** for the existing `energy_manager` Home Assistant
+`config.yaml` now advertises **4.3.0** for the existing `energy_manager` Home Assistant
 app and `ghcr.io/nxt-1/energymanager` image. It keeps ingress port8099 and manual startup.
 The packaged Python distribution, CLI and module are all named `energymanager`. The
 former standalone candidate has been moved into this main app; the old V3 modules,
@@ -98,7 +98,7 @@ No live dashboard was installed or modified during development.
 Docker is unavailable locally. The V4.0.0 CI and image workflows verified the Linux
 container build and publication; evidence is in VERIFICATION.md and ci-verification.json.
 Supervisor installation and physical deployment remain separate checks. A target host
-can run `docker build --build-arg BUILD_VERSION=4.2.3 -t energymanager:4.2.3 .` from this
+can run `docker build --build-arg BUILD_VERSION=4.3.0 -t energymanager:4.3.0 .` from this
 directory. The repository publish workflow targets the existing GHCR image when
 config.yaml is pushed to main; inspect the workflow for the version being installed.
 
@@ -314,3 +314,21 @@ both graph edges with session tracks on desktop and390px widths. Use pointer/tou
 keyboard cursor controls; check historical gaps, planned values at window edges and
 offset-labelled repeated-hour times. Native sensor choosers must still open more-info.
 Updating the add-on and reloading HA delivers these UI changes through the existing loader.
+
+## Subscribed EV calendars (4.3.0)
+
+Add labelled public HTTPS/iCalendar links in Settings, save and restart configured
+mode. EV → Subscribed calendars shows last sync, failures and skipped all-day items;
+Sync calendars refreshes all running subscriptions. Timed events create provisional
+50km total trips with departure at event start and return four elapsed hours later.
+Edit the source calendar; remove its link and restart to remove its managed journeys.
+Keep subscription links/configuration/backups private. No Google routing is enabled.
+
+For offline checks run `python tools/offline_e2e.py --serve --calendar-fixture` and the
+native preview tool in another terminal. Two labelled synthetic feeds are served by
+local fake endpoints; one event appears in both feeds and must be planned only once.
+Verify the50km/four-hour labels, source/location, sync status, native/standalone agenda,
+Settings add/label/remove/save/restart message and390px layout. The calendar fixture
+uses the normal60-second planning budget and a180-second E2E acceptance timeout; the
+older no-journey fixture retains its15-second budget. These are test-tool limits.
+No live HA/database/hardware/notification/deployment checks are authorized here.

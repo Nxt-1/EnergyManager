@@ -1,5 +1,25 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.0 ARCH-003 subscribed EV calendars
+
+AUTHORIZED: first implement/release multiple labelled iCalendar subscriptions, managed
+50km-total journeys departing at event start/returning four hours later (confirmed).
+Then prepare Google Maps distance/time calculation; second version MUST NOT RELEASE.
+No live HA/database/hardware/deployment/paid routing calls. User example feed read-only
+parser check passed:five upcoming timed events with locations; personal data not saved.
+IMPLEMENTED: Settings links/save/restart, independent bounded/public-HTTPS fetch/parser,
+recurrence/exceptions/cancellation,90day cache, deduplication, source-managed trip goals,
+revision/approval invalidation and EV source/location/provisional/sync-status UI.
+FINAL LOCAL:181 Python42.04s plus40 targeted configuration/calendar checks after the
+invalid-config guard;21 frontend/Ruff/mypy32/all JS/CLI4.3.0 pass. Native/standalone/
+390px browser and settings add/remove/label/save/backup/restart notice pass; clean final
+browser logs.49 final packaged code/assets match and isolated4.3.0 wheel import passes.
+Full-horizon fixture with45%SoC hit reference-solver time limit at15/60second budgets;
+no invalid plan accepted and control remained responsive. Untouched90%SoC E2E passes:
+65.617s/2,022 intervals, two unique imported journeys, five fake-only calls, max tick
+2.761ms. Fixtures/tabs closed. No live deployment.
+NEXT: single4.3.0 commit/push and remoteCI/image. Only then start unreleased Maps preparation.
+
 ## Current work — 4.2.3 compact dashboard and graph inspection
 
 AUTHORIZED: simplify energy/connection labels with symbols; append expected end-of-today

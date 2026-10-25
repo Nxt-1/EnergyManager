@@ -132,6 +132,19 @@ test('EV schedule shows requirements without presenting an obsolete plan as curr
   assert.equal(evSchedule(restarted).events.some(event => event.type === 'charge'), false);
 });
 
+test('subscribed journeys preserve source and placeholder metadata in departure, away and return items', () => {
+  const state = syntheticSchedule();
+  state.schedule_goals = [{id: 'calendar-synthetic', revision: 3, kind: 'trip', title: 'Referee · fixture',
+    deadline: '2026-10-25T01:00Z', return_at: '2026-10-25T05:00Z', distance_km: 50,
+    calendar: {source: 'Referee', location: 'Fixture hall', placeholder: true}}];
+  state.accepted = null;
+  const schedule = evSchedule(state);
+  assert.deepEqual(schedule.events.map(event => event.type), ['trip', 'away', 'return']);
+  assert.ok(schedule.events.every(event => event.goal.calendar.placeholder));
+  assert.equal(schedule.goals[0].distance_km, 50);
+  assert.equal(schedule.events[1].end - schedule.events[1].start, 4 * 3600000);
+});
+
 test('EV agenda uses half-open day boundaries for returns and simultaneous targets', () => {
   const day = {start: 100, end: 200};
   const events = [

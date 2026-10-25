@@ -1,6 +1,6 @@
 # Current requirements and decisions
 
-Maintained 25 October 2026 for 4.2.3. This records confirmed product preferences and
+Maintained 25 October 2026 for 4.3.0. This records confirmed product preferences and
 implementation outcomes from the V4 implementation chat. It supplements the complete
 original [architecture decisions](architecture/Architecture_Decisions.md); the
 [maintained architecture](architecture/Architecture_Proposal.md) describes the resulting implementation.
@@ -163,3 +163,18 @@ The user explicitly chose expected total by the end of today after each energy v
 recorded energy so far plus the current plan for the rest of the installation-local
 day. This is a projection, with partial actual coverage still marked, and does not
 change scheduler or hardware authority. Prepare4.2.3 under standing release permission.
+
+## 25 October2026 — ARCH-003 calendar import, then unreleased Maps preparation
+
+The user authorized labelled links for multiple calendars in Settings, starting with
+referee iCalendar subscriptions. First release: import agenda events into the EV
+schedule using fake50km total and four hours, departing at event start and returning
+four hours later. The user explicitly confirmed this interpretation. These journeys
+use the existing energy/availability/planning rules and visibly retain placeholder
+provenance. Subscription content owns imported journeys; manual requirements remain.
+Release/commit/push4.3.0 when verified.
+
+Only after that release, prepare Google Maps distance and travel-time calculation.
+Code may be written if enough information is available, but the second version must
+not be released yet. No paid API calls, assumed origin/margins or live installation
+changes are authorized. Temperature compensation remains deferred within ARCH-003.

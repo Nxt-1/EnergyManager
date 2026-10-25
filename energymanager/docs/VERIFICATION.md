@@ -1,5 +1,34 @@
 # EnergyManager 4 verification
 
+## 4.3.0 — Subscribed EV calendars
+
+181 Python tests passed42.04s, followed by40 configuration/calendar checks (including
+12 calendar cases) after the final invalid-config guard.21 frontend tests, Ruff/mypy32
+and all JS syntax pass. Calendar checks cover multiple sources, save/backup/legacy settings,
+recurrence/exceptions/cancellation, DST/TZID, folding/escaping, unsupported/invalid
+feeds, source ownership, unchanged identity/no replan, reschedule/approval reset,
+failure retention, restart and changed-URL removal, duplicate subscriptions, private
+address rejection and a held sync request while /api/state remains responsive.
+The supplied referee feed was read-only checked:five upcoming timed events with
+locations. Its URL/content are not committed or used as synthetic fixtures.
+
+Configured fake E2E with two synthetic subscriptions, a repeated occurrence and90%
+initial EV SoC accepted2,022 intervals in65.617s. Two distinct50km/four-hour trips,
+five fake-only service calls, max observed control tick2.761ms. Report offline-e2e.json.
+The normal no-calendar CI fixture remains separate. Earlier two-trip45%SoC fixtures
+hit the reference-solve time limit at15/60s; no incumbent was adopted and control
+remained responsive. This is a known planner limitation, recorded under ARCH-003;
+calendar import does not change solver policy or promise a plan for every scenario.
+
+Native HA-contract and standalone browser checks passed: imported agenda/away/return,
+provisional50km/four-hour labels, source/location, manual Sync and clean logs. Settings
+add/label/remove/save with backup/restart message passed on local fixtures. At390px,
+calendar fields fit327px rows without overflow. Screenshots calendar-v430-desktop/mobile.
+Native HA built-ins/Supervisor were simulated; no actual HA/Companion installation,
+database, hardware, real notification or deployment. Temporary tabs/servers closed.
+Wheel/sdist built,49 source/assets match, isolated4.3.0 import passes; see
+calendar-package-verification.json. Google Maps preparation follows after publication.
+
 ## 4.2.3 — Compact dashboard and numeric cursors
 
 170 Python tests passed43.45s;20 frontend tests, Ruff/mypy31, all JavaScript syntax

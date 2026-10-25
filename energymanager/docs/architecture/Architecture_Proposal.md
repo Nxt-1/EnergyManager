@@ -5,7 +5,7 @@ this same file as requirements and implementation evolve across releases and cha
 do not create a new handoff document for each version. The filename is retained from
 the original architecture proposal, but its content now describes the current system.
 The active application is `energymanager/`; its version is recorded in config.yaml and
-the changelog. Last reviewed: 24 October 2026.
+the changelog. Last reviewed: 25 October 2026.
 
 Repository-wide chat and coding rules live in the root [AGENTS.md](../../../AGENTS.md).
 It directs chats to this architecture, the ongoing backlog and the required coding
@@ -118,6 +118,43 @@ measured reconnection. No external charging is fabricated. Priority then deadlin
 locks best-effort outcomes only after proven hard infeasibility. Timeout is distinct.
 
 ## Frontend units and journey dates
+
+### Subscribed EV calendars (ARCH-003,4.3.0)
+
+Settings accepts up to20 uniquely identified, labelled public HTTPS/webcal iCalendar
+links. Saving keeps the existing backup/conflict checks and requires configured-mode
+restart to apply. Subscriptions fetch at startup, every four hours and on explicit EV
+page Sync. Network reads and calendar parsing run separately from planning/control;
+downloads are limited to2MB/20seconds, three redirects,5,000 source events and1,000
+upcoming occurrences per feed. Redirect targets and resolved addresses must stay public
+HTTPS; no HA credentials are sent. Subscription URLs are not exposed in state/events.
+
+Expand timed events from four hours ago through90days ahead, including recurrence,
+exceptions, cancellations, UTC/TZID and installation-local floating times. Skip all-day
+items with a visible count because they have no departure time. Repetitions more frequent
+than daily are unsupported and fail the refresh. Invalid feeds retain their last-good
+snapshot and expose a warning; valid empty feeds remove their managed journeys.
+The supplied referee feed was checked read-only; personal events/URL are not fixtures.
+
+Every imported occurrence is a managed explicit trip with **provisional50km total**,
+departure at calendar start and return four elapsed hours later, ignoring event duration
+for this first release. The user confirmed these placeholders. Label/location and
+placeholder provenance appear in EV agenda/details. Existing consumption/reserve,
+availability, withdrawal, peak approval and joint-planning rules apply. Stable source+
+UID/recurrence identity prevents duplication; changed journey data increments its goal
+revision and clears permissions. Exact UID/start/location duplicates across feeds are
+planned once. Manual goals remain separate. Edit/remove imported events at the source
+or remove the subscription; normal goal APIs cannot overwrite managed journeys.
+
+Persist successful snapshots for restart/outage continuity, retain failed sources'
+last-good items and display last sync/error/staleness (after eight hours). Removed or
+changed-URL sources cannot resurrect old cached journeys. Demo mode never fetches
+configured calendars. The EV schedule still displays168hours; longer imported events
+remain available for subsequent planning windows. No automatic driving history is learned.
+
+After publishing4.3.0, Google Maps routing preparation is authorized but must remain
+unreleased. No origin, arrival margin, dwell/return formula, live API project/key or
+payment authorization has been assumed. Temperature compensation remains deferred.
 
 ### Native managed Home Assistant dashboard
 

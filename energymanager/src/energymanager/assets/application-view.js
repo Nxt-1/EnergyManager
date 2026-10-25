@@ -91,6 +91,11 @@ export async function mountApplication(root, options = {}) {
       await refresh();
     },
     settings: () => showPage('settings'),
+    sync: async () => {
+      await api('calendars/sync', 'POST', {});
+      pointerUntil = 0;
+      await refresh();
+    },
     replan: async () => {
       await api('replan', 'POST', {});
       pointerUntil = 0;
@@ -302,7 +307,7 @@ export async function mountApplication(root, options = {}) {
       ...g
     })), ...(plan?.goals || []).filter(g => g.kind === 'daily')];
     const goalCard = g =>
-      `<section class="goal"><div class="goal-title"><strong>${esc(g.title)}</strong><span class="badge ${g.shortfall_kwh>0.001?'warning':''}">${g.shortfall_kwh>0.001?'Shortfall':g.status==='scheduled'?'Scheduled':g.status==='unknown_return_state'?'Unknown state':'Waiting'}</span></div><p>${time(g.deadline)} · ${g.kind==='trip'?num(g.distance_km,0)+' km total / '+num((g.target_kwh ?? Math.min(c.ev_capacity_kwh,(g.distance_km+state.policy.arrival_reserve_km)*state.policy.consumption_kwh_per_100km/100))/c.ev_capacity_kwh*100,0)+'% departure target':num(g.target_soc_percent,0)+'% SoC'}</p><p>${g.planned_kwh!==undefined&&g.planned_kwh!==null?num(g.planned_kwh/c.ev_capacity_kwh*100,1)+'% planned · ':''}${g.shortfall_kwh>.001?num(g.shortfall_kwh)+' kWh shortfall':'One shared battery trajectory'}</p>${g.completion_margin_minutes !== undefined && g.completion_margin_minutes !== null ? `<p>${g.desired_margin_met ? `Ready at least ${state.policy.completion_margin_minutes} min early` : `Limited completion margin / ${num(g.completion_margin_minutes,0)} min`}</p>` : ''}${g.external_charging_required?'<p class="error">Charging away must be arranged. Return SoC is unknown.</p>':''}<div class="meter"><i style="width:${Math.min(100,o.ev_kwh/(g.target_kwh||c.ev_capacity_kwh*g.target_soc_percent/100||1)*100)}%;background:#16a34a"></i></div><div class="actions"><button data-detail="${esc(g.id)}">Details</button>${g.kind!=='daily'?`<button data-edit="${esc(g.id)}">Edit</button><button data-delete="${esc(g.id)}">Remove</button>`:''}</div></section>`;
+      `<section class="goal"><div class="goal-title"><strong>${esc(g.title)}</strong><span class="badge ${g.shortfall_kwh>0.001?'warning':''}">${g.shortfall_kwh>0.001?'Shortfall':g.status==='scheduled'?'Scheduled':g.status==='unknown_return_state'?'Unknown state':'Waiting'}</span></div><p>${time(g.deadline)} · ${g.kind==='trip'?num(g.distance_km,0)+' km total / '+num((g.target_kwh ?? Math.min(c.ev_capacity_kwh,(g.distance_km+state.policy.arrival_reserve_km)*state.policy.consumption_kwh_per_100km/100))/c.ev_capacity_kwh*100,0)+'% departure target':num(g.target_soc_percent,0)+'% SoC'}</p><p>${g.planned_kwh!==undefined&&g.planned_kwh!==null?num(g.planned_kwh/c.ev_capacity_kwh*100,1)+'% planned · ':''}${g.shortfall_kwh>.001?num(g.shortfall_kwh)+' kWh shortfall':'One shared battery trajectory'}</p>${g.completion_margin_minutes !== undefined && g.completion_margin_minutes !== null ? `<p>${g.desired_margin_met ? `Ready at least ${state.policy.completion_margin_minutes} min early` : `Limited completion margin / ${num(g.completion_margin_minutes,0)} min`}</p>` : ''}${g.external_charging_required?'<p class="error">Charging away must be arranged. Return SoC is unknown.</p>':''}<div class="meter"><i style="width:${Math.min(100,o.ev_kwh/(g.target_kwh||c.ev_capacity_kwh*g.target_soc_percent/100||1)*100)}%;background:#16a34a"></i></div><div class="actions"><button data-detail="${esc(g.id)}">Details</button>${g.kind!=='daily'&&!g.calendar?`<button data-edit="${esc(g.id)}">Edit</button><button data-delete="${esc(g.id)}">Remove</button>`:''}</div></section>`;
     const dailyGoals = goals.filter(goal => goal.kind === 'daily');
     const primaryGoals = goals.filter(goal => goal.kind !== 'daily' || goal.id === dailyGoals[0]?.id);
     const laterDaily = dailyGoals.slice(1);
@@ -388,6 +393,7 @@ export async function mountApplication(root, options = {}) {
   }
 
   function openGoal(goal, kind = 'manual') {
+    if (goal?.calendar) { showGoalDetail(goal.id); return; }
     if (!state) return;
     const form = $('goal-form');
     form.reset();
@@ -421,7 +427,7 @@ export async function mountApplication(root, options = {}) {
     const goal = state.goals.find(goal => goal.id === id) || state.schedule_goals.find(goal => goal.id === id);
     if (!goal) return;
     detail(goal.title,
-      `<p>Deadline ${time(goal.deadline)}</p><p>${goal.kind === 'trip' ? `Total journey ${num(goal.distance_km, 0)} km, arrival reserve ${state.policy.arrival_reserve_km} km. ${goal.return_at ? 'Expected return ' + time(goal.return_at) : 'Return unknown; unavailable until reconnection.'}` : 'Timed state-of-charge requirement. No journey or withdrawal is assumed.'}</p><p>Priority ${goal.priority}. ${goal.approval_state === 'granted' ? 'Approved task ceiling ' + watts(goal.approved_peak_kw) + ' W' : 'Normal automatic peak policy applies.'}</p><p>Power changes stay within grouped charging sessions.</p>`);
+      `<p>Deadline ${time(goal.deadline)}</p><p>${goal.kind === 'trip' ? `Total journey ${num(goal.distance_km, 0)} km, arrival reserve ${state.policy.arrival_reserve_km} km. ${goal.return_at ? 'Expected return ' + time(goal.return_at) : 'Return unknown; unavailable until reconnection.'}` : 'Timed state-of-charge requirement. No journey or withdrawal is assumed.'}</p>${goal.calendar ? `<p>Calendar: ${esc(goal.calendar.source)}. Provisional 50 km total / four hours from event start.<br>${esc(goal.calendar.location)}</p>` : ''}<p>Priority ${goal.priority}. ${goal.approval_state === 'granted' ? 'Approved task ceiling ' + watts(goal.approved_peak_kw) + ' W' : 'Normal automatic peak policy applies.'}</p><p>Power changes stay within grouped charging sessions.</p>`);
   }
 
   function showSessionDetail(id) {

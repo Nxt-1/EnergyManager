@@ -1,0 +1,15 @@
+{
+  "version": "4.3.0",
+  "provenance": "SYNTHETIC HA-contract/local fake calendar feeds; HA built-ins and Supervisor simulated",
+  "checks": [
+    "native and standalone imported departure/away/return agenda",
+    "50km total / four elapsed hours clearly provisional",
+    "source/location and last-sync status",
+    "manual sync",
+    "Settings add/label/remove/save, backup and restart message",
+    "390px fields fit327px rows without overflow",
+    "fresh final browser logs clean"
+  ],
+  "actual_ha_installation_verified": false,
+  "result": "passed"
+}

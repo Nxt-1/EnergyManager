@@ -150,6 +150,12 @@ p {
   position:relative
 }
 .live-label {display:flex;align-items:center;justify-content:space-between}
+.calendar-links {display:grid;gap:10px;margin-bottom:10px}
+.calendar-link {display:grid;grid-template-columns:minmax(100px,1fr) minmax(120px,2fr) auto;gap:8px}
+.calendar-link input {min-width:0;width:100%}
+.calendar-sync {margin:8px 0 14px;font-size:12px}
+.calendar-sync button {margin-right:8px}
+.calendar-provisional {color:var(--muted);font-size:12px}
 .connection-icon {width:21px;height:21px;vertical-align:middle}
 .connection-icon.connected {color:#16a34a}
 .connection-icon.disconnected {color:var(--muted)}
@@ -601,6 +607,8 @@ body.planning aside .card {
     grid-template-columns:repeat(2,1fr)
   }
   .daily-energy {font-size:11px}
+  .calendar-link {grid-template-columns:minmax(0,1fr) auto}
+  .calendar-link input:nth-child(2) {grid-column:1/-1;grid-row:2}
   .energy-row {gap:3px}
   .live-item strong {
     font-size:18px

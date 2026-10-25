@@ -1,4 +1,5 @@
 {
+  "calendars": [],
   "_description": "SYNTHETIC EXAMPLE ONLY. Review capacities, tariffs and entity mappings.",
   "capabilities": {
     "ev_capacity_kwh": 60.0,
