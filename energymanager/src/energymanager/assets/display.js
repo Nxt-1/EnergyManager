@@ -13,9 +13,11 @@ export function dailyEnergyRows(summary, key, state) {
   const {now, policy: {timezone}} = state;
   const date = new Intl.DateTimeFormat('en-CA', {timeZone: timezone,
     year: 'numeric', month: '2-digit', day: '2-digit'}).format(new Date(now));
-  const current = summary?.date === date && summary.timezone === timezone;
-  const prediction = current && summary.prediction_revision === state.revision &&
-    summary.prediction_plan_id === state.accepted?.id ? summary.predicted_kwh : null;
+  const current = summary?.date === date && summary.timezone === timezone && !!summary.demo === !!state.demo;
+  const estimate = state.daily_estimate;
+  const baseline = estimate?.date === date && estimate.timezone === timezone && !!estimate.demo === !!state.demo ? estimate : null;
+  const prediction = baseline?.kwh;
+  const capture = baseline ? `${baseline.kind === 'midnight' ? 'Fixed midnight estimate' : 'First available estimate'}; captured ${evIncidentTime(baseline.captured_at, timezone)}.${baseline.partial ? ' Based on partial recorded coverage.' : ''}` : 'Daily estimate not yet available.';
   const definitions = {
     grid: [['←', 'import', 'Grid import'], ['→', 'export', 'Grid export']],
     solar: [['∿', 'solar_ac', 'AC solar'], ['⎓', 'solar_dc', 'DC solar']],
@@ -25,7 +27,8 @@ export function dailyEnergyRows(summary, key, state) {
   const number = value => Number.isFinite(value) ? value.toFixed(2) : '—';
   return definitions[key].map(([symbol, name, label]) => ({symbol, label,
     actual: number(current ? summary.kwh?.[name] : null), predicted: number(prediction?.[name]),
-    partial: current && !!summary.partial}));
+    partial: current && !!summary.partial, capture,
+    recordedAt: current ? summary.as_of : null}));
 }
 
 export function connectionIcon(connected) {

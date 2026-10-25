@@ -63,7 +63,7 @@ def test_prediction_uses_elapsed_hours_until_local_midnight(date, remaining):
     assert result is not None and result["import"] == pytest.approx(remaining)
 
 
-async def test_api_keeps_recorded_totals_but_withholds_prediction_until_inputs_are_valid(tmp_path):
+async def test_api_keeps_recorded_totals_and_captured_estimate_survives_replanning(tmp_path):
     from dataclasses import replace
     from aiohttp.test_utils import TestClient, TestServer
     from energymanager.service import Application
@@ -92,7 +92,116 @@ async def test_api_keeps_recorded_totals_but_withholds_prediction_until_inputs_a
         data = await (await client.get("/api/daily-energy")).json()
         assert data["predicted_kwh"] is None  # A restart must reconcile the persisted plan first.
         app.ess_valid = True
+        await app.daily_estimates.capture()
         data = await (await client.get("/api/daily-energy")).json()
-        assert data["prediction_plan_id"] == "synthetic"
-        assert data["prediction_revision"] == 2 and data["predicted_kwh"] is not None
+        estimate = data["estimate"]
+        assert estimate["plan_id"] == "synthetic" and estimate["revision"] == 2
+        assert estimate["kind"] == "first_available" and estimate["captured_at"] == now.isoformat()
+        assert data["predicted_kwh"] is not None
+        app.revision, app.accepted, app.ess_valid = 3, None, False
+        await app.daily_estimates.capture()
+        assert app.state()["daily_estimate"] == estimate
+        assert (await (await client.get("/api/daily-energy")).json())["estimate"] == estimate
     store.close()
+
+
+@pytest.mark.parametrize(("date", "hours"), [("2026-03-29", 23), ("2026-10-25", 25)])
+async def test_midnight_estimate_is_immutable_persisted_and_mode_isolated(tmp_path, date, hours):
+    from dataclasses import replace
+    from energymanager.service import Application
+    from energymanager.store import Store
+    from test_first_slice import tiny
+
+    midnight = datetime.fromisoformat(date).replace(tzinfo=ZoneInfo("Europe/Brussels")).astimezone(UTC)
+    _, plan = prediction_fixture()
+    plan["forecast_at"] = (midnight - timedelta(minutes=5)).isoformat()
+    plan["intervals"][0].update(start=midnight.isoformat(), end=(midnight + timedelta(hours=26)).isoformat())
+    plan["flows"]["grid_ev"] = [0]
+    plan["flows"]["grid_house"] = [1]
+    clock = [midnight + timedelta(seconds=1)]
+    store = Store(tmp_path / "synthetic.sqlite")
+    app = Application(store, snapshot=tiny(), demo=False)
+    app.now = lambda: clock[0]
+    app.accepted, app.revision, app.ess_valid = plan, 2, True
+    app.observation = replace(app.observation, at=clock[0])
+    await app.daily_estimates.capture()
+    estimate = app.state()["daily_estimate"]
+    assert estimate["kind"] == "midnight" and not estimate["partial"]
+    assert estimate["basis_at"] == midnight.isoformat()
+    assert estimate["captured_at"] == clock[0].isoformat()
+    assert estimate["kwh"]["import"] == pytest.approx(hours)
+    clock[0] += timedelta(hours=1)
+    app.accepted = None
+    await app.daily_estimates.capture()
+    assert app.daily_estimates.view(clock[0]) == estimate
+    store.close()
+    # A fresh process reads the saved baseline even before accepting a new plan.
+    reopened = Store(tmp_path / "synthetic.sqlite")
+    restarted = Application(reopened, snapshot=tiny(), demo=False)
+    assert restarted.daily_estimates.view(clock[0]) == estimate
+    restarted.demo = True
+    assert restarted.daily_estimates.view(clock[0]) is None
+    restarted.demo = False
+    assert restarted.daily_estimates.view(midnight + timedelta(hours=26)) is None
+    reopened.close()
+
+
+async def test_missing_or_future_plan_cannot_be_labelled_midnight(tmp_path):
+    from dataclasses import replace
+    from energymanager.service import Application
+    from energymanager.store import Store
+    from test_first_slice import tiny
+
+    summary, plan = prediction_fixture()
+    now = datetime.fromisoformat(summary["as_of"])
+    store = Store(tmp_path / "synthetic.sqlite")
+    app = Application(store, snapshot=tiny(), demo=False)
+    app.now = lambda: now
+    app.accepted, app.revision, app.ess_valid = plan, 2, True
+    app.observation = replace(app.observation, at=now)
+    await app.daily_estimates.capture()
+    assert app.daily_estimates.view(now) is None  # No measured subtotal: never invent morning energy.
+    store.close()
+
+
+async def test_slow_daily_archive_reads_coalesce_without_blocking_live_state(tmp_path, monkeypatch):
+    import asyncio
+    import threading
+    from aiohttp.test_utils import TestClient, TestServer
+    from energymanager import daily_estimates
+    from energymanager.service import Application
+    from energymanager.store import Store
+    from energymanager.web import create_web
+    from test_first_slice import tiny
+
+    entered, release = threading.Event(), threading.Event()
+    calls = 0
+
+    def slow_archive(*args):
+        nonlocal calls
+        calls += 1
+        entered.set()
+        assert release.wait(3)
+        return {"date": "2026-10-23", "kwh": None}
+
+    monkeypatch.setattr(daily_estimates, "daily_energy", slow_archive)
+    store = Store(tmp_path / "synthetic.sqlite")
+    app = Application(store, snapshot=tiny())
+    async def no_lifecycle():
+        pass
+    app.start = app.close = no_lifecycle
+    try:
+        async with TestClient(TestServer(create_web(app))) as client:
+            requests = [asyncio.ensure_future(client.get("/api/daily-energy")) for _ in range(3)]
+            try:
+                assert await asyncio.to_thread(entered.wait, 2)
+                response = await asyncio.wait_for(client.get("/api/state"), 1)
+                assert response.status == 200 and not any(task.done() for task in requests)
+            finally:
+                release.set()
+            responses = await asyncio.gather(*requests)
+            assert all(response.status == 200 for response in responses)
+            assert calls == 1
+    finally:
+        release.set()
+        store.close()

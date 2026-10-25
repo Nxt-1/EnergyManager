@@ -55,6 +55,7 @@ class FastControl:
         fresh = (at - o.at).total_seconds() <= p.measurement_max_age_seconds and o.quality not in (
             "unknown",
             "stale",
+            "settling",
         )
         if not fresh:
             return Command(
@@ -66,7 +67,8 @@ class FastControl:
                 o.ev_phases,
                 0,
                 baseline,
-                "Measurements stale; new commands restricted",
+                ("Power readings settling; commands paused" if o.quality == "settling"
+                 else "Measurements stale; new commands restricted"),
                 True,
             )
         position = (

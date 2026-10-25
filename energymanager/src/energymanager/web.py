@@ -16,7 +16,6 @@ from .settings import ConfigurationConflict, ConfigurationFile, SettingsValidati
 from .hardware import HardwareControl
 from . import __version__
 from .dashboard import dashboard_manifest
-from .energy import daily_energy, end_of_day_energy
 from .graph_history import graph_history
 from .calendars import CalendarSync
 from .ev_faults import incident_report
@@ -98,20 +97,14 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         return web.json_response({"calendars": application.calendars.status()})
 
     async def energy(request: web.Request) -> web.Response:
-        plan, revision = application.accepted, application.revision
         now = application.now()
-        age = (now - application.observation.at).total_seconds()
-        inputs_known = application.demo or (application.observation.quality == "measured"
-                       and -5 <= age <= application.policy.measurement_max_age_seconds)
-        result = await asyncio.to_thread(daily_energy, application.store.path, now,
-                                        application.policy.timezone,
-                                        application.policy.measurement_max_age_seconds, application.demo)
-        result["prediction_revision"] = revision
-        result["prediction_plan_id"] = plan["id"] if plan else None
-        result["predicted_kwh"] = end_of_day_energy(
-            result, plan, revision, application.policy.forecast_max_age_seconds,
-            application.snapshot.capabilities.ac_discharge_efficiency
-        ) if inputs_known and application.ess_valid and revision == application.revision else None
+        try:
+            result = await application.daily_estimates.recorded(now)
+        except (TimeoutError, sqlite3.OperationalError) as exc:
+            return web.json_response({"error": f"Daily energy unavailable: {exc}"}, status=503)
+        estimate = application.daily_estimates.view(now)
+        result["estimate"] = estimate
+        result["predicted_kwh"] = estimate["kwh"] if estimate else None
         return web.json_response(result, headers={"Cache-Control": "no-store"})
 
     async def history(request: web.Request) -> web.Response:

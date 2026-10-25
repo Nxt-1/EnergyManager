@@ -201,17 +201,23 @@ Creating this index can take time on the first startup with a large existing arc
 
 From4.2.3, compact rows use left/right arrows for grid import/export, alternating/direct
 current symbols for AC/DC solar and downward/upward arrows for ESS AC charge/discharge.
-Every recorded subtotal is followed by a forecast arrow and expected end-of-today total:
-recorded energy so far plus only the current plan's remaining intervals through the next
-installation-local midnight. Partial intervals and23/25-hour days use elapsed time.
-Forecasts require a reconciled valid plan at the current revision, a fresh forecast,
-successful current input reads, an actual subtotal and continuous remaining-day coverage.
-Unavailable forecasts remain blank. Revision/plan identity prevents mixing obsolete plans.
-Missing recorded coverage is not backfilled; the partial symbol and tooltip apply to
-both subtotal and projection. ESS AC output includes DC passthrough after converter
-efficiency, matching observed converter power rather than battery-inventory change.
-Summaries also refresh when the accepted plan or local date changes. Connection status
-uses accessible plug/slashed-plug/unknown symbols. The sensor/history chooser is retained.
+From4.3.3 every recorded subtotal is followed by a fixed expected end-of-day total.
+An independent task captures the accepted pre-midnight plan at the installation-local
+midnight, integrating that entire23/25-hour day with continuous coverage and a fresh
+forecast. Persist one immutable baseline per local date, timezone and demo/configured
+mode; subsequent plans, input faults and restarts do not overwrite it. The tooltip
+states the actual capture time and whether this is a midnight or first available
+estimate. On later startup without an eligible midnight plan, the first reconciled
+valid plan plus the recorded subtotal supplies the fallback at its actual capture time.
+Missing actual coverage is never backfilled and its partial status remains explicit.
+An unavailable plan/forecast/subtotal or uncovered remainder cannot create a fallback.
+The fast state API supplies the saved baseline independently of archive integration.
+Recorded subtotals refresh every30s and on local-day/mode changes, outside the browser's
+live-state request. Coalesced backend reads cache30s and use a five-second scan budget;
+read failures retain the last same-day subtotal with its as-of time in the tooltip.
+ESS AC output includes DC passthrough after converter efficiency, matching observed
+converter power rather than battery-inventory change. Connection status uses accessible
+plug/slashed-plug/unknown symbols. The sensor/history chooser is retained.
 
 Power and battery SoC graphs share a time cursor: hover inspects, click/touch pins,
 arrows move, Shift+arrow moves one minute, Home/End select window edges and Escape clears.
@@ -238,7 +244,9 @@ a gap is suppressed rather than joining readings across the gap; empty spans rem
 blank. Cached snapshots are deduplicated and read freshness bounds continuity. Current
 measured and demo histories stay separate. Recent samples overlay the archive with the
 same gap rules. The UI caches up to six ranges for30s, backs off failures and ignores
-obsolete range responses or disposed views. Errors explicitly show recent-only history.
+obsolete range responses or disposed views. Rolling windows retain the overlapping loaded archive until replacement succeeds;
+failures label retained history or recent-only history truthfully. Nonoverlapping
+navigation clears the old data, and stale responses cannot replace the selected range.
 History day uses installation-local midnight boundaries, including23/25-hour dates;
 12-hour elapsed navigation and Now remain. Future observations are not invented.
 New measurement records also include EV/ESS capacities, without changing the Observation
@@ -554,6 +562,18 @@ visible independently of a failed snapshot. If reads stop, cached cards show a r
 warning; unavailable components remain explicit. Actual charts use validated HA snapshots.
 Forecast issuance/expiry and permission/actuator guards remain unchanged. Installation
 integrations must accurately signal device loss via availability; this remains a live check.
+
+From4.3.3 a derived household residual below−100W has a settling window equal to
+measurement_max_age_seconds (normally30s), only after a validated observation existed.
+The failed combination never refreshes Observation.at or invents nonnegative demand:
+quality becomes settling, the controller requests zero EV/ESS commands, and no sample
+is learned as measured household consumption. The accepted plan/permission revisions
+remain intact during a brief mismatch; planning waits and in-flight publication is
+rejected until a validated balance returns. Record first mismatch time, raw input states
+and recovery. The UI retains independently available values with an explicit inconsistent
+household value. At the deadline, on startup without a prior valid observation, or for
+other critical-input failures, normal visible error/invalidation rules apply immediately.
+Recovery from a brief mismatch resumes the existing plan subject to every normal guard.
 
 ## Maintaining the architecture and continuing work
 

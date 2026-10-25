@@ -17,29 +17,44 @@ export class GraphHistory {
     this.requests = new Map();
     this.key = null;
     this.data = null;
+    this.dataRange = null;
     this.error = null;
     this.loading = false;
     this.disposed = false;
+    this.scope = null;
   }
 
-  load(start, end, now) {
+  load(start, end, now, scope = '') {
     if (this.disposed) return;
+    if (scope !== this.scope) {
+      this.scope = scope;
+      this.cache.clear();
+      this.key = this.data = this.dataRange = null;
+    }
     start = Math.floor(start / 60000) * 60000;
     end = Math.ceil(Math.min(end, now) / 60000) * 60000;
-    const key = `${start}/${end}`;
+    const key = `${scope}/${start}/${end}`;
     if (this.key !== key) {
       this.key = key;
-      this.data = null;
+      // A rolling minute boundary must not remove the archive while its replacement loads.
+      if (!this.dataRange || start >= this.dataRange[1] || end <= this.dataRange[0]) {
+        this.data = null;
+        this.dataRange = null;
+      }
       this.error = null;
     }
     if (end <= start) {
       this.data = {series: {}, sample_count: 0};
+      this.dataRange = null;
       this.loading = false;
       return;
     }
     const cached = this.cache.get(key);
     if (cached && Date.now() - cached.saved < 30000) {
-      this.data = cached.data;
+      if (cached.data) {
+        this.data = cached.data;
+        this.dataRange = [start, end];
+      }
       this.error = cached.error || null;
       this.loading = false;
       return;
@@ -55,6 +70,7 @@ export class GraphHistory {
       if (this.cache.size > 6) this.cache.delete(this.cache.keys().next().value);
       if (!this.disposed && this.key === key) {
         this.data = data;
+        this.dataRange = [start, end];
         this.error = null;
       }
     }).catch(error => {
@@ -63,7 +79,6 @@ export class GraphHistory {
       this.cache.set(key, {data: null, error: error.message, saved: Date.now()});
       if (this.cache.size > 6) this.cache.delete(this.cache.keys().next().value);
       if (this.key === key) {
-        this.data = null;
         this.error = error.message;
       }
     }).finally(() => {
@@ -77,7 +92,7 @@ export class GraphHistory {
   }
 
   get status() {
-    if (this.error) return `Archive history unavailable · recent samples only · ${this.error}`;
+    if (this.error) return `Archive history unavailable · ${this.data ? 'retaining loaded history' : 'recent samples only'} · ${this.error}`;
     if (this.loading && !this.data) return 'Loading recorded graph history…';
     if (!this.data?.sample_count) return 'No archived measurements in this period. Missing history remains blank.';
     const detail = Math.ceil(this.data.bucket_seconds);

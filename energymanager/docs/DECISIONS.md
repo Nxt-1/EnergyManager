@@ -202,3 +202,18 @@ ESS stays available. Source inspection corrected the heartbeat choice: integrati
 2026.10.3 rounds uptime to whole hours; use its existing last Status change age in
 seconds instead. No new physical phase sensor, direct charger connection, live access
 or Maps activation. Keep HA as the control boundary and verify only fake endpoints.
+
+## 25 October2026 — Fixed daily baseline and brief power-balance settling
+
+The user requested investigation/fixes for graph flashes, slow/empty predicted energy
+and transient negative derived household demand, and explicitly authorized code.
+They selected a fixed estimate captured at midnight with capture time in the tooltip.
+Save that baseline independently of open dashboards and retain it through replans and
+restarts. If no eligible midnight plan exists, label a first available fallback honestly;
+never reconstruct an apparent midnight forecast from information acquired afterward.
+
+A brief inconsistent derived balance pauses commands without treating an impossible
+negative demand as a valid measurement or triggering global errors/replans. Bound the
+settling period by the existing input watchdog, retain diagnostic evidence, and keep
+persistent/other input failures visible. Release4.3.3 uses standing ready-release
+commit/push permission. Live HA, hardware and deployment remain separate authorization.

@@ -28,6 +28,8 @@ from .worker import watch_parent
 from .hardware import HardwareControl
 from .calendars import CalendarSync
 from .ev_faults import EVFaults
+from .daily_estimates import DailyEstimates
+from .measurements import HousePowerMismatch
 
 
 class Application:
@@ -83,6 +85,8 @@ class Application:
         self.calendars: CalendarSync | None = None
         self.calendar_items: dict[str, dict[str, Any]] = {}
         self.ev_faults: EVFaults | None = None
+        self.daily_estimates = DailyEstimates(self)
+        self.house_mismatch_since: datetime | None = None
 
     def now(self) -> datetime:
         return (
@@ -92,6 +96,7 @@ class Application:
         )
 
     async def start(self) -> None:
+        self.daily_estimates.start()
         if self.hardware:
             self.hardware.start()
         if self.calendars:
@@ -112,6 +117,7 @@ class Application:
 
     async def close(self) -> None:
         self.shutdown = True
+        await self.daily_estimates.close()
         if self.ev_faults:
             await self.ev_faults.close()
         if self.calendars:
@@ -256,7 +262,11 @@ class Application:
         while not self.shutdown:
             try:
                 observation = await self.ha.observe(self.snapshot.capabilities)
-                initial = self.forecast_data is None or self.observation.quality == "unknown"
+                initial = self.forecast_data is None or (self.observation.quality == "unknown"
+                                                        and self.house_mismatch_since is None)
+                if self.house_mismatch_since is not None:
+                    self.store.event("power_balance_recovered", {"at": self.now(), "since": self.house_mismatch_since})
+                    self.house_mismatch_since = None
                 self.observe(observation)
                 if self.status == "inputs_unavailable":
                     self.error = None
@@ -305,6 +315,10 @@ class Application:
                     reason = "inputs_ready" if initial else "forecast_recovered" if recovered else "forecast_revision"
                     self.changed(reason, ess=not initial)
             except (ValueError, KeyError, OSError, RuntimeError, aiohttp.ClientError, TimeoutError) as exc:
+                if isinstance(exc, HousePowerMismatch) and self.settling_house_power(exc):
+                    await asyncio.sleep(5)
+                    continue
+                self.house_mismatch_since = None
                 self.error = f"Inputs unavailable: {type(exc).__name__}: {exc}"
                 self.status = "inputs_unavailable"
                 was_unknown = self.observation.quality == "unknown"
@@ -314,6 +328,23 @@ class Application:
                 self.store.event("input_error", {"reason": self.error})
             await asyncio.sleep(5)
 
+    def settling_house_power(self, error: HousePowerMismatch) -> bool:
+        """Pause commands immediately, but avoid invalidating a plan for a brief sensor skew."""
+        now = self.now()
+        if self.house_mismatch_since is None:
+            if self.observation.quality not in ("measured", "SYNTHETIC"):
+                return False  # Startup has no validated balance to recover from.
+            self.house_mismatch_since = now
+            self.store.event("power_balance_settling", {
+                "at": now, "reason": str(error), "last_valid_at": self.observation.at,
+                "readings": json_data(self.ha.inputs.readings) if self.ha else {},
+            })
+        elapsed = (now - self.house_mismatch_since).total_seconds()
+        if not 0 <= elapsed < self.policy.measurement_max_age_seconds:
+            return False
+        self.observation = replace(self.observation, quality="settling")
+        return True
+
     async def planning_loop(self) -> None:
         while not self.shutdown:
             try:
@@ -322,6 +353,10 @@ class Application:
                 self.requested.set()
             self.requested.clear()
             await asyncio.sleep(0.05)  # Coalesce event bursts, never queue independent full solves.
+            if self.house_mismatch_since is not None:
+                self.requested.set()
+                await asyncio.sleep(5)
+                continue
             try:
                 snapshot = self.build_snapshot()
             except (ValueError, KeyError) as exc:
@@ -349,6 +384,10 @@ class Application:
                 self.store.event("solver_error", {"type": type(exc).__name__, "reason": str(exc)})
                 continue
             # All changes are conservatively revalidated by a fresh solve; accepted unaffected work continues.
+            if self.house_mismatch_since is not None:
+                self.store.record(snapshot, result, "rejected_unsettled_power")
+                self.requested.set()
+                continue
             if snapshot.revision != self.revision:
                 self.store.record(snapshot, result, "rejected_stale")
                 self.status = "superseded"
@@ -460,7 +499,7 @@ class Application:
             except (OSError, RuntimeError) as exc:
                 self.error = f"Actuator unavailable: {type(exc).__name__}: {exc}"
                 self.store.event("actuator_error", {"reason": self.error, "generation": self.revision})
-            if command.replan and (
+            if command.replan and self.house_mismatch_since is None and (
                 self.last_control_replan is None or (at - self.last_control_replan).total_seconds() >= 60
             ):
                 self.last_control_replan = at
@@ -629,6 +668,8 @@ class Application:
             requirements.append(Goal.from_dict(approved) if approved and approved["revision"] == goal.revision else goal)
         return {
             "version": __version__,
+            "daily_estimate": self.daily_estimates.view(now),
+            "power_balance_settling_since": json_data(self.house_mismatch_since),
             "status": self.status,
             "error": self.error,
             "revision": self.revision,

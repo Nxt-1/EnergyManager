@@ -1,3 +1,17 @@
+## 4.3.3 — Stable graphs and fixed daily energy estimates
+
+- Retain overlapping archive data while rolling graph windows refresh, including
+  temporary archive failures; preserve gaps and clear unrelated date ranges.
+- Save one fixed midnight energy estimate per local day and operating mode, surviving
+  restarts and replans. Show its capture time in the tooltip. A later startup uses an
+  honestly labelled first available estimate when no midnight baseline exists.
+- Load recorded daily totals independently of live updates; coalesce archive reads,
+  bound queries and retain dated subtotals through temporary read failures.
+- Allow derived negative household balances to settle for the input watchdog period
+  without a global error or plan invalidation. Pause EV/ESS commands immediately,
+  record raw diagnostic states and escalate persistent mismatches. Do not fabricate
+  household samples or feed inconsistent readings into forecast learning.
+
 ## 4.3.2 — go-e charging supervision
 
 - Interpret numeric car/status/error readings before timing non-delivery; require an

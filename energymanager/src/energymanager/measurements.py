@@ -30,6 +30,10 @@ def installation_configuration(document: dict[str, Any]) -> dict[str, Any]:
     return prepared
 
 
+class HousePowerMismatch(ValueError):
+    """A derived residual can be inconsistent while independently sampled powers settle."""
+
+
 @dataclass(frozen=True)
 class MeasurementOptions:
     house_source: str = "direct"
@@ -59,7 +63,10 @@ class MeasurementOptions:
         else:
             result = measured_kw
         if result < -0.1:
-            raise ValueError("Derived house demand is negative; check power signs and meter topology")
+            message = f"Derived house demand is negative ({result:.3f} kW); check power signs and meter topology"
+            if self.house_source != "direct":
+                raise HousePowerMismatch(message)
+            raise ValueError(message)
         return max(0, result)  # Allow small differences between asynchronously sampled sensors.
 
     def quarter_energy(self, value: float, reported_at: datetime) -> float:

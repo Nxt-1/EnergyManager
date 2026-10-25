@@ -1,5 +1,31 @@
 # EnergyManager 4 verification
 
+## 4.3.3 — Stable graphs, frozen daily estimates and settling balances
+
+Synthetic/local checks only. Final full suite244 passed44.33s; focused26 energy/input
+checks passed0.61s after the archive-coalescing regression and clock guard.
+24 frontend tests, Ruff/mypy35, all packaged JavaScript syntax and CLI4.3.3 pass.
+Regression coverage includes overlap retained during pending/failed range replacement,
+nonoverlap/mode/timezone isolation, obsolete responses, saved midnight baselines across
+23/25-hour days, restart/replan immutability, honest late-start fallback, and coalesced
+slow archive reads while the live state endpoint remains responsive. Real loopback HA
+input-loop tests verify command pause/no revision change during a brief residual and
+normal visible invalidation after30s of persistent mismatch. Invalid residuals do not
+become measured household history or forecast-learning samples.
+
+Configured fake E2E with42,480synthetic archived measurements passes32.344s across
+2,018intervals, max control tick4.319ms, four fake-only service/notification calls.
+Native and standalone browser previews verify capture/as-of tooltips and independently
+loaded recorded totals. Native live EV update45→57% still works while estimates remain
+fixed through the subsequent replan. Fifty sampled graph renders before/after a minute
+rollover retained full archived paths (minimum6,840characters); no missing archive redraw
+was observed. Native390px energy rows fit147px with no horizontal overflow. Screenshots
+remain under ignored artifacts/release-4.3.3-*.jpg. No live HA/database/hardware use.
+
+Wheel/sdist built; all52 code/assets match source and isolated4.3.3 import passes.
+Paused Maps code and unrelated backlog edits are excluded from both distributions.
+Remote results belong only in the ignored checkpoint/final reply after the release commit.
+
 ## 4.3.2 — Status-aware go-e charging supervision
 
 Full suite236 passed42.91s; after the final evidence-storage stop safeguard,56 targeted

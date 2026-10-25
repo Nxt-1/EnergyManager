@@ -94,14 +94,14 @@ def daily_energy(path: Path, now: datetime, timezone: str, max_age_seconds: floa
         for key, power in powers.items():
             totals[key] += power * seconds / 3600
 
-    for sample in measurements(path, start - timedelta(seconds=max_age_seconds), now):
+    for sample in measurements(path, start - timedelta(seconds=max_age_seconds), now, timeout_seconds=5):
         if previous is not None:
             integrate(previous, instant(sample["at"]))
         previous = sample
     if previous is not None:
         integrate(previous, now)
     elapsed = (now - start).total_seconds()
-    return {"date": local.date().isoformat(), "timezone": timezone, "as_of": now.isoformat(),
+    return {"date": local.date().isoformat(), "timezone": timezone, "demo": demo, "as_of": now.isoformat(),
             "kwh": totals if covered > 0 else None, "covered_seconds": covered,
             "elapsed_seconds": elapsed, "partial": elapsed - covered > 1,
             "source": "SYNTHETIC power integration" if demo else "Recorded power integration"}

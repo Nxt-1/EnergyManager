@@ -1,5 +1,23 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.3 stable graphs, fixed daily baseline and power-balance settling
+
+AUTHORIZED: fix rolling graph flashes, slow/empty energy estimates and brief negative
+household residual errors. User chose a fixed midnight estimate with capture tooltip.
+IMPLEMENTED: overlap retention/error backoff; independently persisted midnight/labelled
+first-available daily baseline; fast state projection, asynchronous/coalesced/bounded
+archive totals and dated retention. Derived mismatch pauses commands immediately,
+retains plan revisions for the input watchdog window, records raw states/recovery and
+escalates persistent failure. No fabricated household samples or load-learning input.
+FINAL LOCAL:244 Python44.33s/24 Node/Ruff/mypy35/all JS/CLI4.3.3 pass. Fake E2E
+32.344s,2,018intervals,max tick4.319ms,four fake-only calls and42,480archived fixture
+records. Native/standalone capture/as-of/HA update and390px fit checks pass; loaded
+archive remains before/after minute rollover. Browser logs clean, fixtures closed.
+PACKAGED: wheel/sdist built;52 code/assets match source, isolated4.3.3 import passes.
+Paused Maps code and unrelated backlog edits excluded. Final focused diff review passes.
+NEXT: single release commit/push and remote CI/image checks. Preserve unrelated ARCH-011/012 backlog edits and ignored
+paused Maps archive. No live installation access.
+
 ## Current work - 4.3.2 go-e charging supervision
 
 AUTHORIZED: implement the reviewed go-e fixes. User confirmed numeric car/status/error

@@ -212,3 +212,65 @@ async def test_independent_control_stops_when_the_input_loop_cannot_complete_ano
             task.cancel()
         await asyncio.gather(*tasks, *app.protective_tasks, return_exceptions=True)
         store.close()
+
+
+@pytest.mark.parametrize("persistent", [False, True])
+async def test_negative_derived_balance_settles_without_replan_but_persistent_failure_escalates(inputs, tmp_path, monkeypatch, persistent):
+    adapter, rows, at = inputs
+    observation = await adapter.observe(Capabilities(), at=at)
+    clock = [at + timedelta(seconds=5)]
+    original_observe = adapter.observe
+
+    async def observe(capabilities):
+        return await original_observe(capabilities, at=clock[0])
+
+    class Forecast:
+        async def read(self, observation, at):
+            raise asyncio.CancelledError  # Reaching forecast read proves a validated recovery.
+
+    monkeypatch.setattr(adapter, "observe", observe)
+    store = Store(tmp_path / "balance.sqlite")
+    app = Application(store, snapshot=demo_snapshot(goals=()), demo=False, ha=adapter, forecast=Forecast())
+    app.now = lambda: clock[0]
+    app.observation, app.forecast_data, app.status = observation, {}, "ready"
+    app.ev_valid = app.ess_valid = True
+    revision = app.revision
+    rows["grid_export_kw"]["state"] = "3000"  # Residual -1kW while independent readings settle.
+    sleeps = 0
+
+    async def advance(seconds):
+        nonlocal sleeps
+        sleeps += 1
+        if sleeps == 1:
+            assert app.observation.quality == "settling"
+            assert app.observation.at == observation.at  # Failed reads cannot refresh a valid timestamp.
+            assert app.error is None and app.revision == revision
+            command = app.controller.tick(app.observation, clock[0], None, revision)
+            assert command.ev_kw == command.ess_kw == 0 and "settling" in command.reason
+            assert app.ev_valid and app.ess_valid
+            clock[0] += timedelta(seconds=30 if persistent else 5)
+            if not persistent:
+                rows["grid_export_kw"]["state"] = "1300"
+        else:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(asyncio, "sleep", advance)
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await app.input_loop()
+        events = [event["kind"] for event in store.events()]
+        assert "power_balance_settling" in events
+        if persistent:
+            assert app.status == "inputs_unavailable" and "negative" in app.error
+            assert app.observation.quality == "unknown"
+            assert not app.ev_valid and not app.ess_valid and app.revision == revision + 1
+            assert "input_error" in events
+        else:
+            assert app.observation.quality == "measured" and app.error is None
+            assert app.revision == revision and app.ev_valid and app.ess_valid
+            assert "power_balance_recovered" in events and "input_error" not in events
+    finally:
+        for task in app.protective_tasks:
+            task.cancel()
+        await asyncio.gather(*app.protective_tasks, return_exceptions=True)
+        store.close()

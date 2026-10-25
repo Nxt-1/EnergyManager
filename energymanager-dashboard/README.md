@@ -59,11 +59,12 @@ is labelled partial, absent coverage unavailable; gaps are not filled. Totals re
 every30 seconds. The first startup creates an index over existing measurement events,
 which can take longer with a large archive.
 
-From4.2.3 each compact energy row shows recorded kWh followed by ⇢ expected kWh at
-today's end (recorded so far plus the current plan until local midnight). Grid ←/→
-mean import/export, solar ∿/⎓ mean AC/DC, and ESS ↓/↑ mean AC charge/discharge.
-Hover or focus for descriptions; ◐ marks partial recorded coverage, including the
-projection's baseline. Missing or obsolete predictions show —. Car connection uses
+From4.3.3 each compact energy row shows recorded kWh followed by ⇢ the fixed expected
+total for that local day. The midnight baseline survives replans/restarts; its tooltip
+shows capture time. Without an eligible midnight plan, a later estimate is labelled
+first available. Actual subtotals load independently and retain their as-of time during
+read failures. Grid ←/→ denotes import/export, solar ∿/⎓ AC/DC and ESS ↓/↑ charge/discharge.
+Partial actual coverage stays marked. Missing estimates show —. Car connection uses
 a plug symbol, slashed when disconnected and marked ? when unknown.
 
 Hover over either graph to inspect numbers, click/touch to pin the cursor, or focus

@@ -278,17 +278,23 @@ test('stable loader uses authenticated HA discovery, versioned assets and safe s
   } finally { globalThis.fetch = originalFetch; }
 });
 
-test('compact daily energy separates flows, pairs day-end predictions and rejects stale totals/plans', () => {
+test('compact daily energy keeps the frozen baseline across plans and rejects other dates/modes', () => {
   const summary = {date: '2026-10-25', timezone: 'Europe/Brussels', partial: true,
     prediction_revision: 2, prediction_plan_id: 'synthetic',
     kwh: {import: 4, export: 2, ess_charge: 1.5, ess_discharge: 1, solar_ac: 5, solar_dc: 1, house: 3, ev: 2},
     predicted_kwh: {import: 6, export: 3, ess_charge: 2, ess_discharge: 1.5, solar_ac: 7, solar_dc: 2, house: 5, ev: 4}};
-  const state = {now: '2026-10-24T23:00:00Z', policy: {timezone: 'Europe/Brussels'}, revision: 2, accepted: {id: 'synthetic'}};
+  const state = {now: '2026-10-24T23:00:00Z', policy: {timezone: 'Europe/Brussels'}, revision: 2, accepted: {id: 'synthetic'},
+    daily_estimate: {date: summary.date, timezone: summary.timezone, kind: 'midnight',
+      captured_at: '2026-10-24T22:00:01Z', kwh: summary.predicted_kwh}};
   assert.deepEqual(dailyEnergyRows(summary, 'grid', state).map(row => [row.symbol,row.actual,row.predicted]),
     [['←','4.00','6.00'],['→','2.00','3.00']]);
   assert.deepEqual(dailyEnergyRows(summary, 'solar', state).map(row => row.symbol), ['∿','⎓']);
   assert.ok(dailyEnergyRows(summary, 'ess', state).every(row => row.partial));
-  assert.equal(dailyEnergyRows(summary, 'house', {...state, revision: 3})[0].predicted, '—');
+  assert.equal(dailyEnergyRows(summary, 'house', {...state, revision: 3, accepted: null})[0].predicted, '5.00');
+  assert.equal(dailyEnergyRows(null, 'house', state)[0].predicted, '5.00');
+  assert.match(dailyEnergyRows(null, 'house', state)[0].capture, /Fixed midnight estimate; captured.*00:00:01/);
+  assert.equal(dailyEnergyRows(summary, 'house', {...state, demo: true})[0].predicted, '—');
+  assert.equal(dailyEnergyRows(summary, 'house', {...state, now:'2026-10-25T23:00Z'})[0].predicted, '—');
   assert.equal(dailyEnergyRows(summary, 'house', {...state, now:'2026-10-25T23:00Z'})[0].actual, '—');
   assert.equal(dailyEnergyRows(null, 'ev', state)[0].actual, '—');
   assert.match(connectionIcon(true), /aria-label="Connected"/);
@@ -348,6 +354,48 @@ test('graph history ignores obsolete responses, caches ranges and exposes archiv
   history.dispose();
   history.load(0, 3600000, 7200000);
   assert.equal(pending.length, 3);
+});
+
+test('rolling graph history retains overlapping data through refresh and failure, clears unrelated ranges', async () => {
+  const pending = [];
+  const history = new GraphHistory(path => new Promise((resolve, reject) => pending.push({resolve, reject})), () => {});
+  history.load(0, 3600000, 3600000);
+  const data = {sample_count: 2, series: {house: [[0,100],[3500000,200]]}};
+  pending[0].resolve(data);
+  await [...history.requests.values()][0];
+  history.load(60000, 3660000, 3660000);
+  assert.equal(history.data, data);
+  assert.ok(history.loading);
+  pending[1].reject(new Error('SYNTHETIC timeout'));
+  await [...history.requests.values()][0];
+  assert.equal(history.data, data);
+  assert.match(history.status, /retaining loaded history.*timeout/);
+  history.load(60000, 3660000, 3660000);
+  assert.equal(history.data, data); // Failed range backoff must retain it too.
+  history.load(7200000, 10800000, 10800000);
+  assert.equal(history.data, null);
+  pending[2].resolve({sample_count: 0, series: {}});
+  await [...history.requests.values()][0];
+  history.dispose();
+});
+
+test('graph history never retains another operating mode or timezone', async () => {
+  const pending = [];
+  const history = new GraphHistory(() => new Promise(resolve => pending.push(resolve)), () => {});
+  history.load(0, 3600000, 3600000, 'configured/Europe/Brussels');
+  pending[0]({sample_count: 1, series: {house: [[0,400]]}});
+  await [...history.requests.values()][0];
+  history.load(0, 3600000, 3600000, 'demo/Europe/Brussels');
+  assert.equal(history.data, null);
+  const demoRequest = [...history.requests.values()][0];
+  history.load(0, 3600000, 3600000, 'demo/UTC');
+  pending[1]({sample_count: 9});
+  await demoRequest;
+  assert.equal(history.data, null);
+  pending[2]({sample_count: 2, series: {}});
+  await [...history.requests.values()][0];
+  assert.equal(history.data.sample_count, 2);
+  history.dispose();
 });
 
 test('observed graphs merge older archive with recent snapshots while preserving missing readings', () => {

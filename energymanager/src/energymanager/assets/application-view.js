@@ -36,7 +36,7 @@ export async function mountApplication(root, options = {}) {
     hardwareChanging = false,
     hardwareIntent = false,
     hardwareError = null;
-  let dailyEnergy = null, energyRequestedAt = 0, energyPlanId = null, energyDay = null;
+  let dailyEnergy = null, energyRequestedAt = 0, energyDay = null, energyLoading = false;
   const graphModels = {};
   let incidentReport = null;
   let selectedRange = null;
@@ -308,7 +308,7 @@ export async function mountApplication(root, options = {}) {
     renderLive();
     $('status').innerHTML =
       `${!plan ? '<p class="status-line">Waiting for a validated plan.</p>' : ''}${state.error ? `<p class="error">${esc(powerText(state.error))}</p>` : ''}`;
-    graphHistory.load(start, end, Date.parse(state.now));
+    graphHistory.load(start, end, Date.parse(state.now), `${state.demo}/${state.policy.timezone}`);
     renderCharts();
     const sessions = plan?.sessions || [];
     $('timeline').innerHTML = ['ev', 'ess'].map(resource =>
@@ -398,8 +398,9 @@ export async function mountApplication(root, options = {}) {
         connected = connection === 'Connected' ? true : connection === 'Away / disconnected' ? false : null;
       }
       const rows = dailyEnergyRows(dailyEnergy, key, state).map(row => {
-        const coverage = row.partial ? ' Partial recorded coverage; the projection starts from that subtotal.' : '';
-        return `<span class="energy-row" title="${esc(row.label)}: recorded today ⇢ expected at local midnight. Power integration estimates.${coverage}" aria-label="${esc(row.label)}: ${row.actual} kWh recorded, ${row.predicted} kWh expected at day end${row.partial ? ', partial coverage' : ''}"><span class="energy-symbol" aria-hidden="true">${row.symbol}</span><span>${row.actual}</span><span class="prediction-arrow" aria-hidden="true">⇢</span><span>${row.predicted}</span><span class="energy-unit">kWh${row.partial ? ' ◐' : ''}</span></span>`;
+        const coverage = row.partial ? ' Partial recorded coverage.' : '';
+        const recorded = row.recordedAt ? ` Recorded through ${evIncidentTime(row.recordedAt, state.policy.timezone)}.` : '';
+        return `<span class="energy-row" title="${esc(row.label)}: recorded today ⇢ fixed day-end estimate. ${esc(row.capture)}${recorded}${coverage}" aria-label="${esc(row.label)}: ${row.actual} kWh recorded, ${row.predicted} kWh fixed day-end estimate${row.partial ? ', partial coverage' : ''}"><span class="energy-symbol" aria-hidden="true">${row.symbol}</span><span>${row.actual}</span><span class="prediction-arrow" aria-hidden="true">⇢</span><span>${row.predicted}</span><span class="energy-unit">kWh${row.partial ? ' ◐' : ''}</span></span>`;
       }).join('');
       return `<article class="live-item" data-live="${key}" ${options.native ? 'role="button" tabindex="0"' : ''}><span class="live-label muted">${name}${key === 'ev' ? connectionIcon(connected) : ''}</span><strong style="color:${colors[key]}">${unit==='W'?watts(value):num(value,0)} <small style="display:inline;font-size:13px">${unit}</small></strong>${compact ? `<small class="live-components">${compact}</small>` : ''}<div class="daily-energy">${rows}</div>${issues.length ? `<span class="input-warning" title="${esc(issues.map(powerText).join('; '))}" aria-label="${esc(issues.map(powerText).join('; '))}">⚠</span>` : ''}${unit==='%' && value !== null ?`<div class="meter"><i style="width:${Math.max(0,Math.min(100,value))}%;background:${colors[key]}"></i></div>`:''}</article>`;
     }).join('');
@@ -470,20 +471,7 @@ export async function mountApplication(root, options = {}) {
         backendState = nextState;
         state = options.liveState ? options.liveState(backendState) : backendState;
         render();
-        const energyDate = new Intl.DateTimeFormat('en-CA', {timeZone: state.policy.timezone,
-          year: 'numeric', month: '2-digit', day: '2-digit'}).format(new Date(state.now));
-        if (['overview', 'planning'].includes(page) && (Date.now() - energyRequestedAt > 30000 ||
-            energyPlanId !== state.accepted?.id || energyDay !== energyDate)) {
-          energyRequestedAt = Date.now();
-          energyPlanId = state.accepted?.id;
-          energyDay = energyDate;
-          try {
-            dailyEnergy = await api('daily-energy');
-          } catch {
-            dailyEnergy = null;
-          }
-          if (!lifecycle.signal.aborted && !viewLocked()) renderLive();
-        }
+        refreshEnergy();
       }
     } catch (error) {
       $('connection').textContent = 'Connection unavailable';
@@ -491,6 +479,26 @@ export async function mountApplication(root, options = {}) {
       if (options.native) root.querySelector('#native-error').textContent = error.message;
     } finally {
       loading = false
+    }
+  }
+
+  async function refreshEnergy() {
+    const energyDate = new Intl.DateTimeFormat('en-CA', {timeZone: state.policy.timezone,
+      year: 'numeric', month: '2-digit', day: '2-digit'}).format(new Date(state.now));
+    const key = `${state.demo}/${state.policy.timezone}/${energyDate}`;
+    if (energyLoading || !['overview', 'planning'].includes(page) ||
+        (Date.now() - energyRequestedAt <= 30000 && energyDay === key)) return;
+    energyRequestedAt = Date.now();
+    energyDay = key;
+    energyLoading = true;
+    try {
+      const result = await api('daily-energy');
+      if (!lifecycle.signal.aborted) dailyEnergy = result;
+    } catch {
+      // Retain the last dated subtotal; its tooltip states how far it was recorded.
+    } finally {
+      energyLoading = false;
+      if (!lifecycle.signal.aborted && !viewLocked()) renderLive();
     }
   }
   root.addEventListener('pointerdown', () => {

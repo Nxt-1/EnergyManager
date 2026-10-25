@@ -2,6 +2,16 @@
 
 ## Local use
 
+Release4.3.3 freezes daily expected totals at local midnight and saves them across
+restarts. Hover/tap the energy row for capture time and recorded subtotal as-of time.
+After a midday upgrade/start without a saved baseline, the first eligible estimate is
+labelled first available. Later replans do not change that day's comparison baseline.
+Brief negative derived balances show an inconsistent household input and pause EV/ESS
+commands while sensors settle; persistent mismatch after the read watchdog (normally
+30s) still raises the normal input error. Events power_balance_settling and
+power_balance_recovered retain raw states/timing for diagnosis. No measured negative
+household value is clamped into fabricated history or forecast-learning samples.
+
 Release4.3.2 requires numeric go-e car/status/error and last Status change age (seconds)
 for EV control. Enable the raw [CODE] sensors in HA if necessary, select the four
 entities in EV fault recovery, save and restart. Existing uptime is rounded to hours
