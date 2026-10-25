@@ -1,5 +1,15 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.7 six-hour Overview
+
+User authorized narrowing Overview graphs to about six hours for more horizontal detail.
+Implemented two hours past/four ahead, matching power/SoC/session ranges, six-hour arrows
+and local-midnight six-hour History day. Planning remains seven days.36 Node/3 asset
+tests/Ruff/JS pass; synthetic E2E32.319s/max3.134ms/2,018intervals/four fake calls passes.
+Browser navigation/history/cursor/Now/DST and matching plot/session edges pass; logs clean.
+NEXT: package/final scoped review, release commit/push and existing CI/image workflows.
+Preserve unrelated backlog/paused Maps. No live HA/database/hardware/notifications/deploy.
+
 ## Current work —4.3.6 combined EV visualization
 
 AUTHORIZED: implement the approved annotated drawing + diagnostic sidebar with red

@@ -2,6 +2,11 @@
 
 ## Local use
 
+Release4.3.7 narrows Overview power/SoC graphs and session bars to six hours: two hours
+behind now and four ahead. Arrows move six hours. History day opens six elapsed hours
+from that date's local midnight; Now returns to the live window. Planning remains
+seven days. Update the add-on and reload HA; no configuration changes are needed.
+
 Release4.3.6 combines the annotated EV drawing with a diagnostic sidebar. Red means
 reported error, green means confirmed OK, and white/normal theme text means neutral.
 Forced stop, waiting and selected settings are neutral; unverified device readings
@@ -347,8 +352,8 @@ automation are required. Resumption uses WORK_STATE.md; automatic resumption is 
 
 ARCH-010 is included in 4.2.2. The user authorized committing and pushing the
 previously held implementation. Updating the add-on and reloading HA loads the new graphs.
-Overview's History day selects a local calendar day; arrows shift12 elapsed hours,
-and Now restores the original live24-hour window. Power/SoC graphs load the selected
+Overview's History day selects six hours starting at local midnight; arrows shift six
+elapsed hours, and Now restores the live six-hour window. Power/SoC graphs load the selected
 archive range. Missing history remains blank; from4.2.3 normal detail/loading metadata
 is in collapsed diagnostics and archive errors remain visible. Legacy battery percentages use current runtime
 capacities where the archive did not record them; the chart explicitly labels this.
@@ -365,8 +370,8 @@ Open localhost8102 for standalone, or localhost8103/native-preview for the label
 HA-contract harness. `--history-fixture` seeds an isolated synthetic SQLite archive
 with older5-second samples, daily power peaks, an explicit noon outage and EV-only
 unknown SoC. It does not change current input readings, load-learning samples or control
-authority. Choose the previous calendar day; verify a full day of power/SoC, line breaks,
-12-hour navigation, Now and a day outside the fixture (blank). HA built-ins/Supervisor
+authority. Choose the previous calendar day; navigate its six-hour power/SoC windows,
+verify line breaks, six-hour navigation, Now and a day outside the fixture (blank). HA built-ins/Supervisor
 remain simulated. Stop both test processes after inspection. Do not use an installation
 database or substitute synthetic fixture values as evidence of live historical coverage.
 

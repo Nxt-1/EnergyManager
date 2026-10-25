@@ -301,8 +301,11 @@ same gap rules. The UI caches up to six ranges for30s, backs off failures and ig
 obsolete range responses or disposed views. Rolling windows retain the overlapping loaded archive until replacement succeeds;
 failures label retained history or recent-only history truthfully. Nonoverlapping
 navigation clears the old data, and stale responses cannot replace the selected range.
-History day uses installation-local midnight boundaries, including23/25-hour dates;
-12-hour elapsed navigation and Now remain. Future observations are not invented.
+From4.3.7 Overview uses a shared six-hour range for power, SoC and session bars:
+two hours before now and four after. Navigation shifts six elapsed hours; Now restores
+that live window. History day starts at installation-local midnight (including DST
+changes) and displays the next six elapsed hours, with arrows reaching later periods.
+Planning retains its full accepted-plan/seven-day horizon. Future observations are not invented.
 New measurement records also include EV/ESS capacities, without changing the Observation
 used by planning/control. Historical percentages prefer those recorded capacities;
 legacy records fall back to current runtime capacities with an explicit chart label.

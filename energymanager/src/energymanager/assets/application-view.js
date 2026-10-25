@@ -142,7 +142,7 @@ export async function mountApplication(root, options = {}) {
       .accepted ? Date.parse(state.accepted.intervals.at(-1).end) : now + 168 * 3600000
     ];
     if (selectedRange) return selectedRange;
-    return [now - 6 * 3600000 + offset * 3600000, now + 18 * 3600000 + offset * 3600000];
+    return [now - 2 * 3600000 + offset * 3600000, now + 4 * 3600000 + offset * 3600000];
   }
 
   function points(series, soc = false) {
@@ -585,15 +585,15 @@ export async function mountApplication(root, options = {}) {
   for (const name of ['overview', 'planning', 'ev', 'settings']) $(name).onclick = () => showPage(name);
   $('back').onclick = () => {
     pointerUntil = 0;
-    if (selectedRange) selectedRange = selectedRange.map(at => at - 12 * 3600000);
-    else offset -= 12;
+    if (selectedRange) selectedRange = selectedRange.map(at => at - 6 * 3600000);
+    else offset -= 6;
     $('history-date').value = '';
     render()
   };
   $('forward').onclick = () => {
     pointerUntil = 0;
-    if (selectedRange) selectedRange = selectedRange.map(at => at + 12 * 3600000);
-    else offset += 12;
+    if (selectedRange) selectedRange = selectedRange.map(at => at + 6 * 3600000);
+    else offset += 6;
     $('history-date').value = '';
     render()
   };
@@ -608,7 +608,8 @@ export async function mountApplication(root, options = {}) {
     pointerUntil = 0;
     if (!$('history-date').value) return;
     try {
-      selectedRange = historyDayRange($('history-date').value, state.policy.timezone);
+      const [start] = historyDayRange($('history-date').value, state.policy.timezone);
+      selectedRange = [start, start + 6 * 3600000];
       render();
     } catch (error) {
       $('graph-history-status').textContent = error.message;

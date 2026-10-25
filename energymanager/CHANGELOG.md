@@ -1,3 +1,10 @@
+## 4.3.7 — Six-hour Overview graphs
+
+- Show two hours of history and four hours ahead on Overview, sharing the same six-hour
+  range across power, battery SoC and session bars for more horizontal detail.
+- Move six hours with the navigation arrows; a history date opens its first six hours.
+  Planning retains the full seven-day horizon.
+
 ## 4.3.6 — Annotated EV drawing and status colors
 
 - Put measured power, battery level, current limit, phase setting and controller

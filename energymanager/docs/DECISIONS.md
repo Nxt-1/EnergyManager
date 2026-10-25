@@ -249,3 +249,10 @@ for OK. Color each current status independently rather than coloring all reading
 an older incident. Verified stop/wait settings are neutral; missing/stale states stay
 unverified. Future HA history clicks remain deferred. Ready-release commit/push
 permission applies; no installation access, hardware operation or deployment.
+
+## 25 October2026 — Six-hour Overview graphs
+
+The user requested a roughly six-hour Overview graph span for more horizontal detail.
+Release4.3.7 uses two hours of history and four hours ahead, shared by power/SoC/session
+bars. Arrows advance six elapsed hours; History day starts a six-hour view at local
+midnight. Planning keeps its full horizon. These are display changes only.

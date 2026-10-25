@@ -1,5 +1,17 @@
 # EnergyManager 4 verification
 
+## 4.3.7 — Six-hour Overview window
+
+36 frontend tests, three native/versioned-asset tests(0.27s), Ruff and changed JavaScript
+syntax pass. Full-horizon synthetic E2E32.319s/2,018intervals/max control tick3.134ms/
+four fake-only calls passes. No backend/controller changes. Browser verifies the live
+two-hour-past/four-hour-future range, previous/next six hours, local history date,
+historical navigation, numeric cursor and Now. On the25October DST day, local00:00→05:00
+correctly spans six elapsed hours; next is05:00→11:00. Planning still spans seven days.
+Power/SoC plot edges98→687px align with session98→687.44px (rounding under0.5px).
+Browser warning/error logs are empty. Proof is ignored artifacts/release-4.3.7-overview.jpg.
+Verification uses isolated synthetic history/local endpoints only; no installation access.
+
 ## 4.3.6 — Annotated EV drawing and independent status colors
 
 Synthetic/local only.245 Python tests pass50.74s;36 frontend tests, Ruff/mypy35,
