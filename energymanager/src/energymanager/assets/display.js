@@ -36,6 +36,19 @@ export function connectionIcon(connected) {
   return `<svg class="connection-icon ${status}" viewBox="0 0 24 24" role="img" aria-label="${label}"><title>${label}</title><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v5m8-5v5M6 8h12v3a6 6 0 0 1-12 0zm6 9v4"/>${mark}</g></svg>`;
 }
 
+export function evIncidentTime(value, timezone) {
+  return new Date(value).toLocaleString('en-GB', {timeZone: timezone,
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'shortOffset'});
+}
+
+export function evFaultText(incident, timezone) {
+  if (!incident || ['recovered', 'acknowledged'].includes(incident.status)) return '';
+  const at = evIncidentTime(incident.detected_at, timezone);
+  const status = {pending: 'EV delivery fault · stopped', rebooting: 'EV recovery · reboot wait',
+    verifying: 'EV recovery · checking charging', unresolved: 'EV delivery fault · stopped; attention needed'}[incident.status];
+  return `${status || 'EV incident'} · ${at} · ${incident.reason}`;
+}
+
 export function entityState(entity) {
   if (entity.unit === 'kW' && entity.state !== '' && Number.isFinite(Number(entity.state)))
     return `${watts(entity.state)} W`;

@@ -1,5 +1,26 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.1 EV delivery fault incidents and recovery
+
+AUTHORIZED25October: implement timestamps, diagnostic history from T−5minutes, one
+configured go-e reboot attempt with verification and phone escalation on failure.
+User supplied a reboot button as installation context; no ID is hardcoded. No live
+HA/database/hardware or real notifications. Use existing code-writer skill. Maps work
+is explicitly on hold and preserved locally, outside the active package, in
+`gpt/paused-maps-2026-10-25/maps-preparation.zip` (seven original files SHA256 verified),
+plus unpacked routing.py/tests and tracked-doc patch. Restore only deliberately later.
+LOCAL COMPLETE: persisted EVFaults state machine, optional reboot/diagnostic pickers,
+separate five-second raw-state sampling, incident worker export and global incident
+banner/history/download/acknowledgement. No routing code in active src/tests.
+198 Python tests51.29s,22 frontend tests, Ruff/mypy33/all JS/CLI4.3.1 pass. Synthetic
+native/standalone/phone browser report/history/download/ack/settings checks pass with
+clean final logs; no horizontal dialog overflow. Configured fake E2E30.300s/2,018
+intervals/max tick2.656ms/five fake-only service calls passes. Fixtures/tabs closed.
+Wheel/sdist built;50 packaged code/assets match and isolated4.3.1 import passes.
+Paused Maps code/archive excluded from both distributions. No live installation use.
+NEXT: final focused review then single4.3.1 release commit/push and remote CI/image
+checks. Remote outcomes only ignored checkpoint/final; no extra release docs commit.
+
 ## Current work —4.3.0 ARCH-003 subscribed EV calendars
 
 AUTHORIZED: first implement/release multiple labelled iCalendar subscriptions, managed

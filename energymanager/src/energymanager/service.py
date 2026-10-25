@@ -27,6 +27,7 @@ from .validation import validate
 from .worker import watch_parent
 from .hardware import HardwareControl
 from .calendars import CalendarSync
+from .ev_faults import EVFaults
 
 
 class Application:
@@ -81,6 +82,7 @@ class Application:
         self.configuration_error: str | None = None
         self.calendars: CalendarSync | None = None
         self.calendar_items: dict[str, dict[str, Any]] = {}
+        self.ev_faults: EVFaults | None = None
 
     def now(self) -> datetime:
         return (
@@ -105,9 +107,13 @@ class Application:
             self.input_task = asyncio.create_task(self.input_loop())
         elif not self.configuration_error:
             self.requested.set()
+        if self.ev_faults:
+            self.ev_faults.start()
 
     async def close(self) -> None:
         self.shutdown = True
+        if self.ev_faults:
+            await self.ev_faults.close()
         if self.calendars:
             await self.calendars.close()
         if self.hardware:
@@ -636,6 +642,7 @@ class Application:
                 "preparing_phase": (getattr(self.actuator, "target_phase", None)
                                     or getattr(self.actuator, "awaiting_phase", None)),
             },
+            "ev_incident": self.ev_faults.current if self.ev_faults else None,
             "provenance": self.snapshot.provenance,
             "forecast_status": getattr(self.forecast, "status", {}),
             "observation": json_data(self.observation),

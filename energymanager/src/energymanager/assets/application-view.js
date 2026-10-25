@@ -5,7 +5,9 @@ import {
   powerText,
   watts,
   dailyEnergyRows,
-  connectionIcon
+  connectionIcon,
+  evFaultText,
+  evIncidentTime
 } from './display.js';
 import {
   DateTimePicker
@@ -36,6 +38,7 @@ export async function mountApplication(root, options = {}) {
     hardwareError = null;
   let dailyEnergy = null, energyRequestedAt = 0, energyPlanId = null, energyDay = null;
   const graphModels = {};
+  let incidentReport = null;
   let selectedRange = null;
   const graphHistory = new GraphHistory(api, () => {
     if (state && !viewLocked() && ['overview', 'planning'].includes(page)) renderCharts();
@@ -50,6 +53,7 @@ export async function mountApplication(root, options = {}) {
   const num = (value, places = 2) => value !== null && value !== undefined && Number.isFinite(Number(value)) ?
     Number(value).toFixed(places) : '—';
   const money = value => `€ ${num(value)}`;
+  const notificationText = value => value === 'delivered' ? 'sent to Home Assistant' : value;
   const time = (value, date = true) => new Date(value).toLocaleString('en-GB', {
     timeZone: state?.policy.timezone || 'Europe/Brussels',
     ...(date ? {
@@ -262,6 +266,10 @@ export async function mountApplication(root, options = {}) {
     if (!state) return;
     renderHardware();
     if (viewLocked()) return;
+    const fault = state.ev_incident;
+    const faultText = evFaultText(fault, state.policy.timezone);
+    $('ev-fault-banner').hidden = !faultText;
+    $('ev-fault-banner').innerHTML = faultText ? `<strong>${esc(faultText)}</strong><p>Phone alert: ${esc(notificationText(fault.notification))} · Reboot attempts: ${fault.reboot_attempts}/1</p><button data-incident="${esc(fault.id)}">Incident details & logs</button>${fault.status === 'unresolved' ? ` <button data-ack-incident="${esc(fault.id)}">Acknowledge after diagnosis</button>` : ''}` : '';
     $('app-version').textContent = ` ${state.version}`;
     if (!options.native) document.title = `EnergyManager · ${state.version}`;
     $('dashboard').hidden = page === 'settings' || page === 'ev';
@@ -294,7 +302,7 @@ export async function mountApplication(root, options = {}) {
     $('navigation').hidden = page === 'planning';
     renderLive();
     $('status').innerHTML =
-      `${!plan ? '<p class="status-line">Waiting for a validated plan.</p>' : ''}${state.actuator_health?.delivery_fault ? '<p class="error">EV delivery fault: stopped; diagnose before restart</p>' : ''}${state.error ? `<p class="error">${esc(powerText(state.error))}</p>` : ''}`;
+      `${!plan ? '<p class="status-line">Waiting for a validated plan.</p>' : ''}${state.error ? `<p class="error">${esc(powerText(state.error))}</p>` : ''}`;
     graphHistory.load(start, end, Date.parse(state.now));
     renderCharts();
     const sessions = plan?.sessions || [];
@@ -428,6 +436,17 @@ export async function mountApplication(root, options = {}) {
     if (!goal) return;
     detail(goal.title,
       `<p>Deadline ${time(goal.deadline)}</p><p>${goal.kind === 'trip' ? `Total journey ${num(goal.distance_km, 0)} km, arrival reserve ${state.policy.arrival_reserve_km} km. ${goal.return_at ? 'Expected return ' + time(goal.return_at) : 'Return unknown; unavailable until reconnection.'}` : 'Timed state-of-charge requirement. No journey or withdrawal is assumed.'}</p>${goal.calendar ? `<p>Calendar: ${esc(goal.calendar.source)}. Provisional 50 km total / four hours from event start.<br>${esc(goal.calendar.location)}</p>` : ''}<p>Priority ${goal.priority}. ${goal.approval_state === 'granted' ? 'Approved task ceiling ' + watts(goal.approved_peak_kw) + ' W' : 'Normal automatic peak policy applies.'}</p><p>Power changes stay within grouped charging sessions.</p>`);
+  }
+
+  async function showFaultHistory() {
+    const incidents = await api('ev-incidents');
+    detail('EV fault history', incidents.map(item => `<p><button data-incident="${esc(item.id)}">${evIncidentTime(item.detected_at,state.policy.timezone)} · ${esc(item.status)}</button> ${esc(item.reason)}</p>`).join('') || '<p>No recorded EV incidents.</p>');
+  }
+
+  async function showIncident(id) {
+    incidentReport = await api(`ev-incidents/${encodeURIComponent(id)}`);
+    const item = incidentReport.incident;
+    detail('EV delivery incident', `<p>Detected ${evIncidentTime(item.detected_at,state.policy.timezone)} · Began ${evIncidentTime(item.started_at,state.policy.timezone)}</p><p>${esc(item.status)} · ${esc(item.reason)}</p><p>Reboot attempts ${item.reboot_attempts}/1 · Phone alert: ${esc(notificationText(item.notification))}</p><p>${esc(incidentReport.note)}</p><button data-download-incident="true">Download full incident JSON</button><p>${incidentReport.events.length} recorded events${incidentReport.truncated ? ' (report limit reached)' : ''}; preview shows the latest 100.</p><pre class="incident-trace">${esc(JSON.stringify(incidentReport.events.slice(-100),null,2))}</pre>`);
   }
 
   function showSessionDetail(id) {
@@ -574,6 +593,19 @@ export async function mountApplication(root, options = {}) {
     const button = event.target.closest('button');
     if (!button || !state) return;
     try {
+      if (button.dataset.faultHistory) await showFaultHistory();
+      if (button.dataset.incident) await showIncident(button.dataset.incident);
+      if (button.dataset.ackIncident) {
+        await api(`ev-incidents/${encodeURIComponent(button.dataset.ackIncident)}/acknowledge`, 'POST', {});
+        pointerUntil = 0;
+        await refresh();
+      }
+      if (button.dataset.downloadIncident && incidentReport) {
+        const url = URL.createObjectURL(new Blob([JSON.stringify(incidentReport,null,2)], {type:'application/json'}));
+        const link = document.createElement('a');
+        link.href = url; link.download = `ev-incident-${incidentReport.incident.id}.json`; link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
       if (button.dataset.edit) openGoal(state.goals.find(g => g.id === button.dataset.edit));
       if (button.dataset.delete) {
         await api(`goals/${encodeURIComponent(button.dataset.delete)}`, 'DELETE', {});

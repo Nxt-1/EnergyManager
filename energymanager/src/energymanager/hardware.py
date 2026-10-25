@@ -102,7 +102,7 @@ class HardwareControl:
             available = {entity["entity_id"]: entity for entity in inventory["entities"]}
             settings = self.configuration.read()
             for field in SETTING_FIELDS:
-                if field.kind != "entity":
+                if field.kind != "entity" or not field.required:
                     continue
                 entity = available.get(settings["values"][field.path])
                 if entity is None:

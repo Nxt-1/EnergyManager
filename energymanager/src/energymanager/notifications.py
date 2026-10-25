@@ -34,7 +34,7 @@ class Notifications:
                  target: NotificationTarget | None = None) -> None:
         self.store, self.client, self.target = store, client, target
 
-    async def inform(self, key: str, body: dict[str, Any]) -> None:
+    async def inform(self, key: str, body: dict[str, Any]) -> bool:
         # Tenths of kW and the affected peak identify material updates, not solver IDs.
         material = {
             k: (round(v, 1) if isinstance(v, float) else v)
@@ -44,7 +44,7 @@ class Notifications:
         signature = encode({"destination": asdict(self.target) if self.target else None, "notice": material})
         notices = self.store.get("notices", {})
         if notices.get(key) == signature:
-            return
+            return True
         self.store.event("notification_queued", {"key": key, **body})
         if self.target:
             try:
@@ -58,12 +58,13 @@ class Notifications:
                 await self.client.service("notify", service, data)
             except (OSError, RuntimeError, TimeoutError) as exc:
                 self.store.event("notification_failed", {"key": key, "error": type(exc).__name__})
-                return  # Retry on the next adoption, without falsely recording delivery.
+                return False  # Keep delivery retryable without falsely recording success.
         self.store.event(
             "local_notification" if self.target is None else "notification_delivered", {"key": key, **body}
         )
         notices[key] = signature
         self.store.put("notices", notices)
+        return True
 
     @staticmethod
     def message(body: dict[str, Any]) -> str:

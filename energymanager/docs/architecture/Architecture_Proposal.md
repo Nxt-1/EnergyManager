@@ -405,6 +405,61 @@ work. Restart initially revokes all recorded command authority until fresh recon
 Actuator failures are explicit events; repeated failure backs off, and non-delivery
 latches EV stopping. A solver-parent watchdog prevents orphan workers after service loss.
 
+### EV non-delivery incidents and bounded reboot recovery (4.3.1)
+
+The existing watchdog detects90seconds of requested EV power above100W while measured
+EV power stays below100W, connected and without an active phase transition. This is
+an EnergyManager delivery failure, not a confirmed go-e fault code. A persisted incident
+records first suspected time, detection time, original command/observation, recovery
+state, attempts and notification outcome. Incident history survives restart in SQLite.
+The dashboard banner and report show local timestamps including seconds and UTC offset.
+
+Settings optionally maps `actuators.ev_reboot` to a HA button; no installation ID is
+hardcoded or preselected. Selecting it enables one automatic reboot for this watchdog.
+Without a mapping, keep EV stopped and escalate. Recovery requires enabled hardware
+control, fresh validated connected EV/phase/SoC readings and power below100W. Under the
+actuator generation guard, send stop, recheck permission, persist the attempt, then
+press the button. A failed/unknown button response consumes the attempt. No network
+retry or restart may replay it. A persisted30-minute cooldown also spans new incidents.
+
+Wait60seconds after the attempt, then require a validated input read at/after that
+boundary before permitting a normal guarded charging trial. If inputs do not return
+within180seconds, stop/escalate. Charging must be requested normally and fresh measured
+power must exceed the threshold across at least10seconds of distinct readings to
+confirm recovery. A repeated90-second non-delivery fault or five minutes without
+verification leaves EV latched off. Disabling hardware revokes a pending reboot;
+there are no long sleeps inside the actuator lock. ESS balancing remains available.
+Restart during verification latches unresolved; restart during reboot wait retains the
+single consumed attempt. Explicit acknowledgement requires fresh connected inputs,
+records the user decision and invalidates EV authority for a new plan. It neither
+reboots nor forces charging and does not reset the cooldown.
+
+Unresolved incidents notify the existing selected phone target, deduplicated per
+incident/destination. Failed notification delivery retries at60-second intervals,
+independently of control. Without a target, evidence remains local and the UI says
+phone not configured. A successful notify service means HA accepted the action, not
+that physical phone receipt was confirmed. The agent uses fake endpoints only.
+
+A separate five-second sampler records EV power/SoC/connection, forced phase selector,
+charger force/current readbacks and optional `ev_diagnostics` status/error/allowed
+entities. Store bounded state/unit/report metadata and explicit read errors, without
+credentials or fabricated values. Diagnostic states never grant control authority.
+`GET /api/ev-incidents` lists the latest20 incidents. The incident endpoint reads
+T−5minutes to min(now,T+10minutes) from a separate read-only worker connection, using
+the event-time index, five-second scan budget and10,000-event cap with truncation flag.
+The UI previews100 events and downloads the complete bounded JSON. Command intents,
+successful service calls and observed states remain distinguishable. Added diagnostics
+and exact incident timestamps cannot be reconstructed retroactively for older faults.
+An initial event-time index may take time to create on a large archive; no deletion or
+retention policy is introduced. No live HA/database/hardware/phone validation occurred.
+
+Google Maps preparation is paused at the user's request. Its code, tests and previous
+document changes are preserved in a hash-verified local archive outside the active
+package (`gpt/paused-maps-2026-10-25/`). The confirmed future policy remains HA home for
+both legs, arrival60minutes before start and venue departure two elapsed hours after
+start. Restore the code deliberately and reconcile the maintained docs; do not overwrite
+newer requirements with archived copies. No Maps activation is included in4.3.1.
+
 ## Boundaries
 
 The active EnergyManager application lives in the main project. Its fresh joint core replaces V3 under the

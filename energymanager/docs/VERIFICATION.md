@@ -1,5 +1,34 @@
 # EnergyManager 4 verification
 
+## 4.3.1 — EV fault evidence and bounded recovery
+
+198 Python tests passed in51.29s, including16 new incident/recovery cases.22 frontend
+tests, Ruff/mypy33, JavaScript syntax and CLI4.3.1 pass. Checks cover the90second
+timestamp, one persisted reboot, stop/disable/generation guards, reboot failure and
+unknown outcome, restart without replay, fresh-input grace period, ten seconds of
+new measured charging evidence, cached-sample rejection, unresolved latching,
+acknowledgement/new plan,30minute cooldown, notification retries/deduplication,
+optional button unknown/unavailable states, raw diagnostics and archive/API boundaries.
+A held report worker leaves /api/state responsive; report includes T−5minutes beyond
+the recent100-event display limit. Persistence failure prevents button activation.
+
+Configured fake E2E accepted2,018 intervals in30.300s, maximum control tick2.656ms,
+five fake-only service calls. Native and standalone synthetic browser checks covered
+timestamp/offset, report/download/history, acknowledgement, optional reset/phone mapping
+save/backup/restart notice and clean final browser logs. At390px requested viewport,
+dialog client/scroll widths both324px (341px outer). Screenshot raster dimensions
+1265×889desktop and375×812phone; HA built-in cards/Supervisor are simulated.
+See ev-fault-browser-verification.json and screenshots/ev-fault-v431-*.png.
+
+Wheel/sdist built;50 packaged code/assets match and isolated4.3.1 import passes.
+Both distributions exclude Maps code and its local archive; see
+ev-fault-package-verification.json.
+
+No actual HA/database/hardware, charger reboot, real phone notification or deployment
+was used. The reported installation fault has not been diagnosed retrospectively.
+Maps preparation is preserved in the ignored local archive and excluded from this
+release; its earlier16 offline routing checks are not fault-release validation.
+
 ## 4.3.0 — Subscribed EV calendars
 
 181 Python tests passed42.04s, followed by40 configuration/calendar checks (including

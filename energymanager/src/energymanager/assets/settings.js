@@ -403,7 +403,8 @@ export class SettingsPage {
         if (field.required && (!identifier || identifier.split('.')[1]?.startsWith('replace_')))
           message = 'Select an entity';
         else if (identifier && loaded && !match) message = 'Not found in Home Assistant';
-        else if (match && (match.state === 'unavailable' || match.state === 'unknown' && field.kind !== 'notification'))
+        else if (match && (match.state === 'unavailable' || match.state === 'unknown' && field.kind !== 'notification' &&
+            !match.entity_id.startsWith('button.')))
           message = 'Value unavailable';
         else if (match && field.units.length && match.unit && !field.units.includes(match.unit))
           message = 'Incompatible unit';

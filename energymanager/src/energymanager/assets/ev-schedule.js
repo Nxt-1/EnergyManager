@@ -271,7 +271,7 @@ export class EVSchedulePage {
     </section>`).join('');
     this.root.innerHTML = `
       <section class="page-heading"><div><h1>EV schedule</h1><p class="muted">${stamp(schedule.start)} — ${stamp(schedule.end)} · ${esc(zone)}</p></div>
-      <div class="actions"><button data-ev-add="trip" class="primary">＋ Journey</button><button data-ev-add="manual">＋ SoC goal</button></div></section>
+      <div class="actions"><button data-ev-add="trip" class="primary">＋ Journey</button><button data-ev-add="manual">＋ SoC goal</button><button data-fault-history="true">EV fault history</button></div></section>
       <div class="ev-summary"><article class="live-item"><span class="live-label muted">Current EV SoC${connectionIcon(connection === 'Connected' ? true : connection === 'Away / disconnected' ? false : null)}</span><strong class="ev-soc">${number(soc)}%</strong>${(reading?.issues || []).map(issue => `<small class="error">${esc(powerText(issue))}</small>`).join('')}</article>
       <article class="live-item"><span class="muted">Next requirement</span><strong>${nextGoal ? `${number(target(nextGoal))}%` : '—'}</strong><small>${nextGoal ? `${esc(nextGoal.title)} · ${stamp(nextGoal.deadline)}` : 'No upcoming requirements'}</small></article>
       <article class="live-item"><span class="muted">Planned EV charging</span><strong>${schedule.current ? charging.length : '—'} <small>sessions</small></strong><small>${charging[0] ? `Next ${stamp(Math.max(schedule.start, charging[0].start))}` : schedule.current ? 'No charging selected' : 'Awaiting a current validated plan'}</small></article></div>

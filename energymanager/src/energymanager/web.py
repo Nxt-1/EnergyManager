@@ -19,6 +19,7 @@ from .dashboard import dashboard_manifest
 from .energy import daily_energy, end_of_day_energy
 from .graph_history import graph_history
 from .calendars import CalendarSync
+from .ev_faults import incident_report
 
 
 def create_web(application: Application, *, configuration: ConfigurationFile | None = None) -> web.Application:
@@ -175,6 +176,26 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
     async def events(request: web.Request) -> web.Response:
         return web.json_response(application.store.events())
 
+    async def ev_incidents(request: web.Request) -> web.Response:
+        return web.json_response(application.store.ev_incidents(), headers={"Cache-Control": "no-store"})
+
+    async def ev_report(request: web.Request) -> web.Response:
+        incident = application.store.ev_incident(request.match_info["id"])
+        if incident is None:
+            raise web.HTTPNotFound()
+        try:
+            async with archive_readers:
+                report = await asyncio.to_thread(incident_report, application.store.path, incident, application.now())
+        except (TimeoutError, sqlite3.Error) as exc:
+            return web.json_response({"error": str(exc)}, status=503)
+        return web.json_response(report, headers={"Cache-Control": "no-store"})
+
+    async def ev_acknowledge(request: web.Request) -> web.Response:
+        if application.ev_faults is None:
+            raise ValueError("EV incident recovery is not configured")
+        application.ev_faults.acknowledge(request.match_info["id"])
+        return web.json_response({"acknowledged": True})
+
     async def asset(request: web.Request) -> web.Response:
         if "version" in request.match_info and request.match_info["version"] != __version__:
             raise web.HTTPConflict(text="EnergyManager was updated. Reload the dashboard.")
@@ -217,6 +238,9 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
             web.get("/api/decisions", decisions),
             web.get("/api/decisions/{id}", decision),
             web.get("/api/events", events),
+            web.get("/api/ev-incidents", ev_incidents),
+            web.get("/api/ev-incidents/{id}", ev_report),
+            web.post("/api/ev-incidents/{id}/acknowledge", ev_acknowledge),
             web.get("/", asset),
             web.get("/frontend/{version}/{name}", asset),
             web.get("/{name}", asset),

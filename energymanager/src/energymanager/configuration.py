@@ -20,6 +20,7 @@ from .measurements import MeasurementOptions, installation_configuration
 from .forecast_service import InstallationForecast
 from .open_meteo import FORECAST_URL
 from .calendars import calendar_sources
+from .ev_faults import EVFaults
 
 
 def create_configuration_if_missing(path: Path) -> bool:
@@ -95,6 +96,8 @@ def configured_application(path: Path, store: Store, *, weather_url: str = FOREC
         generation=lambda: application.revision,
         on_write=lambda body: store.event("actuator_service", body),
     )
+    application.ev_faults = EVFaults(application, data.get("actuators", {}).get("ev_reboot", ""),
+                                     data.get("ev_diagnostics", {}))
     return application
 
 

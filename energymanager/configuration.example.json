@@ -1,5 +1,6 @@
 {
   "calendars": [],
+  "ev_diagnostics": {"ev_status": "", "charger_status": "", "charger_error": "", "charge_allowed": ""},
   "_description": "SYNTHETIC EXAMPLE ONLY. Review capacities, tariffs and entity mappings.",
   "capabilities": {
     "ev_capacity_kwh": 60.0,
@@ -60,6 +61,7 @@
     "grid_export_kw": "sensor.p1_dongle_momentary_active_export"
   },
   "actuators": {
+    "ev_reboot": "",
     "force": "select.replace_goe_force",
     "phase": "select.replace_goe_phases",
     "current": "number.replace_goe_current",

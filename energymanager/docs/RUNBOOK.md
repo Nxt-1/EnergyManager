@@ -2,6 +2,21 @@
 
 ## Local use
 
+Release4.3.1 adds persisted EV delivery incidents and optional bounded reboot recovery.
+Configure the reboot button, diagnostic entities and phone destination as described in
+SETTINGS.md; save/restart before relying on them. Do not acknowledge an unresolved
+incident before checking its reason and recorded states. Report JSON distinguishes
+requested commands from actual service calls. It contains only archived evidence.
+The current pre-upgrade incident cannot acquire an exact timestamp or raw states that
+were never recorded. The new event-time index may make first startup slower on a large
+archive. Report reads use a separate worker, five-second budget and10,000event limit.
+
+For a labelled local-only incident preview, run `python tools/offline_e2e.py --serve
+--ev-fault-fixture` and, in another terminal, `python tools/native_dashboard_preview.py`.
+This seeds synthetic T−5minute states and an unresolved fault only after the ordinary
+fake E2E completes. All service calls/notifications stay on its fake HA endpoint.
+Never point this verification fixture at an installation.
+
 Use Python3.13 (also tested on3.12 during development). Run from `energymanager/`:
 
 ```powershell

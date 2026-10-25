@@ -1,0 +1,39 @@
+{
+  "version": "4.3.1",
+  "provenance": "SYNTHETIC local fake HA only; native built-ins and Supervisor simulated",
+  "checks": [
+    "native and standalone timestamped banner/report/history",
+    "full incident JSON download",
+    "acknowledgement removes active banner and preserves history",
+    "optional reboot and phone settings save/backup/restart notice",
+    "phone dialog has no horizontal overflow",
+    "clean final warning/error logs"
+  ],
+  "desktop": {
+    "requested_viewport": [
+      1280,
+      900
+    ],
+    "raster": [
+      1265,
+      889
+    ],
+    "dialog_outer_width": 480,
+    "client_width": 478,
+    "scroll_width": 478
+  },
+  "phone": {
+    "requested_viewport": [
+      390,
+      844
+    ],
+    "raster": [
+      375,
+      812
+    ],
+    "dialog_outer_width": 341,
+    "client_width": 324,
+    "scroll_width": 324
+  },
+  "live_installation_verified": false
+}

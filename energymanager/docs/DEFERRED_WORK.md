@@ -61,6 +61,15 @@ project/key/billing and failure/override policy still need resolution before ena
 live route requests. No paid API calls or live installation operation are authorized.
 Temperature compensation remains deferred; no calibration model has been selected.
 
+25October2026: Maps preparation is now **paused at the user's request** while EV fault
+handling takes priority. Tested routing code and16 synthetic routing cases, plus the
+previous doc changes, are preserved locally in `gpt/paused-maps-2026-10-25/` with a
+SHA256-verified ZIP. They are outside the active package and are not released in4.3.1.
+Confirmed future policy: HA home→venue→home; arrive60minutes before start and leave
+venue two elapsed hours after start. Restore code/tests deliberately and reconcile
+living docs rather than replacing them with older archived copies. Credentials/billing,
+traffic/quota and refresh/failure/override policy remain unfinished. No live routing.
+
 Offline integration limitation observed25October2026: two synthetic50km journeys
 requiring additional charging from45%initialSoC produced no reference incumbent at
 15/60second planner budgets. No invalid plan was adopted; basic control stayed

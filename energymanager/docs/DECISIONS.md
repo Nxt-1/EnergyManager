@@ -1,6 +1,6 @@
 # Current requirements and decisions
 
-Maintained 25 October 2026 for 4.3.0. This records confirmed product preferences and
+Maintained 25 October 2026 for 4.3.1. This records confirmed product preferences and
 implementation outcomes from the V4 implementation chat. It supplements the complete
 original [architecture decisions](architecture/Architecture_Decisions.md); the
 [maintained architecture](architecture/Architecture_Proposal.md) describes the resulting implementation.
@@ -178,3 +178,17 @@ Only after that release, prepare Google Maps distance and travel-time calculatio
 Code may be written if enough information is available, but the second version must
 not be released yet. No paid API calls, assumed origin/margins or live installation
 changes are authorized. Temperature compensation remains deferred within ARCH-003.
+
+## 25 October2026 — Fault handling first; preserve and pause Maps
+
+The user approved a separate EV fault-handling update: timestamps, five-minute prior
+state/command evidence, one configurable go-e reboot attempt with verification, and
+phone escalation if the system cannot resolve delivery. The supplied device action
+reboots the charger; its entity must be configured, never hardcoded. Existing hardware,
+fresh-input and planning guards remain authoritative. Verify only on synthetic/local
+endpoints; no live reset, database access or phone notification is authorized.
+
+Pause Maps without losing the work. Preserve the prepared code/tests/docs locally
+outside the active package and keep it out of this release. The future referee policy
+is confirmed: HA home for both legs, arrive60minutes early, leave the venue two elapsed
+hours after event start. No Google credential input or live routing is activated.

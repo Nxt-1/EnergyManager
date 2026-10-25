@@ -1,7 +1,7 @@
 <header><div><span class="brand">◉</span> <strong>EnergyManager</strong><span class="muted" id="app-version"> 4</span></div>
 <nav aria-label="Main navigation"><button id="overview" aria-selected="true">Overview</button><button id="planning" aria-selected="false">Planning</button><button id="ev" aria-selected="false">EV</button><button id="settings" aria-selected="false">Settings</button></nav>
 <div id="connection" role="status">Connecting…</div></header>
-<main><div id="dashboard">
+<main><section id="ev-fault-banner" class="notice ev-fault-banner" role="alert" hidden></section><div id="dashboard">
 <section class="page-heading"><div><h1 id="page-title">Overview</h1><p id="period" class="muted"></p></div>
 <div class="actions"><div id="hardware-controls"><label class="hardware-switch"><span>Hardware control</span><input id="hardware-toggle" type="checkbox" disabled role="switch" aria-label="Hardware control"><span class="switch-track" aria-hidden="true"></span></label><small id="hardware-status" role="status"></small></div><button id="refresh">Recalculate</button><button class="primary" id="new-goal">＋ Add goal</button></div></section>
 <div id="live" class="live"></div>
@@ -18,7 +18,7 @@
 <article class="card"><details><summary>Why this plan</summary><div id="reasons"></div></details></article>
 </aside></div>
 <article class="card"><details id="sessions-detail"><summary>Session details and expected pauses</summary><div id="sessions"></div></details></article>
-<article class="card"><details id="diagnostics"><summary>Decision history & technical evidence</summary><div id="evidence"></div><button id="history">Load decisions</button><div id="history-list"></div></details></article>
+<article class="card"><details id="diagnostics"><summary>Decision history & technical evidence</summary><div id="evidence"></div><button id="history">Load decisions</button> <button data-fault-history="true">EV fault history</button><div id="history-list"></div></details></article>
 </div><section id="ev-panel" hidden aria-label="EV schedule"></section><section id="settings-panel" hidden aria-label="EnergyManager settings"></section>
 <section id="native-setup" class="card" hidden><h2>Native Home Assistant dashboard</h2>
 <p>Install the small dashboard loader once. Future layout and card updates come from the installed add-on when you reload Home Assistant.</p>

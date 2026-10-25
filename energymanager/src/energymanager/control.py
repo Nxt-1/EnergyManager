@@ -394,6 +394,27 @@ class GuardedActuator:
         self.last: tuple[int, int, int] | None = None
         self.charging_since: datetime | None = None
         self.delivery_fault = False
+        self.delivery_fault_at: datetime | None = None
+        self.on_delivery_fault: Callable[[Command, Observation, datetime], None] | None = None
+
+    async def reboot_ev(self, entity: str, permitted: Callable[[], bool], before_press: Callable[[], None]) -> None:
+        """Stop first; persist the single attempt before a generation-guarded button press."""
+        async with self.lock:
+            generation = self.generation() if self.generation else self.command_generation
+            if not self.enabled or not permitted():
+                raise StaleDispatch("EV recovery was revoked")
+            await self.client.service("select", "select_option", {"entity_id": self.entities["force"], "option": "1"})
+            if self.on_write:
+                self.on_write({"generation": generation, "domain": "select", "service": "select_option",
+                               "entity_id": self.entities["force"], "option": "1", "reason": "EV recovery stop before reboot"})
+            if not self.enabled or not permitted() or self.generation and self.generation() != generation:
+                raise StaleDispatch("EV recovery was revoked after stop")
+            before_press()
+            await self.client.service("button", "press", {"entity_id": entity})
+            if self.on_write:
+                self.on_write({"generation": generation, "domain": "button", "service": "press",
+                               "entity_id": entity, "reason": "Single EV delivery recovery reboot"})
+            self.last = None
 
     async def write(self, domain: str, service: str, key: str, value_key: str, value: Any) -> None:
         if not self.enabled or self.generation and self.generation() != self.command_generation:
@@ -478,10 +499,15 @@ class GuardedActuator:
                 self.charging_since = self.charging_since or command.at
                 if (command.at - self.charging_since).total_seconds() >= 90:
                     self.delivery_fault = True
+                    self.delivery_fault_at = self.delivery_fault_at or command.at
             else:
                 self.charging_since = None
             if self.delivery_fault:
-                await self.write("select", "select_option", "force", "option", "1")
+                try:
+                    if self.on_delivery_fault:
+                        self.on_delivery_fault(command, observation, self.charging_since or command.at)
+                finally:
+                    await self.write("select", "select_option", "force", "option", "1")
                 return
             if command.phases != self.phase:
                 if self.target_phase != command.phases:

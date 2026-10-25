@@ -40,7 +40,7 @@ class VerificationResolver(AbstractResolver):
 
 
 async def run(*, serve: bool = False, preview_fault: str | None = None,
-              history_fixture: bool = False, calendar_fixture: bool = False) -> None:
+              history_fixture: bool = False, calendar_fixture: bool = False, ev_fault_fixture: bool = False) -> None:
     issued = datetime.now(UTC)
     calls = []
     weather_queries = []
@@ -81,7 +81,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
     async def states(request: web.Request) -> web.Response:
         assert request.headers.get("Authorization") == "Bearer synthetic-supervisor-credential"
         return web.json_response([state_row(entity) for group in ("measurements", "actuators")
-                                  for entity in config[group].values()])
+                                  for entity in config[group].values() if entity])
 
     async def services(request: web.Request) -> web.Response:
         return web.json_response([{"domain": "notify", "services": {
@@ -146,7 +146,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         config["home_assistant_url"] = str(endpoint.make_url("/api"))
         config["forecast_url"] = "http://127.0.0.1:1/unused-legacy-feed"
         for field in SETTING_FIELDS:
-            if field.kind == "entity":
+            if field.kind == "entity" and field.required:
                 group, key = field.path.split(".")
                 config[group][key] = f"{field.domains[0]}.{key}"
         config["token_environment"] = "UNUSED_LEGACY_TOKEN"
@@ -268,6 +268,23 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                 Path("docs/offline-e2e.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
                 print(json.dumps(report, indent=2), flush=True)
                 if serve:
+                    if ev_fault_fixture:
+                        from energymanager.control import Command
+
+                        detected = application.now()
+                        incident_command = Command(application.revision, None, detected, 1.38, 0, 1, 6, 4,
+                                                   "SYNTHETIC EV non-delivery fixture")
+                        for seconds in range(300, 0, -5):
+                            at = detected - timedelta(seconds=seconds)
+                            body = {"at": at.isoformat(), "provenance": "SYNTHETIC EV incident fixture",
+                                    "entities": {"sensor.ev_kw": {"state": "0", "unit": "kW"},
+                                                 "select.force": {"state": "2"}}}
+                            with store.connection:
+                                store.connection.execute("INSERT INTO events(at,kind,body) VALUES (?,'ev_diagnostics',?)",
+                                                         (at.isoformat(), json.dumps(body)))
+                        application.ev_faults.capture(incident_command, application.observation,
+                                                      detected - timedelta(seconds=90))
+                        application.ev_faults.unresolved("SYNTHETIC verification incident; no real device fault")
                     active_fault = preview_fault
                     print("SYNTHETIC forecast verification preview: http://127.0.0.1:8102/", flush=True)
                     await asyncio.Event().wait()
@@ -280,10 +297,15 @@ if __name__ == "__main__":
                         help="Seed explicitly SYNTHETIC old graph measurements, including gaps")
     parser.add_argument("--calendar-fixture", action="store_true",
                         help="Sync two SYNTHETIC calendar feeds served only by the local fake endpoint")
+    parser.add_argument("--ev-fault-fixture", action="store_true",
+                        help="Show a SYNTHETIC unresolved EV incident and five-minute diagnostic trace")
     parser.add_argument("--input-fault", choices=("quarter", "stale", "unavailable", "read_failure"),
                         help="Inject old metadata, unavailability or HA read failure after local verification")
     arguments = parser.parse_args()
     if arguments.input_fault and not arguments.serve:
         parser.error("--input-fault requires --serve")
+    if arguments.ev_fault_fixture and not arguments.serve:
+        parser.error("--ev-fault-fixture requires --serve")
     asyncio.run(run(serve=arguments.serve, preview_fault=arguments.input_fault,
-                    history_fixture=arguments.history_fixture, calendar_fixture=arguments.calendar_fixture))
+                    history_fixture=arguments.history_fixture, calendar_fixture=arguments.calendar_fixture,
+                    ev_fault_fixture=arguments.ev_fault_fixture))

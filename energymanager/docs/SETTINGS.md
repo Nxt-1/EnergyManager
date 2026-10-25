@@ -29,6 +29,29 @@ and failed check. The hardware switch still requires valid critical measurements
 The HA app's own Configuration tab still selects `demo` or `configured`. Demo mode
 cannot operate hardware. Choose `configured` and restart to use installation inputs.
 
+## EV fault recovery (4.3.1)
+
+In Settings → EV fault recovery, select the optional charger reboot **button**. This
+opts into one automatic reboot after a delivery fault; leave it blank to keep the EV
+stopped and escalate immediately. No installation entity ID is built in. Select the
+optional EV/charger status, error and charging-permission entities for richer evidence.
+Existing EV measurements and actuator states are collected without extra mappings.
+Choose the destination under Phone notifications, then save and restart.
+
+The existing watchdog detects requested charging below100W for90seconds. This does not
+prove a charger defect. Recovery requires hardware control enabled and fresh connected
+EV inputs. It stops charging, records the attempt before pressing the button, waits
+60seconds and verifies actual charging through normal control. An unsuccessful attempt
+leaves EV stopped and sends a timestamped alert through HA. There is no repeat reboot
+for that incident, including after restart; a30minute cross-incident cooldown also applies.
+
+Open Incident details & logs or EV → EV fault history for timestamps and a JSON export
+from five minutes before detection through up to ten minutes after it. Optional raw
+states are sampled every five seconds after installation/configuration; older missing
+states cannot be recovered. After diagnosis, Acknowledge clears the latch only with
+fresh connected inputs and requests a new plan. It does not reboot or force charging.
+“Sent to Home Assistant” confirms HA accepted the alert, not delivery to the phone.
+
 ## EV calendars (4.3.0)
 
 In Settings → EV calendars, add a label and iCalendar subscription link for each feed.

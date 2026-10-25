@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {dailyEnergyRows, connectionIcon, displaySetting, entityState, powerText, settingLabel, storedSetting, watts}
+import {dailyEnergyRows, connectionIcon, displaySetting, entityState, evFaultText, evIncidentTime, powerText, settingLabel, storedSetting, watts}
   from '../src/energymanager/assets/display.js';
 import {clockValue, localDateTime, localInstants, monthDays, validLocal}
   from '../src/energymanager/assets/date-time.js';
@@ -20,6 +20,15 @@ test('power display preserves signs, missing values and energy units', () => {
   assert.equal(entityState({state: '1.68', unit: 'kW'}), '1680 W');
   assert.equal(entityState({state: '1680', unit: 'W'}), '1680 W');
   assert.equal(entityState({state: 'unavailable', unit: 'kW'}), 'unavailable kW');
+});
+
+test('EV incident text includes second-level local timestamps, offsets and recovery phase', () => {
+  const incident = {detected_at: '2026-10-25T12:01:30Z', status:'unresolved', reason:'No delivery'};
+  assert.match(evFaultText(incident,'Europe/Brussels'), /stopped; attention needed.*13:01:30 GMT\+1.*No delivery/);
+  assert.match(evFaultText({...incident,status:'verifying'},'Europe/Brussels'), /checking charging/);
+  assert.equal(evFaultText(null,'Europe/Brussels'), '');
+  assert.equal(evFaultText({...incident,status:'recovered'},'Europe/Brussels'), '');
+  assert.notEqual(evIncidentTime('2026-10-25T00:30Z','Europe/Brussels'), evIncidentTime('2026-10-25T01:30Z','Europe/Brussels'));
 });
 
 test('watt settings round-trip power limits and the capacity tariff without changing cost', () => {

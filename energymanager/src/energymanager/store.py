@@ -37,6 +37,9 @@ class Store:
             CREATE TABLE IF NOT EXISTS load_samples (at REAL PRIMARY KEY, power_w REAL NOT NULL);
             CREATE INDEX IF NOT EXISTS measurement_time ON events
                 (julianday(json_extract(body,'$.at')), sequence) WHERE kind='measurement';
+            CREATE INDEX IF NOT EXISTS event_time ON events (julianday(at), sequence);
+            CREATE TABLE IF NOT EXISTS ev_incidents (
+                id TEXT PRIMARY KEY, detected_at TEXT NOT NULL, body TEXT NOT NULL);
         """)
 
     def close(self) -> None:
@@ -72,6 +75,23 @@ class Store:
             "SELECT at,kind,body FROM events ORDER BY sequence DESC LIMIT ?", (min(1000, max(1, limit)),)
         )
         return [{"at": row[0], "kind": row[1], "body": json.loads(row[2])} for row in rows]
+
+    def save_ev_incident(self, incident: dict[str, Any]) -> None:
+        body = encode(incident)
+        with self.connection:
+            self.connection.execute("INSERT OR REPLACE INTO ev_incidents VALUES (?,?,?)",
+                                    (incident["id"], incident["detected_at"], body))
+            self.connection.execute("INSERT OR REPLACE INTO state VALUES ('ev_incident',?)", (body,))
+            self.connection.execute("INSERT INTO events(at,kind,body) VALUES (?,'ev_incident',?)",
+                                    (datetime.now(UTC).isoformat(), body))
+
+    def ev_incidents(self) -> list[dict[str, Any]]:
+        rows = self.connection.execute("SELECT body FROM ev_incidents ORDER BY detected_at DESC LIMIT 20")
+        return [json.loads(row[0]) for row in rows]
+
+    def ev_incident(self, identity: str) -> dict[str, Any] | None:
+        row = self.connection.execute("SELECT body FROM ev_incidents WHERE id=?", (identity,)).fetchone()
+        return json.loads(row[0]) if row else None
 
     def record(self, snapshot: Any, result: dict[str, Any], disposition: str) -> None:
         with self.connection:

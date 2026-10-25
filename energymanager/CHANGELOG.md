@@ -1,3 +1,14 @@
+## 4.3.1 — EV fault evidence and one-attempt recovery
+
+- Timestamp EV non-delivery incidents and retain them across restarts. Show recovery
+  progress, incident history, diagnostic preview and a full JSON report on both UIs.
+- Record EV/go-e states every five seconds, with optional status/error entity mappings.
+  Reports include the five minutes before detection and up to ten minutes afterward.
+- Add an optional charger reboot-button picker. Stop first, persist one attempt, wait
+  for fresh inputs and verify actual charging. Keep EV stopped and notify the selected
+  phone when recovery fails; prevent reboot loops and allow acknowledgement after diagnosis.
+- Pause Google Maps work and preserve its code/tests locally outside the release package.
+
 ## 4.3.0 — Subscribed EV calendars
 
 - Add multiple labelled iCalendar links in Settings; sync at startup, every four hours
