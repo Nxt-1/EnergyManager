@@ -1,5 +1,18 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.8 horizontal mouse panning
+
+AUTHORIZED: click/drag graphs left/right. Implemented Overview primary-mouse panning
+with a horizontal threshold, pointer capture, initial range anchoring, animation-frame
+redraw and archive load on release/cancel. Both graphs/period/session bars stay aligned;
+six-hour duration persists until Now. Click pins, tooltip text remains selectable,
+vertical gestures/touch and Planning keep prior behavior. Disposal cancels pending frames.
+LOCAL:40 Node/3 native-asset tests0.27s/Ruff/JS pass; synthetic E2E32.030s/2018intervals/
+max4.548ms/four fake calls. Real native power/SoC and standalone drags, vertical rejection,
+outside release, text selection, cursor, Now and Planning checks pass; logs clean.
+NEXT: package/final scoped review, one ready-release commit/push and exact-head CI/image.
+Preserve unrelated backlog/paused Maps; no live HA/database/hardware/phone/deployment.
+
 ## Current work —4.3.7 six-hour Overview
 
 User authorized narrowing Overview graphs to about six hours for more horizontal detail.

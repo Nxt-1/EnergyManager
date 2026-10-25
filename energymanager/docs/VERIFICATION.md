@@ -1,5 +1,23 @@
 # EnergyManager 4 verification
 
+## 4.3.8 — Horizontal mouse panning
+
+40 frontend tests pass, including drag geometry/duration/direction, frame coalescing,
+click jitter, vertical intent, final release position, capture cancellation, disposal,
+secondary buttons, touch and disabled views. Three native/versioned-asset tests pass
+0.27s; Ruff and both changed JavaScript files parse. Full-horizon synthetic E2E passes
+32.030s/2,018intervals/max control tick4.548ms/four fake-only calls. No backend changes.
+
+Real browser mouse drags on native power and SoC move both charts and session labels
+together. Drag right reveals older data, left reveals later data; duration stays six
+hours. Release outside the plot ends capture without opening an unrelated goal/dialog.
+Vertical drag leaves the range unchanged. Click pins numeric values, Escape clears;
+actual tooltip-text selection stays blue and does not pan. Now restores the rolling
+window. Planning has no panning class and retains its seven-day range. Standalone
+drag also synchronizes all ranges. Native/standalone warning/error logs are empty.
+Synthetic proof: ignored artifacts/release-4.3.8-drag.jpg. All endpoints/history are
+local fakes; no actual HA, installation database, hardware or notification operation.
+
 ## 4.3.7 — Six-hour Overview window
 
 36 frontend tests, three native/versioned-asset tests(0.27s), Ruff and changed JavaScript

@@ -2,6 +2,12 @@
 
 ## Local use
 
+Release4.3.8 lets you drag the power or SoC graph left/right with the primary mouse
+button on Overview. Both graphs and session bars move together; release to load older
+history. A click still pins values, and tooltip text can still be selected. Now restores
+the live six-hour window. Touch vertical scrolling and Planning remain as before.
+Update the add-on and reload HA; no new configuration is required.
+
 Release4.3.7 narrows Overview power/SoC graphs and session bars to six hours: two hours
 behind now and four ahead. Arrows move six hours. History day opens six elapsed hours
 from that date's local midnight; Now returns to the live window. Planning remains

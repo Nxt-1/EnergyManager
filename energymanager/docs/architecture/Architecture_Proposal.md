@@ -283,6 +283,16 @@ The time bar includes the plan update moment; normal provenance/history-detail t
 in collapsed diagnostics while actual errors remain visible. The duplicate native
 battery-history card is removed; the archived SoC plot remains.
 
+From4.3.8 primary-mouse dragging on either Overview graph pans the shared time window
+horizontally at its current duration; power, SoC, period and session bars move together.
+A movement threshold distinguishes clicks (pin values) from horizontal drags; a vertical
+gesture does not move time. The initial pointer/range anchors the displacement, with
+one redraw per animation frame and one archive-range request after release/cancellation.
+Pointer capture supports release outside the graph and lifecycle disposal cancels
+pending frames. Tooltip text remains selectable; touch retains existing cursor and
+vertical page-scroll behavior. Now restores the rolling live window. Planning retains
+its full-horizon view and cursor behavior. No zoom or vertical pan control is introduced.
+
 HA Recorder supplies the native historical view under its own coverage/retention settings.
 It does not import EnergyManager's SQLite archive. Accepted plans/decisions/settings
 still use the add-on API.

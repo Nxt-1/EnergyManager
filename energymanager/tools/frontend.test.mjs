@@ -471,7 +471,7 @@ test('compact daily energy keeps the frozen baseline across plans and rejects ot
   assert.match(connectionIcon(null), /aria-label="Connection unknown"/);
 });
 
-const {valueAt, clipSeries} = await import('../src/energymanager/assets/graph-cursor.js');
+const {GraphCursor, valueAt, clipSeries} = await import('../src/energymanager/assets/graph-cursor.js');
 const {requestError, StatePoller} = await import('../src/energymanager/assets/dashboard-client.js');
 const {hasTextSelection} = await import('../src/energymanager/assets/text-selection.js');
 
@@ -540,6 +540,112 @@ test('graph cursor follows displayed lines and preserves gaps and planned step b
   assert.equal(valueAt(readings, 25), null);
   assert.equal(valueAt(readings, 31), null);
   assert.deepEqual(valueAt([[0,100],[10,100],[10,200],[20,200]],10), {value:200,approximate:false});
+});
+
+function syntheticGraphPointer(t) {
+  const frames = new Map(), changes = [], controller = new AbortController();
+  const originalRequest = globalThis.requestAnimationFrame, originalCancel = globalThis.cancelAnimationFrame;
+  let frameID = 0, enabled = true;
+  globalThis.requestAnimationFrame = callback => {frames.set(++frameID, callback); return frameID;};
+  globalThis.cancelAnimationFrame = id => frames.delete(id);
+  t.after(() => {controller.abort(); globalThis.requestAnimationFrame = originalRequest;
+    globalThis.cancelAnimationFrame = originalCancel;});
+  class Plot extends EventTarget {
+    constructor() {super(); this.classes = new Set(); this.capture = null;
+      this.classList = {add: value => this.classes.add(value), remove: value => this.classes.delete(value),
+        toggle: (value, active) => active ? this.classes.add(value) : this.classes.delete(value)};}
+    setAttribute() {}
+    focus() {}
+    closest() {return null;}
+    querySelector(selector) {return selector === 'svg' ? {getBoundingClientRect: () => ({left:0,width:1000})} : null;}
+    setPointerCapture(id) {this.capture = id;}
+    hasPointerCapture(id) {return this.capture === id;}
+    releasePointerCapture() {this.capture = null;}
+  }
+  const plots = {power: new Plot(), soc: new Plot()};
+  const root = {ownerDocument: {getSelection: () => null}, querySelector: selector => {
+    const plot = plots[selector.slice(1).split(' ')[0]];
+    return selector.endsWith(' svg') ? plot.querySelector('svg') : plot;
+  }};
+  const cursor = new GraphCursor(root, String, {}, controller.signal,
+    {enabled: () => enabled, changed: (range, finished) => changes.push({range,finished})});
+  const model = {start:0,end:21600000,width:1000,now:7200000};
+  cursor.update({power:model,soc:{...model}});
+  const emit = (type, x, y = 50, extra = {}) => {
+    const event = new Event(type, {cancelable:true});
+    Object.assign(event, {pointerId:1,pointerType:'mouse',button:0,buttons:type === 'pointerup' ? 0 : 1,
+      clientX:x,clientY:y,...extra});
+    plots.power.dispatchEvent(event);
+  };
+  return {cursor,changes,plots,controller,emit,disable: () => {enabled=false;},
+    flush: () => {const pending=[...frames.values()]; frames.clear(); pending.forEach(callback=>callback());}};
+}
+
+test('horizontal graph dragging preserves duration, direction and the original pointer anchor', t => {
+  const fixture = syntheticGraphPointer(t);
+  fixture.emit('pointerdown', 200);
+  fixture.emit('pointermove', 292.6, 54);
+  fixture.emit('pointermove', 385.2, 52);
+  assert.equal(fixture.changes.length, 0); // Multiple moves share one animation frame.
+  fixture.flush();
+  assert.ok(Math.abs(fixture.changes[0].range[0] + 4320000) < 0.001);
+  assert.equal(fixture.changes[0].range[1]-fixture.changes[0].range[0], 21600000);
+  assert.equal(fixture.changes[0].finished, false);
+  fixture.emit('pointerup', 107.4, 58);
+  const final = fixture.changes.at(-1);
+  assert.ok(Math.abs(final.range[0] - 2160000) < 0.001);
+  assert.equal(final.finished, true);
+  assert.equal(fixture.plots.power.capture, null);
+  assert.equal(fixture.cursor.pinned, false);
+});
+
+test('graph clicks pin values and vertical gestures do not pan time', t => {
+  const fixture = syntheticGraphPointer(t);
+  fixture.emit('pointerdown', 200);
+  fixture.emit('pointermove', 203);
+  fixture.emit('pointerup', 203);
+  assert.equal(fixture.cursor.pinned, true);
+  assert.equal(fixture.changes.length, 0);
+  fixture.emit('pointerdown', 200);
+  fixture.emit('pointermove', 204, 80);
+  fixture.emit('pointermove', 400, 85);
+  fixture.emit('pointerup', 400, 85);
+  fixture.flush();
+  assert.equal(fixture.changes.length, 0);
+});
+
+test('graph cancellation finalizes once and disposal cancels pending rendering', t => {
+  const fixture = syntheticGraphPointer(t);
+  fixture.emit('pointerdown', 200);
+  fixture.emit('pointermove', 100);
+  fixture.emit('pointercancel', 100);
+  fixture.emit('lostpointercapture', 100);
+  fixture.flush();
+  assert.equal(fixture.changes.length, 1);
+  assert.equal(fixture.changes[0].finished, true);
+  fixture.emit('pointerdown', 200);
+  fixture.emit('pointermove', 100);
+  fixture.controller.abort();
+  fixture.flush();
+  assert.equal(fixture.changes.length, 1);
+  assert.equal(fixture.plots.power.capture, null);
+  assert.equal(fixture.plots.power.classes.has('graph-panning'), false);
+});
+
+test('graph panning leaves secondary buttons, touch and disabled views alone', t => {
+  const fixture = syntheticGraphPointer(t);
+  for (const extra of [{button:2}, {pointerType:'touch'}]) {
+    fixture.emit('pointerdown', 200, 50, extra);
+    fixture.emit('pointermove', 100, 50, extra);
+    fixture.emit('pointerup', 100, 50, extra);
+  }
+  fixture.disable();
+  fixture.emit('pointerdown', 200);
+  fixture.emit('pointermove', 100);
+  fixture.emit('pointerup', 100);
+  fixture.flush();
+  assert.equal(fixture.changes.length, 0);
+  assert.equal(fixture.plots.power.capture, null);
 });
 
 // Synthetic archive transport and measurements; no HA access.

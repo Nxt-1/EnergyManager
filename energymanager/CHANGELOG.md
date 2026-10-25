@@ -1,3 +1,11 @@
+## 4.3.8 — Drag Overview graphs through time
+
+- Drag either Overview graph left/right with the primary mouse button to move the
+  shared time window, with power, SoC and session bars staying aligned.
+- Preserve click-to-pin values, keyboard inspection, selectable tooltip text and
+  vertical touch scrolling. Now returns to the live six-hour window.
+- Redraw once per animation frame and load newly requested history after release.
+
 ## 4.3.7 — Six-hour Overview graphs
 
 - Show two hours of history and four hours ahead on Overview, sharing the same six-hour

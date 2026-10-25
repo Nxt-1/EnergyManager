@@ -122,7 +122,15 @@ export async function mountApplication(root, options = {}) {
   const graphCursor = new GraphCursor(root, at => new Date(at).toLocaleString('en-GB', {
     timeZone: state.policy.timezone, day: '2-digit', month: 'short',
     hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'shortOffset'
-  }), colors, lifecycle.signal);
+  }), colors, lifecycle.signal, {
+    enabled: () => page === 'overview',
+    changed: (nextRange, finished) => {
+      selectedRange = nextRange;
+      $('history-date').value = '';
+      if (finished) { pointerHeld = false; pointerUntil = 0; }
+      renderTimeRange(finished);
+    }
+  });
   const charts = root.querySelector('.charts');
   charts.style.setProperty('--plot-left', `${plotInsets.left}px`);
   charts.style.setProperty('--plot-right', `${plotInsets.right}px`);
@@ -296,6 +304,19 @@ export async function mountApplication(root, options = {}) {
     $('graph-history-status').title = graphHistory.error || '';
   }
 
+  function renderTimeRange(loadHistory = true) {
+    const [start, end] = range(), plan = state.accepted;
+    $('period').textContent = `${time(start)} — ${time(end)}${plan ? ` · Plan ${time(plan.intervals[0].start,false)}` : ''}`;
+    $('period').title = `${state.policy.timezone}${plan ? ` · ${plan.summary.intervals} intervals · ${num(plan.seconds,1)} s calculation` : ''}`;
+    if (loadHistory) graphHistory.load(start, end, Date.parse(state.now), `${state.demo}/${state.policy.timezone}`);
+    renderCharts();
+    const sessions = plan?.sessions || [];
+    $('timeline').innerHTML = ['ev', 'ess'].map(resource =>
+        `<div class="timeline-lane"><small>${resource.toUpperCase()}</small><div class="timeline-track">${sessions.filter(s=>s.resource===resource&&Date.parse(s.end)>start&&Date.parse(s.start)<end).map(s=>{const left=Math.max(start,Date.parse(s.start)),right=Math.min(end,Date.parse(s.end));return `<button class="timeline-run" data-session="${esc(s.id)}" style="background:${colors[resource]};left:${(left-start)/(end-start)*100}%;width:${(right-left)/(end-start)*100}%" title="${esc(s.title)} / ${esc(time(s.start))}" aria-label="${resource.toUpperCase()} session ${esc(time(s.start))}"></button>`}).join('')}</div></div>`
+      ).join('') +
+      `<div class="timeline-labels"><span>${time(start)}</span><span>${sessions.length} grouped sessions</span><span>${time(end)}</span></div>`;
+  }
+
   function renderHardware() {
     $('hardware-controls').hidden = page !== 'overview';
     const hardware = state.hardware_control;
@@ -342,22 +363,14 @@ export async function mountApplication(root, options = {}) {
       c = state.capabilities,
       plan = state.accepted;
     $('page-title').textContent = page === 'overview' ? 'Overview' : 'Planning';
-    const [start, end] = range();
-    $('period').textContent = `${time(start)} — ${time(end)}${plan ? ` · Plan ${time(plan.intervals[0].start,false)}` : ''}`;
-    $('period').title = `${state.policy.timezone}${plan ? ` · ${plan.summary.intervals} intervals · ${num(plan.seconds,1)} s calculation` : ''}`;
     $('power-title').textContent = page === 'planning' ? '7 days · Power · actual / planned · W' :
       'Power · actual / planned · W';
     $('navigation').hidden = page === 'planning';
     renderLive();
     $('status').innerHTML =
       `${!plan ? '<p class="status-line">Waiting for a validated plan.</p>' : ''}${state.error ? `<p class="error">${esc(powerText(state.error))}</p>` : ''}`;
-    graphHistory.load(start, end, Date.parse(state.now), `${state.demo}/${state.policy.timezone}`);
-    renderCharts();
+    renderTimeRange();
     const sessions = plan?.sessions || [];
-    $('timeline').innerHTML = ['ev', 'ess'].map(resource =>
-        `<div class="timeline-lane"><small>${resource.toUpperCase()}</small><div class="timeline-track">${sessions.filter(s=>s.resource===resource&&Date.parse(s.end)>start&&Date.parse(s.start)<end).map(s=>{const left=Math.max(start,Date.parse(s.start)),right=Math.min(end,Date.parse(s.end));return `<button class="timeline-run" data-session="${esc(s.id)}" style="background:${colors[resource]};left:${(left-start)/(end-start)*100}%;width:${(right-left)/(end-start)*100}%" title="${esc(s.title)} / ${esc(time(s.start))}" aria-label="${resource.toUpperCase()} session ${esc(time(s.start))}"></button>`}).join('')}</div></div>`
-      ).join('') +
-      `<div class="timeline-labels"><span>${time(start)}</span><span>${sessions.length} grouped sessions</span><span>${time(end)}</span></div>`;
     const goals = [...state.goals.map(g => ({
       ...((plan?.goals || []).find(p => p.id === g.id && p.revision === g.revision) || {}),
       ...g

@@ -227,6 +227,8 @@ p {
   min-height:180px
 }
 .plot {position:relative;touch-action:pan-y;outline:none}
+.plot.graph-pannable > svg {cursor:grab;user-select:none;-webkit-user-select:none}
+.plot.graph-panning,.plot.graph-panning > svg {cursor:grabbing}
 .plot:focus-visible {outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
 .cursor-line {stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}
 .cursor-values {position:absolute;top:10px;z-index:1;pointer-events:auto;padding:9px 11px;

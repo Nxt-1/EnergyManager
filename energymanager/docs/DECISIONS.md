@@ -256,3 +256,12 @@ The user requested a roughly six-hour Overview graph span for more horizontal de
 Release4.3.7 uses two hours of history and four hours ahead, shared by power/SoC/session
 bars. Arrows advance six elapsed hours; History day starts a six-hour view at local
 midnight. Planning keeps its full horizon. These are display changes only.
+
+## 25 October2026 — Drag Overview graphs horizontally
+
+The user requested click-and-drag left/right graph scrolling. Release4.3.8 pans the
+Overview time axis with the primary mouse button while synchronizing power/SoC/session
+bars. Keep clicks for pinned values, tooltip text selection, keyboard inspection and
+existing touch scrolling. A panned range stays fixed until Now. Do not change control
+policy, zoom/vertical inputs, or the full Planning horizon. Standing release permission
+applies; installation operation remains outside this scope.
