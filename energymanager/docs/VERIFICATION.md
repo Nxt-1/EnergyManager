@@ -1,5 +1,30 @@
 # EnergyManager 4 verification
 
+## 4.3.9 — Wheel/mobile time navigation and monthly peak
+
+245 Python tests pass42.95s;47 frontend tests pass, including wheel delta modes,
+coalescing/settling, cancellation, two-finger pan direction, pinch anchor and15min/7day
+bounds, third-pointer suppression, capture disposal and valid/zero/missing/stale peak
+handling. Ruff/mypy35/all asset JavaScript parse pass. Synthetic full-horizon E2E
+32.623s/2,018intervals/max control tick3.751ms/four fake-only calls passes.
+
+Real browser wheel input pans time without moving the page over a plot. Both graph
+ranges and session labels match. Native source updates2500→7500→unavailable→0 refresh
+the line/scale correctly; unavailable has no line, zero remains zero. Keyboard values,
+Now, zoom-aware arrow labels and Planning without a peak/panning remain functional.
+Labelled fixture buttons replay touch PointerEvents against real view handlers, with
+capture mocked: pinch6h→4h→8h and two-finger pan of both power/SoC synchronize all
+ranges. These are synthetic integration checks, not a physical touch/browser gesture
+negotiation test. Physical phone behavior remains unverified. A narrow-layout327px
+graph fits; computed touch-action remains pan-y for one-finger vertical page scroll.
+Browser warning/error logs are empty. Synthetic proof: artifacts/release-4.3.9-overview.jpg.
+
+Pointer handling follows [Pointer Events pinch guidance](https://developer.mozilla.org/en-US/docs/Web/API/Pointer_events/Pinch_zoom_gestures)
+and the browser's [touch-action contract](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/touch-action).
+Wheel/sdist build passes;55 packaged code/assets match source in both archives and
+isolated extracted-wheel import reports4.3.9. All endpoints/history are labelled
+local fakes; no installation HA/database/hardware/notifications/deployment was accessed.
+
 ## 4.3.8 — Horizontal mouse panning
 
 40 frontend tests pass, including drag geometry/duration/direction, frame coalescing,

@@ -201,3 +201,13 @@ fabricated, no HA Recorder history is imported, and no retention/deletion policy
 Offline verification uses clearly labelled synthetic archives/local fake endpoints.
 Actual installation history remains unverified; live database access was not authorized.
 The earlier hold on committing/pushing was lifted by the user for the 4.2.2 release.
+
+## ARCH-011 — Current capacity peak on the power graph
+
+Recorded: 25 October 2026. Status: **implemented in4.3.9**, explicitly authorized
+alongside scheduled wheel/mobile graph navigation.
+
+Overview shows the current recorded monthly capacity peak as a neutral dotted line
+with a Month peak label and15-minute-average legend/description. Its live input is
+distinct from instantaneous power, forecast peaks, tariff floors and approval limits.
+Unavailable omits the line; real zero is valid. No scheduler/control-policy changes.

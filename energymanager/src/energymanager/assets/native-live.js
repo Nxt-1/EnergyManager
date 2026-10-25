@@ -18,7 +18,7 @@ export function nativeLiveState(state, hass, manifest) {
     };
     return value;
   };
-  for (const key of ['grid_import_kw', 'grid_export_kw', 'pv_ac_kw', 'pv_dc_kw', 'ev_kw', 'ess_kw']) read(key, 'kW');
+  for (const key of ['grid_import_kw', 'grid_export_kw', 'pv_ac_kw', 'pv_dc_kw', 'ev_kw', 'ess_kw', 'monthly_peak_kw']) read(key, 'kW');
   read('ev_soc', '%');
   read('ess_soc', '%');
   const card = (keys, calculate, label) => {

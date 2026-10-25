@@ -2,6 +2,18 @@
 
 ## Local use
 
+Release4.3.9 adds wheel navigation over either Overview graph: wheel down/right moves
+later, up/left earlier. Outside the graph, the wheel scrolls the page. Ctrl/Meta-wheel
+is left to the browser. On mobile use two fingers to pan horizontally or pinch to
+zoom time (15 minutes–7 days); one finger still scrolls the page vertically. Both
+graphs and session bars share the range. Arrows move its current width; Now resets
+to six hours. Click-to-pin, keyboard values and selectable tooltip text remain.
+The dotted Month peak line is the current recorded monthly grid-import maximum,
+measured as a15-minute average. It is not an instantaneous or forecast peak or an
+approval limit. An unavailable source shows no line; a real zero remains valid.
+Update the add-on and reload HA; no new configuration is required. Real phone gesture
+negotiation remains unverified; local touch checks use labelled synthetic pointers.
+
 Release4.3.8 lets you drag the power or SoC graph left/right with the primary mouse
 button on Overview. Both graphs and session bars move together; release to load older
 history. A click still pins values, and tooltip text can still be selected. Now restores

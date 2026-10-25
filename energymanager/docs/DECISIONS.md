@@ -8,6 +8,15 @@ New explicit user instructions take precedence. Deferred ideas are not authoriza
 
 ## Architecture and EV behavior retained
 
+- For4.3.9 the user confirmed both mobile time gestures: pinch zoom and two-finger
+  horizontal pan. Wheel navigation uses the same shared Overview range as mouse drag;
+  Now restores six hours and arrows move the current width. Engineering zoom bounds
+  are15minutes–7days, within the existing eight-day history-query limit. One-finger
+  vertical page scrolling, numeric cursor and copyable tooltips are retained.
+- ARCH-011 shows the current recorded monthly quarter-hour-average import peak with
+  a neutral dotted line. It never substitutes a tariff floor, forecast or approval
+  limit. Missing source means unavailable; valid zero is displayed. No policy changes.
+
 - One joint EV/ESS MILP, full seven elapsed days and intervals no longer than five
   minutes; an independent responsive control loop and persisted, validated decisions.
 - Keep the original required/optional energy, source, cost, peak permission and

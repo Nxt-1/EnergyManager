@@ -1,3 +1,13 @@
+## 4.3.9 — Wheel, mobile time navigation and monthly peak
+
+- Scroll either Overview graph through time with the mouse wheel. On mobile, pinch
+  to zoom the time axis and swipe with two fingers to pan. Power, SoC and sessions
+  stay aligned; Now restores six hours. One-finger vertical page scrolling remains.
+- Bound time zoom to 15 minutes–7 days and move the current window width with arrows.
+- Show the recorded monthly grid-import peak as a dotted line, labelled as a
+  15-minute average. Keep it distinct from instantaneous power and planned limits;
+  show unavailable rather than substituting a forecast or tariff floor.
+
 ## 4.3.8 — Drag Overview graphs through time
 
 - Drag either Overview graph left/right with the primary mouse button to move the

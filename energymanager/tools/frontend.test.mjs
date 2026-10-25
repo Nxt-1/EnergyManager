@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {dailyEnergyRows, connectionIcon, displaySetting, entityState, evFaultText, evIncidentTime, powerText, settingLabel, storedSetting, watts}
+import {dailyEnergyRows, connectionIcon, displaySetting, entityState, evFaultText, evIncidentTime, monthlyPeakWatts, powerText, settingLabel, storedSetting, watts}
   from '../src/energymanager/assets/display.js';
 import {clockValue, localDateTime, localInstants, monthDays, validLocal}
   from '../src/energymanager/assets/date-time.js';
@@ -551,16 +551,16 @@ function syntheticGraphPointer(t) {
   t.after(() => {controller.abort(); globalThis.requestAnimationFrame = originalRequest;
     globalThis.cancelAnimationFrame = originalCancel;});
   class Plot extends EventTarget {
-    constructor() {super(); this.classes = new Set(); this.capture = null;
+    constructor() {super(); this.classes = new Set(); this.capture = null; this.captures = new Set();
       this.classList = {add: value => this.classes.add(value), remove: value => this.classes.delete(value),
         toggle: (value, active) => active ? this.classes.add(value) : this.classes.delete(value)};}
     setAttribute() {}
     focus() {}
     closest() {return null;}
     querySelector(selector) {return selector === 'svg' ? {getBoundingClientRect: () => ({left:0,width:1000})} : null;}
-    setPointerCapture(id) {this.capture = id;}
-    hasPointerCapture(id) {return this.capture === id;}
-    releasePointerCapture() {this.capture = null;}
+    setPointerCapture(id) {this.captures.add(id); this.capture = id;}
+    hasPointerCapture(id) {return this.captures.has(id);}
+    releasePointerCapture(id) {this.captures.delete(id); this.capture = [...this.captures].at(-1) ?? null;}
   }
   const plots = {power: new Plot(), soc: new Plot()};
   const root = {ownerDocument: {getSelection: () => null}, querySelector: selector => {
@@ -576,6 +576,7 @@ function syntheticGraphPointer(t) {
     Object.assign(event, {pointerId:1,pointerType:'mouse',button:0,buttons:type === 'pointerup' ? 0 : 1,
       clientX:x,clientY:y,...extra});
     plots.power.dispatchEvent(event);
+    return event;
   };
   return {cursor,changes,plots,controller,emit,disable: () => {enabled=false;},
     flush: () => {const pending=[...frames.values()]; frames.clear(); pending.forEach(callback=>callback());}};
@@ -597,6 +598,129 @@ test('horizontal graph dragging preserves duration, direction and the original p
   assert.equal(final.finished, true);
   assert.equal(fixture.plots.power.capture, null);
   assert.equal(fixture.cursor.pinned, false);
+});
+
+test('wheel navigation coalesces a burst, preserves duration and settles one archive update', async t => {
+  const fixture = syntheticGraphPointer(t);
+  const wheel = extra => {
+    const event = new Event('wheel', {cancelable:true});
+    Object.assign(event, {deltaX:0,deltaY:92.6,deltaMode:0,ctrlKey:false,metaKey:false,...extra});
+    fixture.plots.power.dispatchEvent(event);
+    return event;
+  };
+  assert.equal(wheel({ctrlKey:true}).defaultPrevented, false);
+  assert.equal(wheel({metaKey:true}).defaultPrevented, false);
+  assert.equal(wheel({}).defaultPrevented, true);
+  wheel({deltaX:92.6,deltaY:0});
+  assert.equal(fixture.changes.length, 0);
+  fixture.flush();
+  assert.ok(Math.abs(fixture.changes[0].range[0] - 4320000) < 0.001);
+  assert.equal(fixture.changes[0].range[1]-fixture.changes[0].range[0], 21600000);
+  assert.equal(fixture.cursor.interacting, true);
+  await new Promise(resolve => setTimeout(resolve, 220));
+  assert.equal(fixture.changes.filter(change => change.finished).length, 1);
+  assert.equal(fixture.cursor.interacting, false);
+});
+
+test('line/page wheel units and cancellation preserve control of the final viewport', t => {
+  const fixture = syntheticGraphPointer(t);
+  const wheel = (deltaY, deltaMode) => {
+    const event = new Event('wheel', {cancelable:true});
+    Object.assign(event, {deltaX:0,deltaY,deltaMode}); fixture.plots.power.dispatchEvent(event);
+  };
+  wheel(1, 2);
+  fixture.cursor.finishWheel();
+  assert.equal(fixture.changes.at(-1).range[0], 21600000);
+  wheel(-1, 1);
+  fixture.cursor.finishWheel();
+  assert.ok(Math.abs(fixture.changes.at(-1).range[0] + 16/926*21600000) < 0.001);
+  const count = fixture.changes.length;
+  wheel(120, 0);
+  fixture.cursor.cancelNavigation();
+  fixture.flush();
+  assert.equal(fixture.changes.length, count);
+  assert.equal(fixture.cursor.interacting, false);
+});
+
+test('two-finger panning preserves duration and ignores vertical centroid movement', t => {
+  const fixture = syntheticGraphPointer(t);
+  const touch = (type, id, x, y=50) => fixture.emit(type,x,y,{pointerId:id,pointerType:'touch'});
+  assert.equal(touch('pointerdown',1,200).defaultPrevented, false);
+  assert.equal(touch('pointerdown',2,400).defaultPrevented, true);
+  touch('pointermove',1,250,100); touch('pointermove',2,450,100);
+  fixture.flush();
+  const range = fixture.changes.at(-1).range;
+  assert.equal(range[1]-range[0], 21600000);
+  assert.ok(Math.abs(range[0] + 50/926*21600000) < 0.001);
+  touch('pointerup',1,250,100);
+  const count = fixture.changes.length;
+  touch('pointermove',2,500,100); touch('pointerup',2,500,100);
+  fixture.flush();
+  assert.equal(fixture.changes.length, count);
+  assert.equal(fixture.cursor.pinned, false);
+  assert.equal(fixture.cursor.interacting, false);
+  assert.equal(fixture.plots.power.captures.size, 0);
+});
+
+test('pinch zoom preserves the midpoint time and has bounded duration', t => {
+  const fixture = syntheticGraphPointer(t);
+  const touch = (type, id, x) => fixture.emit(type,x,50,{pointerId:id,pointerType:'touch'});
+  touch('pointerdown',1,100); touch('pointerdown',2,500);
+  touch('pointermove',1,-100); touch('pointermove',2,700);
+  fixture.flush();
+  let range = fixture.changes.at(-1).range;
+  assert.equal(range[1]-range[0], 10800000);
+  const fraction = (300-58)/926;
+  assert.ok(Math.abs(range[0] + fraction*10800000 - fraction*21600000) < 0.001);
+  touch('pointermove',1,299); touch('pointermove',2,300);
+  fixture.flush(); range=fixture.changes.at(-1).range;
+  assert.equal(range[1]-range[0], 7*24*3600000);
+  touch('pointermove',1,-1000000); touch('pointermove',2,1000000);
+  fixture.flush(); range=fixture.changes.at(-1).range;
+  assert.equal(range[1]-range[0], 15*60000);
+});
+
+test('third touch, pointer loss and disposal do not leave queued navigation or captures', t => {
+  const fixture = syntheticGraphPointer(t);
+  const touch = (type,id,x) => fixture.emit(type,x,50,{pointerId:id,pointerType:'touch'});
+  touch('pointerdown',1,200); touch('pointerdown',2,400); touch('pointermove',2,500);
+  touch('pointerdown',3,600);
+  assert.equal(fixture.changes.filter(change=>change.finished).length, 1);
+  const count=fixture.changes.length;
+  touch('pointermove',3,700); touch('pointercancel',1,200); touch('pointerup',2,500); touch('pointerup',3,700);
+  fixture.flush(); assert.equal(fixture.changes.length,count);
+  touch('pointerdown',4,200); touch('pointerdown',5,400); touch('pointermove',5,500);
+  fixture.controller.abort(); fixture.flush();
+  assert.equal(fixture.changes.length,count);
+  assert.equal(fixture.plots.power.captures.size,0);
+  assert.equal(fixture.cursor.interacting,false);
+});
+
+test('monthly peak uses only a current recorded input, with explicit zero and demo isolation', () => {
+  const state = syntheticEVStatus();
+  state.observation.monthly_peak_kw = 2.5;
+  state.policy.capacity_floor_kw = 2.5;
+  state.accepted = {summary:{peak_kw:7}};
+  assert.equal(monthlyPeakWatts(state),null);
+  state.live_inputs = {readings:{monthly_peak_kw:{value:1.2,issue:null}}};
+  assert.equal(monthlyPeakWatts(state),1200);
+  const reading=state.live_inputs.readings.monthly_peak_kw;
+  for (const value of [null,undefined,'', ' ',NaN,Infinity,-1]) {
+    reading.value=value; assert.equal(monthlyPeakWatts(state),null);
+  }
+  reading.value=0; assert.equal(monthlyPeakWatts(state),0);
+  reading.value=3; reading.issue='read watchdog expired'; assert.equal(monthlyPeakWatts(state),null);
+  reading.display_current=true; assert.equal(monthlyPeakWatts(state),3000);
+  state.demo=true; assert.equal(monthlyPeakWatts(state),2500);
+  state.now='2026-10-25T12:01:00Z'; assert.equal(monthlyPeakWatts(state),null);
+});
+
+test('native monthly peak converts W and never replaces unavailable values with an old observation', () => {
+  const state=syntheticEVStatus(), manifest={entities:{monthly_peak_kw:'sensor.peak'}};
+  const hass={states:{'sensor.peak':{state:'3750',attributes:{unit_of_measurement:'W'}}}};
+  assert.equal(monthlyPeakWatts(nativeLiveState(state,hass,manifest)),3750);
+  hass.states['sensor.peak'].state='unavailable';
+  assert.equal(monthlyPeakWatts(nativeLiveState(state,hass,manifest)),null);
 });
 
 test('graph clicks pin values and vertical gestures do not pan time', t => {

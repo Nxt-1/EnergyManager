@@ -1,5 +1,22 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.9 wheel/mobile navigation and recorded peak
+
+AUTHORIZED: scheduled one-time wheel navigation, mobile pinch time zoom + two-finger
+pan, ARCH-011 monthly capacity peak. Implemented shared Overview range with15min–7day
+zoom bounds, frame coalescing and one archive load at gesture end/wheel idle. Now,
+cursor, selection and one-finger vertical scroll policy retained. Arrows use current
+span. Live monthly input draws a dotted15min-average peak; missing never falls back
+to forecast/floor, zero valid. Planning and controller policies unchanged.
+LOCAL:245 Python42.95s/47 Node/Ruff/mypy35/JS pass. Synthetic E2E32.623s/2018intervals/
+max3.751ms/four fake calls. Real browser wheel, live peak2500/7500/0/unavailable,
+keyboard/Now/Planning checks pass. Labelled synthetic pointer replay verifies pinch,
+pan and shared ranges in browser; physical phone touch negotiation remains unverified.
+Narrow layout327px graph fits; no browser warnings/errors. Wheel/sdist55 code/assets
+match; isolated4.3.9 import passes. NEXT: scoped review, commit/push ready release and
+inspect exact-head CI/image; pause completed one-time automation. Preserve unrelated
+backlog edits/paused Maps. No actual HA/database/hardware/notifications/deployment.
+
 ## Current work —4.3.8 horizontal mouse panning
 
 AUTHORIZED: click/drag graphs left/right. Implemented Overview primary-mouse panning

@@ -291,7 +291,29 @@ one redraw per animation frame and one archive-range request after release/cance
 Pointer capture supports release outside the graph and lifecycle disposal cancels
 pending frames. Tooltip text remains selectable; touch retains existing cursor and
 vertical page-scroll behavior. Now restores the rolling live window. Planning retains
-its full-horizon view and cursor behavior. No zoom or vertical pan control is introduced.
+its full-horizon view and cursor behavior.
+
+From4.3.9 Overview also accepts wheel time navigation, using horizontal trackpad delta
+or vertical mouse-wheel delta. Wheel events are coalesced per frame and archive loading
+waits for180ms idle. Ctrl/Meta-wheel, selected text and tooltip interactions retain
+browser behavior. Two touch pointers on one graph combine horizontal midpoint panning
+with distance-based time zoom anchored under the initial midpoint. Zoom is bounded to
+15 elapsed minutes–7 elapsed days. Vertical movement does not move the time window;
+CSS `touch-action:pan-y` retains one-finger vertical page scrolling. Lifting/cancelling
+a pointer commits once and suppresses the remaining finger until all are released.
+Third pointers, navigation and disposal safely end pending work. Navigation arrows
+move the selected window's width; Now restores two hours past/four ahead. Updates
+cannot overwrite the range during a gesture. Both graphs/session tracks stay aligned.
+
+ARCH-011 is implemented in4.3.9 on the Overview power graph: a neutral dotted line and
+Month peak label show the current recorded monthly `monthly_peak_kw` input in watts.
+The graph's scale includes that value. HA source changes refresh it immediately;
+unavailable/invalid readings omit the line and show unavailable, while zero is valid.
+No forecast, permission limit, tariff floor or stale observation substitutes for this
+reading. Demo uses only its own current synthetic observation. Accessible description
+and legend identify the current-month15-minute-average grid-import billing peak,
+distinct from instantaneous power. This release changes presentation only, not peak
+permissions, optimizer policy or controller behavior.
 
 HA Recorder supplies the native historical view under its own coverage/retention settings.
 It does not import EnergyManager's SQLite archive. Accepted plans/decisions/settings

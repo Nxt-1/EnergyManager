@@ -23,7 +23,8 @@ async def preview() -> None:
             manifest = await response.json()
         values = {"ev_soc": (45, "%"), "ess_soc": (50, "%"), "connected": ("on", None),
                   "grid_import_kw": (0, "W"), "grid_export_kw": (600, "W"), "pv_ac_kw": (1000, "W"),
-                  "pv_dc_kw": (1000, "W"), "ev_kw": (0, "W"), "ess_kw": (0, "W")}
+                  "pv_dc_kw": (1000, "W"), "ev_kw": (0, "W"), "ess_kw": (0, "W"),
+                  "monthly_peak_kw": (2500, "W")}
         states = {entity: {"entity_id": entity, "state": str(values[key][0]),
                           "attributes": {"friendly_name": key.replace("_", " "),
                                          "unit_of_measurement": values[key][1]}}
@@ -50,6 +51,11 @@ async def preview() -> None:
                     result = {"failing": fail_requests}
                 elif message["type"] == "synthetic/ev_update":
                     states[manifest["entities"]["ev_soc"]]["state"] = "57"
+                    result = states
+                elif message["type"] == "synthetic/peak_update":
+                    if message["value"] not in ("2500", "7500", "0", "unavailable"):
+                        raise ValueError("Unknown synthetic peak value")
+                    states[manifest["entities"]["monthly_peak_kw"]]["state"] = message["value"]
                     result = states
                 elif message["type"] == "synthetic/ev_scenario":
                     ev_scenario = message["scenario"]

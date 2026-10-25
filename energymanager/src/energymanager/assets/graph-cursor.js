@@ -1,6 +1,7 @@
 import {hasTextSelection} from './text-selection.js';
 
 export const plotInsets = {left: 58, right: 16, top: 12, bottom: 32};
+export const timeZoomLimits = {minimum: 15 * 60000, maximum: 7 * 24 * 3600000};
 
 // Follow the displayed line, with no extrapolation or interpolation across a gap.
 export function valueAt(points, at) {
@@ -40,25 +41,38 @@ export class GraphCursor {
     this.pan = pan;
     this.gesture = null;
     this.panFrame = null;
+    this.pendingRange = null;
+    this.wheelRange = null;
+    this.wheelTimer = null;
+    this.touches = new Map();
+    this.touchGesture = null;
+    this.touchSuppressed = false;
     for (const name of ['power', 'soc']) {
       const plot = root.querySelector(`#${name}`);
       plot.tabIndex = 0;
       plot.setAttribute('role', 'group');
       plot.setAttribute('aria-label', `${name === 'power' ? 'Power' : 'Battery state of charge'} graph. Use left/right arrows to inspect values; Escape clears the cursor.`);
       plot.addEventListener('pointermove', event => {
+        if (this.moveTouch(event)) return;
         if (this.movePan(event)) return;
         if (hasTextSelection(root) || event.target.closest('.cursor-values')) return;
         if (!this.pinned || event.buttons || event.pointerType === 'touch') this.point(name, event);
       }, {signal});
       plot.addEventListener('pointerdown', event => {
         if (event.button !== 0 || event.target.closest('.cursor-values') || hasTextSelection(root)) return;
+        this.finishWheel();
+        if (this.beginTouch(name, plot, event)) return;
         this.beginPan(name, plot, event);
         this.pinned = true;
         plot.focus({preventScroll: true});
         this.point(name, event);
       }, {signal});
       for (const type of ['pointerup', 'pointercancel', 'lostpointercapture'])
-        plot.addEventListener(type, event => this.finishPan(event), {signal});
+        plot.addEventListener(type, event => {
+          this.endTouch(event);
+          this.finishPan(event);
+        }, {signal});
+      plot.addEventListener('wheel', event => this.wheel(name, plot, event), {signal, passive: false});
       plot.addEventListener('pointerleave', () => {
         if (hasTextSelection(root)) return;
         if (!this.pinned) { this.at = null; this.draw(); }
@@ -82,12 +96,138 @@ export class GraphCursor {
         this.draw(true);
       }, {signal});
     }
-    signal.addEventListener('abort', () => this.clearPan(), {once: true});
+    signal.addEventListener('abort', () => this.cancelNavigation(), {once: true});
+  }
+
+  get interacting() {
+    return !!this.gesture || !!this.wheelTimer || this.touches.size > 0;
+  }
+
+  geometry(name, plot) {
+    const model = this.models[name], box = plot.querySelector('svg')?.getBoundingClientRect();
+    if (!model || !box?.width) return null;
+    const scale = box.width / model.width;
+    return {start: model.start, end: model.end, width: (model.width - plotInsets.left - plotInsets.right) * scale,
+      left: box.left + plotInsets.left * scale};
+  }
+
+  queueRange(range) {
+    this.pendingRange = range;
+    this.at = null;
+    this.pinned = false;
+    if (this.panFrame === null) this.panFrame = requestAnimationFrame(() => {
+      this.panFrame = null;
+      this.pan.changed(this.pendingRange, false);
+    });
+  }
+
+  commitRange() {
+    if (this.panFrame !== null) cancelAnimationFrame(this.panFrame);
+    this.panFrame = null;
+    const range = this.pendingRange;
+    this.pendingRange = null;
+    if (range) this.pan.changed(range, true);
+  }
+
+  wheel(name, plot, event) {
+    if (!this.pan?.enabled() || this.gesture || this.touches.size || !event.cancelable ||
+        event.ctrlKey || event.metaKey || event.target.closest('.cursor-values') || hasTextSelection(this.root)) return;
+    const geometry = this.geometry(name, plot);
+    if (!geometry) return;
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    if (!Number.isFinite(delta) || !delta) return;
+    event.preventDefault();
+    const pixels = delta * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? geometry.width : 1);
+    const [start, end] = this.wheelRange || [geometry.start, geometry.end];
+    const shift = pixels / geometry.width * (end - start);
+    this.wheelRange = [start + shift, end + shift];
+    this.queueRange(this.wheelRange);
+    clearTimeout(this.wheelTimer);
+    this.wheelTimer = setTimeout(() => this.finishWheel(), 180);
+  }
+
+  finishWheel() {
+    if (this.wheelTimer === null) return;
+    clearTimeout(this.wheelTimer);
+    this.wheelTimer = null;
+    this.wheelRange = null;
+    this.commitRange();
+  }
+
+  beginTouch(name, plot, event) {
+    if (event.pointerType !== 'touch' || !this.pan?.enabled() || this.gesture) return false;
+    this.touches.set(event.pointerId, {name, plot, x: event.clientX, y: event.clientY});
+    plot.setPointerCapture(event.pointerId);
+    if (this.touches.size === 1 && !this.touchSuppressed) return false;
+    event.preventDefault();
+    const touches = [...this.touches.values()], geometry = this.geometry(name, plot);
+    if (this.touches.size !== 2 || this.touchSuppressed || touches.some(touch => touch.plot !== plot)) {
+      this.touchGesture = null;
+      this.touchSuppressed = true;
+      this.commitRange();
+      return true;
+    }
+    const distance = Math.hypot(touches[1].x - touches[0].x, touches[1].y - touches[0].y);
+    if (!geometry || distance < 8) { this.touchSuppressed = true; return true; }
+    const center = (touches[0].x + touches[1].x) / 2;
+    const fraction = Math.max(0, Math.min(1, (center - geometry.left) / geometry.width));
+    this.touchGesture = {...geometry, center, distance, anchor: geometry.start + fraction * (geometry.end - geometry.start)};
+    this.touchSuppressed = true;
+    this.at = null;
+    this.pinned = false;
+    this.draw();
+    return true;
+  }
+
+  moveTouch(event) {
+    const touch = this.touches.get(event.pointerId);
+    if (!touch) return false;
+    touch.x = event.clientX;
+    touch.y = event.clientY;
+    const gesture = this.touchGesture;
+    if (!gesture) return this.touchSuppressed;
+    const [first, second] = [...this.touches.values()];
+    const distance = Math.max(8, Math.hypot(second.x - first.x, second.y - first.y));
+    const center = (first.x + second.x) / 2;
+    if (!this.pendingRange && Math.abs(center - gesture.center) < 4 && Math.abs(distance - gesture.distance) < 4) return true;
+    const duration = Math.max(timeZoomLimits.minimum, Math.min(timeZoomLimits.maximum,
+      (gesture.end - gesture.start) * gesture.distance / distance));
+    const start = gesture.anchor - (center - gesture.left) / gesture.width * duration;
+    this.queueRange([start, start + duration]);
+    return true;
+  }
+
+  endTouch(event) {
+    const touch = this.touches.get(event.pointerId);
+    if (!touch) return;
+    this.touches.delete(event.pointerId);
+    if (this.touchGesture) {
+      this.touchGesture = null;
+      this.commitRange();
+    }
+    if (touch.plot.hasPointerCapture(event.pointerId)) touch.plot.releasePointerCapture(event.pointerId);
+    if (!this.touches.size) this.touchSuppressed = false;
+  }
+
+  cancelNavigation() {
+    this.clearPan();
+    clearTimeout(this.wheelTimer);
+    this.wheelTimer = null;
+    this.wheelRange = null;
+    if (this.panFrame !== null) cancelAnimationFrame(this.panFrame);
+    this.panFrame = null;
+    this.pendingRange = null;
+    this.touchGesture = null;
+    this.touchSuppressed = false;
+    const touches = [...this.touches.entries()];
+    this.touches.clear();
+    for (const [id, touch] of touches)
+      if (touch.plot.hasPointerCapture(id)) touch.plot.releasePointerCapture(id);
   }
 
   beginPan(name, plot, event) {
     const model = this.models[name];
-    if (this.gesture || event.pointerType !== 'mouse' || !this.pan?.enabled() || !model) return;
+    if (this.gesture || this.touches.size || event.pointerType !== 'mouse' || !this.pan?.enabled() || !model) return;
     const box = plot.querySelector('svg')?.getBoundingClientRect();
     if (!box?.width) return;
     const width = box.width * (model.width - plotInsets.left - plotInsets.right) / model.width;
@@ -113,10 +253,7 @@ export class GraphCursor {
     // Use the initial range and horizontal displacement, never the freshly redrawn model.
     const shift = -dx / gesture.width * (gesture.end - gesture.start);
     gesture.range = [gesture.start + shift, gesture.end + shift];
-    if (this.panFrame === null) this.panFrame = requestAnimationFrame(() => {
-      this.panFrame = null;
-      this.pan.changed(gesture.range, false);
-    });
+    this.queueRange(gesture.range);
     return true;
   }
 
@@ -124,9 +261,8 @@ export class GraphCursor {
     const gesture = this.gesture;
     if (!gesture || gesture.id !== event.pointerId) return;
     if (gesture.dragging && event.type === 'pointerup') this.movePan(event);
-    const range = gesture.range;
     this.clearPan();
-    if (range) this.pan.changed(range, true);
+    this.commitRange();
   }
 
   clearPan() {
@@ -157,7 +293,7 @@ export class GraphCursor {
     for (const name of ['power', 'soc']) {
       const plot = this.root.querySelector(`#${name}`), enabled = !!this.pan?.enabled();
       plot.classList.toggle('graph-pannable', enabled);
-      plot.setAttribute('aria-label', `${name === 'power' ? 'Power' : 'Battery state of charge'} graph. ${enabled ? 'Drag left or right to scroll in time. ' : ''}Use left/right arrows to inspect values; Escape clears the cursor.`);
+      plot.setAttribute('aria-label', `${name === 'power' ? 'Power' : 'Battery state of charge'} graph. ${enabled ? 'Drag or wheel to scroll through time; use two fingers to pan or pinch to zoom. ' : ''}Use left/right arrows to inspect values; Escape clears the cursor.`);
     }
     const model = models.power;
     if (this.at !== null && (this.at < model.start || this.at > model.end)) {

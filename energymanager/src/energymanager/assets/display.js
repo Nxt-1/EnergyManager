@@ -4,6 +4,17 @@ export function watts(kilowatts) {
     '—' : String(Math.round(Number(kilowatts) * 1000) || 0);
 }
 
+// Display the recorded billing peak, never the tariff floor or a forecast/permission ceiling.
+export function monthlyPeakWatts(state) {
+  const reading = state.demo ? null : state.live_inputs?.readings?.monthly_peak_kw;
+  const age = (Date.parse(state.now) - Date.parse(state.observation?.at)) / 1000;
+  const demoCurrent = state.demo && age >= -5 && age <= (state.policy?.measurement_max_age_seconds ?? 30);
+  const value = state.demo ? demoCurrent ? state.observation?.monthly_peak_kw : null :
+    reading && (reading.display_current || !reading.issue) ? reading.value : null;
+  return value !== null && value !== undefined && String(value).trim() !== '' && Number.isFinite(Number(value)) && Number(value) >= 0 ?
+    Number(value) * 1000 : null;
+}
+
 export function powerText(text) {
   return String(text ?? '').replace(/(-?\d+(?:\.\d+)?)\s*kW\b/g,
     (_, value) => `${watts(value)} W`);

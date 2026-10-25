@@ -3,6 +3,7 @@ import {
 } from './settings.js';
 import {
   powerText,
+  monthlyPeakWatts,
   watts,
   dailyEnergyRows,
   connectionIcon,
@@ -209,8 +210,9 @@ export async function mountApplication(root, options = {}) {
       item[kind] = clipSeries(item[kind], start, end);
     const visible = series.flatMap(s => [...s.planned, ...s.observed]).filter(p => p[0] >= start && p[0] <=
       end && p[1] !== null);
+    const peak = !soc && page === 'overview' ? monthlyPeakWatts(state) : null;
     let low = soc ? 0 : Math.min(0, ...visible.map(p => p[1])),
-      high = soc ? 100 : Math.max(1000, ...visible.map(p => p[1]));
+      high = soc ? 100 : Math.max(1000, peak ?? 0, ...visible.map(p => p[1]));
     if (!soc) {
       low = Math.floor(low);
       high = Math.ceil(high * 1.1 / 100) * 100;
@@ -255,12 +257,21 @@ export async function mountApplication(root, options = {}) {
     const now = Date.parse(state.now);
     if (now >= start && now <= end) svg +=
       `<line x1="${x(now)}" x2="${x(now)}" y1="${top}" y2="${height-bottom}" stroke="#718697" stroke-dasharray="3 3"/>`;
+    if (!soc && page === 'overview') {
+      const label = peak === null ? 'Monthly peak unavailable' : `Month peak · ${Math.round(peak)} W`;
+      const month = new Intl.DateTimeFormat('en-GB', {timeZone: state.policy.timezone, month: 'short', year: 'numeric'}).format(new Date(state.now));
+      const description = peak === null ? 'Current recorded monthly capacity peak unavailable.' :
+        `${state.demo ? 'Synthetic demo: ' : ''}Current recorded ${month} grid-import peak: ${Math.round(peak)} W, a 15-minute average, not instantaneous power, forecast peak or permission limit.`;
+      svg += `<desc>${esc(description)}</desc>`;
+      if (peak !== null) svg += `<line class="monthly-peak-line" data-peak-watts="${peak}" x1="${left}" x2="${width-right}" y1="${y(peak)}" y2="${y(peak)}"><title>${esc(description)}</title></line>`;
+      svg += `<text class="monthly-peak-label" x="${width-right-4}" y="${peak === null ? top+15 : Math.max(top+15,y(peak)-7)}" text-anchor="end"><title>${esc(description)}</title>${esc(label)}</text>`;
+    }
     return svg + '<g class="cursor-overlay" pointer-events="none"></g></svg><div class="cursor-values" role="status" hidden></div>';
   }
 
   function viewLocked() {
     const copyField = $('connection-error-copy');
-    return $('goal-dialog').open || $('detail-dialog').open || pointerHeld ||
+    return $('goal-dialog').open || $('detail-dialog').open || pointerHeld || graphCursor.interacting ||
       Date.now() < pointerUntil || hasTextSelection(root) ||
       (!copyField.hidden && (root.activeElement || document.activeElement) === copyField);
   }
@@ -306,6 +317,10 @@ export async function mountApplication(root, options = {}) {
 
   function renderTimeRange(loadHistory = true) {
     const [start, end] = range(), plan = state.accepted;
+    const minutes = Math.round((end-start)/60000);
+    const spanLabel = minutes % 60 ? `${minutes} minutes` : `${minutes/60} ${minutes === 60 ? 'hour' : 'hours'}`;
+    $('back').setAttribute('aria-label', `Previous ${spanLabel}`);
+    $('forward').setAttribute('aria-label', `Next ${spanLabel}`);
     $('period').textContent = `${time(start)} — ${time(end)}${plan ? ` · Plan ${time(plan.intervals[0].start,false)}` : ''}`;
     $('period').title = `${state.policy.timezone}${plan ? ` · ${plan.summary.intervals} intervals · ${num(plan.seconds,1)} s calculation` : ''}`;
     if (loadHistory) graphHistory.load(start, end, Date.parse(state.now), `${state.demo}/${state.policy.timezone}`);
@@ -366,6 +381,7 @@ export async function mountApplication(root, options = {}) {
     $('power-title').textContent = page === 'planning' ? '7 days · Power · actual / planned · W' :
       'Power · actual / planned · W';
     $('navigation').hidden = page === 'planning';
+    $('monthly-peak-legend').hidden = page !== 'overview';
     renderLive();
     $('status').innerHTML =
       `${!plan ? '<p class="status-line">Waiting for a validated plan.</p>' : ''}${state.error ? `<p class="error">${esc(powerText(state.error))}</p>` : ''}`;
@@ -585,6 +601,8 @@ export async function mountApplication(root, options = {}) {
   }, {signal: lifecycle.signal});
 
   function showPage(name) {
+    graphCursor.cancelNavigation();
+    pointerHeld = false;
     if (options.native && options.navigate) {
       options.navigate(name);
       return;
@@ -597,20 +615,26 @@ export async function mountApplication(root, options = {}) {
   }
   for (const name of ['overview', 'planning', 'ev', 'settings']) $(name).onclick = () => showPage(name);
   $('back').onclick = () => {
+    graphCursor.cancelNavigation();
+    pointerHeld = false;
     pointerUntil = 0;
-    if (selectedRange) selectedRange = selectedRange.map(at => at - 6 * 3600000);
+    if (selectedRange) { const span = selectedRange[1] - selectedRange[0]; selectedRange = selectedRange.map(at => at - span); }
     else offset -= 6;
     $('history-date').value = '';
     render()
   };
   $('forward').onclick = () => {
+    graphCursor.cancelNavigation();
+    pointerHeld = false;
     pointerUntil = 0;
-    if (selectedRange) selectedRange = selectedRange.map(at => at + 6 * 3600000);
+    if (selectedRange) { const span = selectedRange[1] - selectedRange[0]; selectedRange = selectedRange.map(at => at + span); }
     else offset += 6;
     $('history-date').value = '';
     render()
   };
   $('now').onclick = () => {
+    graphCursor.cancelNavigation();
+    pointerHeld = false;
     pointerUntil = 0;
     offset = 0;
     selectedRange = null;
@@ -618,6 +642,8 @@ export async function mountApplication(root, options = {}) {
     render()
   };
   $('history-date').onchange = () => {
+    graphCursor.cancelNavigation();
+    pointerHeld = false;
     pointerUntil = 0;
     if (!$('history-date').value) return;
     try {
@@ -752,9 +778,11 @@ export async function mountApplication(root, options = {}) {
   return {
     updateLive() {
       if (!backendState || viewLocked()) return;
+      const oldPeak = monthlyPeakWatts(state);
       state = options.liveState ? options.liveState(backendState) : backendState;
       if (page === 'overview' || page === 'planning') renderLive();
       else if (page === 'ev') evPage.updateStatus(state);
+      if (page === 'overview' && monthlyPeakWatts(state) !== oldPeak) renderCharts();
     },
     dispose() {
       lifecycle.abort();
