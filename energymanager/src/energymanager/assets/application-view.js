@@ -740,7 +740,7 @@ export async function mountApplication(root, options = {}) {
       if (!backendState || viewLocked()) return;
       state = options.liveState ? options.liveState(backendState) : backendState;
       if (page === 'overview' || page === 'planning') renderLive();
-      else if (page === 'ev') evPage.render(state);
+      else if (page === 'ev') evPage.updateStatus(state);
     },
     dispose() {
       lifecycle.abort();

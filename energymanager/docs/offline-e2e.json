@@ -1,11 +1,11 @@
 {
-  "version": "4.3.4",
+  "version": "4.3.5",
   "provenance": "SYNTHETIC local weather fixture \u00b7 Open-Meteo KNMI \u00b7 four installed PV planes \u00b7 correction 2026-10-03-seed \u00b7 household baseline learning (samples: 1)",
-  "accepted_seconds": 32.40291630011052,
+  "accepted_seconds": 32.81839520018548,
   "intervals": 2018,
-  "control_max_seconds": 0.002465600147843361,
-  "baseline_control_max_seconds": 0.0022374000400304794,
-  "switch_control_max_seconds": 0.002465600147843361,
+  "control_max_seconds": 0.004137999843806028,
+  "baseline_control_max_seconds": 0.0021102996543049812,
+  "switch_control_max_seconds": 0.004137999843806028,
   "switch_control_ticks": 6,
   "fake_service_calls": 4,
   "calendar_imports": 0,
@@ -66,7 +66,7 @@
     "weather_error": null,
     "load_stage": "learning",
     "synthetic": true,
-    "weather_at": "2026-10-25T13:04:36.852084+00:00",
+    "weather_at": "2026-10-25T13:36:39.716701+00:00",
     "load_methods": [
       "recent_baseline"
     ],

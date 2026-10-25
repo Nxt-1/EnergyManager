@@ -1,5 +1,29 @@
 # EnergyManager 4 verification
 
+## 4.3.5 — EV charger visualization
+
+Synthetic/local only.245 Python tests pass42.97s; final three versioned-bundle tests
+pass0.29s.33 frontend tests, Ruff/mypy35, all asset JavaScript syntax and CLI4.3.5
+pass. New frontend checks cover measured/requested power separation, go-e selector
+code1/2 mapping, automatic/unverified mode, stale/missing inputs without fabricated
+zero, command generation/age, charging/waiting/stopped/complete/disconnected states,
+fault/recovery priority, escaped diagnostic content and demo/installation separation.
+Native HA readings can update display while backend authority checks remain unchanged.
+
+Full-horizon fake E2E passes32.818s/2,018intervals/max control tick4.138ms/four fake-only
+service calls. Native browser verifies charging, phase transition with awaiting readback,
+timestamped fault, stale values, expandable details, incoming sensor update and focus
+preservation through repeated polls. Standalone EV tab also shows fresh charger settings.
+The390px phone card is355px wide with353px scroll width and no card overflow; expanded
+details also fit. Battery percentage is accessible text; motion respects reduced-motion
+CSS. Final native and standalone warning/error logs are empty. Preview scenarios project
+display data only and do not operate the backend controller. Screenshots remain in
+ignored artifacts/release-4.3.5-ev-*.jpg; local preview tabs/servers are closed.
+
+Wheel/sdist build and isolated4.3.5 import pass; all55 code/assets match source bytes
+in both archives. Unrelated backlog edits and paused Maps code are excluded. No actual
+HA/database/hardware, real notifications or installation deployment was used.
+
 ## 4.3.4 — Compact polling, request recovery and selectable text
 
 Synthetic/local verification only. Full245 Python tests passed43.13s; final four

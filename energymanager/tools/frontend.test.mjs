@@ -6,6 +6,116 @@ import {clockValue, localDateTime, localInstants, monthDays, validLocal}
   from '../src/energymanager/assets/date-time.js';
 import {eventsOnDay, evSchedule, scheduleDays} from '../src/energymanager/assets/ev-schedule.js';
 import {nativeLiveState} from '../src/energymanager/assets/native-live.js';
+import {evStatusModel, evStatusMarkup} from '../src/energymanager/assets/ev-status.js';
+
+function syntheticEVStatus() {
+  const at = '2026-10-25T12:00:00Z';
+  return {now: at, revision: 7, demo: false, control_enabled: true,
+    policy: {measurement_max_age_seconds: 30, timezone: 'Europe/Brussels'},
+    capabilities: {ev_capacity_kwh: 60}, observation: {at, quality: 'measured',
+      ev_state_known: true, connected: true, ev_kwh: 27, ev_power_kw: 4.1},
+    command: {at, generation: 7, current_a: 6, phases: 3, ev_kw: 4.14, reason: 'SYNTHETIC request'},
+    charger: {at, device_at: at, issue: null, waiting: null, control: 'SYNTHETIC control',
+      states: {phase: '2', current: '6', force: '2', ev_status: '2', charger_status: '3', charger_error: '0'}}};
+}
+
+test('EV visualization distinguishes measured power, command intent and selector settings', () => {
+  const state = syntheticEVStatus();
+  const model = evStatusModel(state);
+  assert.equal(model.status, 'Charging');
+  assert.equal(model.soc, 45);
+  assert.equal(model.power, 4.1);
+  assert.equal(model.requestedPower, 4.14);
+  assert.equal(model.phase, 3); // go-e selector code2 means three phases.
+  assert.equal(model.current, 6);
+  assert.equal(model.flowing, true);
+  state.charger.states.phase = '1';
+  assert.equal(evStatusModel(state).phase, 1);
+  assert.match(evStatusMarkup(state), /Requested phase mode: 3 φ · awaiting readback/);
+  assert.match(evStatusMarkup(state), /Measured power[\s\S]*4100[\s\S]*Controller request[\s\S]*4140/);
+  state.observation.ev_power_kw = 0;
+  assert.equal(evStatusModel(state).status, 'Waiting to charge');
+  assert.equal(evStatusModel(state).flowing, false);
+  state.charger.states.force = '1';
+  assert.equal(evStatusModel(state).status, 'Stopped');
+  state.charger.states.ev_status = '4';
+  assert.equal(evStatusModel(state).status, 'Charging complete');
+  state.observation.connected = false;
+  assert.equal(evStatusModel(state).status, 'Disconnected');
+});
+
+test('EV visualization does not fabricate zero or verified settings from stale/missing readings', () => {
+  const state = syntheticEVStatus();
+  state.now = '2026-10-25T12:01:00Z';
+  let model = evStatusModel(state);
+  assert.equal(model.status, 'Readings unavailable');
+  for (const key of ['soc', 'power', 'current', 'phase', 'requestedPower']) assert.equal(model[key], null, key);
+  state.now = state.observation.at;
+  state.charger.states.phase = '0';
+  state.charger.issue = 'Automatic phase selector blocks EV control';
+  model = evStatusModel(state);
+  assert.equal(model.phase, 'auto');
+  assert.equal(model.current, null);
+  assert.equal(model.status, 'Readings unavailable');
+  state.command.generation = 6;
+  assert.equal(evStatusModel(state).requestedPower, null);
+  state.charger = null;
+  state.observation.ev_state_known = false;
+  assert.equal(evStatusModel(state).soc, null);
+  assert.match(evStatusMarkup(state), /— <small>W/);
+});
+
+test('EV live display can advance independently of stale control inputs without changing authority', () => {
+  const state = syntheticEVStatus();
+  state.live_inputs = {readings: {ev_kw: {value: 8, issue: 'read watchdog expired', received_at: state.now},
+    ev_soc: {value: 88, issue: 'read watchdog expired', received_at: state.now}}, cards: {ev: {label: 'Connected'}}};
+  assert.equal(evStatusModel(state).power, null);
+  assert.equal(evStatusModel(state).soc, null);
+  const manifest = {entities: {ev_kw: 'sensor.power', ev_soc: 'sensor.soc', connected: 'binary_sensor.connected'}};
+  const projected = nativeLiveState(state, {states: {
+    'sensor.power': {state: '1380', attributes: {unit_of_measurement: 'W'}},
+    'sensor.soc': {state: '57', attributes: {unit_of_measurement: '%'}},
+    'binary_sensor.connected': {state: 'on'}}}, manifest);
+  assert.equal(evStatusModel(projected).power, 1.38);
+  assert.equal(evStatusModel(projected).soc, 57);
+  assert.equal(projected.live_inputs.readings.ev_kw.issue, 'read watchdog expired');
+  assert.equal(projected.command, state.command);
+  assert.equal(projected.charger, state.charger);
+});
+
+test('EV faults and recovery stay visible above power flow; detail text is escaped', () => {
+  const state = syntheticEVStatus();
+  state.charger.states.charger_error = '1';
+  assert.equal(evStatusModel(state).tone, 'fault');
+  state.ev_incident = {status: 'rebooting', detected_at: state.now, reason: '<img src=x onerror=alert(1)>'};
+  assert.equal(evStatusModel(state).status, 'Recovering');
+  const markup = evStatusMarkup(state, true);
+  assert.match(markup, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.doesNotMatch(markup, /<img/);
+  assert.match(markup, /ev-device-details" open/);
+  state.ev_incident.status = 'unresolved';
+  assert.equal(evStatusModel(state).status, 'Fault · attention needed');
+  state.ev_incident.status = 'acknowledged';
+  state.charger.states.charger_error = '0';
+  assert.equal(evStatusModel(state).status, 'Charging');
+});
+
+test('EV demo ignores installation charger faults and live readings', () => {
+  const state = syntheticEVStatus();
+  state.demo = true;
+  state.observation.quality = 'SYNTHETIC';
+  state.live_inputs = {readings: {ev_kw: {value: 99, display_current: true}}};
+  state.charger.states.charger_error = '1';
+  state.actuator_health = {delivery_fault: true};
+  state.ev_incident = {status: 'unresolved', reason: 'Installation fault'};
+  const model = evStatusModel(state);
+  assert.equal(model.power, 4.1);
+  assert.equal(model.status, 'Charging');
+  assert.equal(model.phase, null);
+  assert.equal(model.current, null);
+  assert.match(evStatusMarkup(state), /Synthetic demo/);
+  assert.doesNotMatch(evStatusMarkup(state), /Installation fault/);
+});
 
 test('power display preserves signs, missing values and energy units', () => {
   assert.equal(watts(1.68), '1680');

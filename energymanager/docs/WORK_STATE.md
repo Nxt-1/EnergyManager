@@ -1,5 +1,22 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.5 EV status visualization
+
+AUTHORIZED: implement an EV-tab visualization of status, powers, phases and battery.
+IMPLEMENTED: responsive charger/cable/car SVG, battery fill, actual W versus current
+command intent W, validated current limit and phase-selector mode, transition request,
+connection, waiting/fault/recovery priority and expandable raw readings/frame times.
+Native EV source updates replace only status; selection guards remain in force and
+detail expansion/focus survive refresh. Demo ignores installation device readings.
+LOCAL:245 Python42.97s/33 frontend/Ruff/mypy35/all JS/CLI4.3.5 pass. Full fake E2E
+32.818s/2,018intervals/max tick4.138ms/four fake-only calls passes. Native browser
+charging, phase transition, timestamped fault and stale states pass; phone390px status
+card355px fits without overflow. Native focus/expansion persist through repeated polls;
+standalone EV and clean browser logs pass. Wheel/sdist55 code/assets match and isolated
+4.3.5 import passes. Local fixtures/tabs closed; no live access or operation.
+NEXT: final scoped review and one release commit/push;
+check exact-head CI/image. Preserve unrelated backlog and paused Maps archive. No live access.
+
 ## Current work —4.3.4 request recovery and selectable dashboard text
 
 AUTHORIZED: fix repeated generic browser timeouts and unselectable text. Native HA

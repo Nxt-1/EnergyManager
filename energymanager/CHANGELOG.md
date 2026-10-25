@@ -1,3 +1,12 @@
+## 4.3.5 — EV charger visualization
+
+- Add an EV-tab charger-to-car visualization with battery level, measured/requested
+  power, current limit, phase selector mode, connection, waiting and fault/recovery state.
+- Keep charger settings distinct from physical phase measurements; show unavailable
+  readings explicitly, with expandable raw codes and HA/device frame times.
+- Update native EV power/battery values as HA states arrive without rebuilding the
+  calendar. Preserve diagnostic expansion, keyboard focus and text selection.
+
 ## 4.3.4 — Dashboard request recovery and copyable text
 
 - Reduce polling payloads by sending display-only plan data once per accepted plan,

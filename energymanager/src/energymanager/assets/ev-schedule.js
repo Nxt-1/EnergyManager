@@ -2,10 +2,8 @@ import {
   localDateTime,
   localInstants
 } from './date-time.js';
-import {
-  powerText,
-  connectionIcon
-} from './display.js';
+import {powerText} from './display.js';
+import {evStatusMarkup} from './ev-status.js';
 
 const hour = 3600000;
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -172,10 +170,12 @@ export class EVSchedulePage {
 
   render(state) {
     const calendarExpanded = this.root.querySelector('.calendar-sync')?.open;
+    const deviceExpanded = this.root.querySelector('.ev-device-details')?.open;
     const scroller = this.root.querySelector('.ev-calendar-scroll');
     const scrollLeft = scroller?.scrollLeft || 0;
     const active = this.root.getRootNode().activeElement;
     const focused = this.root.contains(active) ? active : null;
+    const deviceFocused = focused?.matches('.ev-device-details > summary');
     const focusAttribute = focused?.getAttributeNames().find(name => name.startsWith('data-ev-'));
     const focusValue = focusAttribute ? focused.getAttribute(focusAttribute) : null;
     const matchingButtons = focusAttribute ? [...this.root.querySelectorAll(`[${focusAttribute}]`)]
@@ -222,14 +222,6 @@ export class EVSchedulePage {
     const selectedEvents = eventsOnDay(schedule.events, selectedDay, schedule.start, schedule.end);
     const nextGoal = schedule.goals.filter(goal => Date.parse(goal.deadline) >= schedule.start)
       .sort((a, b) => Date.parse(a.deadline) - Date.parse(b.deadline))[0];
-    const reading = state.live_inputs?.cards.ev;
-    const age = (schedule.start - Date.parse(state.observation.at)) / 1000;
-    const known = state.observation.ev_state_known !== false &&
-      (state.demo || state.observation.quality === 'measured' && age >= -5 && age <= state.policy.measurement_max_age_seconds);
-    const soc = !state.demo && state.live_inputs ? reading?.value :
-      known ? state.observation.ev_kwh / state.capabilities.ev_capacity_kwh * 100 : null;
-    const connection = !state.demo && state.live_inputs ? reading?.label || 'Waiting for live input' :
-      known ? state.observation.connected ? 'Connected' : 'Away / disconnected' : 'Waiting for live input';
     const charging = schedule.events.filter(event => event.type === 'charge' && event.end > schedule.start);
     const calendar = schedule.days.map(day => {
       const events = eventsOnDay(schedule.events, day, schedule.start, schedule.end);
@@ -272,7 +264,8 @@ export class EVSchedulePage {
     this.root.innerHTML = `
       <section class="page-heading"><div><h1>EV schedule</h1><p class="muted">${stamp(schedule.start)} — ${stamp(schedule.end)} · ${esc(zone)}</p></div>
       <div class="actions"><button data-ev-add="trip" class="primary">＋ Journey</button><button data-ev-add="manual">＋ SoC goal</button><button data-fault-history="true">EV fault history</button></div></section>
-      <div class="ev-summary"><article class="live-item"><span class="live-label muted">Current EV SoC${connectionIcon(connection === 'Connected' ? true : connection === 'Away / disconnected' ? false : null)}</span><strong class="ev-soc">${number(soc)}%</strong>${(reading?.issues || []).map(issue => `<small class="error">${esc(powerText(issue))}</small>`).join('')}</article>
+      <article class="card ev-status" id="ev-live-status">${evStatusMarkup(state, deviceExpanded)}</article>
+      <div class="ev-summary">
       <article class="live-item"><span class="muted">Next requirement</span><strong>${nextGoal ? `${number(target(nextGoal))}%` : '—'}</strong><small>${nextGoal ? `${esc(nextGoal.title)} · ${stamp(nextGoal.deadline)}` : 'No upcoming requirements'}</small></article>
       <article class="live-item"><span class="muted">Planned EV charging</span><strong>${schedule.current ? charging.length : '—'} <small>sessions</small></strong><small>${charging[0] ? `Next ${stamp(Math.max(schedule.start, charging[0].start))}` : schedule.current ? 'No charging selected' : 'Awaiting a current validated plan'}</small></article></div>
       <p class="ev-message error" role="alert">${esc(this.error || '')}</p>
@@ -286,9 +279,19 @@ export class EVSchedulePage {
       .filter(button => button.getAttribute(focusAttribute) === focusValue)[focusIndex]?.focus({
         preventScroll: true
       });
+    if (deviceFocused) this.root.querySelector('.ev-device-details > summary').focus({preventScroll: true});
     if (scroller && focused === scroller) this.root.querySelector('.ev-calendar-scroll').focus({
       preventScroll: true
     });
     this.root.querySelector('.ev-calendar-scroll').scrollLeft = scrollLeft;
+  }
+
+  updateStatus(state) {
+    this.state = state;
+    const card = this.root.querySelector('#ev-live-status');
+    if (!card) return;
+    const focused = this.root.getRootNode().activeElement?.matches('.ev-device-details > summary');
+    card.innerHTML = evStatusMarkup(state, card.querySelector('.ev-device-details')?.open);
+    if (focused) card.querySelector('.ev-device-details > summary').focus({preventScroll: true});
   }
 }

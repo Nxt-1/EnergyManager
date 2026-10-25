@@ -2,6 +2,16 @@
 
 ## Local use
 
+Release4.3.5 adds EV & charger above the EV calendar. Measured power is actual sensor
+power; Controller request is intent and may differ while waiting or changing phases.
+Current limit and Phase mode are charger settings, not individual phase measurements.
+Charger details shows raw codes and HA/device frame timestamps; unavailable settings
+remain unverified until fresh charger data arrives. No new configuration is required.
+Reload the HA dashboard after updating to load the new versioned card automatically.
+For local visual checks, the native preview's SYNTHETIC EV display selector projects
+charging, phase-transition, fault, stale and disconnected states without changing the
+backend controller or issuing actuator calls. These are fixtures, not installation data.
+
 Release4.3.4 makes dashboard text selectable and preserves selection while polling
 continues in the background. Click outside the selection to resume rendering. Connection
 warnings name the failing request and clear after successful recovery; Copy error

@@ -188,6 +188,22 @@ solar/net-grid/household summaries offer the contributing sensors' histories, wi
 inventing a measured household entity. HA tiles/dialogs retain their entity units;
 EnergyManager's custom power summaries and planning charts retain W.
 
+From4.3.5 the EV tab includes a read-only charger-to-car SVG visualization above the
+existing calendar/agenda. It displays battery SoC, independently measured EV power in W,
+current controller request in W, validated go-e current setting in A, phase selector
+mode and connection/status. Selector code1 means one phase,2 means three phases and0
+means automatic; no physical per-phase currents are available or fabricated. A differing
+requested phase mode is labelled awaiting readback. Command intent requires a current
+revision and recent timestamp and never implies device acknowledgement or delivery.
+Hardware control on/off remains explicit. Actual measured power alone drives the cable
+animation; reduced-motion preferences disable animation. Active incidents/recovery and
+device faults take status priority. Missing/stale readings use unavailable values rather
+than zero, and an expandable details section retains raw codes and HA/device frame times.
+The browser display never grants control authority. Native HA battery/power/connection
+updates replace only this status card, preserving calendar position. Demo uses only its
+synthetic observation/command, never installation charger readings. Both native and
+standalone layouts retain detail expansion and keyboard focus across refreshes.
+
 From4.3.4 native and standalone dashboards use optional compact state polling. The
 first response projects accepted-plan display fields and at most120 recent samples;
 immutable publication/calculation evidence remains in the decision archive. Subsequent

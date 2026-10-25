@@ -7,6 +7,7 @@ body{margin:0}header{padding:12px 24px;background:#fff;border-bottom:1px solid #
 <header><strong>SYNTHETIC HA-contract preview · fixtures only · HA built-in cards simulated</strong><nav id="tabs"></nav><button id="update">Simulate incoming EV sensor update → 57%</button><span id="result" role="status"></span></header>
 <style>#cards{user-select:none;-webkit-user-select:none}</style>
 <button id="timeout">Simulate request timeout</button><button id="recover">Restore requests</button>
+<label>SYNTHETIC EV display <select id="ev-scenario"><option value="sampled">Sampled fixture</option><option value="charging">Charging · 3 phases</option><option value="phase_switch">Phase transition · 1 → 3</option><option value="fault">Delivery fault</option><option value="stale">Stale readings</option><option value="disconnected">Disconnected</option></select></label>
 <main id="cards"></main><dialog id="history"><h2>HA more-info event received</h2><p id="entity"></p><p>Sensor history is supplied by HA Recorder in the actual dashboard. No historical measurements are fabricated here.</p><button id="close">Close sensor history</button></dialog>
 <script type="module">
 await import('/ha-card.js');
@@ -45,6 +46,7 @@ function show(path){
 function update(){for(const item of components){if(item.element)item.element.hass=hass;else{const entity=hass.states[item.config.entity];item.tile.replaceChildren(document.createTextNode(item.config.name));const value=document.createElement('b');value.textContent=`${entity?.state??'unavailable'} ${entity?.attributes.unit_of_measurement||''}`;item.tile.append(value)}}}
 for(const view of config.views){const button=document.createElement('button');button.dataset.view=view.path;button.textContent=view.title;button.onclick=()=>show(view.path);document.querySelector('#tabs').append(button)}
 document.querySelector('#update').onclick=async()=>{hass.states=await hass.callWS({type:'synthetic/ev_update'});update();document.querySelector('#result').textContent='Incoming HA state delivered';};
+document.querySelector('#ev-scenario').onchange=async event=>{hass.states=await hass.callWS({type:'synthetic/ev_scenario',scenario:event.target.value});update();document.querySelector('#result').textContent='SYNTHETIC EV display projection; no actuator changes';};
 for(const [id,fail] of [['timeout',true],['recover',false]]) document.querySelector(`#${id}`).onclick=async()=>{await hass.callWS({type:'synthetic/requests',fail});document.querySelector('#result').textContent=fail?'SYNTHETIC request delay enabled':'SYNTHETIC requests restored';};
 window.addEventListener('hass-more-info',event=>{document.querySelector('#entity').textContent=event.detail.entityId;document.querySelector('#history').showModal()});
 window.addEventListener('location-changed',()=>show(location.pathname.split('/').at(-1)));

@@ -228,3 +228,14 @@ Enable selection and preserve it through automatic rendering, with a Copy error 
 and manual fallback. Deliver through versioned card assets so the installed loader
 continues to work. Ready-release commit/push authorization applies to4.3.4. No live
 HA/database/hardware/deployment or real notifications are authorized.
+
+## 25 October2026 — EV status visualization
+
+The user requested an EV-tab visualization of status, powers and phases and explicitly
+authorized implementation. Release4.3.5 uses existing measurements, command intent and
+validated go-e readbacks; no new telemetry mappings or control behavior are introduced.
+The phase selector is not evidence of physical per-phase amperage. Measured power and
+requested power remain separately labelled, with unavailable/stale inputs visible and
+fault/recovery reasons taking priority. Preserve the EV calendar and update only live
+status on native HA source changes. Standing ready-release commit/push permission
+applies; no live installation operation or deployment is authorized.

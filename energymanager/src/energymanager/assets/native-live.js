@@ -13,7 +13,8 @@ export function nativeLiveState(state, hass, manifest) {
     if (unit === 'kW' && key !== 'ess_kw' && value < 0) value = null;
     readings[key] = {
       ...state.live_inputs?.readings?.[key],
-      value
+      value,
+      display_current: value !== null
     };
     return value;
   };

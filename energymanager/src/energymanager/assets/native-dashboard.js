@@ -22,7 +22,7 @@ export function generateDashboard(config, manifest, connection) {
       const previous = this.currentHass;
       this.currentHass = value;
       const entities = runtimes.get(this.config?.addon)?.manifest.entities;
-      const watched = !entities || this.config.view === 'settings' ? [] : this.config.view === 'ev' ? [entities.ev_soc, entities.connected] : Object.values(entities);
+      const watched = !entities || this.config.view === 'settings' ? [] : this.config.view === 'ev' ? [entities.ev_soc, entities.ev_kw, entities.connected] : Object.values(entities);
       if (watched.some(id => previous?.states[id] !== value.states[id]))
         this.controller?.updateLive();
       this.start();

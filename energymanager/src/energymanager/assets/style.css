@@ -491,8 +491,55 @@ body.planning aside .card {
 [hidden] {
   display:none!important
 }
-.ev-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
-.ev-summary .ev-soc { color:#16a34a; }
+.ev-status { margin-bottom:14px; }
+.ev-status-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.ev-status-heading h2 { margin:0; }
+.ev-control-badge { color:var(--muted); font-size:11px; border:1px solid var(--line); border-radius:20px; padding:5px 10px; }
+.ev-status-body { --ev-color:var(--accent); display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); gap:36px; align-items:center; padding:24px 0; }
+.ev-tone-charging { --ev-color:#16a34a; }
+.ev-tone-warning { --ev-color:#d99716; }
+.ev-tone-fault { --ev-color:#e05252; }
+.ev-flow { min-width:0; color:var(--muted); }
+.ev-flow svg { display:block; width:100%; max-height:190px; }
+.ev-charger-shell,.ev-car-shell { fill:var(--surface); }
+.ev-bolt { color:var(--ev-color); }
+.ev-cable { opacity:.25; stroke-width:5; }
+.ev-current-flow { color:var(--ev-color); opacity:0; stroke-dasharray:5 16; }
+.ev-flowing .ev-current-flow { opacity:1; animation:ev-current 1.2s linear infinite; }
+.ev-battery-track { fill:currentColor; opacity:.2; }
+.ev-battery-fill { fill:#16a34a; }
+.ev-flow-labels { display:flex; justify-content:space-between; padding:5px 6% 0; font-size:12px; }
+.ev-flow-labels span:last-child { color:inherit; font-weight:600; }
+.ev-status-readings { min-width:0; }
+.ev-state-label { display:flex; align-items:center; gap:8px; color:var(--ev-color); font-size:17px; }
+.ev-state-label i { width:8px; height:8px; border-radius:50%; background:currentColor; flex-shrink:0; }
+.ev-state-label .connection-icon { margin-left:auto; flex-shrink:0; }
+.ev-status-reason { margin:7px 0 20px; color:var(--muted); min-height:15px; font-size:12px; overflow-wrap:anywhere; }
+.ev-power-readings,.ev-device-settings { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.ev-power-readings span,.ev-device-settings span { display:block; color:var(--muted); font-size:11px; }
+.ev-power-readings strong { display:block; font-size:28px; font-weight:650; margin-top:5px; }
+.ev-power-readings > div:first-child strong { color:var(--ev-color); }
+.ev-status-readings strong small { font-size:12px; font-weight:400; color:var(--muted); }
+.ev-device-settings { margin-top:18px; border-top:1px solid var(--line); padding-top:14px; }
+.ev-device-settings strong { display:block; font-size:21px; margin-top:6px; }
+.ev-phase-segments { display:flex; margin-top:7px; border:1px solid var(--line); border-radius:6px; overflow:hidden; width:max-content; }
+.ev-phase-segments span { padding:5px 12px; border-right:1px solid var(--line); }
+.ev-phase-segments span:last-child { border-right:0; }
+.ev-phase-segments .selected { background:var(--ev-color); color:white; }
+.ev-device-details { border-top:1px solid var(--line); padding-top:12px; font-size:12px; }
+.ev-device-details summary { cursor:pointer; color:var(--muted); }
+.ev-device-details dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 24px; }
+.ev-device-details dl > div { display:flex; justify-content:space-between; gap:12px; }
+.ev-device-details dt { color:var(--muted); }
+.ev-device-details dd { margin:0; overflow-wrap:anywhere; text-align:right; }
+@keyframes ev-current { to { stroke-dashoffset:-42; } }
+@media(prefers-reduced-motion:reduce) { .ev-flowing .ev-current-flow { animation:none; } }
+@media(max-width:760px) {
+  .ev-status-body { grid-template-columns:1fr; gap:20px; padding:20px 0; }
+  .ev-flow { max-width:500px; width:100%; margin:auto; }
+  .ev-device-details dl { grid-template-columns:1fr; }
+}
+.ev-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
 .ev-summary strong small { display:inline; font-size:13px; }
 .ev-layout { display:grid; grid-template-columns:minmax(0,2.4fr) minmax(280px,1fr); gap:20px; align-items:start; }
 .ev-calendar { min-width:0; }

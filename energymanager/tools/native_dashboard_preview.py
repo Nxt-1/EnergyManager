@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from aiohttp import ClientSession, web
@@ -11,6 +12,7 @@ from aiohttp import ClientSession, web
 
 async def preview() -> None:
     fail_requests = False
+    ev_scenario = "sampled"
     async with ClientSession() as session:
         backend = "http://127.0.0.1:8102/"
         async with session.get(backend + "api/state") as response:
@@ -33,7 +35,7 @@ async def preview() -> None:
                                 if request.query.get("manual-copy") == "1" else None)
 
         async def websocket(request: web.Request) -> web.WebSocketResponse:
-            nonlocal fail_requests
+            nonlocal fail_requests, ev_scenario
             socket = web.WebSocketResponse()
             await socket.prepare(request)
             async for frame in socket:
@@ -48,6 +50,14 @@ async def preview() -> None:
                     result = {"failing": fail_requests}
                 elif message["type"] == "synthetic/ev_update":
                     states[manifest["entities"]["ev_soc"]]["state"] = "57"
+                    result = states
+                elif message["type"] == "synthetic/ev_scenario":
+                    ev_scenario = message["scenario"]
+                    if ev_scenario not in ("sampled", "charging", "phase_switch", "fault", "stale", "disconnected"):
+                        raise ValueError("Unknown synthetic EV display scenario")
+                    for key, value in {"ev_kw": "4140" if ev_scenario == "charging" else "0",
+                                       "ev_soc": "57", "connected": "off" if ev_scenario == "disconnected" else "on"}.items():
+                        states[manifest["entities"][key]]["state"] = "unavailable" if ev_scenario == "stale" else value
                     result = states
                 elif message["type"] != "supervisor/api":
                     raise ValueError("Unexpected synthetic WS command")
@@ -73,7 +83,27 @@ async def preview() -> None:
                     headers[key] = request.headers[key]
             async with session.request(request.method, backend + request.match_info["path"],
                                        headers=headers, params=request.query, data=await request.read()) as response:
-                return web.Response(body=await response.read(), status=response.status,
+                body = await response.read()
+                if request.match_info["path"] == "api/state" and response.status == 200 and ev_scenario != "sampled":
+                    # Display-only projection: never change the application or call an actuator.
+                    fixture = json.loads(body)
+                    at = fixture["now"]
+                    old = (datetime.fromisoformat(at) - timedelta(minutes=2)).isoformat()
+                    fixture["charger"] = {"at": old if ev_scenario == "stale" else at,
+                                          "device_at": old if ev_scenario == "stale" else at,
+                                          "issue": "SYNTHETIC stale device frame" if ev_scenario == "stale" else None,
+                                          "waiting": None, "control": "SYNTHETIC EV display fixture",
+                                          "states": {"phase": "1" if ev_scenario == "phase_switch" else "2",
+                                                     "current": "6", "force": "2", "ev_status": "2",
+                                                     "charger_status": "3", "charger_error": "0",
+                                                     "charge_allowed": "on", "heartbeat": "42"}}
+                    fixture["command"] = {"at": at, "generation": fixture["revision"], "ev_kw": 4.14,
+                                          "current_a": 6, "phases": 3, "reason": "SYNTHETIC requested power"}
+                    if ev_scenario == "fault":
+                        fixture["ev_incident"] = {"status": "unresolved", "detected_at": at,
+                                                  "reason": "SYNTHETIC delivery fault; fixture only"}
+                    body = json.dumps(fixture).encode()
+                return web.Response(body=body, status=response.status,
                                     headers={"Content-Type": response.headers["Content-Type"],
                                              "Cache-Control": "no-store"})
 
