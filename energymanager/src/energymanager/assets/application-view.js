@@ -17,6 +17,8 @@ import {
 } from './ev-schedule.js';
 import {GraphHistory, historyDayRange, observedPoints} from './graph-history.js';
 import {GraphCursor, plotInsets, clipSeries} from './graph-cursor.js';
+import {requestError, StatePoller} from './dashboard-client.js';
+import {hasTextSelection, clearTextSelection} from './text-selection.js';
 
 
 export async function mountApplication(root, options = {}) {
@@ -32,6 +34,7 @@ export async function mountApplication(root, options = {}) {
   let state, backendState, page = options.page || 'overview',
     offset = 0,
     loading = false,
+    pointerHeld = false,
     pointerUntil = 0,
     hardwareChanging = false,
     hardwareIntent = false,
@@ -40,6 +43,8 @@ export async function mountApplication(root, options = {}) {
   const graphModels = {};
   let incidentReport = null;
   let selectedRange = null;
+  let connectionError = null;
+  const statePoller = new StatePoller(api);
   const graphHistory = new GraphHistory(api, () => {
     if (state && !viewLocked() && ['overview', 'planning'].includes(page)) renderCharts();
   });
@@ -64,24 +69,29 @@ export async function mountApplication(root, options = {}) {
     minute: '2-digit'
   });
   async function api(path, method = 'GET', body) {
-    if (options.api) return options.api(path, method, body);
-    const response = await fetch(`./api/${path}`, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-EnergyManager': '1'
-      },
-      ...(body === undefined ? {} : {
-        body: JSON.stringify(body)
-      })
-    });
-    const result = await response.json();
-    if (!response.ok) {
-      const error = new Error(result.error || `Request failed: ${response.status}`);
-      error.fields = result.errors;
-      throw error;
+    try {
+      if (options.api) return await options.api(path, method, body);
+      const response = await fetch(`./api/${path}`, {
+        method,
+        signal: AbortSignal.timeout(15000),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-EnergyManager': '1'
+        },
+        ...(body === undefined ? {} : {
+          body: JSON.stringify(body)
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        const error = new Error(result.error || `Request failed: ${response.status}`);
+        error.fields = result.errors;
+        throw error;
+      }
+      return result;
+    } catch (error) {
+      throw requestError(error, path, method);
     }
-    return result;
   }
   const settingsPage = new SettingsPage($('settings-panel'), api, lifecycle.signal);
   const evPage = new EVSchedulePage($('ev-panel'), {
@@ -92,18 +102,18 @@ export async function mountApplication(root, options = {}) {
     remove: async id => {
       await api(`goals/${encodeURIComponent(id)}`, 'DELETE', {});
       pointerUntil = 0;
-      await refresh();
+      await refresh(true);
     },
     settings: () => showPage('settings'),
     sync: async () => {
       await api('calendars/sync', 'POST', {});
       pointerUntil = 0;
-      await refresh();
+      await refresh(true);
     },
     replan: async () => {
       await api('replan', 'POST', {});
       pointerUntil = 0;
-      await refresh();
+      await refresh(true);
     }
   });
   const dateTimePicker = new DateTimePicker(() => state.policy.timezone, () => state.now, root);
@@ -121,7 +131,7 @@ export async function mountApplication(root, options = {}) {
     const width = entries[0].contentRect.width;
     if (Math.abs(width - chartWidth) < 0.5) return;
     chartWidth = width;
-    if (!lifecycle.signal.aborted && state && ['overview', 'planning'].includes(page)) renderCharts();
+    if (!lifecycle.signal.aborted && state && !viewLocked() && ['overview', 'planning'].includes(page)) renderCharts();
   });
   resizeObserver.observe(charts);
   lifecycle.signal.addEventListener('abort', () => resizeObserver.disconnect(), {once: true});
@@ -241,8 +251,41 @@ export async function mountApplication(root, options = {}) {
   }
 
   function viewLocked() {
-    return $('goal-dialog').open || $('detail-dialog').open || Date.now() < pointerUntil;
+    const copyField = $('connection-error-copy');
+    return $('goal-dialog').open || $('detail-dialog').open || pointerHeld ||
+      Date.now() < pointerUntil || hasTextSelection(root) ||
+      (!copyField.hidden && (root.activeElement || document.activeElement) === copyField);
   }
+
+  function renderConnectionError() {
+    if (viewLocked()) return;
+    const message = $('connection-error-message');
+    const text = connectionError ? `${connectionError.at} · ${connectionError.message} Automatic retry will continue.` : '';
+    if (message.textContent !== text) {
+      message.textContent = text;
+      $('copy-connection-error').textContent = 'Copy error';
+      $('connection-error-copy').hidden = true;
+    }
+    $('connection-error').hidden = !connectionError;
+    const legacyError = root.querySelector('#native-error');
+    if (legacyError) legacyError.textContent = '';
+  }
+
+  $('copy-connection-error').onclick = async () => {
+    const text = $('connection-error-message').textContent;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard requires a secure connection');
+      await navigator.clipboard.writeText(text);
+      $('copy-connection-error').textContent = 'Copied';
+    } catch {
+      const field = $('connection-error-copy');
+      field.value = text;
+      field.hidden = false;
+      field.focus();
+      field.select();
+      $('copy-connection-error').textContent = 'Selected — copy with your device';
+    }
+  };
 
   function renderCharts() {
     $('power').innerHTML = chart();
@@ -461,11 +504,14 @@ export async function mountApplication(root, options = {}) {
     detail(session.title,
       `<p>${time(session.start)} — ${time(session.end)}</p><p>${num(session.energy_kwh)} kWh to the battery</p><p>${esc(powerText(session.reason))}</p><p>${session.resource === 'ev' ? `Contributes to ${session.goal_ids.length} shared goals. Energy is counted once.` : 'Source-specific reservations preserve required EV and household peak support.'}</p>`);
   }
-  async function refresh() {
+  async function refresh(force = false) {
     if (loading) return;
     loading = true;
     try {
-      const nextState = await api('state');
+      const nextState = await statePoller.poll(force);
+      if (!nextState || lifecycle.signal.aborted) return;
+      connectionError = null;
+      renderConnectionError();
       // Keep click targets and their backing records on the same displayed revision.
       if (!viewLocked()) {
         backendState = nextState;
@@ -474,9 +520,11 @@ export async function mountApplication(root, options = {}) {
         refreshEnergy();
       }
     } catch (error) {
-      $('connection').textContent = 'Connection unavailable';
-      $('status').textContent = error.message;
-      if (options.native) root.querySelector('#native-error').textContent = error.message;
+      if (lifecycle.signal.aborted) return;
+      if (connectionError?.message !== error.message)
+        connectionError = {message: error.message, at: new Date().toISOString()};
+      renderConnectionError();
+      $('connection').textContent = 'Connection unavailable · retrying';
     } finally {
       loading = false
     }
@@ -502,10 +550,26 @@ export async function mountApplication(root, options = {}) {
     }
   }
   root.addEventListener('pointerdown', () => {
+    pointerHeld = true;
     pointerUntil = Date.now() + 350
   }, {
     signal: lifecycle.signal
   });
+  const documentRoot = root.ownerDocument || root;
+  root.addEventListener('click', event => {
+    if (event.target.closest('button,input,select,a') && hasTextSelection(root)) clearTextSelection(root);
+  }, {capture: true, signal: lifecycle.signal});
+  documentRoot.addEventListener('pointerdown', event => {
+    const target = event.composedPath()[0];
+    if (hasTextSelection(root) && (!root.contains(target) || target.closest('button,input,select,a')))
+      clearTextSelection(root);
+  }, {signal: lifecycle.signal});
+  for (const event of ['pointerup', 'pointercancel']) documentRoot.addEventListener(event, () => {
+    pointerHeld = false;
+    setTimeout(() => {
+      if (!lifecycle.signal.aborted) renderConnectionError();
+    }, 350);
+  }, {signal: lifecycle.signal});
 
   function showPage(name) {
     if (options.native && options.navigate) {
@@ -573,7 +637,7 @@ export async function mountApplication(root, options = {}) {
       await api('goals', 'POST', body);
       $('goal-dialog').close();
       pointerUntil = 0;
-      await refresh()
+      await refresh(true)
     } catch (error) {
       $('form-error').textContent = error.message
     }
@@ -591,13 +655,13 @@ export async function mountApplication(root, options = {}) {
       hardwareError = error.message;
     } finally {
       hardwareChanging = false;
-      await refresh();
+      await refresh(true);
     }
   };
   $('refresh').onclick = async () => {
     try {
       await api('replan', 'POST', {});
-      await refresh()
+      await refresh(true)
     } catch (error) {
       $('status').textContent = error.message
     }
@@ -611,7 +675,7 @@ export async function mountApplication(root, options = {}) {
       if (button.dataset.ackIncident) {
         await api(`ev-incidents/${encodeURIComponent(button.dataset.ackIncident)}/acknowledge`, 'POST', {});
         pointerUntil = 0;
-        await refresh();
+        await refresh(true);
       }
       if (button.dataset.downloadIncident && incidentReport) {
         const url = URL.createObjectURL(new Blob([JSON.stringify(incidentReport,null,2)], {type:'application/json'}));
@@ -623,7 +687,7 @@ export async function mountApplication(root, options = {}) {
       if (button.dataset.delete) {
         await api(`goals/${encodeURIComponent(button.dataset.delete)}`, 'DELETE', {});
         pointerUntil = 0;
-        await refresh()
+        await refresh(true)
       }
       if (button.dataset.detail) {
         showGoalDetail(button.dataset.detail);
@@ -640,7 +704,7 @@ export async function mountApplication(root, options = {}) {
           revision: issue.revision
         });
         pointerUntil = 0;
-        await refresh()
+        await refresh(true)
       }
     } catch (error) {
       $('status').textContent = error.message
@@ -668,7 +732,7 @@ export async function mountApplication(root, options = {}) {
     }
   };
   if (!options.native) page = ['#planning', '#ev', '#settings'].includes(location.hash) ? location.hash.slice(1) : 'overview';
-  await refresh();
+  await refresh(true);
   if (page === 'settings') await settingsPage.show();
   const timer = setInterval(refresh, 2000);
   return {

@@ -11,6 +11,12 @@
 * {
   box-sizing:border-box
 }
+main,dialog { user-select:text; -webkit-user-select:text; }
+.connection-error { margin:0 0 12px; padding:12px; border:1px solid var(--line);
+  border-radius:8px; color:var(--error-color,#dc2626); background:var(--surface); }
+.connection-error button { margin-left:12px; }
+.connection-error textarea { display:block; width:100%; min-height:80px; margin-top:8px; }
+.connection-error[hidden],.connection-error textarea[hidden] { display:none; }
 body {
   margin:0
 }
@@ -223,7 +229,7 @@ p {
 .plot {position:relative;touch-action:pan-y;outline:none}
 .plot:focus-visible {outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
 .cursor-line {stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}
-.cursor-values {position:absolute;top:10px;z-index:1;pointer-events:none;padding:9px 11px;
+.cursor-values {position:absolute;top:10px;z-index:1;pointer-events:auto;padding:9px 11px;
   border:1px solid var(--line);border-radius:8px;background:var(--surface);
   box-shadow:0 3px 12px #0002;font-size:11px;max-width:100%;font-variant-numeric:tabular-nums}
 .cursor-values strong {font-size:12px}

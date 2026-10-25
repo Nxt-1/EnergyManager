@@ -2,6 +2,15 @@
 
 ## Local use
 
+Release4.3.4 makes dashboard text selectable and preserves selection while polling
+continues in the background. Click outside the selection to resume rendering. Connection
+warnings name the failing request and clear after successful recovery; Copy error
+copies the timestamped report or selects a read-only field for manual device copying
+if clipboard permission is unavailable. A timed-out action may already have applied:
+check the current state before retrying it. Failed status polls back off automatically.
+Reload HA after updating; the existing loader does not need reinstalling. Compact
+polling reuses unchanged plans; complete state and decision evidence remain available.
+
 Release4.3.3 freezes daily expected totals at local midnight and saves them across
 restarts. Hover/tap the energy row for capture time and recorded subtotal as-of time.
 After a midday upgrade/start without a saved baseline, the first eligible estimate is

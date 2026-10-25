@@ -303,6 +303,65 @@ test('compact daily energy keeps the frozen baseline across plans and rejects ot
 });
 
 const {valueAt, clipSeries} = await import('../src/energymanager/assets/graph-cursor.js');
+const {requestError, StatePoller} = await import('../src/energymanager/assets/dashboard-client.js');
+const {hasTextSelection} = await import('../src/energymanager/assets/text-selection.js');
+
+test('request failures name the endpoint and never imply a timed-out mutation was not applied', () => {
+  const timeout = new DOMException('signal timed out', 'TimeoutError');
+  assert.match(requestError(timeout, 'state?plan_id=private').message, /GET state: timed out after 15 seconds/);
+  assert.doesNotMatch(requestError(timeout, 'state?plan_id=private').message, /private|may have been applied/);
+  assert.match(requestError(timeout, 'goals', 'POST').message, /POST goals.*may have been applied/);
+  assert.match(requestError(new TypeError('Failed to fetch'), 'state').message, /could not reach EnergyManager/);
+  const invalid = Object.assign(new Error('Invalid settings'), {fields: {power: 'Invalid'}});
+  assert.deepEqual(requestError(invalid, 'settings', 'POST').fields, invalid.fields);
+  assert.doesNotMatch(requestError(invalid, 'settings', 'POST').message, /may have been applied/);
+});
+
+test('state polling reuses only the matching immutable plan and clears removed plans', async () => {
+  const plan = {id: 'one', flows: {grid: [1]}};
+  const states = [{accepted: plan}, {accepted_unchanged: true, accepted_plan_id: 'one'},
+    {accepted: {id: 'two'}}, {accepted: null}, {accepted_unchanged: true, accepted_plan_id: 'unknown'}];
+  const paths = [];
+  const poller = new StatePoller(async path => {paths.push(path); return states.shift();});
+  assert.equal((await poller.poll()).accepted, plan);
+  assert.equal((await poller.poll()).accepted, plan);
+  assert.match(paths[1], /compact=1&plan_id=one/);
+  assert.equal((await poller.poll()).accepted.id, 'two');
+  assert.equal((await poller.poll()).accepted, null);
+  await assert.rejects(poller.poll(), /out of sync/);
+});
+
+test('failed state polls back off, permit explicit refresh and recover without retrying actions', async () => {
+  const originalNow = Date.now;
+  let now = 0, calls = 0, fail = true;
+  Date.now = () => now;
+  const poller = new StatePoller(async () => {calls++; if (fail) throw new Error('SYNTHETIC timeout'); return {accepted: null};});
+  try {
+    await assert.rejects(poller.poll());
+    assert.equal(poller.retryAt, 2000);
+    assert.equal(await poller.poll(), null);
+    assert.equal(calls, 1);
+    now = 2000;
+    await assert.rejects(poller.poll());
+    assert.equal(poller.retryAt, 6000);
+    fail = false;
+    assert.deepEqual(await poller.poll(true), {accepted: null});
+    assert.equal(poller.failures, 0);
+    assert.equal(poller.retryAt, 0);
+  } finally { Date.now = originalNow; }
+});
+
+test('text selection covers shadow text and a document range crossing its host', () => {
+  const text = {}, host = {};
+  const selection = {isCollapsed: false, anchorNode: text, focusNode: text, rangeCount: 1,
+    getRangeAt: () => ({intersectsNode: node => node === host})};
+  const root = {host, contains: node => node === text, ownerDocument: {getSelection: () => selection}};
+  assert.ok(hasTextSelection(root));
+  selection.anchorNode = selection.focusNode = {};
+  assert.ok(hasTextSelection(root));
+  selection.isCollapsed = true;
+  assert.equal(hasTextSelection(root), false);
+});
 test('graph cursor follows displayed lines and preserves gaps and planned step boundaries', () => {
   const readings = [[0,100],[10,200],[20,null],[30,300]];
   assert.deepEqual(valueAt(readings, 5), {value:150, approximate:true});

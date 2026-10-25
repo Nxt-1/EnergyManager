@@ -217,3 +217,14 @@ negative demand as a valid measurement or triggering global errors/replans. Boun
 settling period by the existing input watchdog, retain diagnostic evidence, and keep
 persistent/other input failures visible. Release4.3.3 uses standing ready-release
 commit/push permission. Live HA, hardware and deployment remain separate authorization.
+
+## 25 October2026 — Fix dashboard request recovery and selection
+
+The user explicitly requested fixing repeated generic signal-timeout messages and
+unselectable text after the read-only diagnosis. Preserve the15s deadline while
+reporting the failing request, backing off state reads and clearing recovered errors.
+Reduce repeated state transfers; keep full decision/replay evidence in the archive.
+Enable selection and preserve it through automatic rendering, with a Copy error action
+and manual fallback. Deliver through versioned card assets so the installed loader
+continues to work. Ready-release commit/push authorization applies to4.3.4. No live
+HA/database/hardware/deployment or real notifications are authorized.

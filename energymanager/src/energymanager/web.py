@@ -88,7 +88,20 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         return web.json_response(result, headers={"Cache-Control": "no-store"})
 
     async def state(request: web.Request) -> web.Response:
-        return web.json_response(application.state())
+        result = application.state()
+        if request.query.get("compact") == "1":
+            # Archive graphs own older samples; publication/replay evidence stays in decisions.
+            result["observed"] = result["observed"][-120:]
+            plan = result["accepted"]
+            result["accepted_plan_id"] = plan["id"] if plan else None
+            result["accepted_unchanged"] = bool(plan and request.query.get("plan_id") == plan["id"])
+            if result["accepted_unchanged"]:
+                del result["accepted"]
+            elif plan:
+                display_fields = ("id", "revision", "valid", "status", "seconds", "intervals", "flows",
+                                  "goals", "sessions", "summary", "reasons", "stages", "input_digest")
+                result["accepted"] = {key: plan[key] for key in display_fields if key in plan}
+        return web.json_response(result, headers={"Cache-Control": "no-store"})
 
     async def sync_calendars(request: web.Request) -> web.Response:
         if application.calendars is None:
@@ -196,7 +209,8 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         if name not in ("index.html", "app.js", "settings.js", "display.js", "date-time.js",
                         "datetime-picker.js", "ev-schedule.js", "style.css", "ha-card.js",
                         "application-view.js", "view.html", "native-dashboard.js", "native-dashboard.css",
-                        "native-live.js", "graph-history.js", "graph-cursor.js"):
+                        "native-live.js", "graph-history.js", "graph-cursor.js", "dashboard-client.js",
+                        "text-selection.js"):
             raise web.HTTPNotFound()
         content_type = {"html": "text/html", "js": "text/javascript", "css": "text/css"}[
             name.rsplit(".", 1)[1]

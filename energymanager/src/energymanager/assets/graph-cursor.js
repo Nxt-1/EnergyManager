@@ -1,3 +1,5 @@
+import {hasTextSelection} from './text-selection.js';
+
 export const plotInsets = {left: 58, right: 16, top: 12, bottom: 32};
 
 // Follow the displayed line, with no extrapolation or interpolation across a gap.
@@ -41,14 +43,17 @@ export class GraphCursor {
       plot.setAttribute('role', 'group');
       plot.setAttribute('aria-label', `${name === 'power' ? 'Power' : 'Battery state of charge'} graph. Use left/right arrows to inspect values; Escape clears the cursor.`);
       plot.addEventListener('pointermove', event => {
+        if (hasTextSelection(root) || event.target.closest('.cursor-values')) return;
         if (!this.pinned || event.buttons || event.pointerType === 'touch') this.point(name, event);
       }, {signal});
       plot.addEventListener('pointerdown', event => {
+        if (event.target.closest('.cursor-values')) return;
         this.pinned = true;
         plot.focus({preventScroll: true});
         this.point(name, event);
       }, {signal});
       plot.addEventListener('pointerleave', () => {
+        if (hasTextSelection(root)) return;
         if (!this.pinned) { this.at = null; this.draw(); }
       }, {signal});
       plot.addEventListener('keydown', event => {

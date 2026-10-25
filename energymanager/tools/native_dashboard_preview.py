@@ -10,6 +10,7 @@ from aiohttp import ClientSession, web
 
 
 async def preview() -> None:
+    fail_requests = False
     async with ClientSession() as session:
         backend = "http://127.0.0.1:8102/"
         async with session.get(backend + "api/state") as response:
@@ -28,9 +29,11 @@ async def preview() -> None:
 
         async def page(request: web.Request) -> web.Response:
             return web.Response(text=Path(__file__).with_name("native-preview.html").read_text(encoding="utf-8"),
-                                content_type="text/html")
+                                content_type="text/html", headers={"Permissions-Policy": "clipboard-write=()"}
+                                if request.query.get("manual-copy") == "1" else None)
 
         async def websocket(request: web.Request) -> web.WebSocketResponse:
+            nonlocal fail_requests
             socket = web.WebSocketResponse()
             await socket.prepare(request)
             async for frame in socket:
@@ -40,6 +43,9 @@ async def preview() -> None:
                 endpoint = message.get("endpoint")
                 if message["type"] == "synthetic/states":
                     result = states
+                elif message["type"] == "synthetic/requests":
+                    fail_requests = message["fail"] is True
+                    result = {"failing": fail_requests}
                 elif message["type"] == "synthetic/ev_update":
                     states[manifest["entities"]["ev_soc"]]["state"] = "57"
                     result = states
@@ -59,6 +65,8 @@ async def preview() -> None:
         async def proxy(request: web.Request) -> web.Response:
             if request.cookies.get("ingress_session") != "synthetic-session":
                 return web.json_response({"error": "Synthetic ingress session required"}, status=401)
+            if request.match_info["path"] == "api/state" and fail_requests:
+                await asyncio.sleep(16)  # Exercise the installed loader's real15s AbortSignal deadline.
             headers = {"Host": request.host, "X-EnergyManager": request.headers.get("X-EnergyManager", "")}
             for key in ("Origin", "Content-Type"):
                 if key in request.headers:

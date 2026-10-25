@@ -1,5 +1,26 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.4 request recovery and selectable dashboard text
+
+AUTHORIZED: fix repeated generic browser timeouts and unselectable text. Native HA
+root disables selection; our live DOM replacements also destroy it.15s native request
+limit emitted raw exceptions and recovery never cleared the native error paragraph.
+IMPLEMENTED: context-rich request errors, retry backoff/recovery banner and Copy error
+with manual-selection fallback; compact polling projects display fields, reuses an
+unchanged plan and limits recent samples to120 (older data stays in archive graphs).
+Selection and held pointers pause automatic DOM replacement; source chooser ignores
+selection gestures. Same versioned fix works with existing installed HA loader.
+LOCAL VERIFIED:245 Python43.13s + final4 asset/API0.33s;28 Node/Ruff/mypy35/JS/CLI
+pass. Fake E2E32.403s,2,018intervals,max tick2.466ms,four fake-only calls. Synthetic
+repeated payload2,523,327→50,534B (-98.0%). Native HA-style parent selection/drag,
+real15s timeout, exact clipboard copy, denied-clipboard fallback and recovery verified;
+standalone selection and native Overview/Planning/EV/live57% update pass.
+Native390px copy-warning355px fits without overflow; fresh startup logs clean.
+Browser fixtures/tabs closed (initial failed temporary tab closes with the turn).
+PACKAGED: wheel/sdist54 code/assets match; isolated4.3.4 import passes. Maps code and
+unrelated backlog edits excluded. Final scoped diff review passes.
+NEXT: single release commit/push and exact-head CI/image checks. Preserve unrelated backlog and Maps archive. No live access.
+
 ## Current work —4.3.3 stable graphs, fixed daily baseline and power-balance settling
 
 AUTHORIZED: fix rolling graph flashes, slow/empty energy estimates and brief negative

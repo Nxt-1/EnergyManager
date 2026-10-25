@@ -1,4 +1,5 @@
 :host {
+  user-select:text; -webkit-user-select:text;
   display:block; color:var(--primary-text-color); font-family:var(--paper-font-body1_-_font-family,system-ui);
   font-size:14px; --surface:var(--ha-card-background,var(--card-background-color,#fff));
   --line:var(--divider-color,#e1e7ed); --muted:var(--secondary-text-color,#647585);

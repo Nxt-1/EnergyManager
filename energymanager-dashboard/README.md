@@ -92,3 +92,10 @@ Offline browser checks use explicitly SYNTHETIC `offline_e2e.py --serve` plus
 messages are simulated there; the versioned custom cards, API and planner are real.
 Actual HA frontend/Companion/Supervisor installation remains a target-system check;
 no live HA configuration, database or devices were accessed during development.
+
+From4.3.4 text can be selected/copied inside the HA card. Automatic rendering pauses
+while a selection is active; click outside it to resume. Connection warnings identify
+the request, provide Copy error (with a manual-copy fallback) and clear on recovery.
+Failed state reads back off; unchanged plans are reused instead of downloaded every
+two seconds. No loader reinstall is needed. Timeouts do not prove an action failed:
+check its current state before retrying; actions are never automatically replayed.

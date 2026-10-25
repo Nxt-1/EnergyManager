@@ -1,5 +1,38 @@
 # EnergyManager 4 verification
 
+## 4.3.4 — Compact polling, request recovery and selectable text
+
+Synthetic/local verification only. Full245 Python tests passed43.13s; final four
+native-bundle/API checks after adding both imported modules to the asset allowlist
+passed0.33s.28 frontend tests, Ruff/mypy35, all packaged JavaScript syntax and CLI4.3.4
+pass. API checks preserve the full legacy endpoint, restrict compact data to display
+fields/recent120 samples, handle unchanged/new/removed plans, avoid mutating stored
+evidence and retain no-store headers. Frontend checks cover cache identity, bounded
+retry/backoff recovery, contextual timeout/network errors, uncertain mutation outcomes,
+validation field errors and text-selection detection across shadow-root boundaries.
+
+Configured fake E2E passes32.403s/2,018intervals/max tick2.466ms/four fake-only calls,
+with42,535labelled archived records. A synthetic full seven-day response measured
+2,523,327bytes; compact initial784,842bytes and unchanged-plan poll50,534bytes:98.0%
+less repeated transfer in that fixture, not an installation/network benchmark.
+
+Native preview deliberately supplies an HA-like user-select:none parent. Actual text
+and power-value selections remain highlighted through multiple refreshes; a drag does
+not open source-history choices. Ordinary controls clear selection and resume rendering.
+The installed loader's real15s AbortSignal deadline was triggered with a local delayed
+state response: a timestamped GET state warning appeared, Copy error exactly matched
+the clipboard, and recovery hid the warning without reload. A Permissions-Policy denial
+exercised the selected read-only manual-copy field. Standalone selection, compact-data
+Overview/Planning/EV navigation and native57% live update also pass. Initial browser
+import failure exposed the missing asset allowlist entries, repaired before final checks;
+expected clipboard-policy errors are distinct from final clean startup checks.
+Native390px denied-clipboard warning fits355px with no horizontal overflow. Final
+fresh native/standalone startup logs are clean. Verification fixtures are stopped.
+Screenshots and payload report remain in ignored artifacts/release-4.3.4-*.
+Wheel/sdist built; all54 code/assets match source and isolated4.3.4 import passes.
+Paused Maps and unrelated backlog edits excluded. No live HA/database/hardware,
+installation notifications or deployment was used.
+
 ## 4.3.3 — Stable graphs, frozen daily estimates and settling balances
 
 Synthetic/local checks only. Final full suite244 passed44.33s; focused26 energy/input

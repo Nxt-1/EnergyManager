@@ -1,3 +1,14 @@
+## 4.3.4 — Dashboard request recovery and copyable text
+
+- Reduce polling payloads by sending display-only plan data once per accepted plan,
+  then reusing it while polling live status and a bounded recent-sample window.
+- Identify timed-out requests, retain useful data, back off failed state polls and
+  clear connection warnings after recovery. Mutations are never automatically retried.
+- Enable text selection inside HA, retain selections during automatic refreshes and
+  keep source-history clicks from interrupting a selection gesture.
+- Add timestamped, copyable connection warnings, including a manual-copy fallback
+  when clipboard permission is unavailable. Existing installed HA loaders work unchanged.
+
 ## 4.3.3 — Stable graphs and fixed daily energy estimates
 
 - Retain overlapping archive data while rolling graph windows refresh, including

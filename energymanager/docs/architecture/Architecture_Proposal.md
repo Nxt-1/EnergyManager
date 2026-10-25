@@ -188,6 +188,31 @@ solar/net-grid/household summaries offer the contributing sensors' histories, wi
 inventing a measured household entity. HA tiles/dialogs retain their entity units;
 EnergyManager's custom power summaries and planning charts retain W.
 
+From4.3.4 native and standalone dashboards use optional compact state polling. The
+first response projects accepted-plan display fields and at most120 recent samples;
+immutable publication/calculation evidence remains in the decision archive. Subsequent
+requests name the cached plan ID: the backend explicitly marks an unchanged plan and
+the browser reuses that exact object. A new or removed plan is sent explicitly; a cache
+identity mismatch is an error. Default /api/state remains complete for existing clients.
+Older graph observations continue to come from /api/history, and no records are deleted.
+
+Requests retain a15-second deadline. UI errors name method/endpoint without query
+parameters, include detection time and offer Copy error. Denied/unavailable clipboard
+access offers a selected read-only field for device copying. Failed state reads back
+off2,4,8,16,then30s; explicit refreshes may bypass backoff. No mutation is automatically
+replayed or reported as certainly unapplied after timeout. The installed loader retains
+its authenticated ingress renewal; versioned card code supplies the new behavior without
+reinstalling it. Successful state reads clear the connection warning (after an active
+text selection ends); initial API failure does not destroy the dashboard or saved data.
+Actual installation network/server causes cannot be inferred from a browser timeout.
+
+The card explicitly enables text selection despite HA's parent user-select:none rule.
+Active text selection, held pointers and the manual-copy field pause automatic DOM
+replacement while state polling continues. Graph, live-value and resize callbacks honor
+that pause; source-history actions ignore selection gestures. Once selection is cleared,
+the normal polling cycle resumes rendering. Native release-mismatch detection also
+checks compact query URLs and still requires an explicit dashboard reload.
+
 The five live boxes also show today's estimated energy in kWh: separate grid import/
 export, AC/DC solar, household demand, EV charging and ESS AC charge/discharge. These
 are integrations of the existing validated recorded powers, not HA meter counters or

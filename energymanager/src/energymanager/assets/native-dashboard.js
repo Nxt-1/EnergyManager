@@ -4,6 +4,7 @@ import {
 import {
   nativeLiveState
 } from './native-live.js';
+import {hasTextSelection} from './text-selection.js';
 
 const runtimes = new Map();
 
@@ -70,7 +71,7 @@ export function generateDashboard(config, manifest, connection) {
         const api = async (path, method, body) => {
           if (changed) throw new Error('EnergyManager was updated. Reload this dashboard.');
           const result = await runtime.request(path, method, body);
-          if (path === 'state' && result.version !== manifest.version) {
+          if (path.split('?')[0] === 'state' && result.version !== manifest.version) {
             changed = true;
             throw new Error('EnergyManager was updated. Reload this dashboard.');
           }
@@ -129,7 +130,7 @@ export function generateDashboard(config, manifest, connection) {
           };
           root.addEventListener('click', event => {
             const card = event.target.closest('[data-live]');
-            if (card && !manifest.demo) openHistory(card.dataset.live);
+            if (card && !manifest.demo && !hasTextSelection(root)) openHistory(card.dataset.live);
           }, {
             signal: this.liveEvents.signal
           });

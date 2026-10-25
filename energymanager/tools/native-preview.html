@@ -5,6 +5,8 @@
 body{margin:0}header{padding:12px 24px;background:#fff;border-bottom:1px solid #ddd;position:sticky;top:0;z-index:2}header strong{display:block;margin-bottom:10px}nav{display:flex;gap:12px}button{padding:10px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer}button[aria-current=true]{border-color:#007ac2;color:#007ac2}main{max-width:1400px;margin:auto;padding:18px}.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}.tiles button{text-align:left}.tiles b{display:block;font-size:20px;margin-top:8px}.history{background:#fff;padding:18px;border:1px solid #ddd;border-radius:12px}dialog{max-width:90vw;border:1px solid #ddd;border-radius:12px}#result{color:#007ac2}@media(max-width:620px){.tiles{grid-template-columns:1fr 1fr}main{padding:10px}nav{gap:4px}}
 </style>
 <header><strong>SYNTHETIC HA-contract preview · fixtures only · HA built-in cards simulated</strong><nav id="tabs"></nav><button id="update">Simulate incoming EV sensor update → 57%</button><span id="result" role="status"></span></header>
+<style>#cards{user-select:none;-webkit-user-select:none}</style>
+<button id="timeout">Simulate request timeout</button><button id="recover">Restore requests</button>
 <main id="cards"></main><dialog id="history"><h2>HA more-info event received</h2><p id="entity"></p><p>Sensor history is supplied by HA Recorder in the actual dashboard. No historical measurements are fabricated here.</p><button id="close">Close sensor history</button></dialog>
 <script type="module">
 await import('/ha-card.js');
@@ -43,6 +45,7 @@ function show(path){
 function update(){for(const item of components){if(item.element)item.element.hass=hass;else{const entity=hass.states[item.config.entity];item.tile.replaceChildren(document.createTextNode(item.config.name));const value=document.createElement('b');value.textContent=`${entity?.state??'unavailable'} ${entity?.attributes.unit_of_measurement||''}`;item.tile.append(value)}}}
 for(const view of config.views){const button=document.createElement('button');button.dataset.view=view.path;button.textContent=view.title;button.onclick=()=>show(view.path);document.querySelector('#tabs').append(button)}
 document.querySelector('#update').onclick=async()=>{hass.states=await hass.callWS({type:'synthetic/ev_update'});update();document.querySelector('#result').textContent='Incoming HA state delivered';};
+for(const [id,fail] of [['timeout',true],['recover',false]]) document.querySelector(`#${id}`).onclick=async()=>{await hass.callWS({type:'synthetic/requests',fail});document.querySelector('#result').textContent=fail?'SYNTHETIC request delay enabled':'SYNTHETIC requests restored';};
 window.addEventListener('hass-more-info',event=>{document.querySelector('#entity').textContent=event.detail.entityId;document.querySelector('#history').showModal()});
 window.addEventListener('location-changed',()=>show(location.pathname.split('/').at(-1)));
 document.querySelector('#close').onclick=()=>document.querySelector('#history').close();
