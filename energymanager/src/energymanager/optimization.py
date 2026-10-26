@@ -773,6 +773,12 @@ class JointModel:
                 values[index] = value
         return self.canonical_values(values)
 
+    def continuity_objective(self) -> dict[int, float]:
+        """Guide economic searches away from needless charger transitions."""
+        return {index: self.operations[index]
+                for name in ("start", "phase_change", "variation")
+                for index in self.linear.variables[name]}
+
     def run(
         self,
         seconds: float,

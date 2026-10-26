@@ -290,3 +290,21 @@ bars. Keep clicks for pinned values, tooltip text selection, keyboard inspection
 existing touch scrolling. A panned range stays fixed until Now. Do not change control
 policy, zoom/vertical inputs, or the full Planning horizon. Standing release permission
 applies; installation operation remains outside this scope.
+
+
+## 26 October2026 — Charging continuity and rejected-plan attention
+
+The user supplied a fragmented overnight EV candidate and explicitly authorized code
+for continuity and the missing peak-rejection attention/notification path. Prefer fewer
+starts, phase switches and power changes within the existing two-cent economic/cash
+tolerance. Try a constant-current session where feasible, preserving required outcomes,
+source accounting and permissions. Keep each economic search's real objective evidence
+and use a focused refinement within its budget; a blended objective was rejected after
+an offline replay showed much worse economic search quality. No billed wear fee is added.
+
+A rejected peak check is a planning/reconciliation failure, not evidence that a higher
+allowance is required. Show a persistent timestamped item, retry automatically once,
+and notify the configured phone if unresolved. Genuine proven permission requests also
+notify. Preserve prior instructions only while valid, and clear the attention item on
+acceptance. Standing ready-release commit/push permission applies. No live installation,
+hardware, actual phone alert or deployment is authorized in development.

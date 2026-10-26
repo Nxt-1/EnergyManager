@@ -293,13 +293,23 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                 print(json.dumps(report, indent=2), flush=True)
                 if serve:
                     if planner_failure_fixture:
-                        store.record(application.build_snapshot(), {
-                            "id": "synthetic-planner-timeout", "valid": False, "status": "Time limit reached",
-                            "reason": "SYNTHETIC required schedule timeout; diagnostic display fixture only",
+                        # Freeze only the background planner so an accepted refresh
+                        # cannot clear this explicitly labelled attention preview.
+                        if application.planning:
+                            application.planning.cancel()
+                            await asyncio.gather(application.planning, return_exceptions=True)
+                        rejected = {
+                            "id": "synthetic-planner-rejection", "valid": False, "status": "publication_rejected",
+                            "reason": "SYNTHETIC measured-state peak rejection; diagnostic display fixture only",
+                            "publication_errors": ["SYNTHETIC quarter-hour import 5532 W exceeds 5490 W allowance"],
                             "seconds": 12.5, "summary": {},
                             "stages": [{"name": "required_reference", "status": "Time limit reached",
                                         "feasible": False, "seconds": 12.0}],
-                        }, "rejected")
+                        }
+                        store.record(application.build_snapshot(), rejected, "rejected")
+                        await application.reject_plan(rejected, rejected["publication_errors"])
+                        await application.reject_plan(rejected, rejected["publication_errors"])
+                        application.status, application.error = "publication_rejected", rejected["publication_errors"][0]
                     if ev_fault_fixture:
                         from energymanager.control import Command
 

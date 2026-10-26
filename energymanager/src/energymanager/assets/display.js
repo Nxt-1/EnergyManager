@@ -55,6 +55,13 @@ export function evIncidentTime(value, timezone) {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'shortOffset'});
 }
 
+export function notificationStatus(value) {
+  return {delivered: 'Phone alert sent to Home Assistant',
+    local_only: 'Local notice only; no phone destination configured',
+    retrying: 'Phone alert delivery retrying',
+    waiting_for_retry: 'Phone alert if recalculation fails'}[value] || '';
+}
+
 export function evFaultText(incident, timezone) {
   if (!incident || ['recovered', 'acknowledged'].includes(incident.status)) return '';
   const at = evIncidentTime(incident.detected_at, timezone);

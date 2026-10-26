@@ -362,6 +362,7 @@ class Application:
             except (ValueError, KeyError) as exc:
                 self.status, self.error = "inputs_unavailable", str(exc)
                 self.store.event("snapshot_error", {"reason": self.error})
+                await self.planning_retry_failed(self.error)
                 continue
             self.status = "planning"
             try:
@@ -371,6 +372,7 @@ class Application:
             except BrokenProcessPool as exc:
                 self.status, self.error = "solver_error", str(exc)
                 self.store.event("worker_restarted", {"reason": str(exc)})
+                await self.planning_retry_failed(self.error)
                 if self.worker:
                     self.worker.shutdown(wait=False, cancel_futures=True)
                 self.worker = ProcessPoolExecutor(
@@ -382,6 +384,7 @@ class Application:
             except (RuntimeError, ValueError, OSError) as exc:
                 self.status, self.error = "solver_error", str(exc)
                 self.store.event("solver_error", {"type": type(exc).__name__, "reason": str(exc)})
+                await self.planning_retry_failed(self.error)
                 continue
             # All changes are conservatively revalidated by a fresh solve; accepted unaffected work continues.
             if self.house_mismatch_since is not None:
@@ -412,6 +415,7 @@ class Application:
                     "publication_rejected" if result.get("valid") else result["status"],
                     errors[0],
                 )
+                await self.reject_plan(result, errors)
                 continue
             self.store.record(snapshot, result, "accepted")
             self.accepted, self.snapshot = result, snapshot
@@ -421,7 +425,9 @@ class Application:
             self.ess_valid = True
             self.conditional_valid = True
             self.status, self.error = "ready", None
+            self.resolve_planning_issue(result["id"])
             self.update_issues(result)
+            await self.notify_permission_issues()
             for reason in result["reasons"]:
                 if reason["kind"] == "peak_precharge":
                     await self.notifications.inform(
@@ -435,6 +441,63 @@ class Application:
                             "day": result["intervals"][0]["start"][:10],
                         },
                     )
+
+    def resolve_planning_issue(self, decision_id: str) -> None:
+        if self.store.get("planning_issue"):
+            self.store.event("planning_recovered", {"decision_id": decision_id, "at": self.now()})
+            self.store.put("planning_issue", None)
+
+    async def planning_retry_failed(self, reason: str) -> None:
+        """An input/worker failure must not leave the promised retry waiting silently."""
+        if issue := self.store.get("planning_issue"):
+            await self.reject_plan({"id": issue["decision_id"]}, [reason])
+
+    async def reject_plan(self, result: dict[str, Any], errors: list[str]) -> None:
+        """Expose rejection immediately; retry once before escalating a persistent failure."""
+        previous = self.store.get("planning_issue")
+        if previous is None:
+            previous = {"id": uuid4().hex, "first_revision": self.revision, "attempts": 0,
+                        "first_at": self.now().isoformat(), "first_reason": errors[0]}
+        attempts = previous["attempts"] + 1
+        issue = {**previous, "revision": self.revision,
+                 "kind": "planning", "title": "Charging plan could not be updated",
+                 "state": "retrying" if attempts == 1 else "attention_required",
+                 "attempts": attempts, "last_at": self.now().isoformat(),
+                 "decision_id": result["id"], "reason": errors[0],
+                 "text": (f"Plan could not be updated: {errors[0]}. Previous instructions continue only while valid. "
+                          + ("One automatic recalculation is in progress." if attempts == 1 else
+                             "Automatic recalculation did not resolve this. Inspect the decision evidence. "
+                             "This rejection is not a request to approve a higher peak.")),
+                 "notification": previous.get("notification", "waiting_for_retry")}
+        self.store.put("planning_issue", issue)
+        self.store.event("planning_rejected", issue)
+        if attempts == 1:
+            self.requested.set()
+        else:
+            delivered = await self.notifications.inform(f"planning:{issue['id']}", {
+                "kind": "planning_rejected",
+                "message": ("EnergyManager could not update the charging plan after an automatic retry: "
+                            f"{issue['first_reason']}. Previous instructions continue only while valid. "
+                            "Open Decisions needing attention for details; no higher peak has been approved.")})
+            issue["notification"] = ("delivered" if self.notifications.target else "local_only") if delivered else "retrying"
+            self.store.put("planning_issue", issue)
+
+    async def notify_permission_issues(self) -> None:
+        """Notify only for demonstrated, revision-scoped permission proposals."""
+        issues = self.store.get("issues", {})
+        for issue in issues.values():
+            if issue.get("state") != "pending" or not issue.get("proposed_peak_kw"):
+                continue
+            title = next((g.title for g in self.snapshot.goals if g.id == issue["goal_id"]),
+                         "Battery peak strategy" if issue.get("kind") == "ess_peak" else "EV goal")
+            peak = round(issue["proposed_peak_kw"], 1)
+            delivered = await self.notifications.inform(f"permission:{issue['goal_id']}:{issue['revision']}", {
+                "kind": "permission_required", "goal_id": issue["goal_id"], "revision": issue["revision"],
+                "peak_kw": peak, "message": (f"{title} needs your decision about a {peak * 1000:.0f} W "
+                    "quarter-hour import ceiling. Open Decisions needing attention to approve or reject. "
+                    "Permitted charging continues while waiting.")})
+            issue["notification"] = ("delivered" if self.notifications.target else "local_only") if delivered else "retrying"
+        self.store.put("issues", issues)
 
     def update_issues(self, plan: dict[str, Any]) -> None:
         issues = self.store.get("issues", {})
@@ -661,6 +724,7 @@ class Application:
 
     def state(self) -> dict[str, Any]:
         now = self.now()
+        planning_issue = self.store.get("planning_issue")
         daily_approvals = self.store.get("daily_approvals", {})
         requirements = []
         for goal in daily_goals(now, now + timedelta(hours=168), self.policy, self.goals):
@@ -700,7 +764,8 @@ class Application:
             "calendars": self.calendars.status() if self.calendars else [],
             "accepted": self.accepted,
             "ev_plan_valid": self.ev_valid,
-            "issues": list(self.store.get("issues", {}).values()),
+            "issues": list(self.store.get("issues", {}).values()) + (
+                [planning_issue] if planning_issue else []),
             "command": self.last_command,
             "observed": self.observed,
             "control_max_seconds": max(self.response_seconds, default=0),

@@ -8,6 +8,7 @@ from time import monotonic
 from typing import Any
 from uuid import uuid4
 from collections import defaultdict
+from copy import deepcopy
 from zoneinfo import ZoneInfo
 
 from .domain import PeakPermission, Snapshot, json_data, instant
@@ -39,16 +40,116 @@ class Planner:
                 best = candidate
             if self.remaining() < 2:
                 break
+        if best is not None and 1 in s.capabilities.phases and self.remaining() > 2:
+            steady = seed(model, baseline, preferred_phase=1)
+            if (steady is not None
+                    and model.value(model.economic, steady) <= model.value(model.economic, best) + 1e-6
+                    and model.value(model.cash, steady) <= model.value(model.cash, best) + 1e-6
+                    and model.value(model.continuity_objective(), steady)
+                    < model.value(model.continuity_objective(), best)):
+                best = steady
         return best
 
     def run_model(
         self, name: str, model: JointModel, allowance: float, warm: list[float] | None = None, **kwargs: Any
     ) -> dict[str, Any]:
-        result = model.run(min(allowance, self.remaining()), warm=warm, **kwargs)
+        economic_search = "objective" not in kwargs
+        started = monotonic()
+        allowance = min(allowance, self.remaining())
+        result = model.run(allowance * 0.8 if economic_search else allowance, warm=warm, **kwargs)
         self.stages.append(
             {"name": name, **{k: v for k, v in result.items() if k not in ("flows", "values")}}
         )
+        if economic_search and result["feasible"]:
+            remaining = min(self.remaining(), allowance - (monotonic() - started))
+            result = self.prefer_continuity(name, model, result, remaining)
         return result
+
+    def prefer_continuity(self, name: str, model: JointModel, result: dict[str, Any],
+                          allowance: float) -> dict[str, Any]:
+        """Refine each economic incumbent using a smaller EV-only search in its stage budget."""
+        economic = model.value(model.economic, result["values"])
+        cash = model.value(model.cash, result["values"])
+        result["economic_baseline"], result["cash_baseline"] = economic, cash
+        if allowance < 0.3:
+            return result
+        started = monotonic()
+        guided = deepcopy(model)
+        adjustable = {"one", "three", "amps_one", "amps_three", "grid_ev", "grid_direction",
+                      "ev_energy", "grid_cumulative", "start", "phase_change", "variation", "causal_witness"}
+        for variable, indexes in guided.linear.variables.items():
+            if variable in adjustable or variable.startswith(("peak_", "quarter_", "margin_shortfall_")):
+                continue
+            for index in indexes:
+                guided.linear.lower[index] = result["values"][index]
+                guided.linear.upper[index] = result["values"][index]
+        # Preserve solar/storage choices and delivered quantity, but let grid work
+        # move into longer sessions. Never buy smoothness by losing readiness.
+        for variable, indexes in guided.linear.variables.items():
+            if variable.startswith("margin_shortfall_"):
+                guided.linear.upper[indexes[0]] = result["values"][indexes[0]] + 1e-6
+        ev = guided.linear.variables["ev_energy"]
+        guided.linear.lower[ev[-1]] = result["flows"]["ev_energy"][-1] - 1e-6
+        tolerance = model.snapshot.policy.polish_tolerance_eur
+        bounds = [(guided.economic, economic + tolerance), (guided.cash, cash + tolerance)]
+        steady = self.steady_grid_model(guided, result)
+        if steady is not None:
+            trial = self.run_model(name + "_steady_grid", steady,
+                                  (allowance - (monotonic() - started)) * 0.5,
+                                  steady.warm_from(result["flows"]), objective=steady.operations,
+                                  bounds=bounds)
+            if (trial["feasible"] and not validate(model.snapshot, trial["flows"], model.service)
+                    and steady.value(steady.continuity_objective(), trial["values"])
+                    <= model.value(model.continuity_objective(), result["values"]) + 1e-6):
+                result = {**trial, "status": result["status"],
+                          "values": model.warm_from(trial["flows"])}
+                continuity = guided.continuity_objective()
+                guided.linear.row(list(continuity.items()), upper=model.value(
+                    model.continuity_objective(), result["values"]) + 1e-6)
+        refined = self.run_model(name + "_continuity", guided, allowance - (monotonic() - started),
+                                 guided.warm_from(result["flows"]), objective=guided.operations,
+                                 bounds=bounds)
+        if (refined["feasible"] and not validate(model.snapshot, refined["flows"], model.service)
+                and guided.value(guided.continuity_objective(), refined["values"])
+                < model.value(model.continuity_objective(), result["values"]) - 1e-6):
+            refined["values"] = model.warm_from(refined["flows"])
+            refined["status"] = result["status"]  # Refinement optimality is not economic optimality.
+            refined["economic_baseline"], refined["cash_baseline"] = economic, cash
+            return refined
+        result["economic_baseline"], result["cash_baseline"] = economic, cash
+        return result
+
+    def steady_grid_model(self, model: JointModel, result: dict[str, Any]) -> JointModel | None:
+        """Try one constant-current session for the next source-free required window.
+
+        This is a candidate, never a new charging constraint. A short window, held
+        three-phase setting or existing solar allocation leaves the ordinary search available.
+        """
+        s, c, o = model.snapshot, model.snapshot.capabilities, model.snapshot.observation
+        goals = [g for g in s.goals if s.intervals[0].start < g.deadline <= s.intervals[-1].end
+                 and g.target(c, s.policy) > o.ev_kwh + TOL]
+        if not goals or 1 not in c.phases or s.hold_ev_kw > TOL and s.hold_phases != 1:
+            return None
+        deadline = min(g.deadline for g in goals)
+        slots = [t for t, i in enumerate(s.intervals) if i.end <= deadline]
+        if (not slots or any(result["flows"][name][t] > TOL
+                             for t in slots for name in ("pv_ev", "solar_dis_ev"))):
+            return None
+        steady = deepcopy(model)
+        v, m = steady.linear.variables, steady.linear
+        current = m.variable("steady_current", 1, c.maximum_current_a, c.minimum_current_a, integer=True)[0]
+        m.row([(v["start"][t], 1) for t in slots], upper=1)
+        for t in slots:
+            m.upper[v["three"][t]] = 0
+            m.upper[v["amps_three"][t]] = 0
+            m.row([(v["amps_one"][t], 1), (current, -1)], upper=0)
+            m.row([(v["amps_one"][t], -1), (current, 1), (v["one"][t], c.maximum_current_a)],
+                  upper=c.maximum_current_a)
+        # Keep later EV decisions fixed: this small solve only schedules the next goal.
+        for name in ("one", "three", "amps_one", "amps_three", "grid_ev"):
+            for t in range(slots[-1] + 1, len(s.intervals)):
+                m.lower[v[name][t]] = m.upper[v[name][t]] = result["flows"][name][t]
+        return steady
 
     def plan(self, snapshot: Snapshot) -> dict[str, Any]:
         self.started = monotonic()
@@ -559,10 +660,12 @@ class Planner:
                             )
         economic_status = selected["status"]
         polish_reference_summary = accounting(s, selected["flows"])
+        before_score = selected.get("economic_baseline", selected_model.value(
+            selected_model.economic, selected["values"]))
+        before_cash = selected.get("cash_baseline", selected_model.value(
+            selected_model.cash, selected["values"]))
         if self.remaining() > 9:
             tolerance = s.policy.polish_tolerance_eur
-            before_score = selected_model.value(selected_model.economic, selected["values"])
-            before_cash = selected_model.value(selected_model.cash, selected["values"])
             days: dict[str, list[int]] = defaultdict(list)
             zone = ZoneInfo(s.policy.timezone)
             for t, interval in enumerate(s.intervals):
@@ -637,6 +740,13 @@ class Planner:
                 service=service,
                 grid_ess=any(v > TOL for v in selected["flows"]["grid_store"]),
             )
+            continuity = source_model.continuity_objective()
+            source_model.linear.row(list(continuity.items()), upper=source_model.value(
+                continuity, source_model.warm_from(selected["flows"])) + 1e-6)
+            source_model.linear.row(list(source_model.economic.items()),
+                                    upper=before_score + s.policy.polish_tolerance_eur + TOL)
+            source_model.linear.row(list(source_model.cash.items()),
+                                    upper=before_cash + s.policy.polish_tolerance_eur + TOL)
             for _, slots in source_model.quarters.items():
                 original_import = sum(
                     sum(selected["flows"][name][t] for name in ("grid_ev", "grid_house", "grid_store"))

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {dailyEnergyRows, connectionIcon, displaySetting, entityState, evFaultText, evIncidentTime, monthlyPeakWatts, powerText, settingLabel, storedSetting, watts}
+import {dailyEnergyRows, connectionIcon, displaySetting, entityState, evFaultText, evIncidentTime, monthlyPeakWatts, notificationStatus, powerText, settingLabel, storedSetting, watts}
   from '../src/energymanager/assets/display.js';
 import {clockValue, localDateTime, localInstants, monthDays, validLocal}
   from '../src/energymanager/assets/date-time.js';
@@ -950,4 +950,13 @@ test('graph window boundaries keep bracketing line values without extrapolating 
   assert.deepEqual(valueAt(clipped, 15), {value:200,approximate:true});
   assert.deepEqual(valueAt(clipped, 10), {value:200,approximate:false});
   assert.deepEqual(clipSeries([[0,100],[10,null],[20,200]], 5, 15), [[10,null]]);
+});
+
+
+test('planning notices distinguish HA handoff, local-only delivery and pending retry', () => {
+  assert.equal(notificationStatus('delivered'), 'Phone alert sent to Home Assistant');
+  assert.match(notificationStatus('local_only'), /no phone destination configured/);
+  assert.match(notificationStatus('retrying'), /delivery retrying/);
+  assert.match(notificationStatus('waiting_for_retry'), /if recalculation fails/);
+  assert.equal(notificationStatus(null), '');
 });

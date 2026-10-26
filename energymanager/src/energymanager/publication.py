@@ -112,6 +112,8 @@ def rebase(
         flows["ess_grid"].append(flows["ess_grid"][-1] + (grid_in - grid_out) * i.hours)
     errors = validate(current, flows, result.get("service"))
     if errors:
+        # Keep the failed reconciliation as labelled evidence, not executable flows.
+        adopted["publication_candidate"] = {"flows": flows, "intervals": json_data(intervals)}
         return current, adopted, errors
     if result.get("reference_flows"):
         reference_result = {

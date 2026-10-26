@@ -126,7 +126,7 @@ class Store:
                 "digest": row[3],
                 "summary": result.get("summary", {}),
                 "status": result.get("status"),
-                "reason": result.get("reason"),
+                "reason": (result.get("publication_errors") or [result.get("reason")])[0],
                 "seconds": result.get("seconds"),
             })
         return entries

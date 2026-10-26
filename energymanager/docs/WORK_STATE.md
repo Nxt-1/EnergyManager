@@ -742,3 +742,20 @@ new HANDOFF.md, updated active links/pointers and recorded the preference in DEC
 Original draft/history remains in Git and local historical records. Documentation only;
 no application code, version bump or release. NEXT: keep this same architecture current
 with future authorized changes; deferred ideas remain deferred.
+
+
+4.3.12 LOCAL COMPLETE26October2026: user authorized continuity and rejected-peak
+attention/notification fixes. Each economic stage reserves focused continuity work;
+steady-grid alternatives retain all requirements and one2c comparison/cash envelope.
+Final certificate preserves transition score/economics. Persisted rejection item retries
+once then escalates via configured phone; successful acceptance clears it. Normal
+revisions do not reset retry/dedup. Genuine pending permissions notify separately.
+Publication reasons and labelled reconciliation evidence are available in history.
+260Python59.78s/51Node/Ruff/mypy35 pass. Final private replay118.284s validates one
+constant3.45kW morning session; supplied later measurement also reconciles with no
+errors and unchanged5.49kW monthly peak. Three serial120s synthetic benchmarks valid/
+certified; configured fake E2E35.295s/max4.602ms/four fake calls. Native/standalone
+attention and native evidence verified.55 wheel/sdist code/assets identical; isolated
+4.3.12 import. No live installation/database/hardware/phone/deployment. NEXT scoped
+release commit/push and exact-head CI/image; remote results only in ignored checkpoint.
+Preserve unrelated deferred backlog and paused Maps.

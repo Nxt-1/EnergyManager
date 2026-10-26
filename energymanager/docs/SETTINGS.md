@@ -149,6 +149,11 @@ legacy phone actions use their own notify action. This supports both current
 [HA notify entities](https://www.home-assistant.io/integrations/notify/) and
 [Companion app phone actions](https://companion.home-assistant.io/docs/notifications/basic/).
 
+From4.3.12, demonstrated EV/ESS peak permission requests and planning rejections that
+persist after one automatic retry also use this destination. The attention item shows
+whether HA accepted delivery, delivery is retrying, or only a local notice was recorded.
+A rejection alone never creates an approval request or grants more peak allowance.
+
 Existing informational peak-precharge notices use this destination. Material changes
 are deduplicated, failed delivery remains retryable, and changing destinations does not
 reuse an old destination's delivery record. Without a destination, notices remain in

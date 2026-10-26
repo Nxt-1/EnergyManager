@@ -284,8 +284,10 @@ def validate(
             and g.forecast_id == s.forecast_id
             and at < g.deadline <= at + timedelta(hours=24)
         ]
-        check(ev_purchase < TOL or energy * 4 <= max(ev_limits) + TOL, f"Unapproved EV peak {at}")
-        check(ess_purchase < TOL or energy * 4 <= max(ess_limits) + TOL, f"Unapproved ESS peak {at}")
+        check(ev_purchase < TOL or energy * 4 <= max(ev_limits) + TOL,
+              f"Unapproved EV peak {at}: {energy * 4000:.0f} W quarter-hour average exceeds {max(ev_limits) * 1000:.0f} W allowance")
+        check(ess_purchase < TOL or energy * 4 <= max(ess_limits) + TOL,
+              f"Unapproved ESS peak {at}: {energy * 4000:.0f} W quarter-hour average exceeds {max(ess_limits) * 1000:.0f} W allowance")
     return errors
 
 

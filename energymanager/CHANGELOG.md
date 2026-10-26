@@ -1,3 +1,17 @@
+## 4.3.12 — Smoother EV plans and visible planning failures
+
+- Reserve continuity work within each economic stage and try a constant-current
+  session for the next grid-only requirement. Preserve goals, permissions and the
+  existing two-cent economic/cash tolerance; retain flexibility when needed.
+- Prevent the final minimum-grid calculation from worsening charger transitions.
+- Show rejected plans under Decisions needing attention with a timestamp, the
+  quarter-hour peak/allowance where relevant, and direct decision evidence.
+- Recalculate automatically once, then send a deduplicated configured-phone notice
+  if unresolved. Also notify for demonstrated EV/ESS peak permission requests.
+  Distinguish HA handoff, retrying delivery and local-only notices.
+- Include publication rejection reasons in history and preserve the failed
+  reconciliation separately in diagnostic exports.
+
 ## 4.3.11 — Planner timeout recovery and accessible failure evidence
 
 - Correct starting-schedule allowances across billing months: an incurred peak in

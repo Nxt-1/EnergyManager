@@ -8,7 +8,8 @@ import {
   dailyEnergyRows,
   connectionIcon,
   evFaultText,
-  evIncidentTime
+  evIncidentTime,
+  notificationStatus
 } from './display.js';
 import {
   DateTimePicker
@@ -401,9 +402,10 @@ export async function mountApplication(root, options = {}) {
       `<details><summary>${laterDaily.length} later morning requirements</summary>${laterDaily.map(goalCard).join('')}</details>` :
       '');
     if (!goals.length) $('goals').innerHTML = '<p class="empty">Add a journey or timed SoC goal.</p>';
-    $('approvals').innerHTML = state.issues.length ? state.issues.map(i =>
-      `<section class="issue"><strong>${esc(i.title||goals.find(g=>g.id===i.goal_id)?.title||'EV goal')}</strong><p>${esc(powerText(i.text))}</p><p>${i.kind==='ess_peak'?'Specific forecast peak':i.shortfall_kwh===null?'Awaiting measured reconnection':num(i.shortfall_kwh)+' kWh short'} · ${esc(i.state)}</p>${i.proposed_peak_kw && i.state === 'pending'?`<p>Requested ceiling ${watts(i.proposed_peak_kw)} W</p><button data-approve="${esc(i.goal_id)}">Approve</button> <button data-reject="${esc(i.goal_id)}">Reject</button>`:''}</section>`
-    ).join('') : '<p class="empty">No pending permission decisions.</p>';
+    $('approvals').innerHTML = state.issues.length ? state.issues.map(i => i.kind === 'planning' ?
+      `<section class="issue"><strong>${esc(i.title)}</strong><p>${esc(powerText(i.text))}</p><p>${time(i.first_at)} · ${i.state === 'retrying' ? 'Recalculating' : 'Attention needed'}${i.notification ? ' · ' + esc(notificationStatus(i.notification)) : ''}</p><button data-decision="${esc(i.decision_id)}">Decision evidence</button></section>` :
+      `<section class="issue"><strong>${esc(i.title||goals.find(g=>g.id===i.goal_id)?.title||'EV goal')}</strong><p>${esc(powerText(i.text))}</p><p>${i.kind==='ess_peak'?'Specific forecast peak':i.shortfall_kwh===null?'Awaiting measured reconnection':num(i.shortfall_kwh)+' kWh short'} · ${esc(i.state)}</p>${i.notification ? `<p>${esc(notificationStatus(i.notification))}</p>` : ''}${i.proposed_peak_kw && i.state === 'pending'?`<p>Requested ceiling ${watts(i.proposed_peak_kw)} W</p><button data-approve="${esc(i.goal_id)}">Approve</button> <button data-reject="${esc(i.goal_id)}">Reject</button>`:''}</section>`
+    ).join('') : '<p class="empty">No pending decisions or planning problems.</p>';
     if (plan) {
       const v = plan.summary;
       $('costs').innerHTML = [
@@ -773,14 +775,14 @@ export async function mountApplication(root, options = {}) {
       $('status').textContent = error.message
     }
   };
-  $('history-list').onclick = async event => {
+  const openDecision = async event => {
     const b = event.target.closest('[data-decision]');
     if (b) {
       try {
         const id = encodeURIComponent(b.dataset.decision);
         const d = await api(`decisions/${id}`);
         detail(d.disposition.startsWith('rejected') ? 'Rejected planning attempt' : 'Persisted decision',
-          `<p>${esc(d.disposition)} · ${esc(d.snapshot.provenance)}</p><pre>${esc(JSON.stringify({status:d.result.status,valid:d.result.valid,reason:d.result.reason,seconds:d.result.seconds,stages:d.result.stages,summary:d.result.summary,reasons:d.result.reasons,digest:d.digest},null,2))}</pre>`);
+          `<p>${esc(d.disposition)} · ${esc(d.snapshot.provenance)}</p><pre>${esc(JSON.stringify({status:d.result.status,valid:d.result.valid,reason:d.result.reason,publication_errors:d.result.publication_errors,seconds:d.result.seconds,stages:d.result.stages,summary:d.result.summary,reasons:d.result.reasons,digest:d.digest},null,2))}</pre>`);
         const download = document.createElement('a');
         // Download server JSON directly so floating-point formatting and checksums survive.
         download.href = options.decisionDownloadUrl ? options.decisionDownloadUrl(id) : `./api/decisions/${id}?download=1`;
@@ -792,6 +794,8 @@ export async function mountApplication(root, options = {}) {
       }
     }
   };
+  $('history-list').onclick = openDecision;
+  $('approvals').addEventListener('click', openDecision, {signal: lifecycle.signal});
   if (!options.native) page = ['#planning', '#ev', '#settings'].includes(location.hash) ? location.hash.slice(1) : 'overview';
   await refresh(true);
   if (page === 'settings') await settingsPage.show();

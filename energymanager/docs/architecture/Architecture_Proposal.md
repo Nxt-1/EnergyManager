@@ -447,7 +447,9 @@ is no positive causal deficit. Thus later PV cannot erase necessary pre-departur
 and already sufficient pre-deadline solar cannot leave a nominal required-grid purchase.
 A final certificate minimizes grid within the chosen modes, non-grid/storage allocations
 and per-quarter import envelopes. Its Optimal status has this bounded scope, not a
-global optimality claim. All flows are independently audited outside the model builder.
+global optimality claim. From4.3.12 it also bounds the EV start/phase/power-variation
+score to the selected schedule's score, so certification cannot undo continuity.
+All flows are independently audited outside the model builder.
 
 ## Economics, opportunities and permission
 
@@ -518,6 +520,38 @@ Download server JSON directly to preserve float representation/checksums; native
 uses its discovered ingress base. Frozen CLI replay validates the exported top-level
 digest as well as legacy result.input_digest. No full snapshot is added to state polls
 or decision-list responses; opening/exporting a decision performs no hardware action.
+From4.3.12 each economic stage reserves20% of its own allowance for a focused
+continuity refinement, rather than relying exclusively on leftover cleanup time. The
+economic solve retains its real objective/bound/gap; separately named steady_grid and
+continuity stages retain their own evidence. The refinement fixes non-EV physical
+flows, preserves achieved readiness and terminal quantity, and allows EV grid work
+to move within the same physical/source/permission constraints. For the next required
+window without allocated non-grid EV energy, it first tests one constant integer-current
+one-phase session, leaving later EV decisions fixed. This is an alternative candidate,
+not a hard restriction: short/solar/held-three-phase windows retain the flexible search.
+A checked one-phase seed is also preferred when it costs no more in comparison or cash.
+
+Each refinement has one0.02EUR envelope on actual economics and cash against its
+unrefined economic incumbent, carried into subsequent cleanup; tolerances do not stack
+between the steady and flexible passes. Starts, phase activation changes and absolute
+power variation retain weights10,5,0.1, alongside the existing readiness/throughput
+preferences. These are internal search priorities, not monetary wear charges. Refined
+candidates are independently validated; economic Time limit reached status is not
+replaced by a refinement's Optimal status. Full seven-day coverage remains unchanged.
+
+Rejected publication produces a persisted, timestamped planning attention item outside
+the permission list. One immediate retry is automatic; another rejection escalates to
+attention_required and a deduplicated configured-phone notice. Further failed solves
+update evidence without spawning an immediate retry loop or repeating delivered alerts.
+Acceptance clears the item and records recovery. Measurement/goal revisions do not
+reset an unresolved incident's retry budget or delivered-notice deduplication. Rejection never creates a peak grant/request: current-state revalidation
+and the normal physically useful diagnostics remain mandatory. Accepted pending EV/ESS
+permission proposals also receive deduplicated notices. Missing destinations are shown
+as local-only; failed HA handoffs remain retryable. Publication errors appear in history
+metadata/detail and the failed reconciled flows are labelled publication_candidate,
+separate from the original calculated flows. Prior valid instructions retain only their
+existing control authority.
+
 One sweep of local-day operational neighborhoods keeps the entire horizon and fixed
 outside decisions, with a **single**0.02EUR bound on comparison and cash against the
 best economic result. It favors fewer starts/phase changes, lower throughput and early

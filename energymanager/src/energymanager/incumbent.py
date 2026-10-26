@@ -8,7 +8,8 @@ from datetime import timedelta
 from .optimization import JointModel
 
 
-def seed(model: JointModel, peak_limit_kw: float | None = None) -> list[float] | None:
+def seed(model: JointModel, peak_limit_kw: float | None = None,
+         preferred_phase: int | None = None) -> list[float] | None:
     s, m = model.snapshot, model.linear
     c, p, o = s.capabilities, s.policy, s.observation
     n = len(s.intervals)
@@ -82,6 +83,8 @@ def seed(model: JointModel, peak_limit_kw: float | None = None) -> list[float] |
                 and (1 not in c.phases or headroom > c.maximum_current_a * c.voltage / 1000)
                 else 1
             )
+            if preferred_phase is not None:
+                phases = preferred_phase
             if (
                 1 in c.phases
                 and charge_target - ev

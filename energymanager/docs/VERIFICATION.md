@@ -1,5 +1,50 @@
 # EnergyManager 4 verification
 
+## 4.3.12 — EV continuity and planning attention
+
+260 Python tests pass59.78s;51 frontend tests, Ruff/mypy35 and modified JS parsing
+pass. Synthetic regressions cover continuous overnight charging inside an economic
+stage, source-certificate transition preservation, necessary three-phase fallback,
+measured ESS loss causing a new peak during publication, labelled failed-reconciliation
+exports, persisted attention, one automatic retry, recovery without a phone alert,
+revision-independent deduplication, input/worker retry failures, failed HA delivery,
+local-only delivery, pending-proposal notices and history publication reasons.
+The planning-loop regression exercises rejection followed by accepted recovery.
+
+The supplied decision is rejected, not evidence of the displayed accepted plan. Its
+checksum passes. It contains eight EV starts before the morning deadline and an11.04kW
+maximum. Replaying publication reproduces a5.49→5.531619kW quarter after restricted
+ESS inventory falls during the calculation. A rejected peak check alone does not
+establish a physically necessary higher allowance. Private frozen files stay ignored.
+An initial blended-objective experiment worsened economics and was discarded.
+
+The final focused-refinement replay validates in118.284s under the120s policy. It
+produces one constant3.45kW one-phase session for the morning goal, without pauses or
+phase changes in that window. Its comparison is−2.873403EUR versus−2.842014EUR in the
+supplied candidate. The independent validator returns no errors. Reconciliation with
+the supplied later measured state also returns no errors and retains the5.49kW monthly
+peak. These are offline frozen-data results, not installation behavior guarantees.
+
+Serial120s synthetic benchmarks all validate and certify minimum necessary grid:
+mixed115.952s, winter115.295s, permission115.433s. All retain168h and≤300s intervals;
+permission produces a demonstrated pending EV ceiling request. The final certificate
+cash/economic bounds were added after mixed; winter, permission, the final private
+replay and source-certificate regressions include them.
+
+Fake configured E2E passes35.295s/2,017intervals/max tick4.602ms/four fake-only service
+calls, including HA phone handoff to the local fake endpoint. The display-only failure
+fixture then seeds an unresolved rejection and freezes background planning. Native and
+standalone browser views show the timestamped attention item and handoff status, with
+no approval buttons for the rejection. Native Decision evidence opens the rejection,
+publication errors, stages and authenticated export link; browser error/warning logs
+are empty during that check. No browser download was attempted. Proof:
+artifacts/release-4.3.12-attention.png. Temporary tabs/previews closed afterward.
+
+Wheel/sdist build;55 application code/assets match source in both archives and isolated
+extracted-wheel import reports4.3.12. Final release documents are packaged after these
+checks. Unrelated backlog additions and the paused Maps archive remain untouched.
+No live HA/database, hardware, real phone notice or installation deployment was used.
+
 ## 4.3.11 — Month-aware seeds, timeout recovery and failed-decision export
 
 251 Python tests pass43.26s; final eight recovery/failure/export tests pass5.60s after

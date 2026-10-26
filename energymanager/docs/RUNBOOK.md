@@ -2,6 +2,25 @@
 
 ## Local use
 
+Release4.3.12 gives each economic planning stage a bounded continuity refinement and
+tries a single constant-current one-phase session for the next grid-only requirement.
+It retains the flexible candidate when availability, permissions, source allocations
+or the two-cent comparison/cash tolerance prevent that alternative. No wear cost is
+added to the displayed bill. The final grid certificate preserves the transition score.
+
+A rejected candidate now appears immediately under Decisions needing attention, with
+a timestamp, reason and Decision evidence button. One automatic recalculation runs;
+if it also fails, the attention item remains and the configured phone destination gets
+a deduplicated notice. A successful accepted plan clears the item. Existing instructions
+continue only while valid. A rejected peak check is not itself a request to approve a
+higher peak: a new validated diagnostic must demonstrate that request. Actual pending
+EV/ESS permission requests also notify the configured phone destination. The page
+shows HA handoff, delivery retry or local-only notice explicitly. No phone destination
+means no phone alert. History list/details now include publication rejection reasons;
+failed exports retain the attempted reconciliation under publication_candidate without
+replacing the original solver evidence. Update the add-on and reload HA; no new sensor
+mapping or configuration option is needed.
+
 Release4.3.11 fixes a starting-schedule failure when the seven-day horizon crosses
 a billing month and adds bounded first-stage timeout recovery within the existing
 planning budget. Update the add-on and reload HA; no configuration change is needed.

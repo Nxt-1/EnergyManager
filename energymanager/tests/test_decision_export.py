@@ -51,3 +51,12 @@ def test_offline_replay_checks_export_digest_even_when_failed_result_has_no_dige
         main()
     assert error.value.code == 2
     assert "input checksum mismatch" in capsys.readouterr().err
+
+
+def test_rejected_publication_reason_is_present_in_history_list(tmp_path):
+    store = Store(tmp_path / "synthetic.sqlite")
+    errors = ["Unapproved EV peak SYNTHETIC: 5532 W quarter-hour average exceeds 5490 W allowance"]
+    store.record(tiny(), {"id": "synthetic-rebase", "valid": True, "status": "Optimal",
+                          "publication_errors": errors}, "rejected")
+    assert store.decisions()[0]["reason"] == errors[0]
+    store.close()
