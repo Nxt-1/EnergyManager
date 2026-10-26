@@ -24,6 +24,11 @@ const pending=new Map();
 socket.onmessage=event=>{const message=JSON.parse(event.data);pending.get(message.id)(message.result);pending.delete(message.id)};
 const hass={connection:socket,user:{is_admin:true},states:{},callWS(message){return new Promise(resolve=>{const key=++id;pending.set(key,resolve);socket.send(JSON.stringify({...message,id:key}))})}};
 hass.states=await hass.callWS({type:'synthetic/states'});
+hass.callService=async(domain,service,data)=>{
+  hass.states=await hass.callWS({type:'synthetic/phase',domain,service,data});
+  document.querySelector('#result').textContent=`SYNTHETIC HA action only: ${domain}.${service} ${data.entity_id} → ${data.option}`;
+  update();
+};
 const strategy=customElements.get('ll-strategy-dashboard-energymanager');
 const config=await strategy.generate({type:'custom:energymanager'},hass);
 let components=[];
@@ -49,7 +54,7 @@ function show(path){
   }
   update();
 }
-function update(){for(const item of components){if(item.element)item.element.hass=hass;else{const entity=hass.states[item.config.entity];item.tile.replaceChildren(document.createTextNode(item.config.name));const value=document.createElement('b');value.textContent=`${entity?.state??'unavailable'} ${entity?.attributes.unit_of_measurement||''}`;item.tile.append(value)}}}
+function update(){for(const item of components){if(item.element)item.element.hass={...hass,states:{...hass.states}};else{const entity=hass.states[item.config.entity];item.tile.replaceChildren(document.createTextNode(item.config.name));const value=document.createElement('b');value.textContent=`${entity?.state??'unavailable'} ${entity?.attributes.unit_of_measurement||''}`;item.tile.append(value)}}}
 // Synthetic integration replay only: the browser's physical touch/capture negotiation is not tested.
 function replayGesture(kind) {
   const name=document.querySelector('#gesture-target').value;

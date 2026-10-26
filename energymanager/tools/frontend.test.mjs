@@ -5,7 +5,7 @@ import {dailyEnergyRows, connectionIcon, displaySetting, entityState, evFaultTex
 import {clockValue, localDateTime, localInstants, monthDays, validLocal}
   from '../src/energymanager/assets/date-time.js';
 import {eventsOnDay, evSchedule, scheduleDays} from '../src/energymanager/assets/ev-schedule.js';
-import {nativeLiveState} from '../src/energymanager/assets/native-live.js';
+import {nativeLiveState, phaseSelector, setChargerPhase} from '../src/energymanager/assets/native-live.js';
 import {evStatusModel, evStatusMarkup} from '../src/energymanager/assets/ev-status.js';
 
 function syntheticEVStatus() {
@@ -89,15 +89,63 @@ test('EV faults and recovery stay visible above power flow; detail text is escap
   assert.equal(evStatusModel(state).tone, 'fault');
   state.ev_incident = {status: 'rebooting', detected_at: state.now, reason: '<img src=x onerror=alert(1)>'};
   assert.equal(evStatusModel(state).status, 'Recovering');
-  const markup = evStatusMarkup(state, true);
+  const markup = evStatusMarkup(state);
   assert.match(markup, /&lt;img src=x onerror=alert\(1\)&gt;/);
   assert.doesNotMatch(markup, /<img/);
-  assert.match(markup, /ev-device-details" open/);
+  assert.doesNotMatch(markup, /ev-device-details|<details|per-phase currents unavailable/);
   state.ev_incident.status = 'unresolved';
   assert.equal(evStatusModel(state).status, 'Fault · attention needed');
   state.ev_incident.status = 'acknowledged';
   state.charger.states.charger_error = '0';
   assert.equal(evStatusModel(state).status, 'Charging');
+});
+
+test('phase action targets the mapped actuator once and does not change the plan or invent readback', async () => {
+  const manifest = {entities:{ev_phases:'sensor.measured_phases'},phase_selector:'select.synthetic_phase'};
+  const calls = [], hass = {states:{'select.synthetic_phase':{state:'1',attributes:{options:['0','1','2']}}},
+    callService:async(...args)=>calls.push(args)};
+  const state = syntheticEVStatus(), command = state.command;
+  assert.equal(phaseSelector(hass,manifest).value,'1');
+  await setChargerPhase(hass,manifest,'2');
+  assert.deepEqual(calls,[['select','select_option',{entity_id:'select.synthetic_phase',option:'2'}]]);
+  assert.equal(hass.states['select.synthetic_phase'].state,'1');
+  assert.equal(state.command,command);
+  await setChargerPhase(hass,manifest,'0');
+  assert.equal(calls[1][2].option,'0');
+});
+
+test('phase actions reject demo, missing, unavailable, unsupported and non-select mappings without writes', async () => {
+  let calls=0;
+  const hass={states:{'select.phase':{state:'1',attributes:{options:['1','2']}}},callService:async()=>calls++};
+  for (const manifest of [{demo:true,phase_selector:'select.phase'},{phase_selector:'sensor.phases'},{}])
+    await assert.rejects(setChargerPhase(hass,manifest,'1'),/unavailable/);
+  const manifest={phase_selector:'select.phase'};
+  await assert.rejects(setChargerPhase(hass,manifest,'0'),/does not support/);
+  hass.states['select.phase'].state='unavailable';
+  await assert.rejects(setChargerPhase(hass,manifest,'1'),/unavailable/);
+  assert.equal(calls,0);
+  hass.states['select.phase'].state='1';
+  hass.callService=async()=>{throw new Error('SYNTHETIC HA denied');};
+  await assert.rejects(setChargerPhase(hass,manifest,'2'),/HA denied/);
+});
+
+test('EV sidebar retains raw diagnostics without the removed details foldout and phase controls use HA readback', () => {
+  const state=syntheticEVStatus();
+  state.phase_selector={value:'2',options:['0','1','2']};
+  state.charger.states.heartbeat='1234';
+  state.charger.states.charge_allowed='on';
+  let markup=evStatusMarkup(state);
+  assert.match(markup,/data-ev-phase="2"[^>]*aria-pressed="true"/);
+  assert.match(markup,/data-ev-phase="1"[^>]*aria-pressed="false"/);
+  assert.match(markup,/Allowed \(on\)/);
+  assert.match(markup,/Device status age \(s\)[\s\S]*1234/);
+  assert.match(markup,/HA read[\s\S]*Device frame/);
+  assert.doesNotMatch(markup,/<details|ev-device-details|per-phase currents unavailable/);
+  state.now='2026-10-25T12:01:00Z';
+  markup=evStatusMarkup(state,{phaseChanging:true,phaseError:'<SYNTHETIC error>'});
+  assert.match(markup,/Unverified · 2/);
+  assert.match(markup,/data-ev-phase="2"[^>]*disabled/);
+  assert.match(markup,/&lt;SYNTHETIC error&gt;/);
 });
 
 test('EV demo ignores installation charger faults and live readings', () => {
@@ -600,40 +648,51 @@ test('horizontal graph dragging preserves duration, direction and the original p
   assert.equal(fixture.cursor.pinned, false);
 });
 
-test('wheel navigation coalesces a burst, preserves duration and settles one archive update', async t => {
+test('wheel zoom coalesces a burst, anchors time under the mouse and settles one archive update', async t => {
   const fixture = syntheticGraphPointer(t);
   const wheel = extra => {
     const event = new Event('wheel', {cancelable:true});
-    Object.assign(event, {deltaX:0,deltaY:92.6,deltaMode:0,ctrlKey:false,metaKey:false,...extra});
+    Object.assign(event, {deltaX:0,deltaY:-100,deltaMode:0,clientX:289.5,ctrlKey:false,metaKey:false,...extra});
     fixture.plots.power.dispatchEvent(event);
     return event;
   };
   assert.equal(wheel({ctrlKey:true}).defaultPrevented, false);
   assert.equal(wheel({metaKey:true}).defaultPrevented, false);
   assert.equal(wheel({}).defaultPrevented, true);
-  wheel({deltaX:92.6,deltaY:0});
+  wheel({deltaX:-100,deltaY:0});
   assert.equal(fixture.changes.length, 0);
   fixture.flush();
-  assert.ok(Math.abs(fixture.changes[0].range[0] - 4320000) < 0.001);
-  assert.equal(fixture.changes[0].range[1]-fixture.changes[0].range[0], 21600000);
+  const [start,end] = fixture.changes[0].range, duration = end-start;
+  assert.ok(Math.abs(duration - 21600000*Math.exp(-0.4)) < 0.001);
+  assert.ok(Math.abs(start + 0.25*duration - 0.25*21600000) < 0.001);
   assert.equal(fixture.cursor.interacting, true);
   await new Promise(resolve => setTimeout(resolve, 220));
   assert.equal(fixture.changes.filter(change => change.finished).length, 1);
   assert.equal(fixture.cursor.interacting, false);
 });
 
-test('line/page wheel units and cancellation preserve control of the final viewport', t => {
+test('line/page wheel units, zoom bounds and cancellation preserve the final viewport', t => {
   const fixture = syntheticGraphPointer(t);
-  const wheel = (deltaY, deltaMode) => {
+  const wheel = (deltaY, deltaMode, clientX=521) => {
     const event = new Event('wheel', {cancelable:true});
-    Object.assign(event, {deltaX:0,deltaY,deltaMode}); fixture.plots.power.dispatchEvent(event);
+    Object.assign(event, {deltaX:0,deltaY,deltaMode,clientX}); fixture.plots.power.dispatchEvent(event);
   };
   wheel(1, 2);
   fixture.cursor.finishWheel();
-  assert.equal(fixture.changes.at(-1).range[0], 21600000);
+  let [start,end] = fixture.changes.at(-1).range;
+  assert.ok(Math.abs(end-start - 21600000*Math.E) < 0.001);
+  assert.ok(Math.abs((start+end)/2 - 10800000) < 0.001);
   wheel(-1, 1);
   fixture.cursor.finishWheel();
-  assert.ok(Math.abs(fixture.changes.at(-1).range[0] + 16/926*21600000) < 0.001);
+  [start,end] = fixture.changes.at(-1).range;
+  assert.ok(Math.abs(end-start - 21600000*Math.exp(-0.032)) < 0.001);
+  for (let n=0;n<20;n++) wheel(-1000,0,58);
+  fixture.flush(); [start,end] = fixture.changes.at(-1).range;
+  assert.equal(end-start,15*60000);
+  assert.ok(Math.abs(start) < 0.001);
+  for (let n=0;n<20;n++) wheel(1000,0,58);
+  fixture.flush(); [start,end] = fixture.changes.at(-1).range;
+  assert.equal(end-start,7*24*3600000);
   const count = fixture.changes.length;
   wheel(120, 0);
   fixture.cursor.cancelNavigation();

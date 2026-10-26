@@ -29,6 +29,9 @@ async def preview() -> None:
                           "attributes": {"friendly_name": key.replace("_", " "),
                                          "unit_of_measurement": values[key][1]}}
                   for key, entity in manifest["entities"].items() if key in values}
+        if selector := manifest.get("phase_selector"):
+            states[selector] = {"entity_id": selector, "state": "1",
+                                "attributes": {"options": ["0", "1", "2"], "friendly_name": "SYNTHETIC phase mode"}}
 
         async def page(request: web.Request) -> web.Response:
             return web.Response(text=Path(__file__).with_name("native-preview.html").read_text(encoding="utf-8"),
@@ -46,6 +49,14 @@ async def preview() -> None:
                 endpoint = message.get("endpoint")
                 if message["type"] == "synthetic/states":
                     result = states
+                elif message["type"] == "synthetic/phase":
+                    if (message.get("domain") != "select" or message.get("service") != "select_option"
+                            or message.get("data", {}).get("entity_id") != manifest.get("phase_selector")
+                            or message.get("data", {}).get("option") not in ("0", "1", "2")):
+                        raise ValueError("Unexpected synthetic phase action")
+                    states[manifest["phase_selector"]] = {**states[manifest["phase_selector"]],
+                                                         "state": message["data"]["option"]}
+                    result = states  # Display-only fake HA action, never forwarded to the backend.
                 elif message["type"] == "synthetic/requests":
                     fail_requests = message["fail"] is True
                     result = {"failing": fail_requests}

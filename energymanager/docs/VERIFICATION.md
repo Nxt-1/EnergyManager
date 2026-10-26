@@ -1,5 +1,37 @@
 # EnergyManager 4 verification
 
+## 4.3.10 — Wheel zoom, Grid peak history and EV controls
+
+246 Python tests pass42.93s;50 frontend tests pass. Wheel cases verify pointer-anchored
+zoom, both directions/units, coalescing,15min/7day bounds and cancellation. HA action
+tests verify actual actuator mapping, exact one-time option dispatch, no fabricated
+readback, rejection of demo/missing/unavailable/non-select/unsupported sources and
+propagated action failure. Sidebar tests retain raw stale values and remove the old
+details/note. Four native/versioned-asset tests pass0.31s; Ruff/mypy35/all JS parse pass.
+Final synthetic E2E32.451s/2,018intervals/max control tick4.071ms/four fake-only calls.
+
+Real browser wheel zoom narrows6h→290min; dragging then pans at290min. Power/SoC/session
+labels stay aligned. Peak stroke is rgb(220,38,38), dash pattern8/5. Grid peak click and
+Enter dispatch actual mapped sensor.monthly_peak_kw more-info; Grid power still opens
+its import/export chooser. Missing peak has no line, but mapped history stays clickable.
+Existing mobile gestures pass labelled synthetic replay and were reported working on
+the installation by the user; no new physical phone test was performed here.
+
+Native EV synthetic HA service actions record select.phase→2 and keyboardAuto→0;
+pressed state follows HA readback and focus survives polls. No action is forwarded to
+the application/controller or real HA. Consolidated sidebar retains neutral stop,
+green OK, raw stale codes and timestamps with unverified labels. Narrow EV card353px
+fits without horizontal overflow. Browser warning/error logs are empty. These checks
+use local fake endpoints, not installation database/hardware/real notifications.
+
+Manual phase actions use the documented [HA frontend callService API](https://contributors.home-assistant.io/frontend/reference/hass-object/).
+The current controller continues to require fixed-phase readback; selecting charger
+Auto does not change that existing safeguard or add a planner preference.
+
+Wheel/sdist build passes; all55 code/assets match source in both archives and an
+isolated import reports4.3.10. Synthetic screenshots are under ignored artifacts/
+release-4.3.10-ev.jpg and release-4.3.10-overview.jpg. No installation deployment.
+
 ## 4.3.9 — Wheel/mobile time navigation and monthly peak
 
 245 Python tests pass42.95s;47 frontend tests pass, including wheel delta modes,

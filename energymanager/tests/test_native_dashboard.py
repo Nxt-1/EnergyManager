@@ -20,7 +20,7 @@ def test_manifest_uses_active_entities_and_never_exposes_credentials(tmp_path):
     application.demo = False
     manifest = dashboard_manifest(application)
     assert manifest == {"protocol": 1, "version": __version__, "demo": False,
-                        "entities": {"ev_soc": "sensor.synthetic_car"}}
+                        "entities": {"ev_soc": "sensor.synthetic_car"}, "phase_selector": None}
     application.store.close()
 
 
@@ -53,3 +53,19 @@ def test_installed_loader_and_managed_yaml_are_self_contained():
     yaml = (root / "energymanager-dashboard/energymanager-dashboard.yaml").read_text(encoding="utf-8")
     assert "type: custom:energymanager" in yaml
     assert "iframe" not in yaml and "REPLACE_WITH" not in yaml
+
+
+def test_manifest_phase_selector_uses_actuator_mapping_and_is_hidden_in_demo(tmp_path):
+    from energymanager.control import FakeActuator, GuardedActuator
+
+    snapshot = tiny()
+    application = Application(Store(tmp_path / "synthetic.sqlite"), snapshot=snapshot)
+    application.ha = SimpleNamespace(entities={"ev_phases": "sensor.phase_measurement"})
+    application.actuator = GuardedActuator(SimpleNamespace(), {"phase": "select.synthetic_phase"},
+                                           snapshot.capabilities)
+    assert dashboard_manifest(application)["phase_selector"] is None
+    application.demo = False
+    assert dashboard_manifest(application)["phase_selector"] == "select.synthetic_phase"
+    application.actuator = FakeActuator()
+    assert dashboard_manifest(application)["phase_selector"] is None
+    application.store.close()

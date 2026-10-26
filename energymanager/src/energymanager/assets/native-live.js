@@ -1,4 +1,19 @@
 // HA readings are a display projection only. They never grant controller authority.
+export function phaseSelector(hass, manifest) {
+  const id = manifest.demo ? null : manifest.phase_selector;
+  const entity = id?.startsWith('select.') ? hass?.states?.[id] : null;
+  const options = Array.isArray(entity?.attributes?.options) ? entity.attributes.options.filter(option => ['0', '1', '2'].includes(option)) : [];
+  const available = !!entity && !['unknown', 'unavailable'].includes(entity.state) && options.length > 0;
+  return {entity: id, value: available ? entity.state : null, options: available ? options : []};
+}
+
+// A user-triggered HA action only; it does not pause or override the planner.
+export async function setChargerPhase(hass, manifest, option) {
+  const selector = phaseSelector(hass, manifest);
+  if (!selector.options.includes(option)) throw new Error('Charger phase selector is unavailable or does not support this option.');
+  await hass.callService('select', 'select_option', {entity_id: selector.entity, option});
+}
+
 export function nativeLiveState(state, hass, manifest) {
   if (manifest.demo || !hass?.states) return state;
   const readings = {};
@@ -48,6 +63,7 @@ export function nativeLiveState(state, hass, manifest) {
   }
   return {
     ...state,
+    phase_selector: phaseSelector(hass, manifest),
     live_inputs: {
       ...state.live_inputs,
       readings: {

@@ -11,8 +11,8 @@ main { max-width:none; padding:0; }
 .page-heading h1 { display:none; }
 .card,.live-item { border-radius:var(--ha-card-border-radius,12px); }
 .card { box-shadow:var(--ha-card-box-shadow,none); }
-.live-item[role=button] { cursor:pointer; }
-.live-item[role=button]:focus-visible { outline:2px solid var(--accent); }
+.live-item[role=button],.live-item [role=button] { cursor:pointer; }
+.live-item[role=button]:focus-visible,.live-item [role=button]:focus-visible { outline:2px solid var(--accent); }
 .notice { background:var(--surface); border-color:var(--line); color:var(--muted); }
 .timeline-track,.meter { background:var(--divider-color,#e9eff4); }
 .issue,.badge.warning { background:color-mix(in srgb,var(--surface),#d97706 15%); color:var(--primary-text-color); }

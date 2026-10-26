@@ -2,7 +2,7 @@ import {
   mountApplication
 } from './application-view.js';
 import {
-  nativeLiveState
+  nativeLiveState, setChargerPhase
 } from './native-live.js';
 import {hasTextSelection} from './text-selection.js';
 
@@ -22,7 +22,8 @@ export function generateDashboard(config, manifest, connection) {
       const previous = this.currentHass;
       this.currentHass = value;
       const entities = runtimes.get(this.config?.addon)?.manifest.entities;
-      const watched = !entities || this.config.view === 'settings' ? [] : this.config.view === 'ev' ? [entities.ev_soc, entities.ev_kw, entities.connected] : Object.values(entities);
+      const phase = runtimes.get(this.config?.addon)?.manifest.phase_selector;
+      const watched = !entities || this.config.view === 'settings' ? [] : this.config.view === 'ev' ? [entities.ev_soc, entities.ev_kw, entities.connected, phase] : Object.values(entities);
       if (watched.some(id => previous?.states[id] !== value.states[id]))
         this.controller?.updateLive();
       this.start();
@@ -79,6 +80,7 @@ export function generateDashboard(config, manifest, connection) {
         };
         const controller = await mountApplication(root, {
           native: true,
+          entities: manifest.entities,
           page: this.config.view,
           api,
           navigate: name => {
@@ -86,12 +88,18 @@ export function generateDashboard(config, manifest, connection) {
             history.pushState(null, '', `/${dashboard}/${name}`);
             window.dispatchEvent(new Event('location-changed'));
           },
-          liveState: state => nativeLiveState(state, this.currentHass, manifest)
+          liveState: state => nativeLiveState(state, this.currentHass, manifest),
+          setPhase: option => setChargerPhase(this.currentHass, manifest, option)
         });
         if (!this.isConnected || generation !== (this.generation || 0)) controller.dispose();
         else {
           this.controller = controller;
           this.liveEvents = new AbortController();
+          const moreInfo = entityId => this.dispatchEvent(new CustomEvent('hass-more-info', {
+            bubbles: true,
+            composed: true,
+            detail: {entityId}
+          }));
           const openHistory = key => {
             const keys = {
               ev: ['ev_soc', 'ev_kw', 'connected'],
@@ -101,13 +109,6 @@ export function generateDashboard(config, manifest, connection) {
               house: ['grid_import_kw', 'grid_export_kw', 'pv_ac_kw', 'ess_kw', 'ev_kw']
             } [key];
             const ids = keys.map(name => manifest.entities[name]).filter(Boolean);
-            const moreInfo = entityId => this.dispatchEvent(new CustomEvent('hass-more-info', {
-              bubbles: true,
-              composed: true,
-              detail: {
-                entityId
-              }
-            }));
             if (ids.length === 1) {
               moreInfo(ids[0]);
               return;
@@ -129,6 +130,12 @@ export function generateDashboard(config, manifest, connection) {
             root.querySelector('#detail-dialog').showModal();
           };
           root.addEventListener('click', event => {
+            const entity = event.target.closest('[data-entity-key]');
+            if (entity && !manifest.demo && !hasTextSelection(root)) {
+              const id = manifest.entities[entity.dataset.entityKey];
+              if (id) moreInfo(id);
+              return;
+            }
             const card = event.target.closest('[data-live]');
             if (card && !manifest.demo && !hasTextSelection(root)) openHistory(card.dataset.live);
           }, {

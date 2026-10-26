@@ -134,10 +134,28 @@ export class EVSchedulePage {
   constructor(root, actions) {
     this.root = root;
     this.selectedDate = null;
+    this.phaseChanging = false;
+    this.phaseError = null;
     root.addEventListener('click', async event => {
       const button = event.target.closest('button');
       if (!button) return;
       try {
+        if (button.dataset.evPhase !== undefined && !this.phaseChanging && actions.phase) {
+          const option = button.dataset.evPhase;
+          this.phaseChanging = true;
+          this.phaseError = null;
+          this.updateStatus(this.state);
+          try {
+            await actions.phase(option);
+          } catch (error) {
+            this.phaseError = error.message || 'The charger phase request failed. Check HA before retrying.';
+          } finally {
+            this.phaseChanging = false;
+            this.updateStatus(this.state);
+            this.root.querySelector(`[data-ev-phase="${option}"]`)?.focus({preventScroll:true});
+          }
+          return;
+        }
         if (button.dataset.evDay) {
           this.selectedDate = button.dataset.evDay;
           this.render(this.state);
@@ -170,12 +188,10 @@ export class EVSchedulePage {
 
   render(state) {
     const calendarExpanded = this.root.querySelector('.calendar-sync')?.open;
-    const deviceExpanded = this.root.querySelector('.ev-device-details')?.open;
     const scroller = this.root.querySelector('.ev-calendar-scroll');
     const scrollLeft = scroller?.scrollLeft || 0;
     const active = this.root.getRootNode().activeElement;
     const focused = this.root.contains(active) ? active : null;
-    const deviceFocused = focused?.matches('.ev-device-details > summary');
     const focusAttribute = focused?.getAttributeNames().find(name => name.startsWith('data-ev-'));
     const focusValue = focusAttribute ? focused.getAttribute(focusAttribute) : null;
     const matchingButtons = focusAttribute ? [...this.root.querySelectorAll(`[${focusAttribute}]`)]
@@ -264,7 +280,7 @@ export class EVSchedulePage {
     this.root.innerHTML = `
       <section class="page-heading"><div><h1>EV schedule</h1><p class="muted">${stamp(schedule.start)} — ${stamp(schedule.end)} · ${esc(zone)}</p></div>
       <div class="actions"><button data-ev-add="trip" class="primary">＋ Journey</button><button data-ev-add="manual">＋ SoC goal</button><button data-fault-history="true">EV fault history</button></div></section>
-      <article class="card ev-status" id="ev-live-status">${evStatusMarkup(state, deviceExpanded)}</article>
+      <article class="card ev-status" id="ev-live-status">${evStatusMarkup(state, this)}</article>
       <div class="ev-summary">
       <article class="live-item"><span class="muted">Next requirement</span><strong>${nextGoal ? `${number(target(nextGoal))}%` : '—'}</strong><small>${nextGoal ? `${esc(nextGoal.title)} · ${stamp(nextGoal.deadline)}` : 'No upcoming requirements'}</small></article>
       <article class="live-item"><span class="muted">Planned EV charging</span><strong>${schedule.current ? charging.length : '—'} <small>sessions</small></strong><small>${charging[0] ? `Next ${stamp(Math.max(schedule.start, charging[0].start))}` : schedule.current ? 'No charging selected' : 'Awaiting a current validated plan'}</small></article></div>
@@ -279,7 +295,6 @@ export class EVSchedulePage {
       .filter(button => button.getAttribute(focusAttribute) === focusValue)[focusIndex]?.focus({
         preventScroll: true
       });
-    if (deviceFocused) this.root.querySelector('.ev-device-details > summary').focus({preventScroll: true});
     if (scroller && focused === scroller) this.root.querySelector('.ev-calendar-scroll').focus({
       preventScroll: true
     });
@@ -290,8 +305,9 @@ export class EVSchedulePage {
     this.state = state;
     const card = this.root.querySelector('#ev-live-status');
     if (!card) return;
-    const focused = this.root.getRootNode().activeElement?.matches('.ev-device-details > summary');
-    card.innerHTML = evStatusMarkup(state, card.querySelector('.ev-device-details')?.open);
-    if (focused) card.querySelector('.ev-device-details > summary').focus({preventScroll: true});
+    const focused = this.root.getRootNode().activeElement;
+    const option = card.contains(focused) ? focused?.dataset.evPhase : undefined;
+    card.innerHTML = evStatusMarkup(state, this);
+    if (option !== undefined) card.querySelector(`[data-ev-phase="${option}"]`)?.focus({preventScroll:true});
   }
 }

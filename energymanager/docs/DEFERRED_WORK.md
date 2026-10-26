@@ -207,7 +207,9 @@ The earlier hold on committing/pushing was lifted by the user for the 4.2.2 rele
 Recorded: 25 October 2026. Status: **implemented in4.3.9**, explicitly authorized
 alongside scheduled wheel/mobile graph navigation.
 
-Overview shows the current recorded monthly capacity peak as a neutral dotted line
+Overview shows the current recorded monthly capacity peak as a red long-dashed line
 with a Month peak label and15-minute-average legend/description. Its live input is
 distinct from instantaneous power, forecast peaks, tariff floors and approval limits.
 Unavailable omits the line; real zero is valid. No scheduler/control-policy changes.
+Presentation updated in4.3.10: the Grid box also shows a peak-chart icon/value opening
+the actual mapped HA sensor history directly.

@@ -106,6 +106,7 @@ export async function mountApplication(root, options = {}) {
       await refresh(true);
     },
     settings: () => showPage('settings'),
+    phase: options.setPhase,
     sync: async () => {
       await api('calendars/sync', 'POST', {});
       pointerUntil = 0;
@@ -474,7 +475,17 @@ export async function mountApplication(root, options = {}) {
         const recorded = row.recordedAt ? ` Recorded through ${evIncidentTime(row.recordedAt, state.policy.timezone)}.` : '';
         return `<span class="energy-row" title="${esc(row.label)}: recorded today ⇢ fixed day-end estimate. ${esc(row.capture)}${recorded}${coverage}" aria-label="${esc(row.label)}: ${row.actual} kWh recorded, ${row.predicted} kWh fixed day-end estimate${row.partial ? ', partial coverage' : ''}"><span class="energy-symbol" aria-hidden="true">${row.symbol}</span><span>${row.actual}</span><span class="prediction-arrow" aria-hidden="true">⇢</span><span>${row.predicted}</span><span class="energy-unit">kWh${row.partial ? ' ◐' : ''}</span></span>`;
       }).join('');
-      return `<article class="live-item" data-live="${key}" ${options.native ? 'role="button" tabindex="0"' : ''}><span class="live-label muted">${name}${key === 'ev' ? connectionIcon(connected) : ''}</span><strong style="color:${colors[key]}">${unit==='W'?watts(value):num(value,0)} <small style="display:inline;font-size:13px">${unit}</small></strong>${compact ? `<small class="live-components">${compact}</small>` : ''}<div class="daily-energy">${rows}</div>${issues.length ? `<span class="input-warning" title="${esc(issues.map(powerText).join('; '))}" aria-label="${esc(issues.map(powerText).join('; '))}">⚠</span>` : ''}${unit==='%' && value !== null ?`<div class="meter"><i style="width:${Math.max(0,Math.min(100,value))}%;background:${colors[key]}"></i></div>`:''}</article>`;
+      const content = `<span class="live-label muted">${name}${key === 'ev' ? connectionIcon(connected) : ''}</span><strong style="color:${colors[key]}">${unit==='W'?watts(value):num(value,0)} <small style="display:inline;font-size:13px">${unit}</small></strong>${compact ? `<small class="live-components">${compact}</small>` : ''}<div class="daily-energy">${rows}</div>${issues.length ? `<span class="input-warning" title="${esc(issues.map(powerText).join('; '))}" aria-label="${esc(issues.map(powerText).join('; '))}">⚠</span>` : ''}${unit==='%' && value !== null ?`<div class="meter"><i style="width:${Math.max(0,Math.min(100,value))}%;background:${colors[key]}"></i></div>`:''}`;
+      const historyAction = options.native ? 'role="button" tabindex="0"' : '';
+      if (key !== 'grid') return `<article class="live-item" data-live="${key}" ${historyAction}>${content}</article>`;
+      const peak = monthlyPeakWatts(state), peakText = peak === null ? '—' : String(Math.round(peak));
+      const canOpen = options.native && !state.demo && !!options.entities?.monthly_peak_kw;
+      const description = `${state.demo ? 'Synthetic demo: ' : ''}Current recorded monthly grid-import peak: ${peak === null ? 'unavailable' : peakText + ' W'} · 15-minute average.${options.native && !state.demo ? canOpen ? ' Open HA sensor history.' : ' HA sensor is not mapped.' : ''}`;
+      const peakContent = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 20h18M3 17l6-7 4 4 4-10 4 13M3 4h10"/></svg><span>${peakText} W</span>`;
+      const peakRow = options.native && !state.demo ?
+        `<button type="button" class="grid-peak" data-entity-key="monthly_peak_kw" ${canOpen ? '' : 'disabled'} title="${esc(description)}" aria-label="${esc(description)}">${peakContent}</button>` :
+        `<span class="grid-peak" title="${esc(description)}" aria-label="${esc(description)}">${peakContent}</span>`;
+      return `<article class="live-item"><div data-live="grid" ${historyAction}>${content}</div>${peakRow}</article>`;
     }).join('');
   }
 

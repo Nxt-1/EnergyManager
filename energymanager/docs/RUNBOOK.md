@@ -2,6 +2,24 @@
 
 ## Local use
 
+Release4.3.10 corrects mouse-wheel input to time zoom: up zooms in, down zooms out,
+anchored under the mouse. Drag left/right to pan. The existing mobile pinch zoom and
+two-finger pan are retained; the user reported these working on mobile. The recorded
+monthly peak uses red long dashes and appears with a peak-chart icon in the Grid box.
+Click the peak value to open its mapped HA sensor history directly; clicking Grid
+power still opens import/export source histories. An unavailable reading shows — but
+its mapped history remains accessible. An unmapped sensor has a disabled history button.
+Demo and standalone show the value without an HA history action. Update and reload HA.
+
+The EV diagram now offers direct1φ/3φ/Auto HA controls, using the configured phase
+actuator and the options that HA actually offers. This is a one-time manual action;
+EnergyManager continues running and may change it again. Auto is the charger's own
+mode, not automatic scheduling; existing fixed-phase validation can hold EV control
+until1φ/3φ is selected again. Busy buttons disable during the request; failures are
+shown without automatic retries. Demo, standalone and unavailable mappings disable
+these actions. Charger details are now in the sidebar, including raw codes, current,
+status age and HA/device frame times. Stale raw values remain labelled unverified.
+
 Release4.3.9 adds wheel navigation over either Overview graph: wheel down/right moves
 later, up/left earlier. Outside the graph, the wheel scrolls the page. Ctrl/Meta-wheel
 is left to the browser. On mobile use two fingers to pan horizontally or pinch to

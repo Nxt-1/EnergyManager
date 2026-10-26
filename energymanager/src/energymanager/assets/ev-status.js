@@ -110,22 +110,26 @@ export function evStatusModel(state) {
     flowing: power > 0.1, demo: !!state.demo, controlled: !!state.control_enabled};
 }
 
-export function evStatusMarkup(state, expanded = false) {
+export function evStatusMarkup(state, interaction = {}) {
   const model = evStatusModel(state);
   const number = value => value === null ? '—' : String(Math.round(value * 10) / 10);
   const time = value => value ? evIncidentTime(value, state.policy?.timezone || 'UTC') : '—';
   const phaseText = model.phase === 'auto' ? 'Auto' : model.phase ? `${model.phase} φ` : '—';
-  const fields = [
-    ['Car code', model.states.ev_status], ['Status code', model.states.charger_status],
-    ['Error code', model.states.charger_error], ['Force code', model.states.force],
-    ['Phase selector code', model.states.phase], ['Charge allowed', model.states.charge_allowed],
-    ['Current setting (A)', model.states.current], ['Device status age (s)', model.states.heartbeat],
+  const selector = !model.demo && state.phase_selector;
+  const selectedPhaseText = ({0:'Auto', 1:'1 φ', 2:'3 φ'})[selector?.value] || phaseText;
+  const buttons = [['1', '1 φ'], ['2', '3 φ'], ['0', 'Auto']].map(([value, label]) =>
+    `<button type="button" data-ev-phase="${value}" aria-label="Set charger phase mode to ${label}" aria-pressed="${selector?.value === value}" ${!selector?.options?.includes(value) || interaction.phaseChanging ? 'disabled' : ''}>${label}</button>`).join('');
+  const extraFields = [
+    ['Phase selector code', model.states.phase],
+    ['Device status age (s)', model.states.heartbeat],
     ['HA read', time(model.charger?.at)], ['Device frame', time(model.charger?.device_at)]
   ];
-  const diagnostic = key => model.diagnostics.find(field => field.key === key);
-  const fieldTone = label => ({'Car code': diagnostic('ev_status').tone,
-    'Status code': diagnostic('charger_status').tone, 'Error code': diagnostic('charger_error').tone,
-    'Charge allowed': diagnostic('charge_allowed').tone}[label] || 'neutral');
+  const diagnostics = model.diagnostics.map(field => {
+    const raw = field.key === 'connected' ? null : model.states[field.key];
+    const text = field.text === 'Unverified' && raw !== null && raw !== undefined ?
+      `Unverified · ${raw}` : field.key === 'charge_allowed' && raw ? `${field.text} (${raw})` : field.text;
+    return `<div data-ev-field="${field.key}" class="ev-reading-${field.tone}"><dt>${field.key === 'connected' ? connectionIcon(model.connected) : '<i aria-hidden="true"></i>'}${field.label}</dt><dd>${esc(text)}</dd></div>`;
+  }).join('');
   return `<div class="ev-status-heading"><h2>EV &amp; charger</h2><span class="ev-control-badge">${model.demo ? 'Synthetic demo' : model.controlled ? 'Hardware control on' : 'Hardware control off'}</span></div>
     <div class="ev-status-body ev-tone-${model.tone}">
       <div class="ev-state-label"><i></i><strong>${esc(model.status)}</strong></div>
@@ -146,13 +150,12 @@ export function evStatusMarkup(state, expanded = false) {
         <div class="ev-annotation ev-on-current"><span>Current limit</span><strong>${number(model.current)} <small>A</small></strong></div>
         <div class="ev-annotation ev-on-power"><span>Measured power</span><strong>${watts(model.power)} <small>W</small></strong></div>
         <div class="ev-annotation ev-on-battery"><span>Battery</span><strong>${number(model.soc)} <small>%</small></strong></div>
-        <div class="ev-annotation ev-on-phase" title="go-e phase selector setting; not physical per-phase current."><span>Phase mode</span><strong>${phaseText}</strong></div>
+        <div class="ev-annotation ev-on-phase"><span>Phase mode · ${selectedPhaseText}</span><div class="ev-phase-options" role="group" aria-label="Charger phase mode" title="One-time charger change; EnergyManager may overwrite it. Auto is the charger's own phase mode and can leave EV control waiting for a fixed phase readback.">${buttons}</div>${interaction.phaseChanging ? '<small role="status">Sending…</small>' : ''}</div>
         <div class="ev-annotation ev-on-request" title="Controller intent; not confirmed charger output. Hardware control must be on to apply requests."><span>Controller request</span><strong>${watts(model.requestedPower)} <small>W</small></strong></div>
       </div>
-      <dl class="ev-diagnostic-readings">${model.diagnostics.map(field => `<div data-ev-field="${field.key}" class="ev-reading-${field.tone}"><dt>${field.key === 'connected' ? connectionIcon(model.connected) : '<i aria-hidden="true"></i>'}${field.label}</dt><dd>${esc(field.text)}</dd></div>`).join('')}</dl>
+      <dl class="ev-diagnostic-readings">${diagnostics}<div><dt>Current setting</dt><dd>${esc(model.states.current ?? '—')} A${!model.healthy ? ' · unverified' : ''}</dd></div>${extraFields.map(([label, value]) => `<div><dt>${label}</dt><dd class="ev-reading-${label === 'Device frame' && model.healthy ? 'good' : 'neutral'}">${esc(value ?? '—')}${!model.healthy ? ' · unverified' : ''}</dd></div>`).join('')}</dl>
       </div>
+      ${interaction.phaseError ? `<p class="error" role="alert">${esc(interaction.phaseError)}</p>` : ''}
       ${model.requestedPhases && model.requestedPhases !== model.phase ? `<p class="subtle">Requested phase mode: ${model.requestedPhases} φ · awaiting readback</p>` : ''}
-      <div class="ev-status-footer"><span class="ev-reading-${model.healthy ? 'good' : 'neutral'}">Device frame · ${time(model.charger?.device_at)}${!model.healthy ? ' · unverified' : ''}</span><span>Phase mode is a setting · per-phase currents unavailable</span></div>
-    </div>
-    <details class="ev-device-details"${expanded ? ' open' : ''}><summary>Charger details</summary><p class="subtle">Current limit and phase mode are settings read from the charger. Individual phase currents are not measured here.${model.demo ? ' Demo uses synthetic battery and power values; device readings are unavailable.' : !model.healthy ? ' Device readings below are unverified or unavailable.' : ''}</p><dl>${fields.map(([label, value]) => `<div><dt>${label}</dt><dd class="ev-reading-${fieldTone(label)}">${esc(value ?? '—')}</dd></div>`).join('')}</dl></details>`;
+    </div>`;
 }

@@ -5,7 +5,7 @@ this same file as requirements and implementation evolve across releases and cha
 do not create a new handoff document for each version. The filename is retained from
 the original architecture proposal, but its content now describes the current system.
 The active application is `energymanager/`; its version is recorded in config.yaml and
-the changelog. Last reviewed: 25 October 2026.
+the changelog. Last reviewed: 26 October 2026.
 
 Repository-wide chat and coding rules live in the root [AGENTS.md](../../../AGENTS.md).
 It directs chats to this architecture, the ongoing backlog and the required coding
@@ -293,8 +293,10 @@ pending frames. Tooltip text remains selectable; touch retains existing cursor a
 vertical page-scroll behavior. Now restores the rolling live window. Planning retains
 its full-horizon view and cursor behavior.
 
-From4.3.9 Overview also accepts wheel time navigation, using horizontal trackpad delta
-or vertical mouse-wheel delta. Wheel events are coalesced per frame and archive loading
+From4.3.10 Overview wheel input zooms only the time axis, anchored at the time beneath
+the mouse: up/left zooms in, down/right zooms out. This corrects4.3.9 wheel panning
+after user clarification; horizontal navigation remains click/drag. Wheel events are
+coalesced per frame and archive loading
 waits for180ms idle. Ctrl/Meta-wheel, selected text and tooltip interactions retain
 browser behavior. Two touch pointers on one graph combine horizontal midpoint panning
 with distance-based time zoom anchored under the initial midpoint. Zoom is bounded to
@@ -305,7 +307,7 @@ Third pointers, navigation and disposal safely end pending work. Navigation arro
 move the selected window's width; Now restores two hours past/four ahead. Updates
 cannot overwrite the range during a gesture. Both graphs/session tracks stay aligned.
 
-ARCH-011 is implemented in4.3.9 on the Overview power graph: a neutral dotted line and
+ARCH-011 is implemented in4.3.9 on the Overview power graph; from4.3.10 a red long-dashed line and
 Month peak label show the current recorded monthly `monthly_peak_kw` input in watts.
 The graph's scale includes that value. HA source changes refresh it immediately;
 unavailable/invalid readings omit the line and show unavailable, while zero is valid.
@@ -314,6 +316,32 @@ reading. Demo uses only its own current synthetic observation. Accessible descri
 and legend identify the current-month15-minute-average grid-import billing peak,
 distinct from instantaneous power. This release changes presentation only, not peak
 permissions, optimizer policy or controller behavior.
+
+From4.3.10 the Grid box also shows this recorded peak with a peak-chart icon. In native
+HA its own keyboard-accessible button dispatches standard `hass-more-info` with the
+actual mapped `monthly_peak_kw` entity, including while that entity is unavailable.
+Grid power keeps its separate import/export source chooser; the two actions are
+siblings, avoiding nested buttons. Missing mapping disables the peak-history action;
+demo and standalone expose no installation history action. No synthetic HA entity or
+Recorder history is created.
+
+From4.3.10 EV diagnostics are consolidated in the sidebar: interpreted status plus
+raw car/status/error/force/permission values, current and phase-selector readbacks,
+device status age, HA read and device frame timestamps. Stale raw values stay visible
+as unverified. The separate Charger details foldout and redundant phase-current footer
+are removed. Red/neutral/green status meaning remains.
+
+The phase-mode annotation has1φ/3φ/Auto buttons in native HA. The user explicitly chose
+one-time direct charger changes that automatic control may overwrite, rather than a
+planner constraint or EV-control pause. Dashboard discovery supplies only the mapped
+actuator phase selector (no credentials, none in demo). Buttons use that actual HA
+select entity, validate its offered0/1/2 options, and call HA `select.select_option`
+once under the current user's permissions. Pending writes disable the buttons; errors
+are visible and never retried automatically. Pressed state follows HA readback; focus
+survives refreshes. Unknown/unavailable mappings, unsupported options, demo and standalone
+have no enabled action. Existing automatic control/stop/dwell/fault policies remain.
+Auto means the charger's own automatic phase mode, not EnergyManager scheduling; the
+existing controller requires fixed1/3-phase readback and may hold EV control for Auto.
 
 HA Recorder supplies the native historical view under its own coverage/retention settings.
 It does not import EnergyManager's SQLite archive. Accepted plans/decisions/settings

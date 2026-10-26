@@ -139,8 +139,13 @@ export class GraphCursor {
     event.preventDefault();
     const pixels = delta * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? geometry.width : 1);
     const [start, end] = this.wheelRange || [geometry.start, geometry.end];
-    const shift = pixels / geometry.width * (end - start);
-    this.wheelRange = [start + shift, end + shift];
+    const fraction = Number.isFinite(event.clientX) ?
+      Math.max(0, Math.min(1, (event.clientX - geometry.left) / geometry.width)) : 0.5;
+    const anchor = start + fraction * (end - start);
+    const duration = Math.max(timeZoomLimits.minimum, Math.min(timeZoomLimits.maximum,
+      (end - start) * Math.exp(Math.max(-1, Math.min(1, pixels * 0.002)))));
+    // Keep the time beneath the mouse fixed while changing only the time scale.
+    this.wheelRange = [anchor - fraction * duration, anchor + (1 - fraction) * duration];
     this.queueRange(this.wheelRange);
     clearTimeout(this.wheelTimer);
     this.wheelTimer = setTimeout(() => this.finishWheel(), 180);
@@ -293,7 +298,7 @@ export class GraphCursor {
     for (const name of ['power', 'soc']) {
       const plot = this.root.querySelector(`#${name}`), enabled = !!this.pan?.enabled();
       plot.classList.toggle('graph-pannable', enabled);
-      plot.setAttribute('aria-label', `${name === 'power' ? 'Power' : 'Battery state of charge'} graph. ${enabled ? 'Drag or wheel to scroll through time; use two fingers to pan or pinch to zoom. ' : ''}Use left/right arrows to inspect values; Escape clears the cursor.`);
+      plot.setAttribute('aria-label', `${name === 'power' ? 'Power' : 'Battery state of charge'} graph. ${enabled ? 'Drag to scroll through time; wheel or pinch to zoom; use two fingers to pan. ' : ''}Use left/right arrows to inspect values; Escape clears the cursor.`);
     }
     const model = models.power;
     if (this.at !== null && (this.at < model.start || this.at > model.end)) {

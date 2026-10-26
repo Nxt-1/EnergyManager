@@ -1,3 +1,15 @@
+## 4.3.10 — Wheel zoom, Grid peak history and EV controls
+
+- Correct mouse-wheel behavior to zoom the time axis around the pointer: up zooms
+  in, down zooms out. Dragging pans; mobile pinch and two-finger gestures are retained.
+- Draw the monthly peak with red long dashes.
+- Add a peak-chart icon and recorded peak value to the Grid box. In native HA,
+  clicking it opens the actual mapped sensor's more-info/history directly.
+- Consolidate charger diagnostics beside the EV drawing and remove the details
+  foldout and redundant footer note. Keep raw values and freshness visible.
+- Add native HA 1 φ / 3 φ / Auto controls for one-time charger changes. Automatic
+  control remains active and may overwrite a manual choice; no optimistic readback.
+
 ## 4.3.9 — Wheel, mobile time navigation and monthly peak
 
 - Scroll either Overview graph through time with the mouse wheel. On mobile, pinch

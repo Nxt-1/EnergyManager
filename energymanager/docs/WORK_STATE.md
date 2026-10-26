@@ -1,5 +1,23 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.10 wheel correction, Grid peak and EV consolidation
+
+AUTHORIZED: wheel zoom instead of pan; red dashed peak + Grid value/history; remove
+EV footer/details, consolidate sidebar and make phase selectable. User explicitly
+chose direct one-time charger changes that automatic control may overwrite, with no
+EV-control pause or planner constraint. Implemented native HA action using actual
+actuator mapping/options, busy/error handling, no auto retry or optimistic readback.
+Demo/standalone/unavailable actions disabled. Existing control safeguards unchanged.
+LOCAL:246 Python42.93s/50 Node/4native0.31s/Ruff/mypy35/JS pass. Final fake E2E32.451s/
+2018intervals/max4.071ms/four fake calls. Browser wheel zoom/drag, synced ranges,
+red8/5 line, direct peak entity click/keyboard and preserved Grid chooser pass.
+Native synthetic phase2/Auto0, actual projected readback/focus, stale raw sidebar,
+removed foldout/note and353px narrow fit pass; logs clean. No real hardware actions.
+NEXT: final package comparison, scoped review/commit/push and exact-head CI/image.
+PACKAGE:55 code/assets match wheel/sdist; isolated4.3.10 import passes. Browser closed,
+viewport reset; release proof retained in ignored artifacts/release-4.3.10-*.jpg.
+Preserve unrelated deferred work/paused Maps. No live HA/database/deployment access.
+
 ## Current work —4.3.9 wheel/mobile navigation and recorded peak
 
 AUTHORIZED: scheduled one-time wheel navigation, mobile pinch time zoom + two-finger

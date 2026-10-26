@@ -8,6 +8,16 @@ New explicit user instructions take precedence. Deferred ideas are not authoriza
 
 ## Architecture and EV behavior retained
 
+- For4.3.10 the user clarified that mouse-wheel scrolling should zoom; mouse dragging
+  already covers horizontal panning. Wheel zoom anchors time under the pointer and
+  shares the15min–7day bounds. Preserve mobile pinch/two-finger gestures, which the
+  user reports working. Show the monthly peak with red dashes and a clickable Grid
+  peak icon/value, opening the actual HA sensor directly.
+- The user also chose direct, one-time HA phase-selector changes and explicitly
+  allows automatic control to overwrite them. Do not pause EV/ESS control or constrain
+  the planner.1φ/3φ/Auto use the mapped select entity's real supported options; Auto
+  remains subject to existing fixed-phase control validation. Consolidate charger
+  details in the diagnostic sidebar and remove the crossed-out phase-current footer.
 - For4.3.9 the user confirmed both mobile time gestures: pinch zoom and two-finger
   horizontal pan. Wheel navigation uses the same shared Overview range as mouse drag;
   Now restores six hours and arrows move the current width. Engineering zoom bounds
