@@ -31,6 +31,12 @@ cannot operate hardware. Choose `configured` and restart to use installation inp
 
 ## EV charging supervision (4.3.2)
 
+From4.3.13 the old Minimum phase dwell setting is removed. Its default was600seconds
+(10minutes); existing JSON values are accepted but ignored. Automatic restarts instead
+wait30seconds after a phase acknowledgement or confirmed stopped/low-power state.
+Time already spent stopped counts. Current-only adjustments have no stop or hold.
+No new setting or mapping is needed; the15minute persistent-wait alarm is separate.
+
 After updating, select these go-e APIv2 Connect entities under EV fault recovery:
 
 | Field | go-e entity | Typical suffix before HA renaming |

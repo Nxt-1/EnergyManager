@@ -184,5 +184,8 @@ async def test_phase_change_waits_for_readback_before_resuming_charge():
     # A fresh readback confirms the forced mode; AC hardware telemetry is not fabricated.
     await actuator.apply(replace(command, at=at + timedelta(seconds=12)), 1,
                          replace(observation, at=at + timedelta(seconds=12), ev_phases=3))
+    assert {"entity_id": "select.force", "option": "2"} not in client.calls
+    await actuator.apply(replace(command, at=at + timedelta(seconds=42)), 1,
+                         replace(observation, at=at + timedelta(seconds=42), ev_phases=3))
     assert client.calls[-1] == {"entity_id": "select.force", "option": "2"}
     assert {"entity_id": "number.current", "value": 6} in client.calls

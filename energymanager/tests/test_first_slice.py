@@ -84,3 +84,14 @@ def test_time_grid_full_horizon_partial_and_dst():
     assert len(partial) == 2019
     assert (partial[-1] - partial[0]).total_seconds() == 168 * 3600
     assert max((b - a).total_seconds() for a, b in zip(partial, partial[1:])) <= 300
+
+
+def test_planner_and_independent_validation_ignore_retired_phase_cooldown():
+    s = tiny(hours=.5, house=0, pv=12)
+    s = replace(s, capabilities=replace(s.capabilities, phase_dwell_seconds=900))
+    model = JointModel(s, optional=True)
+    for t, phase in ((1, "one"), (2, "three"), (3, "one")):
+        model.linear.equality([(model.linear.variables[phase][t], 1)], 1)
+    result = model.run(10)
+    assert result["feasible"]
+    assert validate(s, result["flows"]) == []

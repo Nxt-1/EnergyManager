@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -20,6 +20,7 @@ WAITING = {
     32: "Unbalanced-load protection", 34: "Grid monitoring", 35: "OCPP fallback",
 }
 CHARGING = {3, 7, 8, 9, 10, 11, 12, 13, 14, 15, 19, 20, 33}
+RESUME_DELAY_SECONDS = 30
 
 
 class GoEReadings:
@@ -153,13 +154,25 @@ class GoEControl:
         self.stop_sent: datetime | None = None
         self.stopping_since: datetime | None = None
         self.disabled_stop_at: datetime | None = None
+        self.observed_phase: int | None = None
         self.status = "Waiting for charger inputs"
 
     def reset(self) -> None:
         self.pending.clear()
         self.phase_started = self.waiting_since = self.unhealthy_since = self.stop_sent = None
         self.stopping_since = self.disabled_stop_at = None
+        self.observed_phase = None
+        self.actuator.resume_after = None
         self.actuator.last = None
+
+    def observe_stopped(self, command: Command, observation: Observation, confirmed: bool) -> None:
+        """Start one settling interval when force off and low power are confirmed."""
+        a = self.actuator
+        if not confirmed or observation.ev_power_kw >= .1:
+            a.resume_after = None
+        elif a.resume_after is None:
+            a.resume_after = command.at + timedelta(seconds=RESUME_DELAY_SECONDS)
+        self.waiting_since = None
 
     def fault(self, command: Command, observation: Observation, reason: str, *, reboot: bool = False) -> None:
         a = self.actuator
@@ -175,6 +188,7 @@ class GoEControl:
         if self.stop_sent is None or (command.at - self.stop_sent).total_seconds() >= 10:
             await self.actuator.write("select", "select_option", "force", "option", "1")
             self.stop_sent = command.at
+            self.actuator.resume_after = None
 
     async def fail(self, command: Command, observation: Observation, reason: str, *, reboot: bool = False) -> None:
         try:
@@ -198,8 +212,8 @@ class GoEControl:
             return False
         domain, service, value_key = ("number", "set_value", "value") if key == "current" else ("select", "select_option", "option")
         self.pending[key] = value, command.at, command.generation
-        if key == "phase":
-            a.switched_at = command.at  # An uncertain write still consumes phase dwell.
+        if key == "force" and value == 1:
+            a.resume_after = None
         if key == "force" and value == 2:
             self.stop_sent = None  # A newer start request revokes any earlier stop acknowledgement.
         await a.write(domain, service, key, value_key, value if key == "current" else str(value))
@@ -227,6 +241,10 @@ class GoEControl:
         if error := r.error():
             await self.fail(command, observation, error + "; inspect before restart")
             return
+        phase = r.code("phase")
+        if self.observed_phase is not None and phase != self.observed_phase:
+            a.resume_after = command.at + timedelta(seconds=RESUME_DELAY_SECONDS)
+        self.observed_phase = phase
         if not command.current_a or not observation.connected:
             a.charging_since = None
             self.waiting_since = None
@@ -237,6 +255,7 @@ class GoEControl:
             a.stopped_at = a.zero_since = None
             self.status = "EV stopped"
             confirmed = await self.confirm("force", 1, command, observation)
+            self.observe_stopped(command, observation, confirmed)
             if observation.ev_power_kw >= .1:
                 self.stopping_since = self.stopping_since or command.at
                 if confirmed and (command.at - self.stopping_since).total_seconds() >= 30:
@@ -244,7 +263,6 @@ class GoEControl:
             else:
                 self.stopping_since = None
             return
-        self.stopping_since = None
         minimum, maximum = r.limits(a.c.minimum_current_a, a.c.maximum_current_a)
         if not minimum <= command.current_a <= maximum:
             self.status = f"EV paused: requested {command.current_a} A outside charger limits {minimum}–{maximum} A"
@@ -256,7 +274,7 @@ class GoEControl:
             self.phase_started = self.phase_started or command.at
             a.target_phase = a.target_phase or command.phases
             phase_target = a.target_phase
-            if (command.at - self.phase_started).total_seconds() >= max(180, a.c.phase_dwell_seconds + 180):
+            if (command.at - self.phase_started).total_seconds() >= 180:
                 await self.fail(command, observation, "go-e phase change timed out; EV remains stopped")
                 return
             if not await self.confirm("force", 1, command, observation):
@@ -266,13 +284,12 @@ class GoEControl:
             if (a.zero_since is None or (observation.at - a.zero_since).total_seconds() < 3
                     or (command.at - a.stopped_at).total_seconds() < 10):
                 return
-            if (r.code("phase") != (2 if phase_target == 3 else 1)
-                    and a.switched_at and "phase" not in self.pending
-                    and (command.at - a.switched_at).total_seconds() < a.c.phase_dwell_seconds):
-                self.status = "Waiting for phase dwell"
-                return
             if not await self.confirm("phase", 2 if phase_target == 3 else 1, command, observation):
                 return
+            # Selector acknowledgement starts the same tested hold in either direction.
+            if "phase" not in self.pending and a.awaiting_phase is None:
+                a.resume_after = command.at + timedelta(seconds=RESUME_DELAY_SECONDS)
+                a.awaiting_phase = phase_target
             if r.code("charger_status") in (22, 23):
                 self.status = "Waiting for charger phase transition"
                 return
@@ -283,14 +300,33 @@ class GoEControl:
             self.phase_started = None
             if command.phases != phase_target:
                 return
-        # Reductions stop immediately; starting waits for current readback first.
-        if r.number("current") > command.current_a and r.code("force") != 1:
-            if not await self.confirm("force", 1, command, observation):
+        # Current-only changes stay live. Every actual restart waits for a settled stop.
+        pending_force = self.pending.get("force")
+        starting = (pending_force is not None and (pending_force[0], pending_force[2]) == (2, command.generation)
+                    and (a.resume_after is None or command.at >= a.resume_after))
+        needs_resume = a.resume_after is not None or r.code("force") != 2 or pending_force is not None
+        if needs_resume and not starting:
+            confirmed = await self.confirm("force", 1, command, observation)
+            self.observe_stopped(command, observation, confirmed)
+            if not confirmed:
                 return
+            if observation.ev_power_kw >= .1:
+                self.status = "Waiting for EV power below 100 W before restart"
+                self.stopping_since = self.stopping_since or command.at
+                if (command.at - self.stopping_since).total_seconds() >= 30:
+                    await self.fail(command, observation, "EV power did not stop after the confirmed stop request")
+                return
+            self.stopping_since = None
         if not await self.confirm("current", command.current_a, command, observation):
+            return
+        if not starting and a.resume_after is not None and command.at < a.resume_after:
+            remaining = math.ceil((a.resume_after - command.at).total_seconds())
+            self.status = f"EV restart settling: {remaining} seconds remaining"
             return
         if not await self.confirm("force", 2, command, observation):
             return
+        a.resume_after = None
+        self.stopping_since = None
         self.stop_sent = None
         waiting = r.waiting()
         if waiting or r.entities["charge_allowed"] and str(r.rows["charge_allowed"].get("state")).lower() not in ("on", "true"):

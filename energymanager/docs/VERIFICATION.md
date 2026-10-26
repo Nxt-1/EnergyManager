@@ -1,5 +1,39 @@
 # EnergyManager 4 verification
 
+## 4.3.13 — EV restart settling and phase cooldown removal
+
+272 Python tests pass54.63s;51 frontend tests, Ruff and mypy35 pass. Focused
+synthetic charger regressions check the exact30second boundary after phase
+acknowledgement in both directions, short/long stopped periods, repeated ticks and
+plan changes, canceled starts, current-only increases/reductions without stopping,
+ESS dispatch during waits, unconfirmed commands, continuing power after stop and
+delivery/reboot/notification timing after the hold. Existing charger errors and
+stale-input cases remain protected. Old600/900second configuration values and a
+missing retired field are readable; planner/independent validation accept phase
+changes within the former cooldown. Settings omits the retired control.
+
+Removing the cooldown exposed a later-refinement regression: an exceptional solar
+candidate had not exceeded80% in an early window, so the window was left unprotected
+and operational polishing moved extra charging into it without scarcity proof.
+Unproven windows now retain the normal ceiling, and the final source certificate
+inherits the selected ceiling rules. Existing scarce/plentiful-solar tests pass.
+
+Final4.3.13 local fake-HA E2E passes: accepted31.465s,2018intervals, maximum local
+control18.086ms (not hardware latency), four fake service calls. It exercises the
+normal configured startup, settings, weather, planning and hardware-switch boundary
+against isolated local endpoints. The full thirty-second charger sequence is
+verified with simulated advancing time in the focused tests, not on physical hardware.
+All55 code/assets/default files match wheel and sdist; isolated packaged4.3.13 import
+passes. No agent access to live HA, installation databases, hardware, real phone
+notifications or deployment occurred. The user separately reported that the standalone
+thirty-second script worked; automatic installation behaviour remains unverified.
+
+Sequential seven-day benchmarks pass independent validation and minimum-grid
+certification: mixed115.705s, winter115.143s and permission120.074s. The last includes
+74ms of final overhead within the existing120s+0.5s acceptance bound; it produces a
+demonstrated pending EV peak request. All retain168h and≤300s intervals. These are
+synthetic offline runtimes, not installation timing or delivery guarantees.
+
 ## 4.3.12 — EV continuity and planning attention
 
 260 Python tests pass59.78s;51 frontend tests, Ruff/mypy35 and modified JS parsing

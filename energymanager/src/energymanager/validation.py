@@ -119,8 +119,6 @@ def validate(
     source_prefix = [0.0]
     grid_total = 0.0
     quarters: dict[datetime, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
-    last_phase = o.ev_phases if o.ev_power_kw > 0.1 else 0
-    last_phase_at = s.intervals[0].start - timedelta(seconds=c.phase_dwell_seconds)
     for t, interval in enumerate(s.intervals):
         f = {name: flows[name][t] for name in needed}
         ev_power = f["pv_ev"] + f["grid_ev"] + f["solar_dis_ev"]
@@ -199,13 +197,6 @@ def validate(
             )
         check(amps1 < TOL or amps3 < TOL, f"Simultaneous EV modes {t}")
         check(close(ev_power, (amps1 + 3 * amps3) * c.voltage / 1000), f"EV mode power {t}")
-        phase = 3 if amps3 > TOL else 1 if amps1 > TOL else 0
-        if phase and phase != last_phase:
-            check(
-                (interval.start - last_phase_at).total_seconds() >= c.phase_dwell_seconds - TOL,
-                f"Phase dwell {t}",
-            )
-            last_phase, last_phase_at = phase, interval.start
         imp = f["grid_ev"] + f["grid_house"] + f["grid_store"]
         check(
             imp <= c.grid_connection_kw + TOL and (imp < TOL or f["export"] < TOL),

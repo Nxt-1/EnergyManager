@@ -477,6 +477,8 @@ class Planner:
                         and candidate["flows"]["amps_one"][t] + candidate["flows"]["amps_three"][t] > TOL
                         for t in range(left, right)
                     ):
+                        # Later smoothing/certification must not create an unproven exception here.
+                        rejected.update(range(left, right))
                         continue
                     if self.remaining() < 2:
                         rejected.update(range(left, right))
@@ -738,6 +740,8 @@ class Planner:
                 s,
                 optional=True,
                 service=service,
+                ceilings=selected_model.ceilings,
+                tight_ceilings=selected_model.tight_ceilings,
                 grid_ess=any(v > TOL for v in selected["flows"]["grid_store"]),
             )
             continuity = source_model.continuity_objective()

@@ -76,6 +76,8 @@ def advance(app, clock, seconds, power=0):
 
 async def detect(app, clock):
     await app.actuator.apply(advance(app, clock, 0), app.revision, app.observation)
+    await app.actuator.apply(advance(app, clock, 30), app.revision, app.observation)
+    await app.actuator.apply(advance(app, clock, 1), app.revision, app.observation)
     await app.actuator.apply(advance(app, clock, 90), app.revision, app.observation)
     assert app.actuator.delivery_fault
 
@@ -120,6 +122,8 @@ async def test_failed_retry_stops_and_notifies_once_with_retryable_delivery(tmp_
     advance(app, clock, 60)
     await manager.step()
     await app.actuator.apply(advance(app, clock, 0), app.revision, app.observation)
+    await app.actuator.apply(advance(app, clock, 30), app.revision, app.observation)
+    await app.actuator.apply(advance(app, clock, 1), app.revision, app.observation)
     await app.actuator.apply(advance(app, clock, 90), app.revision, app.observation)
     assert manager.current["status"] == "unresolved" and app.actuator.delivery_fault
     ha.fail_notify = True
@@ -136,7 +140,7 @@ async def test_failed_retry_stops_and_notifies_once_with_retryable_delivery(tmp_
     assert len([call for call in ha.calls if call[0] == "notify"]) == 2
     assert len([call for call in ha.calls if call[0] == "button"]) == 1
     message = [call[2]["message"] for call in ha.calls if call[0] == "notify"][-1]
-    assert "13:01:30 CET" in message and manager.current["id"] in message
+    assert "13:02:01 CET" in message and manager.current["id"] in message
     app.store.close()
 
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from zoneinfo import ZoneInfo
-from datetime import timedelta
 
 from .optimization import JointModel
 
@@ -27,7 +26,6 @@ def seed(model: JointModel, peak_limit_kw: float | None = None,
     last_power = o.ev_power_kw
     previous_on = o.ev_power_kw > 0.1
     previous_phase = o.ev_phases
-    previous_active_at = s.intervals[0].start - timedelta(seconds=c.phase_dwell_seconds)
     zone = ZoneInfo(p.timezone)
     current_month = s.intervals[0].start.astimezone(zone).strftime("%Y-%m")
     for t, interval in enumerate(s.intervals):
@@ -91,11 +89,6 @@ def seed(model: JointModel, peak_limit_kw: float | None = None,
                 < c.minimum_current_a * 3 * c.voltage / 1000 * interval.hours * c.ev_efficiency
             ):
                 phases = 1
-            if (
-                phases != previous_phase
-                and (interval.start - previous_active_at).total_seconds() < c.phase_dwell_seconds
-            ):
-                phases = previous_phase
             amps = min(c.maximum_current_a, int((headroom + 1e-8) * 1000 / (c.voltage * phases)))
             if amps >= c.minimum_current_a and phases in c.phases:
                 # Smallest integer-current final interval rather than excessive overdelivery.
@@ -196,7 +189,7 @@ def seed(model: JointModel, peak_limit_kw: float | None = None,
             return None
         last_power, previous_on = power, power > 0
         if power > 0:
-            previous_phase, previous_active_at = phases, interval.start
+            previous_phase = phases
     for name, value in (
         ("ev_energy", ev),
         ("ess_solar", solar),

@@ -74,7 +74,7 @@ class FakeClient:
         self.calls.append((domain, service, data))
 
 
-async def test_goe_stop_confirm_phase_dwell_and_stale_generation():
+async def test_goe_stop_phase_readback_resume_and_stale_generation():
     s = demo_snapshot(hours=1, goals=())
     o = replace(s.observation, ev_phases=1, ev_power_kw=0)
     client = FakeClient()
@@ -100,13 +100,18 @@ async def test_goe_stop_confirm_phase_dwell_and_stale_generation():
     assert not any(call[2].get("entity_id") == "select.phase" for call in client.calls)
     await actuator.apply(replace(command, at=o.at + timedelta(seconds=10)), 1, o)
     assert client.calls[-1][2] == {"entity_id": "select.phase", "option": "2"}
-    await actuator.apply(replace(command, at=o.at + timedelta(seconds=11)), 1, replace(o, ev_phases=3))
+    await actuator.apply(replace(command, at=o.at + timedelta(seconds=11)), 1,
+                         replace(o, at=o.at + timedelta(seconds=11), ev_phases=3))
     assert any(call[2].get("entity_id") == "number.ess" and call[2]["value"] == 200 for call in client.calls)
     previous = len([call for call in client.calls if call[2].get("entity_id") == "select.phase"])
     await actuator.apply(
-        replace(command, at=o.at + timedelta(seconds=50), phases=1, current_a=6), 1, replace(o, ev_phases=3)
+        replace(command, at=o.at + timedelta(seconds=50), phases=1, current_a=6), 1,
+        replace(o, at=o.at + timedelta(seconds=50), ev_phases=3)
     )
     assert len([call for call in client.calls if call[2].get("entity_id") == "select.phase"]) == previous
+    await actuator.apply(replace(command, at=o.at + timedelta(seconds=60), phases=1), 1,
+                         replace(o, at=o.at + timedelta(seconds=60), ev_phases=3))
+    assert client.calls[-1][2] == {"entity_id": "select.phase", "option": "1"}
 
 
 def test_unknown_returns_and_manual_goals_do_not_withdraw():

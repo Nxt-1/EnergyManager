@@ -53,7 +53,7 @@ class Capabilities:
     minimum_current_a: int = 6
     maximum_current_a: int = 16
     phases: tuple[int, ...] = (1, 3)
-    phase_dwell_seconds: float = 600.0
+    phase_dwell_seconds: float = 0.0  # Retired compatibility field; no planner or control constraint.
     grid_connection_kw: float = 17.0
 
     def __post_init__(self) -> None:

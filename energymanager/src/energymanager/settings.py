@@ -88,7 +88,6 @@ def setting_fields() -> tuple[SettingField, ...]:
     for key, label, group, minimum, maximum in (
         ("ev_capacity_kwh", "EV capacity (kWh)", "EV and charger", 0.01, None),
         ("voltage", "Phase voltage (V)", "EV and charger", 1, None),
-        ("phase_dwell_seconds", "Minimum phase dwell (seconds)", "EV and charger", 0, None),
         ("ess_capacity_kwh", "ESS capacity (kWh)", "ESS and conversion", 0.01, None),
         ("ess_min_kwh", "ESS minimum stored energy (kWh)", "ESS and conversion", 0, None),
         ("ac_charge_kw", "AC charging limit (kW)", "ESS and conversion", 0, None),
@@ -235,7 +234,8 @@ class ConfigurationFile:
             raise SettingsValidationError(errors)
         try:
             for group, model in (("capabilities", Capabilities), ("policy", Policy)):
-                missing = {field.name for field in fields(model) if field.name != "control_enabled"} - set(document.get(group, {}))
+                missing = {field.name for field in fields(model)
+                           if field.name not in ("control_enabled", "phase_dwell_seconds")} - set(document.get(group, {}))
                 if missing:
                     raise ValueError(f"Missing {group}: {', '.join(sorted(missing))}")
             Capabilities(**document["capabilities"])

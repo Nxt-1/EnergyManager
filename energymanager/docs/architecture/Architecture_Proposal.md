@@ -5,7 +5,7 @@ this same file as requirements and implementation evolve across releases and cha
 do not create a new handoff document for each version. The filename is retained from
 the original architecture proposal, but its content now describes the current system.
 The active application is `energymanager/`; its version is recorded in config.yaml and
-the changelog. Last reviewed: 26 October 2026.
+the changelog. Last reviewed: 27 October 2026.
 
 Repository-wide chat and coding rules live in the root [AGENTS.md](../../../AGENTS.md).
 It directs chats to this architecture, the ongoing backlog and the required coding
@@ -95,8 +95,9 @@ its AC bus boundary; DC solar is not counted twice. The P1 demand sensor builds 
 zero and is converted from W/kW to quarter import kWh using a fixed0.25h denominator.
 The go-e phase selector supplies forced-mode readback; no additional phase sensor is
 required. Auto/unavailable is unknown and pauses EV while fresh ESS balancing continues.
-Stop/zero/dwell and post-switch readback remain enforced without claiming physical
-contactor telemetry. Meter/controller clock alignment remains a commissioning check.
+Stop/zero, post-switch readback and a30second restart settling hold are enforced
+without claiming physical contactor telemetry. There is no minimum interval between
+phase switches. Meter/controller clock alignment remains a commissioning check.
 
 Settings exposes only these sensor mappings, with no source/type selectors or computed
 house/phase-count inputs. Daily readiness is in the EV group. Older JSON is interpreted
@@ -339,7 +340,8 @@ select entity, validate its offered0/1/2 options, and call HA `select.select_opt
 once under the current user's permissions. Pending writes disable the buttons; errors
 are visible and never retried automatically. Pressed state follows HA readback; focus
 survives refreshes. Unknown/unavailable mappings, unsupported options, demo and standalone
-have no enabled action. Existing automatic control/stop/dwell/fault policies remain.
+have no enabled action. Automatic stop/settling/fault policies apply to controller
+restarts; these direct HA buttons themselves do not run the automatic sequence.
 Auto means the charger's own automatic phase mode, not EnergyManager scheduling; the
 existing controller requires fixed1/3-phase readback and may hold EV control for Auto.
 
@@ -433,9 +435,15 @@ be sold. House and PV conservation, grid direction and physical connection limit
 hard. Simultaneous nominal PV ESS charging and household grid purchase is prohibited
 to avoid relabelling grid-supplied storage as solar. Genuine DC-bus routing is allowed.
 
-EV uses integer6–16A and supported one/three-phase modes. Modes exclude each other;
-opposite active phases require600s separation. The actuator independently stops10s,
-confirms zero3s and enforces dwell. It prepares a future phase during an off interval.
+EV uses integer6–16A and supported one/three-phase modes. Modes exclude each other.
+From4.3.13 there is no minimum separation between opposite active phase modes in
+planning, its incumbent or independent validation. The actuator still stops10s and
+confirms zero3s before phase writes, then holds force off for30s after selector
+acknowledgement in either direction. An ordinary restart requires30s from confirmed
+force off and power below100W; an already long enough stop counts toward that hold.
+Current-only adjustments stay live. It prepares a future phase during an off interval.
+The five-minute plan uses nominal slot power; sub-minute control holds can postpone
+actual delivery, which is reconciled from measurements rather than fabricated.
 Planning holds the currently valid EV setting through the calculation budget plus15s,
 so a candidate never assumes energy that could not have been delivered while solving.
 
@@ -601,14 +609,23 @@ requests planning without rewriting JSON or raising the configured maximum. Disj
 ranges fail the EV guard. Sampler frames retain actual limit evidence.
 
 EV writes are staged across sampler frames, never sleeps under the control lock.
-Current must match before forced start. Reductions stop first when the previous
-readback exceeds the new target. Pending writes require a later advancing device frame;
+Current must match before forced start. Current-only increases and reductions do
+not force a stop or start a settling interval. Pending writes require a later advancing device frame;
 HA service acceptance alone is not a charger acknowledgement. A superseded pending
 write is followed by the newly desired command even if an older frame already shows
 that value. Missing confirmation after30seconds latches/escalates without reboot.
-Stop/zero/10second preparation and configured phase dwell remain; selector echo alone
-does not complete an active modelStatus22/23 transition. Phase sequencing times out
-after max(180,configured phase dwell+180)seconds, independently of non-delivery.
+Stop/zero/10second phase preparation remains; selector echo alone does not complete
+an active modelStatus22/23 transition. A30second nonblocking hold starts at phase
+acknowledgement, or at confirmed force off plus power below100W for ordinary stops.
+Repeated ticks, current changes and plan revisions preserve the deadline; another
+observed phase change or lost stopped-power confirmation requires a new settling
+interval. A stop supersedes an unconfirmed start. Fault/input/enabled/generation
+guards remain effective during every wait; ESS keeps running. Delivery timing starts
+after the start is acknowledged, not during settling. Initial/recovered control with
+unknown stop duration waits conservatively. Phase sequencing times out after180s,
+independently of non-delivery. The old `phase_dwell_seconds` field is optional,
+hidden and ignored, retained only for old JSON/decision compatibility; the prior
+default was600s, not900s. The separate15minute waiting escalation remains.
 Continuing power for30seconds after stop escalates. A disabled hardware stop is also
 checked for30seconds in the incident worker; failure notifies without re-enabling or
 issuing recovery writes. Every command still passes enabled/generation guards.

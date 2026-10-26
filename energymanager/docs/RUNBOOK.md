@@ -2,6 +2,16 @@
 
 ## Local use
 
+Release4.3.13 adds a30second EV restart settling hold after phase acknowledgement
+in either direction and after confirmed force off plus power below100W for ordinary
+stops. Time already spent stopped counts. Current-only changes stay live; ESS and
+protective stops remain responsive. Existing command/readback/error/watchdog guards
+remain. The old phase-switch cooldown (600s by default) is removed from planning
+and control, and its Settings field is retired. Existing JSON values are accepted
+and ignored; no configuration edit is required. Update the add-on and reload HA.
+Native manual phase buttons still send direct one-time HA changes and do not run
+this automatic sequence. No installation/hardware checks were performed by the agent.
+
 Release4.3.12 gives each economic planning stage a bounded continuity refinement and
 tries a single constant-current one-phase session for the next grid-only requirement.
 It retains the flexible candidate when availability, permissions, source allocations
@@ -316,7 +326,8 @@ Under Actuators select the existing go-e APIv2 Connect **Phase switch mode** ent
 as **Charger phase selector**. The same mapping supplies phase-mode readback. No
 separate phase input is required. Raw options1/2 mean single/three phase. Auto or
 unavailable means unknown: EV delivery pauses while fresh ESS balancing continues.
-Phase changes retain stop/zero/dwell and wait for readback before charging resumes.
+Phase changes retain stop/zero preparation, wait for readback and hold force off
+for30seconds before charging resumes. There is no phase-switch cooldown.
 
 House background is `import - export + AC_solar + ESS_AC_output - EV`. Both P1 grid
 channels are nonnegative W/kW; ESS AC output is positive when supplying the AC bus and

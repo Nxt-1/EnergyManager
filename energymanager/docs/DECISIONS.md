@@ -85,7 +85,8 @@ New explicit user instructions take precedence. Deferred ideas are not authoriza
   Do not double-count DC solar or expose a nonexistent house sensor mapping.
 - The user uses go-e APIv2 Connect. Use the existing phase selector readback for
   forced one/three-phase modes; no extra phase-count sensor or phase-source choice.
-  Auto/unavailable readback is unknown; preserve stop/zero/dwell protections.
+  Auto/unavailable readback is unknown; preserve stop/zero protections and the
+  30second restart settling hold adopted in4.3.13.
 - Daily readiness settings belong with EV settings.
 - Forecasting must use the original source, PV setups and applicable correction
   factors. These were recovered and restored: Open-Meteo KNMI seamless at HA home,
@@ -308,3 +309,18 @@ and notify the configured phone if unresolved. Genuine proven permission request
 notify. Preserve prior instructions only while valid, and clear the attention item on
 acceptance. Standing ready-release commit/push permission applies. No live installation,
 hardware, actual phone alert or deployment is authorized in development.
+
+## 27 October2026 — Thirty-second EV restart settling; retire phase cooldown
+
+The user reported that the standalone stop→phase→30second pause→force-charge test
+worked. Manual tests also showed car-app error/stopped cycles that self-recovered;
+this does not identify a confirmed charger or car defect. Apply the30second hold
+to automatic restarts after phase changes in either direction and ordinary stop/start
+cycles. Current-only changes are excluded and must stay live. Count already elapsed
+confirmed stopped time; keep control nonblocking and preserve protective/input/error
+guards. Remove the phase-switch minimum from planning and control. The actual old
+default was600seconds (10minutes), not15minutes; persistent-wait escalation is a
+different900second timer and remains. Old configuration/decision fields stay readable
+without retaining the cooldown. Existing direct manual HA phase controls retain their
+previously approved semantics. Standing ready-release permission applies; no agent
+operation of the installation is authorized.

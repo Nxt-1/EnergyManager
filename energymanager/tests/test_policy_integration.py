@@ -137,6 +137,13 @@ async def test_ha_measurements_and_actuator_calls_against_local_http_server():
             await actuator.apply(command, 1, observation)
             assert calls == [
                 {"entity_id": "fake.ess", "value": 500},
+                {"entity_id": "fake.force", "option": "1"},
+            ]
+            calls.clear()
+            later = observation.at + timedelta(seconds=30)
+            await actuator.apply(replace(command, at=later), 1, replace(observation, at=later))
+            assert calls == [
+                {"entity_id": "fake.ess", "value": 500},
                 {"entity_id": "fake.current", "value": 6},
                 {"entity_id": "fake.force", "option": "2"},
             ]

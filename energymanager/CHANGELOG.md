@@ -1,3 +1,16 @@
+## 4.3.13 — EV restart settling
+
+- Hold charging off for 30 seconds after a confirmed phase setting change in
+  either direction, and after a confirmed stopped/low-power state before restarting.
+  Time already spent stopped counts; repeated ticks and plan changes do not restart
+  the hold. Keep ESS control responsive and retain immediate protective stops.
+- Change current limits without stopping or adding a pause. Keep command readback,
+  stale-input, charger-error and delivery supervision.
+- Remove the configurable phase-switch cooldown from control, planning and validation.
+  Retire its Settings field; existing configuration values remain readable and ignored.
+- Preserve checked SoC ceilings through later optional refinements and the final
+  grid certificate, including when the removed cooldown permits new schedules.
+
 ## 4.3.12 — Smoother EV plans and visible planning failures
 
 - Reserve continuity work within each economic stage and try a constant-current

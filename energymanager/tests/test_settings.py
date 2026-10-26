@@ -59,6 +59,26 @@ def test_editor_covers_template_and_preserves_future_fields_and_backup(tmp_path)
         store.close()
 
 
+@pytest.mark.parametrize("legacy_dwell", [None, 600, 900])
+def test_retired_phase_cooldown_is_optional_hidden_and_old_configuration_remains_readable(tmp_path, legacy_dwell):
+    editor = configuration_file(tmp_path)
+    data = json.loads(editor.path.read_bytes())
+    assert "phase_dwell_seconds" not in data["capabilities"]
+    if legacy_dwell is not None:
+        data["capabilities"]["phase_dwell_seconds"] = legacy_dwell
+    editor.path.write_text(json.dumps(data), encoding="utf-8")
+    loaded = editor.read()
+    assert "capabilities.phase_dwell_seconds" not in loaded["values"]
+    editor.validate(data)
+    store = Store(tmp_path / "configuration.sqlite")
+    try:
+        app = configured_application(editor.path, store)
+        assert app.ha is not None
+        assert not app.actuator.enabled
+    finally:
+        store.close()
+
+
 @pytest.mark.parametrize("changes", [
     {"capabilities.ev_capacity_kwh": -1},
     {"capabilities.ess_min_kwh": 100},

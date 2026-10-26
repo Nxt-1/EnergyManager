@@ -1,5 +1,26 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.13 EV restart settling
+
+AUTHORIZED27Oct: user confirmed standalone stop→phase→30s→charge worked; apply a30s
+hold to automatic restarts after either phase direction and ordinary stop/start,
+excluding current-only changes. Remove phase-switch cooldown. Verified previous
+default600s (10min);900s persistent-wait escalation is separate and retained.
+Implemented nonblocking deadline from confirmed force off/low power or latest phase
+acknowledgement; existing elapsed stop time counts. Current reductions no longer stop
+first. Protective/input/readback/fault guards and independent ESS dispatch remain.
+Remove dwell from controller/model/incumbent/validator and Settings; retain optional
+ignored legacy JSON field for compatibility. Preserve approved direct manual HA buttons.
+Fix the exposed refinement path that could move unproven above80% charging into an
+earlier solar window; retain checked ceilings through the final grid certificate.
+LOCAL:272Python54.63s/51Node/Ruff/mypy35 pass; fakeE2E31.465s/2018intervals/max18.086ms/
+four fake calls.55 package code/assets/defaults identical; isolated4.3.13 import passes.
+Serial7day mixed115.705/winter115.143/permission120.074s pass validation and minimum-grid
+certification; permission produces a demonstrated request. Last runtime includes74ms
+overhead within the existing0.5s acceptance bound. NEXT: final package/docs/scope review,
+ready release commit/push, then exact-head CI/image. Existing unrelated DEFERRED_WORK edits
+and paused Maps preserved. No live HA/database/hardware/real notifications/deployment.
+
 ## Current work —4.3.11 planner recovery and rejected decision export
 
 AUTHORIZED: fix the supplied frozen no-incumbent failure; inspect seed/budget and

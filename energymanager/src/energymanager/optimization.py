@@ -340,14 +340,6 @@ class JointModel:
                 m.row([(get("three"), 1), (v["three"][t - 1], -1), (get("phase_change"), -1)], upper=0)
                 m.row([(get("three"), -1), (v["three"][t - 1], 1), (get("phase_change"), -1)], upper=0)
             m.row(active + [(get("start"), -1)], upper=0 if t or o.ev_power_kw < 0.1 else 1)
-            previous = t - 1
-            while (
-                previous >= 0
-                and (interval.start - s.intervals[previous].start).total_seconds() < c.phase_dwell_seconds
-            ):
-                m.row([(get("one"), 1), (v["three"][previous], 1)], upper=1)
-                m.row([(get("three"), 1), (v["one"][previous], 1)], upper=1)
-                previous -= 1
             quarter = interval.start.replace(minute=interval.start.minute // 15 * 15, second=0, microsecond=0)
             self.quarters[quarter.isoformat()].append(t)
         m.row([(solar[n], 1), (grid[n], 1)], upper=c.ess_capacity_kwh - c.ess_min_kwh)

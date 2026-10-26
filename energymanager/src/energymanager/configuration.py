@@ -41,7 +41,7 @@ def create_configuration_if_missing(path: Path) -> bool:
 def configured_application(path: Path, store: Store, *, weather_url: str = FORECAST_URL,
                            addon: bool = False) -> Application:
     data: dict[str, Any] = installation_configuration(json.loads(path.read_text(encoding="utf-8")))
-    required_capabilities = {f.name for f in fields(Capabilities)}
+    required_capabilities = {f.name for f in fields(Capabilities) if f.name != "phase_dwell_seconds"}
     if required_capabilities - set(data.get("capabilities", {})):
         return pending_configuration(store,
             "All physical capabilities must be explicitly configured; no synthetic commissioning defaults"

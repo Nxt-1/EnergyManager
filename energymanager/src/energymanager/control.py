@@ -10,7 +10,7 @@ from collections.abc import Callable
 import asyncio
 
 from .domain import Capabilities, Observation, Policy, instant
-from .goe import GoEReadings, GoEControl
+from .goe import GoEReadings, GoEControl, RESUME_DELAY_SECONDS
 
 
 @dataclass(frozen=True)
@@ -369,7 +369,7 @@ class FakeActuator:
 
 
 class GuardedActuator:
-    """go-e stop/confirm/dwell sequencing and Victron setpoint sign, verified on fake HA."""
+    """go-e stop/confirm/resume sequencing and Victron setpoint sign, verified on fake HA."""
 
     def __init__(
         self,
@@ -393,6 +393,7 @@ class GuardedActuator:
         self.stopped_at: datetime | None = None
         self.zero_since: datetime | None = None
         self.switched_at: datetime | None = None
+        self.resume_after: datetime | None = None
         self.failures = 0
         self.fault_until: datetime | None = None
         self.last: tuple[int, int, int] | None = None
@@ -462,6 +463,7 @@ class GuardedActuator:
             self.last = None
             self.target_phase = self.awaiting_phase = None
             self.stopped_at = self.zero_since = None
+            self.resume_after = None
         if errors:
             raise RuntimeError("Hardware control is off, but a stop command failed: " + "; ".join(errors))
 
@@ -496,6 +498,7 @@ class GuardedActuator:
                         and self.switched_at is not None and observation.at > self.switched_at):
                     self.phase = self.awaiting_phase
                     self.awaiting_phase = None
+                    self.resume_after = command.at + timedelta(seconds=RESUME_DELAY_SECONDS)
                 else:
                     await self.write("select", "select_option", "force", "option", "1")
                     return
@@ -509,6 +512,7 @@ class GuardedActuator:
                 and observation.ev_power_kw < 0.1
                 and command.phases == self.phase
                 and self.target_phase is None
+                and self.resume_after is None and self.last is not None and self.last[0] > 0
             ):
                 self.charging_since = self.charging_since or command.at
                 if (command.at - self.charging_since).total_seconds() >= 90:
@@ -538,10 +542,6 @@ class GuardedActuator:
                     (command.at - self.stopped_at).total_seconds() >= 10
                     and self.zero_since
                     and (command.at - self.zero_since).total_seconds() >= 3
-                    and (
-                        self.switched_at is None
-                        or (command.at - self.switched_at).total_seconds() >= self.c.phase_dwell_seconds
-                    )
                 )
                 if ready:
                     await self.write(
@@ -559,10 +559,19 @@ class GuardedActuator:
             if target == self.last:
                 return
             if command.current_a and observation.connected:
+                if self.resume_after is None and observation.ev_power_kw < .1 and (self.last is None or not self.last[0]):
+                    await self.write("select", "select_option", "force", "option", "1")
+                    self.resume_after = command.at + timedelta(seconds=RESUME_DELAY_SECONDS)
+                if self.resume_after is not None and command.at < self.resume_after:
+                    self.charging_since = None
+                    return
                 await self.write("number", "set_value", "current", "value", command.current_a)
                 await self.write("select", "select_option", "force", "option", "2")
+                self.resume_after = None
             else:
                 await self.write("select", "select_option", "force", "option", "1")
+                if self.resume_after is None or observation.ev_power_kw >= .1:
+                    self.resume_after = command.at + timedelta(seconds=RESUME_DELAY_SECONDS)
             self.last, self.failures = target, 0
         except StaleDispatch:
             self.last = None
