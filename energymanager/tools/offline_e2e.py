@@ -40,7 +40,8 @@ class VerificationResolver(AbstractResolver):
 
 
 async def run(*, serve: bool = False, preview_fault: str | None = None,
-              history_fixture: bool = False, calendar_fixture: bool = False, ev_fault_fixture: bool = False) -> None:
+              history_fixture: bool = False, calendar_fixture: bool = False, ev_fault_fixture: bool = False,
+              planner_failure_fixture: bool = False) -> None:
     issued = datetime.now(UTC)
     calls = []
     weather_queries = []
@@ -291,6 +292,14 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                 Path("docs/offline-e2e.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
                 print(json.dumps(report, indent=2), flush=True)
                 if serve:
+                    if planner_failure_fixture:
+                        store.record(application.build_snapshot(), {
+                            "id": "synthetic-planner-timeout", "valid": False, "status": "Time limit reached",
+                            "reason": "SYNTHETIC required schedule timeout; diagnostic display fixture only",
+                            "seconds": 12.5, "summary": {},
+                            "stages": [{"name": "required_reference", "status": "Time limit reached",
+                                        "feasible": False, "seconds": 12.0}],
+                        }, "rejected")
                     if ev_fault_fixture:
                         from energymanager.control import Command
 
@@ -322,6 +331,8 @@ if __name__ == "__main__":
                         help="Sync two SYNTHETIC calendar feeds served only by the local fake endpoint")
     parser.add_argument("--ev-fault-fixture", action="store_true",
                         help="Show a SYNTHETIC unresolved EV incident and five-minute diagnostic trace")
+    parser.add_argument("--planner-failure-fixture", action="store_true",
+                        help="Record a SYNTHETIC rejected decision for diagnostic/export UI checks")
     parser.add_argument("--input-fault", choices=("quarter", "stale", "unavailable", "read_failure", "charger"),
                         help="Inject old metadata, unavailability or HA read failure after local verification")
     arguments = parser.parse_args()
@@ -329,6 +340,8 @@ if __name__ == "__main__":
         parser.error("--input-fault requires --serve")
     if arguments.ev_fault_fixture and not arguments.serve:
         parser.error("--ev-fault-fixture requires --serve")
+    if arguments.planner_failure_fixture and not arguments.serve:
+        parser.error("--planner-failure-fixture requires --serve")
     asyncio.run(run(serve=arguments.serve, preview_fault=arguments.input_fault,
                     history_fixture=arguments.history_fixture, calendar_fixture=arguments.calendar_fixture,
-                    ev_fault_fixture=arguments.ev_fault_fixture))
+                    ev_fault_fixture=arguments.ev_fault_fixture, planner_failure_fixture=arguments.planner_failure_fixture))

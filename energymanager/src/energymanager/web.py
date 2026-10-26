@@ -177,7 +177,10 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         value = application.store.decision(request.match_info["id"])
         if value is None:
             raise web.HTTPNotFound()
-        return web.json_response(value)
+        headers = {"Cache-Control": "no-store"}
+        if request.query.get("download") == "1":
+            headers["Content-Disposition"] = 'attachment; filename="energymanager-decision.json"'
+        return web.json_response(value, headers=headers)
 
     async def events(request: web.Request) -> web.Response:
         return web.json_response(application.store.events())

@@ -1,5 +1,43 @@
 # EnergyManager 4 verification
 
+## 4.3.11 — Month-aware seeds, timeout recovery and failed-decision export
+
+251 Python tests pass43.26s; final eight recovery/failure/export tests pass5.60s after
+the recovery allocation was finalized.50 frontend tests, Ruff/mypy35 and JS parse pass.
+New synthetic regressions cover a month-reset seed with required charging, one initial
+timeout followed by a validated plan, no retry after deadline exhaustion, rejected-list
+metadata, complete no-store attachment JSON with preserved float/checksum, missing ID
+and CLI rejection of a corrupt top-level exported digest.
+
+The user-supplied frozen failed decision passes its checksum. Baseline4.3.10 reproduces
+required_reference timeout/no candidate at12.733s despite120s total budget. Its seed
+uses the current month's incurred allowance in a later month and fails the model's
+correct future-month quarter limit. Corrected replay validates at117.234s; a second
+replay validates at117.242s with an empty independent validation-error list. Raw private
+inputs and outputs remain ignored local evidence, not tracked fixtures or installation
+configuration. These are frozen offline results, not live installation timing claims.
+
+Sequential synthetic120s benchmarks preserve168h and≤300s intervals: mixed115.867s,
+winter115.260s, permission115.366s; all valid, no validation errors and minimum necessary
+grid certified. All three had a feasible initial reference and did not use recovery;
+the recovery branch is covered by the final focused real-solver regression. Updated
+benchmark-{mixed,winter,permission}.json reports retain full stage/gap evidence.
+
+Fake E2E passes31.922s/2,018intervals/max control tick2.303ms/four fake-only service calls.
+The explicitly labelled planner-failure fixture records display evidence after normal
+acceptance checks. Native browser history lists rejected/status/reason/time; the modal
+shows false validity, reason, timing/stages and the authenticated ingress export link.
+Standalone renders the same details with its local export link. A339px dialog fits
+without horizontal overflow; warning/error logs are empty. Synthetic proof is ignored
+artifacts/release-4.3.11-diagnostics.jpg. Browser file-download permission was declined,
+so actual browser download completion was not verified or retried through another route.
+Earlier server-side export/checksum tests passed. No live HA/database/hardware/real
+notifications or installation deployment was accessed.
+
+Wheel/sdist build passes; all55 code/assets match source in both archives and isolated
+extracted-wheel import reports4.3.11. Private replay inputs/artifacts and the paused
+Maps archive are excluded from the package and commit.
+
 ## 4.3.10 — Wheel zoom, Grid peak history and EV controls
 
 246 Python tests pass42.93s;50 frontend tests pass. Wheel cases verify pointer-anchored

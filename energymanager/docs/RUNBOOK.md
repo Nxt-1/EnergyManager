@@ -2,6 +2,15 @@
 
 ## Local use
 
+Release4.3.11 fixes a starting-schedule failure when the seven-day horizon crosses
+a billing month and adds bounded first-stage timeout recovery within the existing
+planning budget. Update the add-on and reload HA; no configuration change is needed.
+For a planning error, expand Decision history & technical evidence, Load decisions,
+then select the rejected attempt at the relevant time. The list shows status/reason/
+elapsed time; the detail shows each solver stage. Download full decision JSON (inputs
+and results) there for offline diagnosis; developer tools/database access are unnecessary.
+The export includes schedule/forecast inputs, so share only the intended decision.
+
 Release4.3.10 corrects mouse-wheel input to time zoom: up zooms in, down zooms out,
 anchored under the mouse. Drag left/right to pan. The existing mobile pinch zoom and
 two-finger pan are retained; the user reported these working on mobile. The recorded

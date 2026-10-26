@@ -8,6 +8,12 @@ New explicit user instructions take precedence. Deferred ideas are not authoriza
 
 ## Architecture and EV behavior retained
 
+- For4.3.11 the user authorized correcting the reproduced planner failure and making
+  rejected decisions accessible. Match the existing billing-month permissions in seed
+  construction, allow one no-candidate timeout recovery using remaining budget, and
+  keep horizon, input requirements, permissions and validation intact. Full exported
+  decision JSON must retain its checksum for offline replay; private replay inputs
+  are not release fixtures or committed configuration.
 - For4.3.10 the user clarified that mouse-wheel scrolling should zoom; mouse dragging
   already covers horizontal panning. Wheel zoom anchors time under the pointer and
   shares the15min–7day bounds. Preserve mobile pinch/two-finger gestures, which the

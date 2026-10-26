@@ -1,5 +1,27 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.11 planner recovery and rejected decision export
+
+AUTHORIZED: fix the supplied frozen no-incumbent failure; inspect seed/budget and
+expose failure evidence. Reproduced baseline12.733s failure under120s global budget.
+Found seed incorrectly using current-month incurred peak in future-month allowance.
+Fixed month boundary; one recovery solve after no-candidate timeout uses remaining budget less2s for validation
+with same model/objective/permissions. First replay valid117.234s; final replay valid
+117.242s and independent validation passes. Raw private snapshots/replays stay ignored.
+Rejected history now lists reason/status/time, detail shows stages/validity, direct
+serverJSON download preserves floats/checksum; CLI verifies exported top-level digest.
+LOCAL:251 Python43.26s/50 Node/five new seed/recovery/export tests0.39s/Ruff/mypy35/JS
+pass. Full replay timings are offline evidence, not installation timing guarantees.
+NEXT: finish sequential synthetic benchmarks, fake E2E/browser download verification,
+package/final docs and scoped ready-release commit/push. No live HA/db/hardware/phone/
+deployment. Preserve unrelated backlog and separately paused Maps.
+FINAL LOCAL: mixed115.867/winter115.260/permission115.366s benchmarks allvalid/certified;
+fake E2E31.922s/max2.303ms/four fake calls. Native/standalone rejected detail/link and
+339px dialog pass, logs clean. Browser download permission declined; no browser completion
+claim/retry, prior server-side export/checksum tests pass. Remaining: package/scoped release.
+PACKAGE:55 code/assets identical in wheel/sdist; isolated4.3.11 import passes. Temporary
+browser tabs/servers closed and viewport reset. Remaining: scoped review/commit/push/CI.
+
 ## Current work —4.3.10 wheel correction, Grid peak and EV consolidation
 
 AUTHORIZED: wheel zoom instead of pan; red dashed peak + Grid value/history; remove

@@ -129,7 +129,9 @@ async def preview() -> None:
                     body = json.dumps(fixture).encode()
                 return web.Response(body=body, status=response.status,
                                     headers={"Content-Type": response.headers["Content-Type"],
-                                             "Cache-Control": "no-store"})
+                                             "Cache-Control": "no-store",
+                                             **({"Content-Disposition": response.headers["Content-Disposition"]}
+                                                if "Content-Disposition" in response.headers else {})})
 
         async def loader(request: web.Request) -> web.Response:
             async with session.get(backend + "ha-card.js") as response:

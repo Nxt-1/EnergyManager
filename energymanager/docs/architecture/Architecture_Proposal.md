@@ -500,6 +500,24 @@ coalesced event or five-minute refresh requests planning. One120s default wall b
 covers construction, reference/diagnostic/opportunity solves, polish and audits. Optional
 refinements are skipped when unvalidated. Checked lower-peak warm starts are feasible
 incumbents, not substitute published schedules. Raw status, bounds and gaps are retained.
+From4.3.11 seed grid allowances reset by installation-local billing month, matching
+the model: current-month incurred peak is never permission in a later month. Every
+seed still passes row/bound checks before HiGHS and every published trajectory passes
+the independent validator. If the initial required-reference stage reaches its time
+limit without a feasible candidate, one recovery solve on the same model/objective
+uses the remaining global wall budget less2s reserved for validation (only when more
+than2s remain), retaining
+the checked warm start if available. No infeasibility claim, new permission, reduced
+horizon or relaxed constraint follows from timeout. Refinements use only leftover time.
+
+Decision history lists status/reason/elapsed time for rejected attempts independently
+of the last accepted plan's evidence. Its detail includes validity, all stages and
+failure reason. A same-origin authenticated download of `GET /api/decisions/{id}?download=1`
+returns full snapshot/result/digest/disposition with no-store attachment headers.
+Download server JSON directly to preserve float representation/checksums; native HA
+uses its discovered ingress base. Frozen CLI replay validates the exported top-level
+digest as well as legacy result.input_digest. No full snapshot is added to state polls
+or decision-list responses; opening/exporting a decision performs no hardware action.
 One sweep of local-day operational neighborhoods keeps the entire horizon and fixed
 outside decisions, with a **single**0.02EUR bound on comparison and cash against the
 best economic result. It favors fewer starts/phase changes, lower throughput and early

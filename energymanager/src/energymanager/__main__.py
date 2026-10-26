@@ -54,7 +54,7 @@ def main() -> None:
     if args.fixture:
         payload = json.loads(args.fixture.read_text(encoding="utf-8"))
         data = payload.get("snapshot", payload)
-        expected = payload.get("result", {}).get("input_digest")
+        expected = payload.get("digest") or payload.get("result", {}).get("input_digest")
         if expected and sha256(encode(data).encode()).hexdigest() != expected:
             parser.error("Frozen decision input checksum mismatch")
         snapshot = Snapshot.from_dict(data)

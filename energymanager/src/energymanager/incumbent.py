@@ -27,6 +27,8 @@ def seed(model: JointModel, peak_limit_kw: float | None = None) -> list[float] |
     previous_on = o.ev_power_kw > 0.1
     previous_phase = o.ev_phases
     previous_active_at = s.intervals[0].start - timedelta(seconds=c.phase_dwell_seconds)
+    zone = ZoneInfo(p.timezone)
+    current_month = s.intervals[0].start.astimezone(zone).strftime("%Y-%m")
     for t, interval in enumerate(s.intervals):
         put("ev_energy", t, ev)
         put("ess_solar", t, solar)
@@ -38,7 +40,10 @@ def seed(model: JointModel, peak_limit_kw: float | None = None) -> list[float] |
         target = max(
             [0.0] + [model.service.get(g.id, g.target(c, p)) for g in future if g.deadline == next_deadline]
         )
-        allowed = max(p.billing_floor_kw, o.monthly_peak_kw, p.automatic_peak_kw if future else 0)
+        # An incurred peak grants no allowance in a future billing month.
+        same_month = interval.start.astimezone(zone).strftime("%Y-%m") == current_month
+        baseline = max(p.billing_floor_kw, o.monthly_peak_kw if same_month else 0)
+        allowed = max(baseline, p.automatic_peak_kw if future else 0)
         allowed = max(
             [allowed]
             + [

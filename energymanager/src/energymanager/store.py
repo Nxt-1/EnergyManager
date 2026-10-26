@@ -116,16 +116,20 @@ class Store:
             "SELECT id,at,disposition,digest,result FROM decisions ORDER BY at DESC LIMIT ?",
             (min(100, max(1, limit)),),
         )
-        return [
-            {
-                "id": r[0],
-                "at": r[1],
-                "disposition": r[2],
-                "digest": r[3],
-                "summary": json.loads(read_archive(r[4])).get("summary", {}),
-            }
-            for r in rows
-        ]
+        entries = []
+        for row in rows:
+            result = json.loads(read_archive(row[4]))
+            entries.append({
+                "id": row[0],
+                "at": row[1],
+                "disposition": row[2],
+                "digest": row[3],
+                "summary": result.get("summary", {}),
+                "status": result.get("status"),
+                "reason": result.get("reason"),
+                "seconds": result.get("seconds"),
+            })
+        return entries
 
     def decision(self, identity: str) -> dict[str, Any] | None:
         row = self.connection.execute(

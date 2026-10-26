@@ -60,12 +60,19 @@ class Planner:
         reasons: list[dict[str, Any]] = []
         required_support = False
         reference_model = JointModel(s)
+        reference_seed = self.starting_point(reference_model)
         reference = self.run_model(
             "required_reference",
             reference_model,
             max(1, self.remaining() * 0.10),
-            self.starting_point(reference_model),
+            reference_seed,
         )
+        if (not reference["feasible"] and reference["status"] == "Time limit reached"
+                and self.remaining() > 2):
+            # A stage allowance is not the whole planning budget. Find a usable
+            # required schedule before spending time on optional refinements.
+            reference = self.run_model("required_reference_recovery", reference_model, self.remaining() - 2,
+                                       reference_seed)
         if not reference["feasible"] and reference["status"] == "Infeasible" and self.remaining() > 3:
             # A late EV window can need ESS household support to avoid a larger necessary peak.
             support_model = JointModel(s, grid_ess=True)
@@ -113,7 +120,8 @@ class Planner:
         if not reference["feasible"]:
             if reference["status"] != "Infeasible":
                 return self.failure(
-                    snapshot, reference["status"], "No validated incumbent; retain valid instructions"
+                    snapshot, reference["status"],
+                    "Required schedule search ended without a feasible candidate; previous instructions continue only while valid"
                 )
             relaxed = JointModel(s, relaxed_service=True)
             physical = self.run_model(

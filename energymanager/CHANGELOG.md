@@ -1,3 +1,14 @@
+## 4.3.11 — Planner timeout recovery and accessible failure evidence
+
+- Correct starting-schedule allowances across billing months: an incurred peak in
+  the current month cannot authorize grid charging in the next month.
+- Retry the required-schedule search once with the remaining global budget
+  (reserving two seconds for validation) when its initial allowance expires without
+  a candidate. Keep the same constraints,
+  permissions, horizon and validation; optional refinements use only remaining time.
+- Show rejected decision status, reason, timings and solver stages in the dashboard.
+  Download the complete input/result JSON directly for checksum-preserving replay.
+
 ## 4.3.10 — Wheel zoom, Grid peak history and EV controls
 
 - Correct mouse-wheel behavior to zoom the time axis around the pointer: up zooms

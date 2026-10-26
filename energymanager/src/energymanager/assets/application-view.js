@@ -767,7 +767,7 @@ export async function mountApplication(root, options = {}) {
     try {
       const rows = await api('decisions');
       $('history-list').innerHTML = rows.map(r =>
-        `<p><button data-decision="${esc(r.id)}">${time(r.at)} · ${esc(r.disposition)}</button> ${money(r.summary.comparison_eur)} comparison</p>`
+        `<p><button data-decision="${esc(r.id)}">${time(r.at)} · ${esc(r.disposition)}${r.status ? ' · ' + esc(r.status) : ''}</button> ${r.reason ? esc(r.reason) : money(r.summary.comparison_eur) + ' comparison'}${r.seconds !== null && r.seconds !== undefined ? ' · ' + num(r.seconds,1) + ' s' : ''}</p>`
       ).join('')
     } catch (error) {
       $('status').textContent = error.message
@@ -776,10 +776,20 @@ export async function mountApplication(root, options = {}) {
   $('history-list').onclick = async event => {
     const b = event.target.closest('[data-decision]');
     if (b) {
-      const d = await api(`decisions/${encodeURIComponent(b.dataset.decision)}`);
-      detail('Persisted decision',
-        `<p>${esc(d.disposition)} · ${esc(d.snapshot.provenance)}</p><pre>${esc(JSON.stringify({summary:d.result.summary,reasons:d.result.reasons,digest:d.digest},null,2))}</pre>`
-      )
+      try {
+        const id = encodeURIComponent(b.dataset.decision);
+        const d = await api(`decisions/${id}`);
+        detail(d.disposition.startsWith('rejected') ? 'Rejected planning attempt' : 'Persisted decision',
+          `<p>${esc(d.disposition)} · ${esc(d.snapshot.provenance)}</p><pre>${esc(JSON.stringify({status:d.result.status,valid:d.result.valid,reason:d.result.reason,seconds:d.result.seconds,stages:d.result.stages,summary:d.result.summary,reasons:d.result.reasons,digest:d.digest},null,2))}</pre>`);
+        const download = document.createElement('a');
+        // Download server JSON directly so floating-point formatting and checksums survive.
+        download.href = options.decisionDownloadUrl ? options.decisionDownloadUrl(id) : `./api/decisions/${id}?download=1`;
+        download.download = 'energymanager-decision.json';
+        download.textContent = 'Download full decision JSON (inputs and results)';
+        $('detail-body').prepend(download);
+      } catch (error) {
+        detail('Decision unavailable', `<p class="error">${esc(error.message)}</p>`);
+      }
     }
   };
   if (!options.native) page = ['#planning', '#ev', '#settings'].includes(location.hash) ? location.hash.slice(1) : 'overview';

@@ -81,6 +81,7 @@ export function generateDashboard(config, manifest, connection) {
         const controller = await mountApplication(root, {
           native: true,
           entities: manifest.entities,
+          decisionDownloadUrl: id => `${runtime.base}api/decisions/${id}?download=1`,
           page: this.config.view,
           api,
           navigate: name => {

@@ -77,6 +77,13 @@ responsive. The90%SoC version completed. Preserve this evidence for a separately
 authorized planner/seed-budget investigation; calendar-import work does not authorize
 changing solver policy or temporal resolution.
 
+26October2026: the user authorized the planner/seed investigation after providing a
+failed decision.4.3.11 corrects month-reset seed permissions and adds one bounded
+required-reference timeout recovery within the existing global budget. The supplied
+frozen failure reproduces before the fix and validates afterward; raw inputs/replays
+remain ignored local evidence. This does not establish that all calendar scenarios
+will solve within budget, and Maps/temperature work remains paused/deferred.
+
 ## ARCH-004 — DHW scheduling and heating-model calibration
 
 Recorded: 22 October 2026. Status: **deferred beyond the initial release**, explicitly requested by the user.
