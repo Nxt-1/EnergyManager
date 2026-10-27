@@ -1,5 +1,34 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.15 EV action visibility and rapid-stop investigation
+
+AUTHORIZED27Oct: investigate rapid charging start/stop/error timing and implement
+an EV-page visual action indicator, especially artificial30s holds. Reproduced a
+specific unchanged-request stop: send force2 under generation1, then two seconds
+later issue the same6A/one-phase positive request under generation2 before readback;
+GoEControl sends force1. `starting` requires the pending generation to match, while
+`resume_after` remains set until start confirmation. This establishes a code path,
+not the cause of the user's unprovided incident. The90s low-power watchdog cannot
+by itself explain a stop a few seconds after start. Fresh input loss, protective
+zero commands and explicit charger errors remain other independent stop paths.
+Also confirmed with a local fixture that `car=5`, even with `err=0`, two seconds
+into the deliberate hold immediately latches a fault. This is the existing error
+policy, not a demonstrated erroneous reading. It can prevent the self-recovery
+observed in manual tests; actual incident codes/order are needed before proposing
+which, if any, reported errors could be treated as transient.
+
+Asked for explicit permission to change this charging-logic path; answer pending.
+Do not change control behavior until supplied. The visual scope is implemented:
+read-only structured activity, action/step strip and real-deadline countdown ring;
+separate restart/phase-preparation/delivery clocks, fault/blocked/off priorities,
+stale/expired update handling and selection-safe1s updates without rebuilding SVG.
+No control branch or duration changed. Native/standalone rendering, light/dark,
+327px component at390px viewport and expired-wait behavior verified on local fixtures.
+Version4.3.15 releases the independently authorized visual scope; the charging fix
+remains pending permission. Final verification/package evidence goes in VERIFICATION.md and the
+existing ignored checkpoint. Preserve unrelated DEFERRED_WORK tail and paused Maps;
+no installation access or hardware/real notification/deployment is authorized.
+
 ## Current work —4.3.14 immediate recalculation and visual activity
 
 AUTHORIZED27Oct: manual Recalculate replaces a running solve, avoids queues and

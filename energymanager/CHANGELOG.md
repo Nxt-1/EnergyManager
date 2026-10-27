@@ -1,3 +1,11 @@
+## 4.3.15 — Visible EV controller actions
+
+- Show what EnergyManager is doing separately from the car/charger's reported state.
+  Highlight the active restart step and show a live countdown ring for the deliberate
+  30-second hold, phase preparation and delivery check with distinct labels.
+- Preserve fault details and measured readings. A timer ending never implies charging
+  has started; expired updates become visibly unavailable. Charging behavior is unchanged.
+
 ## 4.3.14 — Immediate recalculation and visual activity
 
 - Make Recalculate cancel the current solver process and start a fresh calculation

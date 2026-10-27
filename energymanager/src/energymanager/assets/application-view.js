@@ -819,6 +819,7 @@ export async function mountApplication(root, options = {}) {
       lifecycle.abort();
       graphHistory.dispose();
       planningActivity.dispose();
+      evPage.dispose();
       clearInterval(timer);
       for (const dialog of root.querySelectorAll('dialog[open]')) dialog.close();
     }

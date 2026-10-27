@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from aiohttp import ClientSession, web
@@ -13,6 +13,7 @@ from aiohttp import ClientSession, web
 async def preview() -> None:
     fail_requests = False
     ev_scenario = "sampled"
+    ev_scenario_at = datetime.now(UTC)
     async with ClientSession() as session:
         backend = "http://127.0.0.1:8102/"
         async with session.get(backend + "api/state") as response:
@@ -39,7 +40,7 @@ async def preview() -> None:
                                 if request.query.get("manual-copy") == "1" else None)
 
         async def websocket(request: web.Request) -> web.WebSocketResponse:
-            nonlocal fail_requests, ev_scenario
+            nonlocal fail_requests, ev_scenario, ev_scenario_at
             socket = web.WebSocketResponse()
             await socket.prepare(request)
             async for frame in socket:
@@ -70,8 +71,9 @@ async def preview() -> None:
                     result = states
                 elif message["type"] == "synthetic/ev_scenario":
                     ev_scenario = message["scenario"]
+                    ev_scenario_at = datetime.now(UTC)
                     if ev_scenario not in ("sampled", "charging", "phase_switch", "fault", "device_fault",
-                                           "stopped", "stale", "disconnected"):
+                                           "stopped", "stale", "disconnected", "settling"):
                         raise ValueError("Unknown synthetic EV display scenario")
                     for key, value in {"ev_kw": "4140" if ev_scenario == "charging" else "0",
                                        "ev_soc": "57", "connected": "off" if ev_scenario == "disconnected" else "on"}.items():
@@ -117,6 +119,13 @@ async def preview() -> None:
                                                      "charge_allowed": "on", "heartbeat": "42"}}
                     fixture["command"] = {"at": at, "generation": fixture["revision"], "ev_kw": 4.14,
                                           "current_a": 6, "phases": 3, "reason": "SYNTHETIC requested power"}
+                    if ev_scenario == "settling":
+                        fixture["control_enabled"] = True  # Display only; backend hardware remains off.
+                        fixture["charger"]["states"].update(force="1", charger_status="4", ev_status="3")
+                        fixture["charger"]["activity"] = {"as_of": at, "stage": "settling",
+                            "label": "Settling before restart", "detail": "SYNTHETIC thirty-second restart hold.",
+                            "until": (ev_scenario_at + timedelta(seconds=30)).isoformat(),
+                            "duration_seconds": 30, "timer": "Restart hold"}
                     if ev_scenario == "fault":
                         fixture["ev_incident"] = {"status": "unresolved", "detected_at": at,
                                                   "reason": "SYNTHETIC delivery fault; fixture only"}

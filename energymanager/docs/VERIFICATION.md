@@ -1,5 +1,33 @@
 # EnergyManager 4 verification
 
+## 4.3.15 — EV controller-action display
+
+283 Python tests pass53.03s;55 frontend tests, Ruff and mypy35 pass. New read-only
+activity regressions distinguish restart settling, start readback,90s delivery check,
+actual charging, requested stops, disabled control, phase preparation/active transition,
+reported errors and stale inputs. Repeated status reads do not write commands or
+change the deadline. An unfinished stop with measured power still flowing is shown
+as waiting for power to stop rather than controller intent to charge.
+
+Node tests verify real-deadline countdown, elapsed-time extrapolation, expired timers
+awaiting a control update, stale status becoming unavailable, demo/missing-source
+isolation and escaped diagnostic text. Native preview uses a separately labelled,
+display-only30s fixture with a fixed deadline, never repeated fake authority. Browser
+checks cover native/standalone rendering, normal verdict consolidation with preserved
+fault details, dark/light themes,327px strip at390px viewport and expired-wait behavior.
+The active ring/step/remaining/total display is in ignored
+artifacts/release-4.3.15-ev-hold.png. Countdown never declares a start by itself.
+All56 source/assets/defaults match wheel and sdist; isolated packaged4.3.15 import passes.
+
+Configured fake-HA E2E passes32.798s/2018intervals/maximum local control2.238ms (not
+hardware latency), four fake service calls. See offline-e2e.json. This release scope
+does not change command sequencing, watchdogs, error policy or any charging duration.
+The separate start/revision and immediate-error-latch findings are synthetic code-path
+evidence in WORK_STATE.md, not identification of the user's incident. The charging
+fix remains pending the explicit scope answer; the visual scope is independently
+authorized. No live HA, installation database, physical hardware, real notice or
+deployment was accessed.
+
 ## 4.3.14 — Cancel/replace recalculation and visual activity
 
 280 Python tests pass53.42s;54 frontend tests, Ruff and mypy35 pass. Regressions use

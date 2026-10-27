@@ -2,6 +2,19 @@
 
 ## Local use
 
+The4.3.15 EV action strip reports the controller separately from charger state. During
+the deliberate restart pause, Wait is highlighted with remaining seconds and a
+30second total. Start means waiting for charger readback; Power means the acknowledged
+request is awaiting measured delivery, with a separate90second check. Timer expiry
+does not claim charging. A delayed API feed shows Awaiting control update and then
+Controller status unavailable rather than inventing a transition. No new mapping or
+setting is needed. This display does not change the charging sequence or its checks.
+
+For display-only offline verification, run the synthetic E2E/native preview below,
+select Restart hold ·30seconds in the native fixture and inspect the declining
+countdown/ring on desktop and390px width. The fixture never changes backend commands.
+Inspect fault scenarios and expired timers; restore Sampled fixture afterward.
+
 Release4.3.13 adds a30second EV restart settling hold after phase acknowledgement
 in either direction and after confirmed force off plus power below100W for ordinary
 stops. Time already spent stopped counts. Current-only changes stay live; ESS and

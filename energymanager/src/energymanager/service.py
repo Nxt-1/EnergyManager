@@ -816,7 +816,8 @@ class Application:
                                     or getattr(self.actuator, "awaiting_phase", None)),
             },
             "ev_incident": self.ev_faults.current if self.ev_faults else None,
-            "charger": ({**self.actuator.charger.view(now), "control": self.actuator.goe_control.status}
+            "charger": ({**self.actuator.charger.view(now), "control": self.actuator.goe_control.status,
+                         "activity": self.actuator.goe_control.view(now, self.observation, self.current_command)}
                         if isinstance(self.actuator, GuardedActuator) and self.actuator.charger
                         and self.actuator.goe_control else None),
             "provenance": self.snapshot.provenance,

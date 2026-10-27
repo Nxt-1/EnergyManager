@@ -69,6 +69,71 @@ class ChargerFixture:
         await self.tick(amps=amps)
 
 
+async def test_controller_activity_distinguishes_restart_hold_start_ack_and_delivery_check():
+    f = ChargerFixture()
+    command, observation = await f.tick()
+    control = f.actuator.goe_control
+    deadline = f.actuator.resume_after
+    calls = len(f.calls)
+    view = control.view(f.at, observation, command)
+    assert view["stage"] == "settling" and view["duration_seconds"] == 30
+    assert view["until"] == deadline.isoformat() and view["timer"] == "Restart hold"
+    # Reading the status must not change timing, write commands or confirm a pending operation.
+    assert f.actuator.resume_after == deadline and len(f.calls) == calls
+    f.refresh(30)
+    command, observation = await f.tick()
+    assert control.view(f.at, observation, command)["stage"] == "starting"
+    f.refresh()
+    command, observation = await f.tick()
+    view = control.view(f.at, observation, command)
+    assert view["stage"] == "power" and view["timer"] == "Delivery check"
+    assert view["duration_seconds"] == 90
+    command, observation = await f.tick(power=1.38)
+    assert control.view(f.at, observation, command)["stage"] == "charging"
+    command, observation = await f.tick(amps=0)
+    assert control.view(f.at, observation, command)["stage"] == "stopping"
+    f.refresh()
+    command, observation = await f.tick(amps=0)
+    assert control.view(f.at, observation, command)["stage"] == "idle"
+    f.actuator.enabled = False
+    assert control.view(f.at, observation, command)["stage"] == "disabled"
+
+
+async def test_controller_activity_prioritizes_faults_stale_inputs_and_phase_waits():
+    f = ChargerFixture()
+    command, observation = await f.tick(phases=3)
+    control = f.actuator.goe_control
+    assert control.view(f.at, observation, command)["stage"] == "stopping"
+    f.refresh(10)
+    command, observation = await f.tick(phases=3)
+    assert control.view(f.at, observation, command)["stage"] == "settings"
+    f.auto_model = False
+    f.set("charger_status", 23)
+    f.refresh()
+    command, observation = await f.tick(phases=3)
+    assert control.view(f.at, observation, command)["timer"] == "Restart hold"
+    f.refresh(30)
+    command, observation = await f.tick(phases=3)
+    view = control.view(f.at, observation, command)
+    assert view["until"] is None and "hold complete" in view["detail"]
+    f.set("charger_error", 8)
+    f.refresh()
+    assert control.view(f.at, observation, command)["stage"] == "fault"
+    await f.tick(phases=3)
+    assert control.view(f.at, observation, command)["stage"] == "fault"
+    f.actuator.delivery_fault = False
+    f.refresh(31, heartbeat=False)
+    assert control.view(f.at, observation, command)["stage"] == "blocked"
+
+
+async def test_controller_activity_does_not_label_unfinished_stop_as_charging():
+    f = ChargerFixture()
+    command, observation = await f.tick(power=1.38)
+    view = f.actuator.goe_control.view(f.at, observation, command)
+    assert view["stage"] == "stopping" and view["until"] is None
+    assert view["label"] == "Waiting for EV power to stop"
+
+
 async def test_current_must_confirm_before_start_and_silent_failure_escalates():
     f = ChargerFixture()
     f.ignore.add(f.actuators["current"])

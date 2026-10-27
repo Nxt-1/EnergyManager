@@ -6,7 +6,7 @@ import {clockValue, localDateTime, localInstants, monthDays, validLocal}
   from '../src/energymanager/assets/date-time.js';
 import {eventsOnDay, evSchedule, scheduleDays} from '../src/energymanager/assets/ev-schedule.js';
 import {nativeLiveState, phaseSelector, setChargerPhase} from '../src/energymanager/assets/native-live.js';
-import {evStatusModel, evStatusMarkup} from '../src/energymanager/assets/ev-status.js';
+import {evControlActivityModel, evStatusModel, evStatusMarkup} from '../src/energymanager/assets/ev-status.js';
 import {PlanningActivity, planningActivityModel} from '../src/energymanager/assets/planning-activity.js';
 
 test('planning activity reports real stages and elapsed time without a fabricated percentage', () => {
@@ -111,6 +111,35 @@ function syntheticEVStatus() {
     charger: {at, device_at: at, issue: null, waiting: null, control: 'SYNTHETIC control',
       states: {phase: '2', current: '6', force: '2', ev_status: '2', charger_status: '3', charger_error: '0'}}};
 }
+
+test('EV controller countdown uses the real deadline and never declares charging when it expires', () => {
+  const state = syntheticEVStatus();
+  state.observation.ev_power_kw = 0;
+  state.charger.states.force = '1';
+  state.charger.states.charger_status = '4';
+  state.charger.activity = {as_of: state.now, stage: 'settling', label: 'Settling before restart',
+    detail: 'SYNTHETIC deliberate pause', until: '2026-10-25T12:00:18Z', duration_seconds: 30, timer: 'Restart hold'};
+  const model = evControlActivityModel(state, 5);
+  assert.equal(model.seconds, 13);
+  assert.equal(model.stage, 'settling');
+  assert.equal(model.tone, 'active');
+  assert.match(evStatusMarkup(state), /Stopped[\s\S]*Settling before restart[\s\S]*Restart hold/);
+  assert.match(evStatusMarkup(state), /data-control-seconds>18/);
+  const expired = evControlActivityModel(state, 19);
+  assert.equal(expired.seconds, 0);
+  assert.equal(expired.timerLabel, 'Awaiting control update');
+  assert.equal(expired.stage, 'settling');
+  assert.equal(evControlActivityModel(state, 31).label, 'Controller status unavailable');
+  state.charger.activity = {...state.charger.activity, stage: 'fault', label: 'Stopped for attention',
+    detail: '<script>SYNTHETIC</script>', until: null};
+  assert.equal(evControlActivityModel(state).tone, 'error');
+  const markup = evStatusMarkup(state);
+  assert.match(markup, /&lt;script&gt;SYNTHETIC&lt;\/script&gt;/);
+  assert.doesNotMatch(markup, /<script>/);
+  assert.equal(evControlActivityModel({...state, demo:true}), null);
+  delete state.charger.activity;
+  assert.equal(evControlActivityModel(state), null);
+});
 
 test('EV visualization distinguishes measured power, command intent and selector settings', () => {
   const state = syntheticEVStatus();

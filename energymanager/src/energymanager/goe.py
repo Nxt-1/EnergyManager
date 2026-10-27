@@ -165,6 +165,69 @@ class GoEControl:
         self.actuator.resume_after = None
         self.actuator.last = None
 
+    def view(self, at: datetime, observation: Observation, command: Command | None) -> dict[str, Any]:
+        """Read-only display of controller intent, separate from charger measurements."""
+        a, r = self.actuator, self.readings
+
+        def activity(stage: str, label: str, detail: str = "", *,
+                     until: datetime | None = None, seconds: int = 0, timer: str = "") -> dict[str, Any]:
+            return {"as_of": at.isoformat(), "stage": stage, "label": label, "detail": detail,
+                    "until": until.isoformat() if until else None, "duration_seconds": seconds, "timer": timer}
+
+        if not a.enabled:
+            return activity("disabled", "Automatic EV control off")
+        if a.delivery_fault:
+            return activity("fault", "Stopped for attention", a.delivery_reason)
+        if issue := r.issue(at):
+            return activity("blocked", "Waiting for charger inputs", issue)
+        if error := r.error():
+            return activity("fault", "Stopping for charger fault", error)
+        if command is None or not -5 <= (at - command.at).total_seconds() <= r.maximum_age:
+            return activity("blocked", "Waiting for current controller request")
+        pending_force = self.pending.get("force")
+        if pending_force:
+            starting = pending_force[0] == 2
+            return activity("starting" if starting else "stopping",
+                            "Confirming start" if starting else "Confirming stop",
+                            "Waiting for a newer charger readback; service acceptance is not confirmation.")
+        if not command.current_a or not observation.connected:
+            return activity("idle", "Stopped as requested", command.reason)
+        if self.phase_started is not None:
+            target = a.target_phase or command.phases
+            if "phase" in self.pending:
+                return activity("settings", f"Selecting {target}-phase mode", "Waiting for charger readback.")
+            if a.awaiting_phase is not None:
+                if a.resume_after is not None and at >= a.resume_after:
+                    return activity("settings", "Waiting for charger phase transition",
+                                    "Restart hold complete; the charger still reports a phase transition.")
+                return activity("settings", "Waiting for charger phase transition",
+                                "The charger still reports simulated unplugging or phase switching.",
+                                until=a.resume_after, seconds=RESUME_DELAY_SECONDS, timer="Restart hold")
+            if observation.ev_power_kw >= .1:
+                return activity("stopping", "Waiting for EV power to stop", "Charging must stop before changing phases.")
+            ready = a.stopped_at + timedelta(seconds=10) if a.stopped_at else None
+            if ready and a.zero_since:
+                ready = max(ready, a.zero_since + timedelta(seconds=3))
+            if ready and at >= ready:
+                ready = None
+            return activity("stopping", "Preparing phase change", "Confirming stopped power before changing phases.",
+                            until=ready, seconds=10, timer="Stop preparation")
+        if self.stopping_since is not None:
+            return activity("stopping", "Waiting for EV power to stop", "Confirming stopped power before the restart hold.")
+        if a.resume_after is not None and at < a.resume_after:
+            return activity("settling", "Settling before restart", "Charging is deliberately held off before starting.",
+                            until=a.resume_after, seconds=RESUME_DELAY_SECONDS, timer="Restart hold")
+        if "current" in self.pending:
+            return activity("settings", f"Confirming {command.current_a} A limit", "Current changes do not require a restart hold.")
+        if self.waiting_since is not None:
+            return activity("waiting", "Waiting for car or charger", self.status)
+        if observation.ev_power_kw >= .1:
+            return activity("charging", "Charging", "Measured power is reaching the car.")
+        if a.charging_since is not None:
+            return activity("power", "Waiting for charging power", "Start confirmed; checking measured delivery.",
+                            until=a.charging_since + timedelta(seconds=90), seconds=90, timer="Delivery check")
+        return activity("waiting", "Waiting to start", self.status)
+
     def observe_stopped(self, command: Command, observation: Observation, confirmed: bool) -> None:
         """Start one settling interval when force off and low power are confirmed."""
         a = self.actuator

@@ -3,7 +3,8 @@ import {
   localInstants
 } from './date-time.js';
 import {powerText} from './display.js';
-import {evStatusMarkup} from './ev-status.js';
+import {evControlActivityModel, evStatusMarkup} from './ev-status.js';
+import {hasTextSelection} from './text-selection.js';
 
 const hour = 3600000;
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -136,6 +137,7 @@ export class EVSchedulePage {
     this.selectedDate = null;
     this.phaseChanging = false;
     this.phaseError = null;
+    this.activityTimer = setInterval(() => this.updateActivity(), 1000);
     root.addEventListener('click', async event => {
       const button = event.target.closest('button');
       if (!button) return;
@@ -299,6 +301,7 @@ export class EVSchedulePage {
       preventScroll: true
     });
     this.root.querySelector('.ev-calendar-scroll').scrollLeft = scrollLeft;
+    this.updateActivity();
   }
 
   updateStatus(state) {
@@ -308,6 +311,31 @@ export class EVSchedulePage {
     const focused = this.root.getRootNode().activeElement;
     const option = card.contains(focused) ? focused?.dataset.evPhase : undefined;
     card.innerHTML = evStatusMarkup(state, this);
+    this.updateActivity();
     if (option !== undefined) card.querySelector(`[data-ev-phase="${option}"]`)?.focus({preventScroll:true});
+  }
+
+  updateActivity() {
+    if (!this.state || this.root.hidden || hasTextSelection(this.root)) return;
+    const stamp = this.state.charger?.activity?.as_of;
+    if (stamp !== this.activityStamp) {
+      this.activityStamp = stamp;
+      this.activityReceivedAt = Date.now();
+    }
+    const element = this.root.querySelector('[data-ev-control]');
+    const model = evControlActivityModel(this.state, (Date.now() - this.activityReceivedAt) / 1000);
+    if (!element || !model) return;
+    element.querySelector('[data-control-label]').textContent = model.label;
+    element.querySelector('[data-control-detail]').textContent = model.detail;
+    element.querySelector('.ev-control-steps').hidden = !(model.step >= 0);
+    element.querySelector('.ev-control-timer').hidden = model.seconds === null;
+    element.querySelector('[data-control-seconds]').textContent = model.seconds > 0 ? `${model.seconds}s` : '…';
+    element.querySelector('[data-control-timer-label]').textContent = model.timerLabel || '';
+    element.querySelector('[data-control-ring]').setAttribute('stroke-dashoffset', String(model.offset || 0));
+    element.className = `ev-controller ev-controller-${model.tone}`;
+  }
+
+  dispose() {
+    clearInterval(this.activityTimer);
   }
 }

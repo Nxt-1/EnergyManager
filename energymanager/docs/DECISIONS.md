@@ -310,6 +310,16 @@ notify. Preserve prior instructions only while valid, and clear the attention it
 acceptance. Standing ready-release commit/push permission applies. No live installation,
 hardware, actual phone alert or deployment is authorized in development.
 
+## 27 October2026 — Investigate rapid EV stops; show controller actions
+
+The user reports charging starting then stopping/erroring after a few seconds and
+requests investigation of timing/checks, plus a visual controller-action indicator
+on the EV page, especially for the artificial30second restart holds. Implement the
+read-only action/countdown display while preserving charger measurements and fault
+details. Timer expiry is not evidence of charging or authority to start. Charging
+behavior changes require explicit authorization beyond this investigation; the
+separate reproduced revision/start-readback issue is recorded in WORK_STATE.md.
+
 ## 27 October2026 — Recalculate replaces active work
 
 The user explicitly requests that manual Recalculate start a fresh calculation,

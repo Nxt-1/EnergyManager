@@ -6,6 +6,41 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
 const numeric = value => value !== null && value !== undefined && value !== '' &&
   Number.isFinite(Number(value)) ? Number(value) : null;
 
+export function evControlActivityModel(state, elapsed = 0) {
+  const activity = !state.demo && state.charger?.activity;
+  if (!activity) return null;
+  const age = Math.max(0, (Date.parse(state.now) - Date.parse(activity.as_of)) / 1000) + elapsed;
+  if (!Number.isFinite(age) || age > (state.policy?.measurement_max_age_seconds ?? 30))
+    return {stage: 'blocked', label: 'Controller status unavailable', detail: 'Waiting for a new system update.',
+      tone: 'neutral', seconds: null, offset: 0, step: -1, timerLabel: ''};
+  const until = Date.parse(activity.until), total = Number(activity.duration_seconds);
+  const remaining = (until - Date.parse(activity.as_of)) / 1000 - age;
+  const timed = Number.isFinite(remaining) && total > 0;
+  const stages = ['stopping', 'settings', 'settling', 'starting', 'power', 'charging'];
+  return {...activity, tone: activity.stage === 'fault' ? 'error' : activity.stage === 'charging' ? 'good' :
+    stages.includes(activity.stage) ? 'active' : 'neutral',
+    seconds: timed ? Math.max(0, Math.ceil(remaining)) : null,
+    offset: timed ? 113.1 * Math.max(0, Math.min(1, remaining / total)) : 0,
+    timerLabel: timed && remaining <= 0 ? 'Awaiting control update' : timed ? `${activity.timer} · ${total} s` : '',
+    step: stages.indexOf(activity.stage)};
+}
+
+function evControlActivityMarkup(state) {
+  const model = evControlActivityModel(state);
+  if (!model) return '';
+  const steps = ['Stop', 'Settings', 'Wait', 'Start', 'Power'];
+  const step = Math.min(4, model.step);
+  return `<section class="ev-controller ev-controller-${model.tone}" data-ev-control aria-label="EnergyManager EV action">
+    <div class="ev-controller-action"><small>EnergyManager</small><strong data-control-label>${esc(model.label)}</strong><p data-control-detail>${esc(model.detail)}</p>
+    <ol class="ev-control-steps" aria-label="Restart sequence" ${model.step >= 0 ? '' : 'hidden'}>${steps.map((label, i) => `<li ${i === step ? 'aria-current="step"' : ''}>${label}</li>`).join('')}</ol></div>
+    <div class="ev-control-timer" ${model.seconds === null ? 'hidden' : ''}>
+      <div class="ev-countdown" role="timer" aria-label="${esc(model.timer)}" aria-live="off">
+        <svg viewBox="0 0 44 44" aria-hidden="true"><circle class="ev-countdown-track" cx="22" cy="22" r="18"/><circle data-control-ring cx="22" cy="22" r="18" stroke-dasharray="113.1" stroke-dashoffset="${model.offset}"/></svg>
+        <strong data-control-seconds>${model.seconds || '…'}<small>${model.seconds > 0 ? 's' : ''}</small></strong>
+      </div><small data-control-timer-label>${esc(model.timerLabel)}</small>
+    </div></section>`;
+}
+
 // Match the charging/waiting groups used by GoEReadings; permission is not power delivery.
 const chargingStates = new Set([3, 7, 8, 9, 10, 11, 12, 13, 14, 15, 19, 20, 33]);
 const waitingStates = {
@@ -112,6 +147,7 @@ export function evStatusModel(state) {
 
 export function evStatusMarkup(state, interaction = {}) {
   const model = evStatusModel(state);
+  const activity = evControlActivityMarkup(state);
   const number = value => value === null ? '—' : String(Math.round(value * 10) / 10);
   const time = value => value ? evIncidentTime(value, state.policy?.timezone || 'UTC') : '—';
   const phaseText = model.phase === 'auto' ? 'Auto' : model.phase ? `${model.phase} φ` : '—';
@@ -133,7 +169,8 @@ export function evStatusMarkup(state, interaction = {}) {
   return `<div class="ev-status-heading"><h2>EV &amp; charger</h2><span class="ev-control-badge">${model.demo ? 'Synthetic demo' : model.controlled ? 'Hardware control on' : 'Hardware control off'}</span></div>
     <div class="ev-status-body ev-tone-${model.tone}">
       <div class="ev-state-label"><i></i><strong>${esc(model.status)}</strong></div>
-      <div class="ev-status-verdict"><strong>${esc(model.summary)}</strong>${model.reason ? `<p class="ev-status-reason">${esc(powerText(model.reason))}</p>` : ''}</div>
+      ${!activity || ['fault', 'warning'].includes(model.tone) ? `<div class="ev-status-verdict"><strong>${esc(model.summary)}</strong>${model.reason ? `<p class="ev-status-reason">${esc(powerText(model.reason))}</p>` : ''}</div>` : ''}
+      ${activity}
       <div class="ev-combined-layout">
       <div class="ev-flow ${model.flowing ? 'ev-flowing' : ''}">
         <svg aria-hidden="true" viewBox="0 0 500 150" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">

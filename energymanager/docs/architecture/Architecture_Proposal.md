@@ -617,6 +617,20 @@ latches EV stopping. A solver-parent watchdog prevents orphan workers after serv
 
 ### EV charging supervision and incident recovery (4.3.2)
 
+From4.3.15 the EV page shows a separate EnergyManager action strip, alongside the
+charger's reported state and measured power. The read-only `charger.activity` API
+projection exposes the active step, detail, server timestamp and actual timer deadline.
+The strip highlights Stop → Settings → Wait → Start → Power, with a numeric countdown
+and ring for the deliberate30second restart hold. It separately labels the10second
+phase preparation and90second delivery check; command readback waits remain explicit.
+Fault/blocked/disabled/idle states take priority where applicable. Normal action text
+replaces the redundant generic verdict; fault/recovery/unavailable detail is retained.
+The browser advances only the countdown each second, anchored to a new server activity
+timestamp, without rebuilding the drawing or phase controls. Expiry waits for a new
+controller update and never claims charging. Missing updates beyond the read watchdog
+show controller status unavailable. Text selection and disposal stop local updates.
+This display has no command authority and does not change charging checks or timing.
+
 The configured actuator uses GoEReadings/GoEControl. The five-second sampler reads
 mapped force/current/phase plus numeric `ev_status` (`car`), `charger_status`
 (`modelStatus`), `charger_error` (`err`) and `heartbeat` (go-e `lmsc_delta`, seconds).
