@@ -156,6 +156,11 @@ requested commands from actual service calls. It contains only archived evidence
 The current pre-upgrade incident cannot acquire an exact timestamp or raw states that
 were never recorded. The new event-time index may make first startup slower on a large
 archive. Report reads use a separate worker, five-second budget and10,000event limit.
+From4.3.17 the report starts five minutes before the incident began, rather than
+five minutes before fault detection, and ends at the earlier of now or ten minutes
+after detection. Re-exporting an existing incident after updating can include earlier
+samples still in the archive. Missing onset timestamps fall back to detection; missing
+samples remain missing. A capped report explicitly says its later events were omitted.
 
 For a labelled local-only incident preview, run `python tools/offline_e2e.py --serve
 --ev-fault-fixture` and, in another terminal, `python tools/native_dashboard_preview.py`.

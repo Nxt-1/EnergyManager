@@ -277,9 +277,11 @@ class EVFaults:
 
 
 def incident_report(path: Path, incident: dict[str, Any], now: datetime) -> dict[str, Any]:
-    """Read a bounded T−5min to T+10min trace on a separate SQLite worker connection."""
+    """Read from five minutes before onset through ten minutes after detection, if recorded."""
     detected = instant(incident["detected_at"])
-    start, end = detected - timedelta(minutes=5), min(now, detected + timedelta(minutes=10))
+    started = instant(incident.get("started_at") or incident["detected_at"])
+    start = min(started, detected) - timedelta(minutes=5)
+    end = min(now, detected + timedelta(minutes=10))
     connection = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)
     deadline = monotonic() + 5
     connection.set_progress_handler(lambda: int(monotonic() > deadline), 1000)
@@ -293,9 +295,14 @@ def incident_report(path: Path, incident: dict[str, Any], now: datetime) -> dict
             if monotonic() > deadline:
                 raise TimeoutError("EV incident archive read exceeded five seconds")
             events.append({"at": at, "kind": kind, "body": json.loads(body)})
+        truncated = len(events) > 10000
+        note = ("Only actually recorded data is included. Additional go-e states are available only after "
+                "diagnostic collection was installed/configured.")
+        if truncated:
+            note += (" Report limit reached: only the first 10,000 chronological events are included; "
+                     "later events in the requested window are omitted.")
         return {"incident": incident, "window_start": start.isoformat(), "window_end": end.isoformat(),
-                "events": events[:10000], "truncated": len(events) > 10000,
-                "note": "Only actually recorded data is included. Additional go-e states are available only after diagnostic collection was installed/configured."}
+                "events": events[:10000], "truncated": truncated, "note": note}
     except sqlite3.OperationalError as exc:
         if monotonic() > deadline:
             raise TimeoutError("EV incident archive read exceeded five seconds") from exc

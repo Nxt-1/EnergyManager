@@ -1,5 +1,24 @@
 # EnergyManager 4 verification
 
+## 4.3.17 — Incident reports include the beginning of long waits
+
+308 Python tests pass53.65s;55 frontend tests, Ruff and mypy35 pass. Eight new
+synthetic cases cover immediate,15minute and two-hour detection delays, inclusive
+window boundaries, excluded unrelated events, missing/empty/late onset timestamps
+and exact10,000 versus10,001event limits. The HTTP export regression verifies that
+commands before onset appear in the response. Existing nonblocking worker and
+acknowledgement boundary tests pass. No private incident data is used as a fixture.
+
+Reports use onset−5minutes through min(now,detection+10minutes), retaining the read-only
+worker, five-second budget and chronological event cap. A capped report explicitly
+identifies its omitted tail. The UI already displays this note and truncation flag;
+no frontend code changed. The earlier4.3.15 browser evidence remains applicable.
+Configured fake-HA E2E passes33.840s/2018intervals/maximum local control4.670ms
+(not hardware latency), four fake calls; see offline-e2e.json. All56 source/assets/
+defaults match wheel and sdist, with isolated4.3.17 import verified.
+Charging, fault and recovery policy is unchanged. No live HA, installation database,
+physical hardware, real notification or deployment was accessed.
+
 ## 4.3.16 — EV start confirmation across revisions
 
 300 Python tests pass53.49s;55 frontend tests, Ruff and mypy35 pass. Seventeen new

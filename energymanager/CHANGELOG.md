@@ -1,3 +1,11 @@
+## 4.3.17 — Include incident onset in EV reports
+
+- Export from five minutes before the incident began through ten minutes after fault
+  detection (or now, if earlier), so long waits include their initial charging sequence.
+  Existing incidents can be re-exported using retained archive data.
+- Keep the bounded read and10,000-event limit; explicitly label omitted later events
+  when the report is capped. Charging and recovery behavior is unchanged.
+
 ## 4.3.16 — Preserve EV starts across control revisions
 
 - Keep confirming an unchanged start when the control revision changes; do not send

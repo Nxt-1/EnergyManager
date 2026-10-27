@@ -1,5 +1,20 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.17 include EV incident onset in reports
+
+AUTHORIZED27Oct: implement the reporting change after the provided15minute waiting
+incident's export omitted its first ten minutes. Reports now begin five minutes
+before recorded onset and end at min(now,detection+10minutes). Missing onset uses
+detection and a later onset cannot discard detection context. Preserve read-only
+off-loop SQLite access, five-second budget and10,000 chronological event cap; capped
+reports explicitly identify the omitted tail. No charging/fault/recovery changes.
+LOCAL:308Python53.65s/55Node/Ruff/mypy35 pass, including long waits, exact window
+boundaries, legacy timestamps, capped exports and early-event inclusion via HTTP.
+FakeE2E33.840s/2018intervals/max4.670ms/four fake calls passes.56 package files match
+wheel/sdist; isolated4.3.17 import passes. The frontend is unchanged.
+NEXT: final scope review and authorized ready-release commit/push; verify exact-head CI/image.
+Preserve unrelated deferred tail and paused Maps; no live installation access.
+
 ## Current work —4.3.16 preserve starts across revisions
 
 AUTHORIZED27Oct: user explicitly answered Yes to fixing the reproduced revision/

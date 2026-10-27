@@ -731,8 +731,12 @@ semantics were checked against go-e APIv2 Connect2026.10.3 `select.py`, `number.
 The integration catches some write errors and sends WebSocket commands asynchronously;
 its `stop_charging` service can return to neutral after five minutes and is not used.
 `GET /api/ev-incidents` lists the latest20 incidents. The incident endpoint reads
-T−5minutes to min(now,T+10minutes) from a separate read-only worker connection, using
-the event-time index, five-second scan budget and10,000-event cap with truncation flag.
+from five minutes before the recorded incident start through min(now,detection+10minutes),
+so long waits include their initial command sequence. A missing start uses detection;
+a start later than detection cannot discard the detection context. Reads use a separate
+read-only worker connection, the event-time index, five-second scan budget and10,000-event
+cap. A capped report flags truncation and states that only the first10,000 chronological
+events are included; later events in the requested window are omitted.
 The UI previews100 events and downloads the complete bounded JSON. Command intents,
 successful service calls and observed states remain distinguishable. Added diagnostics
 and exact incident timestamps cannot be reconstructed retroactively for older faults.

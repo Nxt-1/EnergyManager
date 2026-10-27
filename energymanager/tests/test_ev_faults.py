@@ -231,11 +231,69 @@ async def test_diagnostics_capture_actual_states_and_export_more_than_recent_eve
         app.store.connection.executemany("INSERT INTO events(at,kind,body) VALUES (?,?,?)",
             [(at.isoformat(), kind, body) for at, kind, body in rows])
     report = incident_report(app.store.path, json_data(incident), clock[0])
-    assert len(report["events"]) == 300 and not report["truncated"]
-    assert instant_seconds(incident["detected_at"], report["window_start"]) == 300
-    assert report["events"][0]["body"]["ev_power_kw"] == 0
+    measurements = [event for event in report["events"] if event["kind"] == "measurement"]
+    assert len(measurements) == 300 and not report["truncated"]
+    assert instant_seconds(incident["started_at"], report["window_start"]) == 300
+    assert measurements[0]["body"]["ev_power_kw"] == 0
     assert "Only actually recorded" in report["note"]
     app.store.close()
+
+
+@pytest.mark.parametrize("wait_minutes", [0, 15, 120])
+def test_incident_report_includes_onset_and_both_window_boundaries(tmp_path, wait_minutes):
+    store = Store(tmp_path / "synthetic.sqlite")
+    started = datetime(2026, 10, 27, 0, 29, tzinfo=UTC)
+    detected = started + timedelta(minutes=wait_minutes)
+    start, end = started - timedelta(minutes=5), detected + timedelta(minutes=10)
+    incident = {"started_at": started.isoformat(), "detected_at": detected.isoformat()}
+    rows = [(end + timedelta(seconds=1), "measurement", "after"),
+            (detected, "ev_incident", "detection"), (started, "command_intent", "onset"),
+            (start - timedelta(seconds=1), "measurement", "before"),
+            (end, "actuator_service", "end"), (start, "ev_diagnostics", "start"),
+            (started, "unrelated", "excluded")]
+    with store.connection:
+        store.connection.executemany("INSERT INTO events(at,kind,body) VALUES (?,?,?)",
+            [(at.isoformat(), kind, json.dumps({"synthetic": label})) for at, kind, label in rows])
+    report = incident_report(store.path, incident, end + timedelta(hours=1))
+    assert report["window_start"] == start.isoformat() and report["window_end"] == end.isoformat()
+    expected = ["start", "onset", "detection", "end"] if wait_minutes else ["start", "detection", "onset", "end"]
+    assert [event["body"]["synthetic"] for event in report["events"]] == expected
+    assert not report["truncated"]
+    store.close()
+
+
+@pytest.mark.parametrize("started_at", [None, "", "2026-10-27T13:00:00+00:00"])
+def test_incident_report_legacy_or_late_onset_keeps_detection_context(tmp_path, started_at):
+    store = Store(tmp_path / "synthetic.sqlite")
+    detected = datetime(2026, 10, 27, 12, tzinfo=UTC)
+    now = detected + timedelta(minutes=2)
+    incident = {"detected_at": detected.isoformat()}
+    if started_at is not None:
+        incident["started_at"] = started_at
+    report = incident_report(store.path, incident, now)
+    assert report["window_start"] == (detected - timedelta(minutes=5)).isoformat()
+    assert report["window_end"] == now.isoformat()
+    assert report["events"] == [] and not report["truncated"]
+    store.close()
+
+
+@pytest.mark.parametrize("count", [10000, 10001])
+def test_incident_report_retains_chronological_cap_and_labels_omitted_tail(tmp_path, count):
+    store = Store(tmp_path / "synthetic.sqlite")
+    started = datetime(2026, 10, 27, 12, tzinfo=UTC)
+    detected = started + timedelta(minutes=15)
+    incident = {"started_at": started.isoformat(), "detected_at": detected.isoformat()}
+    with store.connection:
+        store.connection.executemany("INSERT INTO events(at,kind,body) VALUES (?,?,?)",
+            [((started + timedelta(milliseconds=index)).isoformat(), "measurement", json.dumps({"synthetic": index}))
+             for index in range(count)])
+    report = incident_report(store.path, incident, detected)
+    assert len(report["events"]) == 10000
+    assert report["events"][0]["body"]["synthetic"] == 0
+    assert report["events"][-1]["body"]["synthetic"] == 9999
+    assert report["truncated"] == (count > 10000)
+    assert ("later events in the requested window are omitted" in report["note"]) == report["truncated"]
+    store.close()
 
 
 async def test_incident_http_history_report_and_acknowledgement_boundary(tmp_path):
@@ -246,6 +304,11 @@ async def test_incident_http_history_report_and_acknowledgement_boundary(tmp_pat
     await detect(app, clock)
     await manager.step()
     identity = manager.current["id"]
+    started = datetime.fromisoformat(manager.current["started_at"])
+    early = started - timedelta(minutes=4)
+    with app.store.connection:
+        app.store.connection.execute("INSERT INTO events(at,kind,body) VALUES (?,?,?)",
+            (early.isoformat(), "command_intent", json.dumps({"synthetic": "before onset"})))
 
     async def no_lifecycle():
         pass
@@ -256,6 +319,8 @@ async def test_incident_http_history_report_and_acknowledgement_boundary(tmp_pat
         assert items[0]["id"] == identity
         report = await (await client.get(f"/api/ev-incidents/{identity}")).json()
         assert report["incident"]["status"] == "unresolved" and report["window_start"]
+        assert report["window_start"] == (started - timedelta(minutes=5)).isoformat()
+        assert any(event["body"].get("synthetic") == "before onset" for event in report["events"])
         assert (await client.get("/api/ev-incidents/missing")).status == 404
         assert (await client.post(f"/api/ev-incidents/{identity}/acknowledge", json={})).status == 403
         response = await client.post(f"/api/ev-incidents/{identity}/acknowledge", json={}, headers={"X-EnergyManager": "1"})

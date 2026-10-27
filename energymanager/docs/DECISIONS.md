@@ -8,6 +8,10 @@ New explicit user instructions take precedence. Deferred ideas are not authoriza
 
 ## Architecture and EV behavior retained
 
+- For4.3.17 the user authorized expanding incident reporting after a15minute wait's
+  export missed its beginning. Anchor the pre-incident window to recorded onset,
+  keep ten minutes after detection and existing read bounds, and clearly label a
+  capped report. This does not change charging, fault or recovery policy.
 - For4.3.11 the user authorized correcting the reproduced planner failure and making
   rejected decisions accessible. Match the existing billing-month permissions in seed
   construction, allow one no-candidate timeout recovery using remaining budget, and
