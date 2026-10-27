@@ -32,7 +32,6 @@ class FastControl:
         self.c = capabilities
         self.p = policy
         self.deviation_since: datetime | None = None
-        self.input_deviation_since: datetime | None = None
         self.last_ev_kw = 0.0
         self.last_tick: datetime | None = None
         self.last_meter_at: datetime | None = None
@@ -85,7 +84,6 @@ class FastControl:
         conditional = False
         dc_reserved = 0.0
         protected_solar = 0.0
-        sustained_deviation = False
         if plan and position is not None:
             f = plan["flows"]
             eligible = [
@@ -138,15 +136,6 @@ class FastControl:
                 if ev_valid and (conditional_valid or eligible):
                     protected_solar += after["solar_ev_kwh"]
                 floor += protected_solar + (after["grid_house_kwh"] if ess_valid else 0)
-            interval = plan["intervals"][position]
-            net_deviation = (o.house_kw - o.pv_ac_kw) - (interval["house_kw"] - interval["pv_ac_kw"])
-            if abs(net_deviation) > 0.5 or abs(o.pv_dc_kw - interval["pv_dc_kw"]) > 0.5:
-                self.input_deviation_since = self.input_deviation_since or at
-                sustained_deviation = (
-                    at - self.input_deviation_since
-                ).total_seconds() >= p.sustained_deviation_seconds
-            else:
-                self.input_deviation_since = None
             conditional = any(r["kind"] == "joint_capture" for r in plan["reasons"])
             dc_reserved = f["dc_store"][position]
             if o.ev_kwh >= f["ev_energy"][position + 1] + 0.02:
@@ -347,7 +336,7 @@ class FastControl:
             amps,
             limit,
             reason,
-            emergency or sustained_deviation,
+            plan is not None and position is None,
         )
 
 

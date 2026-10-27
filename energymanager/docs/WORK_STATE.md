@@ -893,3 +893,37 @@ attention and native evidence verified.55 wheel/sdist code/assets identical; iso
 4.3.12 import. No live installation/database/hardware/phone/deployment. NEXT scoped
 release commit/push and exact-head CI/image; remote results only in ignored checkpoint.
 Preserve unrelated deferred backlog and paused Maps.
+
+
+4.3.20 IMPLEMENTED27October2026: user authorized original EV scheduling continuity
+and evidence-based recalculation. Full joint EV/ESS continuity retains source/ESS
+freedom, prices actual phase changes and live-switch restarts, and preserves a shared
+2cent cash/comparison reference. One fixed-phase session per connected window is an
+alternative inside the original joint search; current can vary. No publication repair
+or charger timer/fault change is included. Operational auxiliaries are appended after
+physical variables and their rows added only when priced/certified, preserving economic
+search quality. Optional/health searches keep valid reference/best-selected seeds;
+model source-rounding threshold agrees with independent validation.
+
+Replanning integrates15minutes of fresh household/PV residuals, changes the near-term
+forecast before requesting work, rebases the correction across new issuances, and
+ignores completed excursions and repeated unchanged bias. Expected resource progress
+and immediate protective power changes do not launch full solves. Material inventory
+loss, manual restart, periodic refresh and material events remain. Corrected forecasts
+have their own permission identity and cannot consume prior forecast-specific ESS grants.
+Required EV authority remains usable; forecast-driven ESS/conditional work is revoked.
+
+Latest serial seven-day benchmarks validate within120s: mixed104.89s comparison-7.9923EUR
+(previous same fixture-7.9707), winter104.56s25.4417EUR, permission118.77s32.3713EUR.
+These are time-limited synthetic incumbents, not global optimality; mixed/winter source
+certificates complete, permission certificate is feasible/time-limited. Final private
+replay validates in118.72s with one continued3p session for the next morning,23.4569kWh
+at its goal and peak5.49kW. This is offline evidence, not installation delivery.
+Applying the earlier frozen unchanged adoption observation still rejects Required outcome:
+the separate elapsed-energy publication issue remains; validation is not weakened and
+no repair added. Final362Python102.73s/59Node/Ruff/mypy36 pass. FakeE2E33.976s,
+2018intervals/max local control4.199ms/four fake calls passes;57 packaged source/assets/
+defaults match wheel/sdist and isolated4.3.20 import passes. NEXT scoped release commit,
+push and exact-head CI/image; remote results only in ignored checkpoint/final reply.
+Detailed experiments/checkpoints remain ignored. Preserve unrelated DEFERRED additions
+and paused Maps; no live installation/database/hardware/phone access or deployment.

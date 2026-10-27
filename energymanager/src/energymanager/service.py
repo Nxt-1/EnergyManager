@@ -26,6 +26,7 @@ from .calendars import CalendarSync
 from .ev_faults import EVFaults
 from .daily_estimates import DailyEstimates
 from .measurements import HousePowerMismatch
+from .replanning import ReplanningEvidence
 
 
 class Application:
@@ -78,7 +79,8 @@ class Application:
         self.observed: list[dict[str, Any]] = store.get("observed", [])
         self.started = monotonic()
         self.demo_origin = self.observation.at
-        self.last_control_replan: datetime | None = None
+        self.control_replan_key: tuple[str | None, str] | None = None
+        self.replanning = ReplanningEvidence()
         self.notifications = Notifications(store)
         self.hardware: HardwareControl | None = None
         self.configuration_error: str | None = None
@@ -230,6 +232,7 @@ class Application:
             else g
             for g in prepared.goals
         )
+        prepared = self.replanning.adjusted(prepared)
         hold_until = prepared.intervals[0].start + timedelta(seconds=self.policy.planning_budget_seconds + 15)
         intervals = []
         for interval in prepared.intervals:
@@ -303,7 +306,8 @@ class Application:
                     await asyncio.sleep(5)
                     continue
                 self.forecast_data = data
-                self.snapshot = prepared
+                correction = self.replanning.forecast(observation, prepared)
+                self.snapshot = self.replanning.adjusted(prepared)
                 recovered = self.status == "forecast_unavailable"
                 if recovered:
                     self.error = None
@@ -312,6 +316,10 @@ class Application:
                     last_forecast = data["revision"]
                     reason = "inputs_ready" if initial else "forecast_recovered" if recovered else "forecast_revision"
                     self.changed(reason, ess=not initial)
+                elif correction:
+                    self.store.event("forecast_bias", correction)
+                    self.conditional_valid = False
+                    self.changed("forecast_bias", ess=True)
             except (ValueError, KeyError, OSError, RuntimeError, aiohttp.ClientError, TimeoutError) as exc:
                 if isinstance(exc, HousePowerMismatch) and self.settling_house_power(exc):
                     await asyncio.sleep(5)
@@ -624,11 +632,12 @@ class Application:
             except (OSError, RuntimeError) as exc:
                 self.error = f"Actuator unavailable: {type(exc).__name__}: {exc}"
                 self.store.event("actuator_error", {"reason": self.error, "generation": self.revision})
-            if command.replan and self.house_mismatch_since is None and (
-                self.last_control_replan is None or (at - self.last_control_replan).total_seconds() >= 60
-            ):
-                self.last_control_replan = at
-                self.request_plan("control_deviation")
+            key = (command.plan_id, command.reason)
+            if not command.replan:
+                self.control_replan_key = None
+            elif self.house_mismatch_since is None and key != self.control_replan_key:
+                if self.request_plan("control_unavailable")["requested"]:
+                    self.control_replan_key = key
             self.last_command = json_data(command)
             self.current_command = command
             self.store.event(
@@ -778,11 +787,11 @@ class Application:
             self.changed("ev_state_reconciled" if observation.ev_state_known else "ev_state_unknown", ev=True)
         elif observation.monthly_peak_kw > previous.monthly_peak_kw + 0.05:
             self.changed("actual_peak_increased")
-        elif (
-            abs(previous.ev_kwh - observation.ev_kwh) > 0.2
-            or abs(previous.ess_kwh - observation.ess_kwh) > 0.2
-        ):
-            self.changed("resource_progress", ess=observation.ess_kwh < previous.ess_kwh - 0.2)
+        else:
+            shortfall = self.replanning.resources(observation, self.accepted, self.snapshot)
+            if shortfall:
+                self.store.event("resource_shortfall", shortfall)
+                self.changed("resource_shortfall", ess=shortfall["ess_shortfall_kwh"] >= 0.5)
 
     def state(self) -> dict[str, Any]:
         now = self.now()

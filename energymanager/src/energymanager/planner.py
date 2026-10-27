@@ -7,10 +7,8 @@ from datetime import timedelta
 from time import monotonic
 from typing import Any
 from uuid import uuid4
-from collections import defaultdict
 from collections.abc import Callable
 from copy import deepcopy
-from zoneinfo import ZoneInfo
 
 from .domain import PeakPermission, Snapshot, json_data, instant
 from .incumbent import seed
@@ -25,9 +23,19 @@ class Planner:
         self.deadline = 0.0
         self.stages: list[dict[str, Any]] = []
         self.progress = progress
+        self.validation_seconds = 0.0
+        self.reference_flows: dict[str, list[float]] | None = None
 
     def remaining(self) -> float:
-        return max(0.0, self.deadline - monotonic())
+        return max(0.0, self.deadline - monotonic() - 0.25 - self.validation_seconds * 1.25)
+
+    def validate_candidate(self, snapshot: Snapshot, flows: dict[str, list[float]],
+                           service: dict[str, float] | None = None) -> list[str]:
+        """Reserve measured audit time so a late solver stage cannot consume the wall budget."""
+        started = monotonic()
+        errors = validate(snapshot, flows, service)
+        self.validation_seconds = max(self.validation_seconds, monotonic() - started)
+        return errors
 
     def starting_point(self, model: JointModel) -> list[float] | None:
         s = model.snapshot
@@ -71,7 +79,7 @@ class Planner:
 
     def prefer_continuity(self, name: str, model: JointModel, result: dict[str, Any],
                           allowance: float) -> dict[str, Any]:
-        """Refine each economic incumbent using a smaller EV-only search in its stage budget."""
+        """Choose charger continuity in the full joint model within one economic allowance."""
         economic = model.value(model.economic, result["values"])
         cash = model.value(model.cash, result["values"])
         result["economic_baseline"], result["cash_baseline"] = economic, cash
@@ -79,16 +87,9 @@ class Planner:
             return result
         started = monotonic()
         guided = deepcopy(model)
-        adjustable = {"one", "three", "amps_one", "amps_three", "grid_ev", "grid_direction",
-                      "ev_energy", "grid_cumulative", "start", "phase_change", "variation", "causal_witness"}
-        for variable, indexes in guided.linear.variables.items():
-            if variable in adjustable or variable.startswith(("peak_", "quarter_", "margin_shortfall_")):
-                continue
-            for index in indexes:
-                guided.linear.lower[index] = result["values"][index]
-                guided.linear.upper[index] = result["values"][index]
-        # Preserve solar/storage choices and delivered quantity, but let grid work
-        # move into longer sessions. Never buy smoothness by losing readiness.
+        guided.add_continuity_limits()
+        # ESS and source allocations remain decisions in the original physical model.
+        # A fragmented ESS incumbent must not dictate fragmented EV charging.
         for variable, indexes in guided.linear.variables.items():
             if variable.startswith("margin_shortfall_"):
                 guided.linear.upper[indexes[0]] = result["values"][indexes[0]] + 1e-6
@@ -96,13 +97,13 @@ class Planner:
         guided.linear.lower[ev[-1]] = result["flows"]["ev_energy"][-1] - 1e-6
         tolerance = model.snapshot.policy.polish_tolerance_eur
         bounds = [(guided.economic, economic + tolerance), (guided.cash, cash + tolerance)]
-        steady = self.steady_grid_model(guided, result)
+        steady = self.single_session_model(guided, result)
         if steady is not None:
-            trial = self.run_model(name + "_steady_grid", steady,
-                                  (allowance - (monotonic() - started)) * 0.5,
-                                  steady.warm_from(result["flows"]), objective=steady.operations,
+            trial = self.run_model(name + "_single_session", steady,
+                                  (allowance - (monotonic() - started)) * 0.35,
+                                  steady.warm_from(result["flows"]), objective=steady.continuity_objective(),
                                   bounds=bounds)
-            if (trial["feasible"] and not validate(model.snapshot, trial["flows"], model.service)
+            if (trial["feasible"] and not self.continuity_errors(model, trial["flows"])
                     and steady.value(steady.continuity_objective(), trial["values"])
                     <= model.value(model.continuity_objective(), result["values"]) + 1e-6):
                 result = {**trial, "status": result["status"],
@@ -110,10 +111,10 @@ class Planner:
                 continuity = guided.continuity_objective()
                 guided.linear.row(list(continuity.items()), upper=model.value(
                     model.continuity_objective(), result["values"]) + 1e-6)
-        refined = self.run_model(name + "_continuity", guided, allowance - (monotonic() - started),
-                                 guided.warm_from(result["flows"]), objective=guided.operations,
+        refined = self.run_model(name + "_joint_continuity", guided, allowance - (monotonic() - started),
+                                 guided.warm_from(result["flows"]), objective=guided.continuity_objective(),
                                  bounds=bounds)
-        if (refined["feasible"] and not validate(model.snapshot, refined["flows"], model.service)
+        if (refined["feasible"] and not self.continuity_errors(model, refined["flows"])
                 and guided.value(guided.continuity_objective(), refined["values"])
                 < model.value(model.continuity_objective(), result["values"]) - 1e-6):
             refined["values"] = model.warm_from(refined["flows"])
@@ -123,41 +124,83 @@ class Planner:
         result["economic_baseline"], result["cash_baseline"] = economic, cash
         return result
 
-    def steady_grid_model(self, model: JointModel, result: dict[str, Any]) -> JointModel | None:
-        """Try one constant-current session for the next source-free required window.
+    def continuity_errors(self, model: JointModel, flows: dict[str, list[float]]) -> list[str]:
+        errors = self.validate_candidate(model.snapshot, flows, model.service)
+        if model.optional and self.reference_flows is not None:
+            errors += rolling_comparison_errors(model.snapshot, self.reference_flows, flows)
+        return errors
 
-        This is a candidate, never a new charging constraint. A short window, held
-        three-phase setting or existing solar allocation leaves the ordinary search available.
+    def single_session_model(self, model: JointModel, result: dict[str, Any]) -> JointModel | None:
+        """Try one fixed-phase session per connected window up to the next requirement.
+
+        This is a candidate, never a new charging constraint. The unrestricted joint
+        search can vary current, phases or session count when the constraints require it.
         """
         s, c, o = model.snapshot, model.snapshot.capabilities, model.snapshot.observation
         goals = [g for g in s.goals if s.intervals[0].start < g.deadline <= s.intervals[-1].end
                  and g.target(c, s.policy) > o.ev_kwh + TOL]
-        if not goals or 1 not in c.phases or s.hold_ev_kw > TOL and s.hold_phases != 1:
+        phase = s.hold_phases if s.hold_ev_kw > TOL else min(c.phases)
+        if not goals or phase not in c.phases:
             return None
         deadline = min(g.deadline for g in goals)
         slots = [t for t, i in enumerate(s.intervals) if i.end <= deadline]
-        if (not slots or any(result["flows"][name][t] > TOL
-                             for t in slots for name in ("pv_ev", "solar_dis_ev"))):
+        if not slots:
             return None
         steady = deepcopy(model)
         v, m = steady.linear.variables, steady.linear
-        current = m.variable("steady_current", 1, c.maximum_current_a, c.minimum_current_a, integer=True)[0]
-        m.row([(v["start"][t], 1) for t in slots], upper=1)
+        continuing = s.hold_ev_kw > TOL and o.ev_power_kw > 0.1
+        windows: list[list[int]] = []
         for t in slots:
-            m.upper[v["three"][t]] = 0
-            m.upper[v["amps_three"][t]] = 0
-            m.row([(v["amps_one"][t], 1), (current, -1)], upper=0)
-            m.row([(v["amps_one"][t], -1), (current, 1), (v["one"][t], c.maximum_current_a)],
-                  upper=c.maximum_current_a)
-        # Keep later EV decisions fixed: this small solve only schedules the next goal.
-        for name in ("one", "three", "amps_one", "amps_three", "grid_ev"):
+            if s.intervals[t].available:
+                if t == 0 or not s.intervals[t - 1].available:
+                    windows.append([])
+                windows[-1].append(t)
+        for window in windows:
+            m.row([(v["start"][t], 1) for t in window], upper=0 if continuing and window[0] == 0 else 1)
+        for t in slots:
+            active, inactive = ("three", "one") if phase == 3 else ("one", "three")
+            m.upper[v[inactive][t]] = 0
+            m.upper[v[f"amps_{inactive}"][t]] = 0
+        # This candidate schedules the next goal jointly with ESS; keep later physical
+        # decisions as its feasible incumbent. The unrestricted search below frees them.
+        fixed_later = ("one", "three", "amps_one", "amps_three", "battery_charge", "converter_charge",
+                       "grid_direction", "pv_store_mode", "pv_ev", "pv_house", "pv_store", "export",
+                       "curtail", "grid_ev", "grid_house", "grid_store", "solar_dis_ev",
+                       "solar_dis_house", "grid_dis_house", "dc_store", "dc_invert")
+        for name in fixed_later:
             for t in range(slots[-1] + 1, len(s.intervals)):
                 m.lower[v[name][t]] = m.upper[v[name][t]] = result["flows"][name][t]
         return steady
 
+    @staticmethod
+    def prefer_result(current: dict[str, Any], current_model: JointModel,
+                      trial: dict[str, Any], trial_model: JointModel) -> bool:
+        """Do not discard a known continuous session for a sub-allowance cost improvement."""
+        def evidence(result: dict[str, Any], model: JointModel) -> tuple[float, float, float]:
+            values = model.warm_from(result["flows"])
+            return (model.value(model.economic, values), model.value(model.cash, values),
+                    model.value(model.continuity_objective(), values))
+
+        old_cost, old_cash, old_score = evidence(current, current_model)
+        cost, cash, score = evidence(trial, trial_model)
+        references = [(current.get("economic_baseline", old_cost), current.get("cash_baseline", old_cash)),
+                      (trial.get("economic_baseline", cost), trial.get("cash_baseline", cash))]
+        reference, cash_reference = min(references)
+        tolerance = current_model.snapshot.policy.polish_tolerance_eur
+        old_allowed = old_cost <= reference + tolerance + 1e-6 and old_cash <= cash_reference + tolerance + 1e-6
+        allowed = cost <= reference + tolerance + 1e-6 and cash <= cash_reference + tolerance + 1e-6
+        preferred = allowed and (not old_allowed or score < old_score - 1e-6
+                                or abs(score - old_score) <= 1e-6 and cost < old_cost - TOL)
+        chosen = trial if preferred else current
+        # Carry the same reference forward: comparing stages must not stack allowances.
+        chosen["economic_baseline"], chosen["cash_baseline"] = reference, cash_reference
+        return preferred
+
     def plan(self, snapshot: Snapshot) -> dict[str, Any]:
         self.started = monotonic()
         self.deadline = self.started + snapshot.policy.planning_budget_seconds
+        self.validation_seconds = 0.0
+        self.reference_flows = None
         self.stages = []
         s = snapshot
         service: dict[str, float] = {}
@@ -204,8 +247,8 @@ class Planner:
             if (
                 support["feasible"]
                 and alternative["feasible"]
-                and not validate(s, support["flows"])
-                and not validate(higher, alternative["flows"])
+                and not self.validate_candidate(s, support["flows"])
+                and not self.validate_candidate(higher, alternative["flows"])
             ):
                 supported, without = accounting(s, support["flows"]), accounting(higher, alternative["flows"])
                 if (
@@ -322,7 +365,7 @@ class Planner:
                     "text": "Original goals preserved; executable service is best effort within current permissions.",
                 }
             )
-        errors = validate(s, reference["flows"], service)
+        errors = self.validate_candidate(s, reference["flows"], service)
         if errors:
             return self.failure(snapshot, "invalid_solution", "; ".join(errors))
         for goal in sorted(s.goals, key=lambda g: (-g.priority, g.deadline)):
@@ -348,7 +391,7 @@ class Planner:
                 min(4.0, self.remaining() * 0.2),
                 seed(permission_model),
             )
-            if permission_result["feasible"] and not validate(
+            if permission_result["feasible"] and not self.validate_candidate(
                 trial, permission_result["flows"], diagnostic_service
             ):
                 required_peak = accounting(trial, permission_result["flows"])["peak_kw"]
@@ -371,6 +414,7 @@ class Planner:
                     )
         selected, selected_model = reference, reference_model
         reference_flows = reference["flows"]
+        self.reference_flows = reference_flows
         exceptional_windows: list[tuple[int, int]] = []
         normal_ceilings = [
             max(
@@ -389,7 +433,7 @@ class Planner:
                 grid_ess=required_support,
             )
             normal_model.add_optional_peak_limits(reference_flows)
-            normal_seed = seed(normal_model) or normal_model.warm_from(reference["flows"])
+            normal_seed = self.starting_point(normal_model) or normal_model.warm_from(reference["flows"])
             seed_result: dict[str, Any] = {
                 "status": "Feasible incumbent",
                 "feasible": True,
@@ -399,13 +443,10 @@ class Planner:
                     for name, indexes in normal_model.linear.variables.items()
                 },
             }
-            if not validate(s, seed_result["flows"], service) and not rolling_comparison_errors(
+            if not self.validate_candidate(s, seed_result["flows"], service) and not rolling_comparison_errors(
                 s, reference_flows, seed_result["flows"]
             ):
-                if (
-                    accounting(s, seed_result["flows"])["comparison_eur"]
-                    < accounting(s, selected["flows"])["comparison_eur"] - TOL
-                ):
+                if self.prefer_result(selected, selected_model, seed_result, normal_model):
                     selected, selected_model = seed_result, normal_model
             normal = self.run_model(
                 "normal_ceiling_joint",
@@ -433,13 +474,10 @@ class Planner:
                 )
             if (
                 normal["feasible"]
-                and not validate(s, normal["flows"], service)
+                and not self.validate_candidate(s, normal["flows"], service)
                 and not rolling_comparison_errors(s, reference_flows, normal["flows"])
             ):
-                if (
-                    accounting(s, normal["flows"])["comparison_eur"]
-                    < accounting(s, selected["flows"])["comparison_eur"] - TOL
-                ):
+                if self.prefer_result(selected, selected_model, normal, normal_model):
                     selected, selected_model = normal, normal_model
                     reasons.append(
                         {
@@ -456,7 +494,7 @@ class Planner:
                 self.remaining() * 0.20,
                 candidate_model.warm_from(selected["flows"]),
             )
-            if candidate["feasible"] and not validate(s, candidate["flows"], service):
+            if candidate["feasible"] and not self.validate_candidate(s, candidate["flows"], service):
                 ceilings = [
                     max(
                         s.policy.normal_soc_percent / 100 * s.capabilities.ev_capacity_kwh,
@@ -536,15 +574,11 @@ class Planner:
                         "health_constrained_joint",
                         candidate_model,
                         self.remaining() * 0.45,
-                        candidate_model.warm_from(reference["flows"]),
+                        candidate_model.warm_from(selected["flows"]),
                     )
-                if candidate["feasible"] and not validate(s, candidate["flows"], service):
+                if candidate["feasible"] and not self.validate_candidate(s, candidate["flows"], service):
                     rolling_errors = rolling_comparison_errors(s, reference_flows, candidate["flows"])
-                    if (
-                        not rolling_errors
-                        and accounting(s, candidate["flows"])["comparison_eur"]
-                        < accounting(s, selected["flows"])["comparison_eur"] - TOL
-                    ):
+                    if not rolling_errors and self.prefer_result(selected, selected_model, candidate, candidate_model):
                         selected, selected_model = candidate, candidate_model
                         reasons.append(
                             {
@@ -576,13 +610,10 @@ class Planner:
             )
             if (
                 support["feasible"]
-                and not validate(s, support["flows"], service)
+                and not self.validate_candidate(s, support["flows"], service)
                 and not rolling_comparison_errors(s, reference_flows, support["flows"])
             ):
-                if (
-                    accounting(s, support["flows"])["comparison_eur"]
-                    < accounting(s, selected["flows"])["comparison_eur"] - TOL
-                ):
+                if self.prefer_result(selected, selected_model, support, support_model):
                     selected, selected_model = support, support_model
                     reasons.append(
                         {
@@ -620,7 +651,7 @@ class Planner:
                     )
                     if (
                         expanded["feasible"]
-                        and not validate(trial, expanded["flows"])
+                        and not self.validate_candidate(trial, expanded["flows"])
                         and not rolling_comparison_errors(trial, reference_flows, expanded["flows"])
                     ):
                         current, proposed = (
@@ -670,73 +701,6 @@ class Planner:
             selected_model.economic, selected["values"]))
         before_cash = selected.get("cash_baseline", selected_model.value(
             selected_model.cash, selected["values"]))
-        if self.remaining() > 9:
-            tolerance = s.policy.polish_tolerance_eur
-            days: dict[str, list[int]] = defaultdict(list)
-            zone = ZoneInfo(s.policy.timezone)
-            for t, interval in enumerate(s.intervals):
-                days[interval.start.astimezone(zone).date().isoformat()].append(t)
-
-            def starts(slots: list[int]) -> int:
-                f = selected["flows"]
-                return sum(
-                    f["one"][t] + f["three"][t] > 0.5
-                    and (t == 0 or f["one"][t - 1] + f["three"][t - 1] < 0.5)
-                    for t in slots
-                )
-
-            neighborhoods = sorted(
-                (slots for slots in days.values() if starts(slots) > 1), key=starts, reverse=True
-            )
-            if not neighborhoods:
-                neighborhoods = [list(range(len(s.intervals)))]
-            for turn, slots in enumerate(neighborhoods):
-                if self.remaining() <= 8.5:
-                    break
-                neighborhood = JointModel(
-                    s,
-                    optional=selected_model.optional,
-                    service=service,
-                    ceilings=selected_model.ceilings,
-                    tight_ceilings=selected_model.tight_ceilings,
-                    grid_ess=any(v > TOL for v in selected["flows"]["grid_store"]),
-                )
-                if selected_model.optional and not any(v > TOL for v in selected["flows"]["grid_store"]):
-                    neighborhood.add_optional_peak_limits(reference_flows)
-                left, right = slots[0], slots[-1] + 1
-                state_names = {"ev_energy", "ess_solar", "ess_grid", "non_grid_cumulative", "grid_cumulative"}
-                for name, indexes in neighborhood.linear.variables.items():
-                    if name in ("start", "variation", "phase_change") or name not in selected["flows"]:
-                        continue
-                    for t, index in enumerate(indexes):
-                        fixed = (
-                            (t <= left or t >= right)
-                            if name in state_names
-                            else (len(indexes) == len(s.intervals) and not left <= t < right)
-                        )
-                        if fixed:
-                            neighborhood.linear.lower[index] = selected["flows"][name][t]
-                            neighborhood.linear.upper[index] = selected["flows"][name][t]
-                allowance = (self.remaining() - 8) / (len(neighborhoods) - turn)
-                polish = self.run_model(
-                    f"operational_polish:{s.intervals[left].start.astimezone(zone).date()}",
-                    neighborhood,
-                    allowance,
-                    neighborhood.warm_from(selected["flows"]),
-                    objective=neighborhood.operations,
-                    bounds=[
-                        (neighborhood.economic, before_score + tolerance),
-                        (neighborhood.cash, before_cash + tolerance),
-                    ],
-                )
-                if polish["feasible"] and not validate(s, polish["flows"], service):
-                    if (
-                        not selected_model.optional
-                        or not rolling_comparison_errors(s, reference_flows, polish["flows"])
-                    ) and neighborhood.value(
-                        neighborhood.operations, polish["values"]
-                    ) < selected_model.value(selected_model.operations, selected["values"]) - 1e-6:
-                        selected, selected_model = polish, neighborhood
         planning_status = economic_status
         source_certificate = False
         if self.remaining() > 0.5:
@@ -748,6 +712,7 @@ class Planner:
                 tight_ceilings=selected_model.tight_ceilings,
                 grid_ess=any(v > TOL for v in selected["flows"]["grid_store"]),
             )
+            source_model.add_continuity_limits()
             continuity = source_model.continuity_objective()
             source_model.linear.row(list(continuity.items()), upper=source_model.value(
                 continuity, source_model.warm_from(selected["flows"])) + 1e-6)
@@ -777,7 +742,9 @@ class Planner:
                 "amps_three",
                 "start",
                 "phase_change",
+                "phase_restart",
                 "variation",
+                "phase_setting",
                 "causal_witness",
                 "grid_direction",
             }
@@ -805,7 +772,7 @@ class Planner:
                 source_model.warm_from(selected["flows"]),
                 objective={source_model.linear.variables["grid_cumulative"][-1]: 1.0},
             )
-            if source_result["feasible"] and not validate(s, source_result["flows"], service):
+            if source_result["feasible"] and not self.validate_candidate(s, source_result["flows"], service):
                 if not selected_model.optional or not rolling_comparison_errors(
                     s, reference_flows, source_result["flows"]
                 ):

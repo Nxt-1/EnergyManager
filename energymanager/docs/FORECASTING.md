@@ -96,3 +96,31 @@ table unused; back up the JSON/database first, and remember4.0.4 required an ext
 prepared forecast service. Live installation location, telemetry topology and physical
 control remain commissioning checks; offline/public-reference verification is not
 live commissioning.
+
+## Near-term planning correction (4.3.20)
+
+Ordinary instantaneous household/PV mismatch no longer triggers the full solver. Fresh
+observations are integrated over a covered15-minute window against the issued forecast,
+separately for house, AC PV and DC PV. A changed net-AC/DC bias of500W and0.1kWh is
+material evidence. Before recalculation, apply that measured mean bias to the next30minutes
+and fade it to zero by one hour. Forecast estimates are bounded below by zero; raw sensor
+values, historical learner samples and weather generation remain unchanged. The baseline
+forecast remains visible in the original input source; decision snapshots/provenance record
+the corrected assumptions and forecast_bias events record each component and coverage.
+
+A constant bias requests one calculation, with at least15minutes before another correction.
+A new issued forecast resets coverage and rebases the existing correction against the
+changed baseline; any bias already represented by the new forecast is removed. An
+unchanged baseline must not rediscover the same load every weather refresh. Completed
+power excursions do not request a correction when the current residual has recovered. Read gaps exceeding
+the measurement watchdog or invalid/settling readings cannot contribute covered evidence;
+read gaps clear corrections, and corrections are used only with a fresh successful read. The existing periodic refresh and
+material-event/manual recalculation remain. This correction is provisional short-term
+persistence, not a claim to predict appliance usage or a change to PV calibration.
+
+Corrected snapshots have a correction-scoped forecast identity. Existing forecast-specific
+ESS peak grants therefore do not apply to changed assumptions; a new demonstrated
+strategy needs its own permission. Polling, snapshot creation and permission review use
+that same identity. Issued raw data remains unchanged, and already-corrected snapshots
+are never corrected twice. Required EV control remains valid during calculation while
+forecast-driven ESS/conditional authority is revoked; basic measured balancing continues.

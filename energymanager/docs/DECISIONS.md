@@ -372,3 +372,14 @@ different900second timer and remains. Old configuration/decision fields stay rea
 without retaining the cooldown. Existing direct manual HA phase controls retain their
 previously approved semantics. Standing ready-release permission applies; no agent
 operation of the installation is authorized.
+
+
+27October2026 — User approved implementing EV continuity in original scheduling plus
+recalculation changes. Preserve the existing0.02EUR economic allowance and all required
+goals/permissions/physical constraints; prefer continuing sessions and current changes.
+The implementation uses a full-joint economic reference and continuity objective with
+ESS/source freedom, replacing fixed-ESS EV smoothing and leftover neighborhood polish.
+Later stage selection preserves known continuity within the same shared allowance.
+Short power mismatch is ordinary control work. Sustained energy evidence must change
+near-term forecast assumptions before requesting another solve; deduplicate unchanged
+bias and normal resource progress. New publication repair is explicitly excluded.

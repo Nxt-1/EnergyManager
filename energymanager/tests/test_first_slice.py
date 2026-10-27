@@ -83,6 +83,18 @@ def test_no_optional_grid_and_no_grid_laundering_with_solar():
     assert f["ev_energy"][-1] > 25.2
 
 
+def test_sub_tolerance_solar_deficit_cannot_unlock_a_whole_grid_rounding_increment():
+    s = tiny(hours=2, ev=24, pv=4, house=0)
+    s = replace(s, goals=(Goal("goal", "SYNTHETIC source rounding", s.intervals[-1].end, 42),))
+    model = JointModel(s)
+    v = model.linear.variables
+    deficit = s.goals[0].target(s.capabilities, s.policy) - s.observation.ev_kwh
+    model.linear.equality([(v["non_grid_cumulative"][-1], 1)], deficit - 1e-6)
+    model.linear.row([(v["grid_cumulative"][-1], 1)], lower=.05)
+    result = model.run(3)
+    assert result["status"] == "Infeasible" and not result["feasible"]
+
+
 def test_duplicate_goals_share_one_battery():
     s = tiny(hours=2, ev=24, house=0)
     s = replace(

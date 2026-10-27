@@ -471,6 +471,9 @@ EV battery energy. A binary witness enforces
 `G <= max(0,max_k(B[k]-S[k])) + integer final-slot rounding`, with no rounding if there
 is no positive causal deficit. Thus later PV cannot erase necessary pre-departure grid,
 and already sufficient pre-deadline solar cannot leave a nominal required-grid purchase.
+From4.3.20 the model’s positive-deficit witness exceeds the independent energy tolerance
+by a numerical margin; a sub-tolerance solar deficit cannot unlock a whole grid rounding
+increment. The independent audit itself is unchanged.
 A final certificate minimizes grid within the chosen modes, non-grid/storage allocations
 and per-quarter import envelopes. Its Optimal status has this bounded scope, not a
 global optimality claim. From4.3.12 it also bounds the EV start/phase/power-variation
@@ -571,24 +574,37 @@ Download server JSON directly to preserve float representation/checksums; native
 uses its discovered ingress base. Frozen CLI replay validates the exported top-level
 digest as well as legacy result.input_digest. No full snapshot is added to state polls
 or decision-list responses; opening/exporting a decision performs no hardware action.
-From4.3.12 each economic stage reserves20% of its own allowance for a focused
-continuity refinement, rather than relying exclusively on leftover cleanup time. The
-economic solve retains its real objective/bound/gap; separately named steady_grid and
-continuity stages retain their own evidence. The refinement fixes non-EV physical
-flows, preserves achieved readiness and terminal quantity, and allows EV grid work
-to move within the same physical/source/permission constraints. For the next required
-window without allocated non-grid EV energy, it first tests one constant integer-current
-one-phase session, leaving later EV decisions fixed. This is an alternative candidate,
-not a hard restriction: short/solar/held-three-phase windows retain the flexible search.
-A checked one-phase seed is also preferred when it costs no more in comparison or cash.
+From4.3.20 every economic stage is a two-objective joint search:80% of its allowance
+establishes an economic reference, and20% chooses charger continuity in the same full
+EV/ESS model. ESS dispatch and solar/source allocation remain decisions; an arbitrary
+ESS incumbent cannot force EV gaps. Achieved required readiness and terminal EV quantity
+are preserved. A fixed-phase, single-session candidate is tried for the next required
+window, including solar allocation and already-held three-phase charging. The unrestricted
+joint search can vary current or retain necessary pauses/phase changes. No new publication
+repair is added. The older fixed-ESS EV-only refinement and leftover local-day polish are
+replaced by this joint objective selection.
 
-Each refinement has one0.02EUR envelope on actual economics and cash against its
-unrefined economic incumbent, carried into subsequent cleanup; tolerances do not stack
-between the steady and flexible passes. Starts, phase activation changes and absolute
-power variation retain weights10,5,0.1, alongside the existing readiness/throughput
-preferences. These are internal search priorities, not monetary wear charges. Refined
-candidates are independently validated; economic Time limit reached status is not
-replaced by a refinement's Optimal status. Full seven-day coverage remains unchanged.
+The operational search has one0.02EUR comparison and cash envelope against its economic
+reference; the constant-session and unrestricted passes share it. Selection between later
+economic stages also retains this reference and favors continuity within the allowance,
+so a tiny saving cannot discard a known continuous session or stack tolerances. Starts, actual
+selected phase-setting changes and absolute charging-power variation have weights10,5,0.1.
+Changing phase between two charging intervals also counts a restart (weight10), because
+the real controller must stop/resume. The single-session search varies current and favors
+low variation; it does not require the held current to persist for the entire task. Phase
+setting persists through off intervals; stopping three-phase charging is not itself a
+selector change. The initial selector and power are included, so switching away from the
+current setting is priced from the first interval. These are internal search priorities,
+not monetary wear charges. Selector auxiliary rows are added to operational searches and
+source certificates; the pure economic reference omits this unpriced bookkeeping.
+Optional searches use the checked reference-ceiling seed selection, rather than only
+trying an automatic-ceiling seed that may violate their tighter peak envelope. Joint
+continuity candidates also retain rolling opportunity checks before replacing the economic
+candidate. Economic status/objective/bound/gap and each operational stage
+remain separate evidence. Measured independent-validation time is reserved inside the
+wall budget so the final solver stage leaves time for its audit. All candidates retain
+independent physical/source/permission checks, rolling opportunity comparisons and
+seven-day coverage.
 
 Rejected publication produces a persisted, timestamped planning attention item outside
 the permission list. One immediate retry is automatic; another rejection escalates to
@@ -603,11 +619,10 @@ metadata/detail and the failed reconciled flows are labelled publication_candida
 separate from the original calculated flows. Prior valid instructions retain only their
 existing control authority.
 
-One sweep of local-day operational neighborhoods keeps the entire horizon and fixed
-outside decisions, with a **single**0.02EUR bound on comparison and cash against the
-best economic result. It favors fewer starts/phase changes, lower throughput and early
-required readiness; it cannot trade required outcomes for inventory. Desired15-minute
-completion margin is visible, uncalibrated, and does not increase required energy.
+Continuity is selected inside each original joint scheduling stage within the single
+comparison/cash allowance described above. It cannot trade required outcomes for inventory.
+Desired15-minute completion margin is visible, uncalibrated, and does not increase required
+energy. Certification cannot worsen the selected transition score.
 
 Fast control uses fresh measured powers and quarter energy, protects only source-specific
 EV/house-peak reservations, balances brief dips with ESS, reduces current for sustained
@@ -622,6 +637,33 @@ entity report timestamps do not expire available states. The read watchdog and f
 2 h limit are provisional engineering parameters.
 Measurement loss stops new commands. Source and permission guards remain independent
 of economic score. Generation is checked between asynchronous actuator writes.
+
+From4.3.20 ordinary forecast power mismatch and protective EV current reductions do
+not request full solves. The fast controller remains responsible for immediate balancing
+and quarter-hour protection. A covered15-minute observation window separately integrates
+household, AC PV and DC PV forecast residuals. A new net-AC or DC bias of at least500W
+and0.1kWh changes the near-term forecast before requesting work: full measured correction
+for the first30minutes, fading to zero by one hour. Forecast estimates stay nonnegative;
+raw observations and the long-term learner/weather inputs are unchanged. Repeated unchanged
+bias does not retrigger; further bias changes are at least15minutes apart. Gaps beyond the
+read watchdog, invalid observations and a new issued forecast reset evidence coverage;
+a new forecast rebases the correction against its changed baseline, removing bias it
+already represents. Unchanged source values cannot rediscover the same bias on each
+issuance. Completed excursions are ignored once the current residual has recovered;
+read gaps clear corrections. Corrections require a currently fresh read. A corrected
+forecast has its own identity, so prior forecast-specific ESS peak grants cannot widen
+its authority. ESS forecast instructions/conditional capture are invalidated on correction;
+required EV authority remains usable while basic ESS balancing continues.
+
+Routine battery progress no longer invalidates instructions or launches a solve. Plan-relative
+inventory deficits request work only with new material evidence: at leastmax(0.5kWh,1% EV
+capacity) ormax(0.5kWh,2% ESS capacity) additional loss. The comparison interpolates accepted
+inventory trajectories; expected ESS discharge and increasing charge do not retrigger.
+Reported deficits are deduplicated per accepted plan. Material ESS shortfall revokes affected
+ESS authority. These provisional engineering thresholds do not relax goal validation.
+Normal five-minute idle refresh, material goal/connection/permission/forecast/input changes,
+manual cancel-and-recalculate and existing failure reporting remain. Persistent control
+unavailability is deduplicated; an identical reason/plan cannot launch repeated solves.
 
 Goal/permission/connection changes invalidate affected EV or ESS authority, increment
 the generation and coalesce a new solve. Household balancing remains useful when an EV

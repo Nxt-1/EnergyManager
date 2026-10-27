@@ -60,10 +60,11 @@ def test_quarter_prefix_protection_and_stale_data():
     command = control.tick(o, at, None, 1)
     assert command.ev_kw == 0
     assert command.ess_kw == 0
-    assert command.replan
+    assert not command.replan  # Immediate peak protection does not require another full solve.
     stale = control.tick(o, at + timedelta(seconds=31), None, 1)
     assert stale.ev_kw == stale.ess_kw == 0
     assert "stale" in stale.reason.lower()
+    assert stale.replan
 
 
 class FakeClient:

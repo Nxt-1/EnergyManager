@@ -1,3 +1,3 @@
 """EnergyManager 4 joint planning and independent control application."""
 
-__version__ = "4.3.19"
+__version__ = "4.3.20"

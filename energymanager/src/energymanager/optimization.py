@@ -14,6 +14,7 @@ import highspy
 import numpy as np
 
 from .domain import Snapshot
+from .validation import TOL
 
 INF = highspy.kHighsInf
 
@@ -124,7 +125,13 @@ class JointModel:
         self.quarters: dict[str, list[int]] = defaultdict(list)
         self.months: dict[str, int] = {}
         self.rolling_metadata: dict[int, tuple[int, int, list[tuple[list[int], float]]]] = {}
+        self.continuity_limits_added = False
         self.build(ceilings, grid_ess, ev_total_limit)
+        # Append operational bookkeeping after the physical model. Keep its variable
+        # ordering stable for the economic MIP and its checked starting schedule.
+        self.linear.variable("phase_setting", len(snapshot.intervals), 1)
+        restarts = self.linear.variable("phase_restart", len(snapshot.intervals), 1)
+        self.operations.update({index: 10.0 for index in restarts})
 
     def build(self, ceilings: list[float] | None, grid_ess: bool, ev_total_limit: float | None) -> None:
         s, m = self.snapshot, self.linear
@@ -162,7 +169,7 @@ class JointModel:
             m.variable(name, n, 1, integer=name != "start")
         for name in ("amps_one", "amps_three"):
             m.variable(name, n, c.maximum_current_a, integer=True)
-        m.variable("variation", n, c.voltage * 3 * c.maximum_current_a / 1000)
+        m.variable("variation", n, max(c.voltage * 3 * c.maximum_current_a / 1000, o.ev_power_kw))
         m.variable("phase_change", n, 1)
         m.variable("non_grid_cumulative", n + 1)
         m.variable("grid_cumulative", n + 1)
@@ -337,8 +344,10 @@ class JointModel:
                         + [(get("variation"), -1)],
                         upper=0,
                     )
-                m.row([(get("three"), 1), (v["three"][t - 1], -1), (get("phase_change"), -1)], upper=0)
-                m.row([(get("three"), -1), (v["three"][t - 1], 1), (get("phase_change"), -1)], upper=0)
+            else:
+                for sign in (-1, 1):
+                    m.row([(index, sign * coef) for index, coef in power_terms]
+                          + [(get("variation"), -1)], upper=sign * max(0.0, o.ev_power_kw))
             m.row(active + [(get("start"), -1)], upper=0 if t or o.ev_power_kw < 0.1 else 1)
             quarter = interval.start.replace(minute=interval.start.minute // 15 * 15, second=0, microsecond=0)
             self.quarters[quarter.isoformat()].append(t)
@@ -423,7 +432,7 @@ class JointModel:
             )
             m.row(
                 [(v["non_grid_cumulative"][k], 1), (witness[j + 1], big)] + shortfall_terms,
-                upper=deficit + big - 1e-6,
+                upper=deficit + big - TOL - 1e-6,
             )
         zone = ZoneInfo(p.timezone)
         for quarter_key, slots in self.quarters.items():
@@ -663,15 +672,18 @@ class JointModel:
         assert values is not None
         v, c, o = self.linear.variables, self.snapshot.capabilities, self.snapshot.observation
         previous_on = o.ev_power_kw > 0.1
-        previous_power = o.ev_power_kw
-        previous_three = float(o.ev_phases == 3 and previous_on)
+        previous_power = max(0.0, o.ev_power_kw)
+        previous_setting = float(o.ev_phases == 3)
         for t in range(len(self.snapshot.intervals)):
             on = values[v["one"][t]] + values[v["three"][t]] > 0.5
             power = (values[v["amps_one"][t]] + 3 * values[v["amps_three"][t]]) * c.voltage / 1000
             values[v["start"][t]] = float(on and not previous_on)
-            values[v["variation"][t]] = abs(power - previous_power) if t else 0.0
-            values[v["phase_change"][t]] = abs(values[v["three"][t]] - previous_three) if t else 0.0
-            previous_on, previous_power, previous_three = on, power, values[v["three"][t]]
+            setting = float(values[v["three"][t]] > 0.5) if on else previous_setting
+            values[v["phase_setting"][t]] = setting
+            values[v["variation"][t]] = abs(power - previous_power)
+            values[v["phase_change"][t]] = abs(setting - previous_setting)
+            values[v["phase_restart"][t]] = abs(setting - previous_setting) if on and previous_on else 0.0
+            previous_on, previous_power, previous_setting = on, power, setting
             if "ess_change" in v:
                 values[v["ess_change"][t]] = (
                     abs(values[v["battery_charge"][t]] - values[v["battery_charge"][t - 1]]) if t else 0
@@ -709,9 +721,10 @@ class JointModel:
             ("service_energy_witness", service_deficits),
         ):
             if name in v:
+                threshold = TOL if name == "causal_witness" else 1e-6
                 choice = (
                     max(range(len(deficit_values)), key=deficit_values.__getitem__) + 1
-                    if deficit_values and max(deficit_values) > 1e-6
+                    if deficit_values and max(deficit_values) > threshold
                     else 0
                 )
                 for j, index in enumerate(v[name]):
@@ -765,10 +778,37 @@ class JointModel:
                 values[index] = value
         return self.canonical_values(values)
 
+    def add_continuity_limits(self) -> None:
+        """Price real selector changes only in operational searches/certificates.
+
+        These auxiliary rows do not restrict any physical schedule. Omitting them
+        from the pure economic reference keeps its MIP search free of unpriced state.
+        """
+        if self.continuity_limits_added:
+            return
+        self.continuity_limits_added = True
+        m, o = self.linear, self.snapshot.observation
+        v = m.variables
+        for t in range(len(self.snapshot.intervals)):
+            setting, change, restart = v["phase_setting"][t], v["phase_change"][t], v["phase_restart"][t]
+            active = [(v["one"][t], 1), (v["three"][t], 1)]
+            m.row([(v["three"][t], 1), (setting, -1)], upper=0)
+            m.row([(v["one"][t], 1), (setting, 1)], upper=1)
+            for sign in (-1, 1):
+                if t:
+                    m.row([(setting, sign), (v["phase_setting"][t - 1], -sign), (change, -1)], upper=0)
+                else:
+                    m.row([(setting, sign), (change, -1)], upper=sign * float(o.ev_phases == 3))
+            if t:
+                m.row([(change, 1), (restart, -1)] + active
+                      + [(v["one"][t - 1], 1), (v["three"][t - 1], 1)], upper=2)
+            else:
+                m.row([(change, 1), (restart, -1)] + active, upper=2 - float(o.ev_power_kw > 0.1))
+
     def continuity_objective(self) -> dict[int, float]:
         """Guide economic searches away from needless charger transitions."""
         return {index: self.operations[index]
-                for name in ("start", "phase_change", "variation")
+                for name in ("start", "phase_change", "phase_restart", "variation")
                 for index in self.linear.variables[name]}
 
     def run(
@@ -780,6 +820,8 @@ class JointModel:
     ) -> dict[str, Any]:
         before = monotonic()
         m = self.linear
+        if objective is not None and any(index in objective for index in m.variables["phase_change"]):
+            self.add_continuity_limits()
         if objective is self.operations and "ess_change" not in m.variables:
             changes = m.variable("ess_change", len(self.snapshot.intervals), 1)
             modes = m.variables["battery_charge"]
@@ -793,7 +835,7 @@ class JointModel:
         for index, value in (objective if objective is not None else self.economic).items():
             m.cost[index] = value
         model = m.solver()
-        if objective is self.operations:
+        if objective is not None and any(index in objective for index in m.variables["start"]):
             model.setOptionValue("mip_heuristic_effort", 0.5)
         if warm:
             warm = self.canonical_values(warm)

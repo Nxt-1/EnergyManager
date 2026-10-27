@@ -2,6 +2,24 @@
 
 ## Local use
 
+Release4.3.20 moves continuity selection into the full joint EV/ESS scheduling model,
+within the existing0.02EUR comparison/cash allowance. It can move ESS support to retain
+an EV session, varies current when needed, and prices actual phase changes from the
+current setting. Necessary availability/source/peak pauses remain possible. The displayed
+bill does not include an invented wear charge. Publication validation is unchanged.
+
+A sustained household/PV power mismatch no longer repeatedly requests full calculations.
+After15minutes of continuous fresh evidence, a material changed energy bias updates the
+next30minutes of forecast (fading by one hour) and requests one solve. An unchanged bias
+is deduplicated; new issuances rebase it against the updated forecast, and read gaps
+clear it. Completed appliance excursions do not predict another run. Expected battery charging/
+discharging no longer counts as a material event. Additional plan-relative energy deficits
+still request work. Immediate ESS balancing, EV peak protection, five-minute idle refresh,
+goal/permission/connection/input events and manual cancel-and-recalculate remain active.
+Events forecast_bias/resource_shortfall and planning_activity.reason identify why work
+was requested. Update/reload HA; no new sensor mapping or configuration field is needed.
+No new publication repair or charger-delay/fault-policy change is included.
+
 Release4.3.16 fixes an unnecessary EV stop if a control revision changes during
 confirmation of an otherwise unchanged start. Identical pending commands keep their
 original30second readback timeout and are not rewritten on each revision. Real stops,

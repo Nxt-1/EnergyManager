@@ -1,5 +1,46 @@
 # EnergyManager 4 verification
 
+## 4.3.20 — Joint EV continuity and evidence-based recalculation
+
+362 Python tests pass102.73s;59 frontend tests, Ruff and mypy36 pass. No frontend
+changes are included. New synthetic regressions cover one overnight
+session, varying current under changing house load, moving ESS support to avoid EV
+restarts, retained3p charging, necessary availability/minimum-current pauses, initial
+selector/power costs, setting persistence across off intervals, live-switch restart
+cost, shared two-cent selection, reference-envelope seeds and sub-tolerance source
+rounding. Goals, physical/source/permission and independent audit checks remain.
+
+Replanning checks cover sustained house/AC/DC PV energy evidence, transient/completed
+appliance runs, gaps/invalid/repeated observations, correction taper/freshness, changed
+issuances with unchanged baseline, expected ESS discharge, material inventory deficits
+and unchanged expired-control deduplication. The actual input loop builds a corrected
+snapshot once; correction identities prevent reuse of earlier forecast-specific ESS
+peak grants. Required EV authority is retained while forecast-driven ESS/conditional
+instructions are revoked. Manual cancellation/coalescing and charger timers still pass.
+
+All three serial120s seven-day cases independently validate: mixed104.890s,
+winter104.565s, permission118.767s. Mixed comparison is-7.9923EUR versus the historical
+same-fixture-7.9707EUR; winter25.4417EUR and permission32.3713EUR. These are time-limited
+incumbents with honest bounds/gaps, not global optimality. Mixed/winter grid certificates
+complete; permission remains feasible/time-limited. Whole-week session counts16/15/2
+include opportunities and necessary pauses; no universal one-session claim is made.
+
+The supplied private decision replays offline in118.722s with independent validation,
+one continued3p session up to the next morning requirement,23.4569kWh at that goal and
+the unchanged5.49kW peak. Private inputs/results remain ignored. Applying the earlier
+unchanged frozen adoption observation still reproduces Required outcome after elapsed
+energy is removed. That separate publication-accounting issue remains; no new repair,
+SoC credit or weakened goal validation is introduced.
+
+Configured fake-HA E2E passes33.976s/2018intervals/maximum local control4.199ms
+(not hardware latency), four fake service calls. It checks spawned cancellation,
+latest-only publication, actual HTTP settings/state and independent control. Benchmarks
+and E2E use labelled synthetic/local endpoints only. No live HA, installation database,
+hardware, real notification or deployment was accessed.
+All57 source/assets/defaults match wheel and sdist; isolated4.3.20 version/import and
+the new replanning module are verified. A transient Windows metadata rename lock
+required one build retry; the final archives are complete and byte-checked.
+
 ## 4.3.19 — Overview EV watts and native history actions
 
 334 Python tests pass54.31s;59 frontend tests, Ruff and mypy35 pass. New discovery

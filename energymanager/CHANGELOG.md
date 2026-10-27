@@ -1,3 +1,24 @@
+## 4.3.20 — Joint charging continuity and evidence-based recalculation
+
+- Choose EV continuity within the full joint EV/ESS optimization and the existing
+  two-cent comparison/cash allowance. ESS and source allocations can move with EV work;
+  replace the fixed-ESS refinement and leftover neighborhood polish.
+- Count actual phase-setting changes, including the first interval, and preserve the
+  setting through charging stops. Count the required restart for a live phase change.
+  Include initial measured charging power in variation.
+- Support fixed-phase single-session candidates for solar and already-active three-phase charging;
+  retain flexible current, phases and necessary pauses under all existing constraints.
+- Replace short power-mismatch/emergency replan loops with covered15-minute energy
+  evidence and a bounded near-term forecast correction before requesting a new solve.
+  Unchanged bias is deduplicated; expected battery progress no longer triggers work.
+- Replan on material new plan-relative inventory shortfall; retain immediate peak
+  protection, manual cancel/recalculate, periodic refresh and material-event handling.
+- Seed optional searches within the reference peak envelope instead of falling back
+  to an expensive schedule after an automatic-ceiling seed is rejected.
+- Align the model’s positive source-deficit threshold with the independent audit; a
+  sub-tolerance solar deficit cannot unlock a full grid rounding increment.
+- Publication validation and charger restart/fault timing are unchanged.
+
 ## 4.3.19 — Overview EV power and native sensor history
 
 - Show actual measured EV charging power in the Overview EV box, including zero and
