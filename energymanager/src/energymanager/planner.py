@@ -8,6 +8,7 @@ from time import monotonic
 from typing import Any
 from uuid import uuid4
 from collections import defaultdict
+from collections.abc import Callable
 from copy import deepcopy
 from zoneinfo import ZoneInfo
 
@@ -19,10 +20,11 @@ from .reservations import reservations
 
 
 class Planner:
-    def __init__(self) -> None:
+    def __init__(self, progress: Callable[[str], None] | None = None) -> None:
         self.started = 0.0
         self.deadline = 0.0
         self.stages: list[dict[str, Any]] = []
+        self.progress = progress
 
     def remaining(self) -> float:
         return max(0.0, self.deadline - monotonic())
@@ -54,6 +56,8 @@ class Planner:
         self, name: str, model: JointModel, allowance: float, warm: list[float] | None = None, **kwargs: Any
     ) -> dict[str, Any]:
         economic_search = "objective" not in kwargs
+        if self.progress:
+            self.progress(name)
         started = monotonic()
         allowance = min(allowance, self.remaining())
         result = model.run(allowance * 0.8 if economic_search else allowance, warm=warm, **kwargs)
@@ -1069,6 +1073,6 @@ class Planner:
         }
 
 
-def plan_snapshot(data: dict[str, Any]) -> dict[str, Any]:
+def plan_snapshot(data: dict[str, Any], progress: Callable[[str], None] | None = None) -> dict[str, Any]:
     """Spawn-safe worker entry point; imports no HA client or controller."""
-    return Planner().plan(Snapshot.from_dict(data))
+    return Planner(progress).plan(Snapshot.from_dict(data))

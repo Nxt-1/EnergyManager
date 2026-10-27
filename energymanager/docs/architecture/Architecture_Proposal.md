@@ -505,8 +505,33 @@ quiet. No external notice was sent in development.
 
 ## Continuity, control and publication
 
-HiGHS runs in one spawned process; event-loop control normally ticks each second. A
-coalesced event or five-minute refresh requests planning. One120s default wall budget
+HiGHS runs in one spawned process; event-loop control normally ticks each second.
+From4.3.14 each calculation owns a fresh terminable process. Manual Recalculate
+replaces active work immediately: cancel the task, terminate/join the exact child
+(kill if needed), then build a fresh snapshot and start the latest request. Process
+launch and cleanup stay off the control event loop. Never overlap solvers or queue
+full calculations. Bursts coalesce to the latest request. Material revision changes
+also replace obsolete work; routine same-revision control requests while calculating
+are ignored, so they cannot repeatedly restart a long solve. Five-minute idle refresh
+remains. A manual request has its own identity and does not change the control revision
+or revoke still-valid accepted instructions. Existing publication/permission checks
+still apply. Canceled attempts record request/snapshot/replacement identities as
+`planning_cancelled` events rather than publishing partial results or raising a
+planning-failure notification. Shutdown reaps the active child; the parent watchdog
+also remains.
+
+`POST /api/replan` acknowledges with202 and the new request identity/activity. Compact
+and full state expose requested/restarting/calculating/checking/waiting/ready/error,
+request/start/finish timestamps, real solver stage and elapsed time. The shared native
+and standalone UI immediately animates the button, then permits another restart once
+the POST is acknowledged. A compact animated activity bar shows stage and elapsed time
+across tabs, briefly confirms acceptance and exposes failed requests. It is indeterminate:
+no completion percentage or ETA is inferred from the solver budget. Stage updates do
+not redraw charts or replace selected text; reduced-motion preferences are respected.
+An old state response cannot erase a newer manual request acknowledgement. Mutations
+are never automatically retried by the browser.
+
+One120s default wall budget
 covers construction, reference/diagnostic/opportunity solves, polish and audits. Optional
 refinements are skipped when unvalidated. Checked lower-peak warm starts are feasible
 incumbents, not substitute published schedules. Raw status, bounds and gaps are retained.

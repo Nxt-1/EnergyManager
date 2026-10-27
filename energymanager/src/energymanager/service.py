@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import aiohttp
-from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures.process import BrokenProcessPool
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from multiprocessing import get_context
 from time import monotonic
 from typing import Any
 from uuid import uuid4
@@ -20,11 +17,10 @@ from .domain import Goal, Observation, PeakPermission, Policy, Snapshot, daily_g
 from .publication import rebase
 from .demo_plant import DemoPlant
 from .forecasts import demo_snapshot
-from .planner import plan_snapshot
 from .store import Store
 from .notifications import Notifications
 from .validation import validate
-from .worker import watch_parent
+from .worker import PlanningWorker, WorkerExited
 from .hardware import HardwareControl
 from .calendars import CalendarSync
 from .ev_faults import EVFaults
@@ -68,7 +64,11 @@ class Application:
         self.error: str | None = None
         self.controller = FastControl(self.snapshot.capabilities, self.snapshot.policy)
         self.actuator: Actuator = FakeActuator()
-        self.worker: ProcessPoolExecutor | None = None
+        self.worker: PlanningWorker | None = None
+        self.active_calculation: asyncio.Task[dict[str, Any]] | None = None
+        self.calculating_revision: int | None = None
+        self.planning_request_id = uuid4().hex
+        self.planning_activity: dict[str, Any] = {"state": "idle", "request_id": self.planning_request_id}
         self.planning: asyncio.Task[None] | None = None
         self.control_task: asyncio.Task[None] | None = None
         self.requested = asyncio.Event()
@@ -101,9 +101,7 @@ class Application:
             self.hardware.start()
         if self.calendars:
             self.calendars.start()
-        self.worker = ProcessPoolExecutor(
-            max_workers=1, mp_context=get_context("spawn"), initializer=watch_parent
-        )
+        self.worker = PlanningWorker()
         self.control_task = asyncio.create_task(self.control_loop())
         self.planning = asyncio.create_task(self.planning_loop())
         if self.ha and self.forecast:
@@ -111,7 +109,7 @@ class Application:
             self.observation = replace(self.observation, quality="unknown")
             self.input_task = asyncio.create_task(self.input_loop())
         elif not self.configuration_error:
-            self.requested.set()
+            self.request_plan("startup")
         if self.ev_faults:
             self.ev_faults.start()
 
@@ -154,7 +152,7 @@ class Application:
             await self.ha.__aexit__()
         self.store.put("observed", self.observed)
         if self.worker:
-            self.worker.shutdown(wait=False, cancel_futures=True)
+            await self.worker.close()
 
     def invalidate(self, kind: str, *, ev: bool, ess: bool) -> None:
         if ev:
@@ -167,7 +165,7 @@ class Application:
         self.revision += 1
         self.store.put("revision", self.revision)
         self.invalidate(kind, ev=ev, ess=ess)
-        self.requested.set()
+        self.request_plan(kind)
         if ev or ess:
             try:
                 loop = asyncio.get_running_loop()
@@ -345,15 +343,77 @@ class Application:
         self.observation = replace(self.observation, quality="settling")
         return True
 
+    def request_plan(self, reason: str, *, restart: bool = False) -> dict[str, Any]:
+        """Replace obsolete work; routine same-revision requests never build a queue."""
+        active = self.active_calculation is not None and not self.active_calculation.done()
+        if self.shutdown:
+            return {"requested": False}
+        if active and not restart and self.calculating_revision == self.revision:
+            return {"requested": False, "planning_activity": json_data(self.planning_activity)}
+        self.planning_request_id = uuid4().hex
+        self.planning_activity = {
+            "request_id": self.planning_request_id, "state": "restarting" if active else "requested",
+            "requested_at": self.now(), "started_at": None, "finished_at": None,
+            "stage": "inputs", "reason": reason,
+        }
+        self.requested.set()
+        self.store.event("planning_requested", {"request_id": self.planning_request_id,
+                                               "reason": reason, "replacing_active": active})
+        return {"requested": True, "planning_activity": json_data(self.planning_activity)}
+
+    def finish_planning(self, state: str) -> None:
+        self.planning_activity.update(state=state, finished_at=self.now())
+
+    async def calculate_plan(self, snapshot: Snapshot, request_id: str) -> dict[str, Any]:
+        if self.worker is None:
+            self.worker = PlanningWorker()
+
+        def progress(stage: str) -> None:
+            if request_id == self.planning_request_id:
+                self.planning_activity.update(stage=stage)
+
+        return await self.worker.run(json_data(snapshot), progress)
+
+    async def run_calculation(self, snapshot: Snapshot) -> dict[str, Any] | None:
+        request_id = self.planning_request_id
+        self.calculating_revision = snapshot.revision
+        self.planning_activity.update(state="calculating", started_at=self.now(), finished_at=None, stage="inputs")
+        work = asyncio.create_task(self.calculate_plan(snapshot, request_id))
+        self.active_calculation = work
+        replaced = asyncio.create_task(self.requested.wait())
+        try:
+            await asyncio.wait((work, replaced), return_when=asyncio.FIRST_COMPLETED)
+            if self.requested.is_set() or request_id != self.planning_request_id:
+                work.cancel()
+                await asyncio.gather(work, return_exceptions=True)
+                if self.worker:
+                    await self.worker.close()
+                self.store.event("planning_cancelled", {"request_id": request_id, "snapshot_id": snapshot.id,
+                                                        "revision": snapshot.revision,
+                                                        "replacement_request_id": self.planning_request_id})
+                return None
+            return work.result()
+        finally:
+            replaced.cancel()
+            if not work.done():
+                work.cancel()
+            await asyncio.gather(work, replaced, return_exceptions=True)
+            if self.worker:
+                await self.worker.close()
+            self.active_calculation = None
+            self.calculating_revision = None
+
     async def planning_loop(self) -> None:
         while not self.shutdown:
             try:
                 await asyncio.wait_for(self.requested.wait(), timeout=300)
             except TimeoutError:
-                self.requested.set()
+                self.request_plan("periodic")
             self.requested.clear()
             await asyncio.sleep(0.05)  # Coalesce event bursts, never queue independent full solves.
+            self.requested.clear()  # Start with the latest request from the burst.
             if self.house_mismatch_since is not None:
+                self.planning_activity.update(state="waiting", stage="inputs")
                 self.requested.set()
                 await asyncio.sleep(5)
                 continue
@@ -361,40 +421,40 @@ class Application:
                 snapshot = self.build_snapshot()
             except (ValueError, KeyError) as exc:
                 self.status, self.error = "inputs_unavailable", str(exc)
+                self.finish_planning("error")
                 self.store.event("snapshot_error", {"reason": self.error})
                 await self.planning_retry_failed(self.error)
                 continue
             self.status = "planning"
             try:
-                result = await asyncio.get_running_loop().run_in_executor(
-                    self.worker, plan_snapshot, json_data(snapshot)
-                )
-            except BrokenProcessPool as exc:
+                result = await self.run_calculation(snapshot)
+            except WorkerExited as exc:
                 self.status, self.error = "solver_error", str(exc)
+                self.finish_planning("error")
                 self.store.event("worker_restarted", {"reason": str(exc)})
                 await self.planning_retry_failed(self.error)
-                if self.worker:
-                    self.worker.shutdown(wait=False, cancel_futures=True)
-                self.worker = ProcessPoolExecutor(
-                    max_workers=1, mp_context=get_context("spawn"), initializer=watch_parent
-                )
                 await asyncio.sleep(1)
-                self.requested.set()
+                if not self.requested.is_set():
+                    self.request_plan("worker_restarted")
                 continue
             except (RuntimeError, ValueError, OSError) as exc:
                 self.status, self.error = "solver_error", str(exc)
+                self.finish_planning("error")
                 self.store.event("solver_error", {"type": type(exc).__name__, "reason": str(exc)})
                 await self.planning_retry_failed(self.error)
                 continue
+            if result is None:
+                continue
+            self.planning_activity.update(state="checking", stage="validation")
             # All changes are conservatively revalidated by a fresh solve; accepted unaffected work continues.
             if self.house_mismatch_since is not None:
                 self.store.record(snapshot, result, "rejected_unsettled_power")
-                self.requested.set()
+                self.request_plan("power_balance_settling")
                 continue
             if snapshot.revision != self.revision:
                 self.store.record(snapshot, result, "rejected_stale")
                 self.status = "superseded"
-                self.requested.set()
+                self.request_plan("superseded")
                 continue
             effective = (
                 Snapshot.from_dict(result["effective_snapshot"])
@@ -411,6 +471,7 @@ class Application:
             if errors:
                 result["publication_errors"] = errors
                 self.store.record(snapshot, result, "rejected")
+                self.finish_planning("error")
                 self.status, self.error = (
                     "publication_rejected" if result.get("valid") else result["status"],
                     errors[0],
@@ -425,6 +486,7 @@ class Application:
             self.ess_valid = True
             self.conditional_valid = True
             self.status, self.error = "ready", None
+            self.finish_planning("ready")
             self.resolve_planning_issue(result["id"])
             self.update_issues(result)
             await self.notify_permission_issues()
@@ -472,7 +534,7 @@ class Application:
         self.store.put("planning_issue", issue)
         self.store.event("planning_rejected", issue)
         if attempts == 1:
-            self.requested.set()
+            self.request_plan("planning_retry")
         else:
             delivered = await self.notifications.inform(f"planning:{issue['id']}", {
                 "kind": "planning_rejected",
@@ -566,7 +628,7 @@ class Application:
                 self.last_control_replan is None or (at - self.last_control_replan).total_seconds() >= 60
             ):
                 self.last_control_replan = at
-                self.requested.set()
+                self.request_plan("control_deviation")
             self.last_command = json_data(command)
             self.current_command = command
             self.store.event(
@@ -724,6 +786,11 @@ class Application:
 
     def state(self) -> dict[str, Any]:
         now = self.now()
+        activity = dict(self.planning_activity)
+        started = activity.get("started_at")
+        finished = activity.get("finished_at") or now
+        activity["elapsed_seconds"] = max(0, (finished - started).total_seconds()) if started else 0
+        activity["budget_seconds"] = self.policy.planning_budget_seconds
         planning_issue = self.store.get("planning_issue")
         daily_approvals = self.store.get("daily_approvals", {})
         requirements = []
@@ -735,6 +802,7 @@ class Application:
             "daily_estimate": self.daily_estimates.view(now),
             "power_balance_settling_since": json_data(self.house_mismatch_since),
             "status": self.status,
+            "planning_activity": json_data(activity),
             "error": self.error,
             "revision": self.revision,
             "now": now.isoformat(),

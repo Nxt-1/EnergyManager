@@ -1,3 +1,13 @@
+## 4.3.14 — Immediate recalculation and visual activity
+
+- Make Recalculate cancel the current solver process and start a fresh calculation
+  with current inputs. Repeated requests replace each other instead of building a queue.
+- Replace work on material input changes; ignore routine same-revision requests while
+  busy. Preserve still-valid accepted charging instructions during manual recalculation.
+- Show immediate button feedback, a restart action, an animated stage/elapsed-time bar
+  and a brief success confirmation in native and standalone dashboards. Respect reduced
+  motion; show failures without automatically repeating the request.
+
 ## 4.3.13 — EV restart settling
 
 - Hold charging off for 30 seconds after a confirmed phase setting change in

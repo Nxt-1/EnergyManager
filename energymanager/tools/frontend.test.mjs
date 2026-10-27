@@ -7,6 +7,99 @@ import {clockValue, localDateTime, localInstants, monthDays, validLocal}
 import {eventsOnDay, evSchedule, scheduleDays} from '../src/energymanager/assets/ev-schedule.js';
 import {nativeLiveState, phaseSelector, setChargerPhase} from '../src/energymanager/assets/native-live.js';
 import {evStatusModel, evStatusMarkup} from '../src/energymanager/assets/ev-status.js';
+import {PlanningActivity, planningActivityModel} from '../src/energymanager/assets/planning-activity.js';
+
+test('planning activity reports real stages and elapsed time without a fabricated percentage', () => {
+  assert.equal(planningActivityModel().visible, false);
+  const model = planningActivityModel({state: 'calculating', stage: 'ev_continuity', elapsed_seconds: 74});
+  assert.equal(model.busy, true);
+  assert.equal(model.label, 'Smoothing charging');
+  assert.equal(model.elapsed, '1:14');
+  assert.equal(planningActivityModel({state: 'calculating', stage: 'normal_ceiling_joint'}).label, 'Optimizing energy');
+  assert.equal(planningActivityModel({state: 'restarting'}).label, 'Restarting');
+  assert.equal(planningActivityModel({state: 'waiting'}).label, 'Waiting for inputs');
+  assert.equal(planningActivityModel({state: 'error'}).visible, true);
+  const finished_at = '2026-10-27T12:00Z';
+  assert.equal(planningActivityModel({state: 'ready', finished_at}, Date.parse(finished_at) + 2000).visible, true);
+  assert.equal(planningActivityModel({state: 'ready', finished_at}, Date.parse(finished_at) + 7000).visible, false);
+});
+
+function activityElement() {
+  const children = new Map(), attributes = new Map(), classes = new Set();
+  return {hidden: false, dataset: {}, textContent: '',
+    querySelector(selector) {
+      if (!children.has(selector)) children.set(selector, activityElement());
+      return children.get(selector);
+    },
+    setAttribute: (name, value) => attributes.set(name, value),
+    getAttribute: name => attributes.get(name),
+    classList: {toggle: (name, on) => on ? classes.add(name) : classes.delete(name),
+      contains: name => classes.has(name)}};
+}
+
+test('manual recalculation gives immediate feedback, permits restart and ignores stale state', async () => {
+  const root = activityElement(), button = activityElement(), evButton = activityElement();
+  let resolve, requests = 0, locked = false;
+  const view = new PlanningActivity(root, button, () => {
+    requests++;
+    return new Promise(done => { resolve = done; });
+  }, () => locked, () => [evButton]);
+  try {
+    const request = view.recalculate();
+    assert.equal(root.hidden, false);
+    assert.equal(root.querySelector('[data-planning-label]').textContent, 'Starting');
+    assert.equal(button.disabled, true);
+    assert.equal(evButton.disabled, true);
+    assert.equal(await view.recalculate(), null);
+    assert.equal(requests, 1); // No duplicate POST while acknowledgement is pending.
+    const activity = {request_id: 'newest', state: 'requested', requested_at: '2026-10-27T12:00Z'};
+    resolve({requested: true, planning_activity: activity});
+    await request;
+    assert.equal(button.disabled, false);
+    assert.equal(button.querySelector('[data-recalculate-label]').textContent, 'Restart calculation');
+    assert.equal(evButton.querySelector('[data-recalculate-label]').textContent, 'Restart calculation');
+    view.update({planning_activity: {...activity, state: 'calculating', started_at: activity.requested_at,
+      elapsed_seconds: 12, stage: 'required_reference'}});
+    assert.equal(root.querySelector('[data-planning-label]').textContent, 'Finding a plan');
+    view.update({planning_activity: {state: 'ready', requested_at: '2026-10-27T11:59Z'}});
+    view.update({});
+    assert.equal(view.activity.request_id, 'newest');
+    locked = true;
+    view.update({planning_activity: {...activity, state: 'checking'}});
+    assert.equal(root.querySelector('[data-planning-label]').textContent, 'Finding a plan');
+    locked = false;
+    view.render();
+    assert.equal(root.querySelector('[data-planning-label]').textContent, 'Validating');
+    const restart = view.recalculate();
+    assert.equal(root.querySelector('[data-planning-label]').textContent, 'Restarting');
+    resolve({requested: true, planning_activity: {...activity, request_id: 'replacement', state: 'restarting'}});
+    await restart;
+    assert.equal(requests, 2);
+    assert.equal(root.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), undefined);
+    const text = root.querySelector('[data-planning-label]').textContent;
+    view.dispose();
+    view.update({planning_activity: {...activity, state: 'error'}});
+    assert.equal(root.querySelector('[data-planning-label]').textContent, text);
+  } finally { view.dispose(); }
+});
+
+test('a failed recalculation request stays visible and never retries the mutation automatically', async () => {
+  const root = activityElement(), button = activityElement();
+  let requests = 0;
+  const view = new PlanningActivity(root, button, async () => {
+    requests++;
+    throw new Error('SYNTHETIC request timeout');
+  });
+  try {
+    await assert.rejects(view.recalculate(), /SYNTHETIC request timeout/);
+    view.update({planning_activity: {state: 'idle'}});
+    assert.equal(root.hidden, false);
+    assert.equal(root.dataset.state, 'error');
+    assert.equal(button.disabled, false);
+    assert.equal(requests, 1);
+    assert.match(root.title, /SYNTHETIC request timeout/);
+  } finally { view.dispose(); }
+});
 
 function syntheticEVStatus() {
   const at = '2026-10-25T12:00:00Z';

@@ -205,11 +205,28 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
             configuration = ConfigurationFile(path, addon=True, mode="configured")
             before = monotonic()
             async with TestClient(TestServer(create_web(application, configuration=configuration), port=8102 if serve else None)) as client:
+                # Cancel an actual full-horizon HiGHS solve through the public button API.
+                async with asyncio.timeout(30):
+                    while (application.planning_activity.get("state") != "calculating"
+                           or application.planning_activity.get("stage") == "inputs"):
+                        await asyncio.sleep(.05)
+                cancelled_request = application.planning_request_id
+                cancelled_pid = application.worker.process.pid
+                for _ in range(2):
+                    response = await client.post("/api/replan", json={}, headers={"X-EnergyManager": "1"})
+                    assert response.status == 202
+                    replacement = (await response.json())["planning_activity"]["request_id"]
+                    assert replacement != cancelled_request
                 while monotonic() - before < (180 if calendar_fixture else 60) and application.accepted is None:
                     await asyncio.sleep(0.2)
                 assert application.accepted is not None, (application.status, application.error)
                 response = await client.get("/api/state")
                 current = await response.json()
+                assert current["planning_activity"]["request_id"] == replacement
+                assert current["planning_activity"]["state"] == "ready"
+                from multiprocessing import active_children
+                assert cancelled_pid not in {child.pid for child in active_children()}
+                assert any(event["kind"] == "planning_cancelled" for event in store.events())
                 if calendar_fixture:
                     assert len([goal for goal in current["goals"] if goal.get("calendar")]) == 2
                     assert len(current["calendars"]) == 2 and not any(item["error"] for item in current["calendars"])
@@ -283,6 +300,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                         "go-e numeric states, advancing seconds heartbeat and current/force/phase readbacks on fake HA",
                         "hardware-off stop confirmed by new device and zero-power observations before injecting preview faults",
                         "spawned real full-horizon HiGHS plan",
+                        "manual replan cancels and reaps real HiGHS; only the latest replacement is adopted",
                         "publication against current measurements",
                         "independent guarded calls to local fake only",
                         "API state",

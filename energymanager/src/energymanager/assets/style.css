@@ -17,6 +17,34 @@ main,dialog { user-select:text; -webkit-user-select:text; }
 .connection-error button { margin-left:12px; }
 .connection-error textarea { display:block; width:100%; min-height:80px; margin-top:8px; }
 .connection-error[hidden],.connection-error textarea[hidden] { display:none; }
+.planning-activity {
+  display:flex; align-items:center; gap:10px; margin:0 0 12px;
+  color:var(--accent); min-height:26px; font-size:12px;
+}
+.planning-activity[hidden] { display:none; }
+.planning-activity strong { font-weight:500; }
+.planning-track { flex:1; max-width:220px; height:3px; overflow:hidden;
+  border-radius:3px; background:var(--line); }
+.planning-track i { display:block; width:35%; height:100%; background:currentColor;
+  animation:planning-travel 1.5s ease-in-out infinite; }
+.planning-symbol,.recalculate-symbol { display:inline-block; }
+.planning-symbol { width:12px; height:12px; border:2px solid currentColor;
+  border-right-color:transparent; border-radius:50%; animation:planning-turn 1s linear infinite; }
+.planning-activity[data-state="ready"] { color:var(--success-color,#16a34a); }
+.planning-activity[data-state="error"],.recalculate-button.request-error { color:var(--error-color,#dc2626); }
+.planning-activity[data-state="ready"] .planning-symbol,
+.planning-activity[data-state="error"] .planning-symbol { border:0; animation:none; height:auto; }
+.planning-activity[data-state="ready"] .planning-symbol::after { content:'✓'; }
+.planning-activity[data-state="error"] .planning-symbol::after { content:'!'; font-weight:700; }
+.planning-activity[data-state="ready"] .planning-track,
+.planning-activity[data-state="error"] .planning-track { visibility:hidden; }
+.recalculate-button.calculating .recalculate-symbol { animation:planning-turn 1s linear infinite; }
+.recalculate-button.calculating { border-color:var(--accent); }
+@keyframes planning-turn { to { transform:rotate(360deg); } }
+@keyframes planning-travel { from { transform:translateX(-100%); } to { transform:translateX(390%); } }
+@media (prefers-reduced-motion:reduce) {
+  .planning-symbol,.planning-track i,.recalculate-button.calculating .recalculate-symbol { animation:none; }
+}
 body {
   margin:0
 }

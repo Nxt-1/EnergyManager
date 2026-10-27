@@ -167,8 +167,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         )
 
     async def replan(request: web.Request) -> web.Response:
-        application.requested.set()
-        return web.json_response({"requested": True}, status=202)
+        return web.json_response(application.request_plan("manual", restart=True), status=202)
 
     async def decisions(request: web.Request) -> web.Response:
         return web.json_response(application.store.decisions())
@@ -212,7 +211,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         if name not in ("index.html", "app.js", "settings.js", "display.js", "date-time.js",
                         "datetime-picker.js", "ev-schedule.js", "style.css", "ha-card.js",
                         "application-view.js", "view.html", "native-dashboard.js", "native-dashboard.css",
-                        "native-live.js", "graph-history.js", "graph-cursor.js", "dashboard-client.js",
+                        "native-live.js", "graph-history.js", "graph-cursor.js", "dashboard-client.js", "planning-activity.js",
                         "text-selection.js", "ev-status.js"):
             raise web.HTTPNotFound()
         content_type = {"html": "text/html", "js": "text/javascript", "css": "text/css"}[

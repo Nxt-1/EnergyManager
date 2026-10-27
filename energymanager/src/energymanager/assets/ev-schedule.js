@@ -290,7 +290,7 @@ export class EVSchedulePage {
       <div class="ev-layout"><article class="card ev-calendar"><div class="card-heading"><div><h2>Seven-day calendar</h2><p class="subtle">Expected away · planned charging · minimum SoC / ↗ departure</p></div><button data-ev-today="true">Today</button></div>
       <div class="ev-calendar-scroll" tabindex="0" aria-label="Seven-day EV calendar; scroll horizontally for all hours"><div class="ev-calendar-days">${calendar}</div></div>
       <p class="subtle">Only the next 168 hours are shown. Away periods come from entered or subscribed calendar journeys. An unknown return stays away; no routine driving or charging away is assumed.</p></article>
-      <aside class="card ev-agenda"><h2>${dateLabel(selectedDay.date)}</h2>${agenda || '<p class="empty">No journeys, requirements or planned charging in this part of the day.</p>'}<div class="actions"><button data-ev-replan="true">Recalculate</button></div><p class="subtle">Charging uses the shared EV/ESS plan. Open an item for details.</p></aside></div>`;
+      <aside class="card ev-agenda"><h2>${dateLabel(selectedDay.date)}</h2>${agenda || '<p class="empty">No journeys, requirements or planned charging in this part of the day.</p>'}<div class="actions"><button class="recalculate-button" data-ev-replan="true"><span class="recalculate-symbol" aria-hidden="true">↻</span> <span data-recalculate-label>Recalculate</span></button></div><p class="subtle">Charging uses the shared EV/ESS plan. Open an item for details.</p></aside></div>`;
     if (focusAttribute)[...this.root.querySelectorAll(`[${focusAttribute}]`)]
       .filter(button => button.getAttribute(focusAttribute) === focusValue)[focusIndex]?.focus({
         preventScroll: true

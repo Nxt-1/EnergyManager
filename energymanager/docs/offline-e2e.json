@@ -1,11 +1,11 @@
 {
-  "version": "4.3.13",
+  "version": "4.3.14",
   "provenance": "SYNTHETIC local weather fixture \u00b7 Open-Meteo KNMI \u00b7 four installed PV planes \u00b7 correction 2026-10-03-seed \u00b7 household baseline learning (samples: 1)",
-  "accepted_seconds": 31.46511759981513,
+  "accepted_seconds": 32.82983089983463,
   "intervals": 2018,
-  "control_max_seconds": 0.018085899762809277,
-  "baseline_control_max_seconds": 0.018085899762809277,
-  "switch_control_max_seconds": 0.0035204002633690834,
+  "control_max_seconds": 0.003286799881607294,
+  "baseline_control_max_seconds": 0.002758199814707041,
+  "switch_control_max_seconds": 0.003286799881607294,
   "switch_control_ticks": 6,
   "fake_service_calls": 4,
   "calendar_imports": 0,
@@ -66,7 +66,7 @@
     "weather_error": null,
     "load_stage": "learning",
     "synthetic": true,
-    "weather_at": "2026-10-26T23:14:00.133398+00:00",
+    "weather_at": "2026-10-26T23:58:22.245152+00:00",
     "load_methods": [
       "recent_baseline"
     ],
@@ -90,6 +90,7 @@
     "go-e numeric states, advancing seconds heartbeat and current/force/phase readbacks on fake HA",
     "hardware-off stop confirmed by new device and zero-power observations before injecting preview faults",
     "spawned real full-horizon HiGHS plan",
+    "manual replan cancels and reaps real HiGHS; only the latest replacement is adopted",
     "publication against current measurements",
     "independent guarded calls to local fake only",
     "API state",

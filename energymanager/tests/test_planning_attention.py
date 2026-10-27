@@ -114,7 +114,7 @@ async def test_publication_loop_recovers_once_and_clears_attention_without_phone
     monkeypatch.setattr(app, "now", lambda: s.observation.at)
     attempts = []
 
-    def calculate(_):
+    async def calculate(snapshot, request_id):
         attempts.append(len(attempts))
         return {**deepcopy(valid), "id": f"synthetic-{len(attempts)}"}
 
@@ -126,7 +126,7 @@ async def test_publication_loop_recovers_once_and_clears_attention_without_phone
     async def accepted():
         app.shutdown = True
 
-    monkeypatch.setattr("energymanager.service.plan_snapshot", calculate)
+    monkeypatch.setattr(app, "calculate_plan", calculate)
     monkeypatch.setattr("energymanager.service.rebase", reconcile)
     monkeypatch.setattr(app, "notify_permission_issues", accepted)
     app.requested.set()

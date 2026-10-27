@@ -395,6 +395,25 @@ ESS and charger integrations mark real device outages unavailable during commiss
 Forecast over 2 h disables conditional work. The read/forecast thresholds and 15-minute
 desired completion margin are provisional.
 
+## Recalculate and planning activity (4.3.14)
+
+Recalculate acknowledges immediately and replaces any running calculation with one
+using current inputs. While busy it becomes Restart calculation; clicking again
+cancels/replaces the current solve. Bursts produce only the latest calculation, never
+a queue. The compact activity bar shows the actual stage and elapsed time; its moving
+line has no percentage meaning. A green check briefly confirms a validated update;
+failure stays visible. Valid prior instructions continue subject to normal control
+guards. No extra hardware-control toggle or restart is needed for manual recalculation.
+
+For offline checks use the fake E2E and native preview commands below. The E2E now
+cancels a real HiGHS worker through `/api/replan`, confirms it was reaped and only the
+newest replacement was adopted, while checking local control responsiveness. In each
+dashboard click Recalculate, click Restart calculation during activity, verify the
+elapsed/stage display and eventual confirmation, then inspect narrow layout and text
+selection. `/api/state` includes `planning_activity`; the event log distinguishes
+`planning_requested` and `planning_cancelled` from accepted/rejected decisions. No
+partial result from canceled work is published. Use local synthetic endpoints only.
+
 ## Commissioning and rollback — later review, not performed here
 
 1. Back up the current add-on/config/dashboard and independently export the new SQLite

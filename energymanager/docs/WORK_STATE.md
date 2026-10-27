@@ -1,5 +1,22 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.14 immediate recalculation and visual activity
+
+AUTHORIZED27Oct: manual Recalculate replaces a running solve, avoids queues and
+provides visual feedback. Implemented own spawned process per solve, off-loop
+spawn/terminate/kill/join, latest-request race/coalescing, material-revision replacement
+and no routine same-revision busy queue. Manual request identity does not invalidate
+accepted control. Retain process-crash recovery and independent validation/permissions.
+API202 acknowledges identity/activity; compact native/standalone stage/elapsed bar,
+Overview/EV button feedback, restart action, brief green confirmation, visible failures,
+reduced motion and selection locks. No invented percentage/ETA.
+LOCAL:280Python53.42s/54Node/Ruff/mypy35 pass. Actual HiGHS cancellation in fakeE2E
+passes32.830s/2018intervals/max3.287ms/four fake calls. Browser native/standalone,
+EV controls, restart/stage/elapsed, dark/light,355px component and read-timeout recovery
+verified.56 source/assets/defaults match wheel/sdist; isolated4.3.14 import passes.
+NEXT: scoped final review and ready-release commit/push; verify exact-head CI/image.
+Preserve unrelated DEFERRED_WORK tail and paused Maps. No live installation operation.
+
 ## Current work —4.3.13 EV restart settling
 
 AUTHORIZED27Oct: user confirmed standalone stop→phase→30s→charge worked; apply a30s

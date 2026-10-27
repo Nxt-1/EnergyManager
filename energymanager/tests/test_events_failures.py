@@ -79,9 +79,9 @@ async def test_real_solve_does_not_block_control_and_disconnect_cannot_be_resurr
         assert app.last_command["generation"] == disconnect_revision
         assert app.response_seconds
         end = monotonic() + 8
-        while monotonic() < end and not any(d["disposition"] == "rejected_stale" for d in store.decisions()):
+        while monotonic() < end and not any(e["kind"] == "planning_cancelled" for e in store.events()):
             await asyncio.sleep(0.05)
-        assert any(d["disposition"] == "rejected_stale" for d in store.decisions())
+        assert any(e["kind"] == "planning_cancelled" for e in store.events())
         assert not app.ev_valid
     finally:
         await app.close()

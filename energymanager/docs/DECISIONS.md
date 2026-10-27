@@ -310,6 +310,18 @@ notify. Preserve prior instructions only while valid, and clear the attention it
 acceptance. Standing ready-release commit/push permission applies. No live installation,
 hardware, actual phone alert or deployment is authorized in development.
 
+## 27 October2026 — Recalculate replaces active work
+
+The user explicitly requests that manual Recalculate start a fresh calculation,
+canceling active work where possible, with no calculation queue and visual feedback.
+Use one owned, terminable spawned process per solve; reap it before starting another.
+Manual requests do not invalidate accepted control. Material revision changes replace
+obsolete work, while routine same-revision control requests during a solve are ignored
+to avoid starving it. Expose actual stages and elapsed time through a compact animated
+indicator and button feedback; do not fabricate a completion percentage or ETA.
+Standing ready-release commit/push permission applies. Development uses only synthetic
+local endpoints; no installation operation or real phone notice is authorized.
+
 ## 27 October2026 — Thirty-second EV restart settling; retire phase cooldown
 
 The user reported that the standalone stop→phase→30second pause→force-charge test

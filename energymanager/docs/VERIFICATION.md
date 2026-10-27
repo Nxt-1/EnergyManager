@@ -1,5 +1,36 @@
 # EnergyManager 4 verification
 
+## 4.3.14 — Cancel/replace recalculation and visual activity
+
+280 Python tests pass53.42s;54 frontend tests, Ruff and mypy35 pass. Regressions use
+real spawned synthetic workers to cancel a running child, cancel during slow spawn,
+reap on shutdown, recover after a child exception/crash and keep the event loop
+responsive. The parent/public HTTP checks verify202 acknowledgement, rapid requests
+coalescing to the newest identity, no same-revision busy queue, material-revision
+cancellation, preservation of accepted control, no publication of superseded work
+and the existing automatic recovery after process death. Both unversioned and
+versioned progress-module assets are served. Existing rejected-plan retry/attention,
+negative-power input guards and disconnect protection pass.
+
+The configured local fake-HA E2E cancels an actual full-horizon HiGHS process via
+the manual endpoint, verifies the old PID is reaped and only the newest replacement
+is adopted. Final fixture result: accepted32.830s,2018intervals, maximum local control
+3.287ms (not hardware latency), four calls to fake services only. Results are in
+offline-e2e.json. No optimization objective/constraint changes are made in this release.
+
+Browser checks cover immediate Starting/Restarting feedback, real stage/elapsed
+updates, restart during a solve, native/standalone entry points, EV-tab activity and
+its own button, light/dark themes and a355px component at390px viewport without
+activity overflow. Synthetic read timeout recovery and green Plan updated feedback
+were observed. The indeterminate bar never claims a percentage. Node checks cover
+old GET suppression after POST acknowledgement, failed requests without automatic
+mutation retries, selection locks, timer disposal and both button states. Existing
+graph gesture/cursor/selection regressions pass. Screenshot evidence stays in ignored
+artifacts/release-4.3.14-recalculation.png. All56 source/assets/defaults match wheel
+and sdist; isolated packaged4.3.14 import passes. No live HA, installation database,
+hardware, real notification or deployment access occurred. Paused Maps and unrelated
+deferred-work edits remain separate.
+
 ## 4.3.13 — EV restart settling and phase cooldown removal
 
 272 Python tests pass54.63s;51 frontend tests, Ruff and mypy35 pass. Focused

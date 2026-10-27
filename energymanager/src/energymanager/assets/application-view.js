@@ -21,6 +21,7 @@ import {GraphHistory, historyDayRange, observedPoints} from './graph-history.js'
 import {GraphCursor, plotInsets, clipSeries} from './graph-cursor.js';
 import {requestError, StatePoller} from './dashboard-client.js';
 import {hasTextSelection, clearTextSelection} from './text-selection.js';
+import {PlanningActivity} from './planning-activity.js';
 
 
 export async function mountApplication(root, options = {}) {
@@ -47,6 +48,8 @@ export async function mountApplication(root, options = {}) {
   let selectedRange = null;
   let connectionError = null;
   const statePoller = new StatePoller(api);
+  const planningActivity = new PlanningActivity($('planning-activity'), $('refresh'),
+    () => api('replan', 'POST', {}), () => viewLocked(), () => root.querySelectorAll('[data-ev-replan]'));
   const graphHistory = new GraphHistory(api, () => {
     if (state && !viewLocked() && ['overview', 'planning'].includes(page)) renderCharts();
   });
@@ -114,7 +117,7 @@ export async function mountApplication(root, options = {}) {
       await refresh(true);
     },
     replan: async () => {
-      await api('replan', 'POST', {});
+      await planningActivity.recalculate();
       pointerUntil = 0;
       await refresh(true);
     }
@@ -374,6 +377,7 @@ export async function mountApplication(root, options = {}) {
     if (page === 'settings') return;
     if (page === 'ev') {
       evPage.render(state);
+      planningActivity.render();
       return;
     }
     const o = state.observation,
@@ -552,6 +556,7 @@ export async function mountApplication(root, options = {}) {
     try {
       const nextState = await statePoller.poll(force);
       if (!nextState || lifecycle.signal.aborted) return;
+      planningActivity.update(nextState);
       connectionError = null;
       renderConnectionError();
       // Keep click targets and their backing records on the same displayed revision.
@@ -713,7 +718,8 @@ export async function mountApplication(root, options = {}) {
   };
   $('refresh').onclick = async () => {
     try {
-      await api('replan', 'POST', {});
+      await planningActivity.recalculate();
+      pointerUntil = 0;
       await refresh(true)
     } catch (error) {
       $('status').textContent = error.message
@@ -812,6 +818,7 @@ export async function mountApplication(root, options = {}) {
     dispose() {
       lifecycle.abort();
       graphHistory.dispose();
+      planningActivity.dispose();
       clearInterval(timer);
       for (const dialog of root.querySelectorAll('dialog[open]')) dialog.close();
     }
