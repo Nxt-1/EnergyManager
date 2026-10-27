@@ -653,6 +653,17 @@ not force a stop or start a settling interval. Pending writes require a later ad
 HA service acceptance alone is not a charger acknowledgement. A superseded pending
 write is followed by the newly desired command even if an older frame already shows
 that value. Missing confirmation after30seconds latches/escalates without reboot.
+From4.3.16 a submitted command is identified by its target setting and original
+submission time, independently of later control revisions. A still-authorized
+identical request continues awaiting the same advancing device readback, without
+rewriting the setting, sending stop or resetting its30second confirmation deadline.
+In particular, an unchanged start remains in start confirmation across revisions
+instead of returning to stop/restart preparation. Different targets, explicit stop,
+phase changes and existing input/fault guards still supersede it. Every actual write
+retains the enabled/current-generation guard. If that guard revokes a write before
+the HA service is called, restore the prior pending operation and timing metadata;
+never await an acknowledgement for the unsent command. An unknown service response
+retains the pending evidence, since the device may already have accepted the write.
 Stop/zero/10second phase preparation remains; selector echo alone does not complete
 an active modelStatus22/23 transition. A30second nonblocking hold starts at phase
 acknowledgement, or at confirmed force off plus power below100W for ordinary stops.

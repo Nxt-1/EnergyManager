@@ -1,5 +1,24 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.16 preserve starts across revisions
+
+AUTHORIZED27Oct: user explicitly answered Yes to fixing the reproduced revision/
+start-confirmation issue alongside the visual indicator, already released in4.3.15.
+Implemented target-value/original-time pending identity, continuation of unchanged
+starts across revisions without stop/rewrite/timeout reset, and rollback of pending/
+hold metadata when an enabled/generation guard revokes a write before service entry.
+Unknown service responses retain evidence for later readback. Actual writes still
+check authority; explicit stops/phase changes/stale inputs/faults supersede. No change
+to30s restart hold,90s delivery supervision or immediate reported-error policy.
+Focused89 Python checks pass, covering the reproduced2s stop, repeated revision
+changes, early flow, current-only changes, unconfirmed30s deadlines, real stops,
+revoked unsent starts/settings/stops, and accepted-but-response-lost start confirmation.
+LOCAL:300Python53.49s/55Node/Ruff/mypy35 pass. FakeE2E33.841s/2017intervals/max5.175ms/
+four fake calls passes.56 package files match wheel/sdist; isolated4.3.16 import passes.
+NEXT: final scope review and authorized release4.3.16
+commit/push with exact-head CI/image evidence. Existing deferred tail and paused Maps
+stay separate. No live HA/database/hardware/real notice/deployment access authorized.
+
 ## Current work —4.3.15 EV action visibility and rapid-stop investigation
 
 AUTHORIZED27Oct: investigate rapid charging start/stop/error timing and implement
@@ -17,15 +36,15 @@ policy, not a demonstrated erroneous reading. It can prevent the self-recovery
 observed in manual tests; actual incident codes/order are needed before proposing
 which, if any, reported errors could be treated as transient.
 
-Asked for explicit permission to change this charging-logic path; answer pending.
-Do not change control behavior until supplied. The visual scope is implemented:
+Permission was initially pending for the charging-logic path; the user subsequently
+authorized its fix in4.3.16 above. The4.3.15 visual scope is implemented:
 read-only structured activity, action/step strip and real-deadline countdown ring;
 separate restart/phase-preparation/delivery clocks, fault/blocked/off priorities,
 stale/expired update handling and selection-safe1s updates without rebuilding SVG.
 No control branch or duration changed. Native/standalone rendering, light/dark,
 327px component at390px viewport and expired-wait behavior verified on local fixtures.
-Version4.3.15 releases the independently authorized visual scope; the charging fix
-remains pending permission. Final verification/package evidence goes in VERIFICATION.md and the
+Version4.3.15 released the independently authorized visual scope; the charging fix
+follows in4.3.16. Final verification/package evidence goes in VERIFICATION.md and the
 existing ignored checkpoint. Preserve unrelated DEFERRED_WORK tail and paused Maps;
 no installation access or hardware/real notification/deployment is authorized.
 

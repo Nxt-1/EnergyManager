@@ -2,6 +2,15 @@
 
 ## Local use
 
+Release4.3.16 fixes an unnecessary EV stop if a control revision changes during
+confirmation of an otherwise unchanged start. Identical pending commands keep their
+original30second readback timeout and are not rewritten on each revision. Real stops,
+changed phase targets, disabled control, stale inputs and charger faults still take
+priority. The30second restart hold and90second delivery check are unchanged. Update
+the add-on and reload HA; no new mappings/settings are needed. The4.3.15 EV action
+strip/countdowns are included. The physical cause of any particular installation
+incident still requires its recorded trace; offline reproduction is not live evidence.
+
 The4.3.15 EV action strip reports the controller separately from charger state. During
 the deliberate restart pause, Wait is highlighted with remaining seconds and a
 30second total. Start means waiting for charger readback; Power means the acknowledged

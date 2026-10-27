@@ -134,6 +134,211 @@ async def test_controller_activity_does_not_label_unfinished_stop_as_charging():
     assert view["label"] == "Waiting for EV power to stop"
 
 
+@pytest.mark.parametrize("early_power", [0, 1.38])
+async def test_revisions_during_pending_start_neither_stop_nor_repeat_start(early_power):
+    f = ChargerFixture()
+    await f.tick()
+    f.refresh(30)
+    await f.tick()
+    pending = f.actuator.goe_control.pending["force"]
+    f.calls.clear()
+    # Control ticks advance between the independent five-second readback samples.
+    for generation in (2, 3, 4):
+        f.at += timedelta(seconds=1)
+        command, observation = await f.tick(generation=generation, power=early_power)
+        assert f.actuator.goe_control.pending["force"] == pending
+        assert f.actuator.goe_control.view(f.at, observation, command)["stage"] == "starting"
+        assert not f.actuator.delivery_fault
+    assert not [call for call in f.calls if call[2]["entity_id"] == f.actuators["force"]]
+    f.refresh(2)
+    await f.tick(generation=5, power=early_power)
+    assert "force" not in f.actuator.goe_control.pending
+    assert f.actuator.resume_after is None
+    assert f.actuator.goe_control.status == "Charging command confirmed"
+
+
+async def test_newer_revision_can_confirm_start_without_rewriting_an_already_matching_readback():
+    f = ChargerFixture()
+    await f.tick()
+    f.refresh(30)
+    await f.tick()
+    f.refresh()
+    f.calls.clear()
+    await f.tick(generation=2, power=1.38)
+    assert not [call for call in f.calls if call[2]["entity_id"] == f.actuators["force"]]
+    assert f.actuator.resume_after is None and not f.actuator.delivery_fault
+
+
+async def test_revisions_cannot_extend_an_unacknowledged_start_forever():
+    f = ChargerFixture()
+    f.ignore.add(f.actuators["force"])
+    await f.tick()
+    f.refresh(30)
+    await f.tick()
+    sent = f.at
+    for generation in range(2, 8):
+        f.refresh()
+        await f.tick(generation=generation)
+        assert f.actuator.delivery_fault == ((f.at - sent).total_seconds() >= 30)
+    assert "force command was not confirmed within 30 seconds" in f.actuator.delivery_reason
+    starts = [c for c in f.calls if c[2] == {"entity_id": f.actuators["force"], "option": "2"}]
+    assert len(starts) == 1
+
+
+@pytest.mark.parametrize("changed", ["stop", "phase", "fault", "stale", "disable"])
+async def test_revision_continuation_does_not_bypass_real_stops_or_guards(changed):
+    f = ChargerFixture()
+    await f.tick()
+    f.refresh(30)
+    await f.tick()
+    f.calls.clear()
+    if changed == "disable":
+        await f.actuator.stop(2, at=f.at)
+    else:
+        if changed == "fault":
+            f.set("charger_error", 8)
+            f.refresh(1)
+        elif changed == "stale":
+            f.refresh(31, heartbeat=False)
+        await f.tick(generation=2, amps=0 if changed == "stop" else 6, phases=3 if changed == "phase" else 1)
+    writes = [c[2] for c in f.calls if c[2]["entity_id"] == f.actuators["force"]]
+    assert writes and writes[0]["option"] == "1"
+    assert not any(c.get("option") == "2" for c in writes)
+
+
+async def test_current_only_change_during_pending_start_does_not_send_stop_or_restart_hold():
+    f = ChargerFixture()
+    await f.tick()
+    f.refresh(30)
+    await f.tick()
+    pending = f.actuator.goe_control.pending["force"]
+    f.calls.clear()
+    await f.tick(generation=2, amps=8)
+    f.refresh()
+    await f.tick(generation=3, amps=8, power=1.84)
+    assert not [c for c in f.calls if c[2]["entity_id"] == f.actuators["force"]]
+    assert pending[1] < f.at and f.actuator.resume_after is None
+
+
+async def test_revoked_unsent_start_does_not_create_a_phantom_pending_acknowledgement():
+    f = ChargerFixture()
+    generation = [1]
+    f.actuator.generation = lambda: generation[0]
+    original = f.service
+
+    async def revoke_after_ess(domain, service, data):
+        await original(domain, service, data)
+        if data["entity_id"] == f.actuators["ess_setpoint"]:
+            generation[0] += 1
+
+    await f.tick()
+    f.refresh(30)
+    f.service = revoke_after_ess
+    await f.tick()
+    assert "force" not in f.actuator.goe_control.pending
+    assert f.rows[f.actuators["force"]]["state"] == "1"
+    f.service = original
+    await f.tick(generation=2)
+    assert f.rows[f.actuators["force"]]["state"] == "2"
+    assert f.actuator.goe_control.pending["force"][0] == 2
+
+
+@pytest.mark.parametrize("key", ["current", "phase", "force"])
+async def test_unchanged_pending_settings_and_stops_keep_original_timeout_across_revisions(key):
+    f = ChargerFixture()
+    f.ignore.add(f.actuators[key])
+    amps, phases = (8, 1) if key == "current" else (6, 3) if key == "phase" else (0, 1)
+    if key == "force":
+        f.set("force", 2)
+        f.refresh()
+    await f.tick(amps=amps, phases=phases)
+    if key == "phase":
+        f.refresh(10)
+        await f.tick(phases=phases)
+    original = f.actuator.goe_control.pending[key]
+    for generation in range(2, 8):
+        f.refresh()
+        await f.tick(generation=generation, amps=amps, phases=phases)
+        if generation < 7:
+            assert f.actuator.goe_control.pending[key] == original
+            assert not f.actuator.delivery_fault
+    assert f.actuator.delivery_fault and key in f.actuator.delivery_reason
+    values = [c[2] for c in f.calls if c[2]["entity_id"] == f.actuators[key]]
+    if key == "force":
+        # Timeout may add a protective stop; the original pending stop was never repeated before it.
+        assert len(values) == 2
+    else:
+        assert len(values) == 1
+
+
+async def test_revoked_replacement_restores_the_previous_inflight_setting():
+    f = ChargerFixture()
+    f.ignore.add(f.actuators["current"])
+    generation = [1]
+    f.actuator.generation = lambda: generation[0]
+    await f.tick(amps=8)
+    pending = f.actuator.goe_control.pending["current"]
+    original = f.service
+
+    async def revoke_after_ess(domain, service, data):
+        await original(domain, service, data)
+        if data["entity_id"] == f.actuators["ess_setpoint"]:
+            generation[0] += 1
+
+    f.service = revoke_after_ess
+    await f.tick(amps=6)
+    assert f.actuator.goe_control.pending["current"] == pending
+    f.service = original
+    f.calls.clear()
+    await f.tick(amps=6, generation=2)
+    # The old 8 A command can still arrive, so 6 A must be sent even though the old frame says 6.
+    assert any(c[2] == {"entity_id": f.actuators["current"], "value": 6} for c in f.calls)
+
+
+async def test_unknown_service_response_keeps_pending_evidence_for_new_revision_readback():
+    f = ChargerFixture()
+    await f.tick()
+    f.refresh(30)
+    original = f.service
+
+    async def accepted_but_response_lost(domain, service, data):
+        await original(domain, service, data)
+        if data == {"entity_id": f.actuators["force"], "option": "2"}:
+            raise RuntimeError("SYNTHETIC response lost after device accepted start")
+
+    f.service = accepted_but_response_lost
+    with pytest.raises(RuntimeError, match="response lost"):
+        await f.tick()
+    assert f.actuator.goe_control.pending["force"][0] == 2
+    f.service = original
+    f.calls.clear()
+    f.refresh()
+    await f.tick(generation=2, power=1.38)
+    assert not [c for c in f.calls if c[2]["entity_id"] == f.actuators["force"]]
+    assert "force" not in f.actuator.goe_control.pending
+
+
+async def test_revoked_unsent_stop_cannot_erase_an_active_restart_hold():
+    f = ChargerFixture()
+    await f.tick()
+    deadline = f.actuator.resume_after
+    f.set("force", 2)  # External change while the controller is still holding a restart.
+    f.refresh()
+    generation = [1]
+    f.actuator.generation = lambda: generation[0]
+    original = f.service
+
+    async def revoke_after_ess(domain, service, data):
+        await original(domain, service, data)
+        if data["entity_id"] == f.actuators["ess_setpoint"]:
+            generation[0] += 1
+
+    f.service = revoke_after_ess
+    await f.tick()
+    assert f.actuator.resume_after == deadline
+    assert "force" not in f.actuator.goe_control.pending
+
+
 async def test_current_must_confirm_before_start_and_silent_failure_escalates():
     f = ChargerFixture()
     f.ignore.add(f.actuators["current"])

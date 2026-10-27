@@ -1,3 +1,14 @@
+## 4.3.16 — Preserve EV starts across control revisions
+
+- Keep confirming an unchanged start when the control revision changes; do not send
+  an unnecessary stop or repeat the start. Preserve the original confirmation timeout
+  and require a newer device readback for all unchanged pending settings.
+- Discard unsent command acknowledgements after a generation guard revokes a write,
+  restoring any previous pending command and restart deadline. Retain evidence after
+  an unknown service response because the device may have accepted it.
+- Keep protective stops, fault policy and charging delays unchanged. Includes the EV
+  action strip and countdowns introduced in4.3.15.
+
 ## 4.3.15 — Visible EV controller actions
 
 - Show what EnergyManager is doing separately from the car/charger's reported state.

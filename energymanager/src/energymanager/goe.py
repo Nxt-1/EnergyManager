@@ -147,7 +147,7 @@ class GoEControl:
 
     def __init__(self, actuator: GuardedActuator, readings: GoEReadings) -> None:
         self.actuator, self.readings = actuator, readings
-        self.pending: dict[str, tuple[int, datetime, int]] = {}
+        self.pending: dict[str, tuple[int, datetime]] = {}
         self.phase_started: datetime | None = None
         self.waiting_since: datetime | None = None
         self.unhealthy_since: datetime | None = None
@@ -262,7 +262,8 @@ class GoEControl:
     async def confirm(self, key: str, value: int, command: Command, observation: Observation) -> bool:
         r, a = self.readings, self.actuator
         pending = self.pending.get(key)
-        same_request = pending is not None and (pending[0], pending[2]) == (value, command.generation)
+        # A revision changes authority, not an already submitted identical device command.
+        same_request = pending is not None and pending[0] == value
         matches = r.number(key) == value
         if matches and (pending is None or same_request and r.device_at is not None and r.device_at > pending[1]):
             self.pending.pop(key, None)
@@ -274,12 +275,25 @@ class GoEControl:
                 await self.fail(command, observation, f"go-e {key} command was not confirmed within 30 seconds")
             return False
         domain, service, value_key = ("number", "set_value", "value") if key == "current" else ("select", "select_option", "option")
-        self.pending[key] = value, command.at, command.generation
+        previous_resume, previous_stop = a.resume_after, self.stop_sent
+        self.pending[key] = value, command.at
         if key == "force" and value == 1:
             a.resume_after = None
         if key == "force" and value == 2:
             self.stop_sent = None  # A newer start request revokes any earlier stop acknowledgement.
-        await a.write(domain, service, key, value_key, value if key == "current" else str(value))
+        # Import here because the actuator module also imports this sequencer.
+        from .control import StaleDispatch
+
+        try:
+            await a.write(domain, service, key, value_key, value if key == "current" else str(value))
+        except StaleDispatch:
+            # A revoked write never reached the device; do not await a phantom acknowledgement.
+            a.resume_after, self.stop_sent = previous_resume, previous_stop
+            if pending is None:
+                self.pending.pop(key, None)
+            else:
+                self.pending[key] = pending
+            raise
         self.status = f"Confirming go-e {key}"
         return False
 
@@ -365,7 +379,7 @@ class GoEControl:
                 return
         # Current-only changes stay live. Every actual restart waits for a settled stop.
         pending_force = self.pending.get("force")
-        starting = (pending_force is not None and (pending_force[0], pending_force[2]) == (2, command.generation)
+        starting = (pending_force is not None and pending_force[0] == 2
                     and (a.resume_after is None or command.at >= a.resume_after))
         needs_resume = a.resume_after is not None or r.code("force") != 2 or pending_force is not None
         if needs_resume and not starting:

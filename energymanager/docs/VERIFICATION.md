@@ -1,5 +1,32 @@
 # EnergyManager 4 verification
 
+## 4.3.16 — EV start confirmation across revisions
+
+300 Python tests pass53.49s;55 frontend tests, Ruff and mypy35 pass. Seventeen new
+synthetic regressions cover unchanged pending starts across multiple revisions with
+zero or already flowing power, a newer revision receiving the matching readback,
+current-only changes during startup, and the original30second timeout despite
+repeated revisions. The original reproduction sent Stop at+2s; the corrected path
+sends neither Stop nor duplicate Start and clears the hold only after new readback.
+
+The guard tests exercise explicit zero requests, phase changes, real charger faults,
+expired input frames and hardware disable. They still stop. Identical pending
+current/phase/stop settings retain the original deadline; timeout cannot be postponed
+by revision churn. An actual enabled/generation revocation after the fake ESS service
+but before EV service entry leaves no phantom start acknowledgement, restores the
+previous in-flight setting and preserves a restart hold. A fake accepted start with
+a lost response retains evidence and later confirms without replaying Start.
+
+Configured local fake-HA E2E passes33.841s/2017intervals/maximum local control5.175ms
+(not hardware latency), four fake service calls. See offline-e2e.json. The existing
+4.3.15 action strip/countdowns remain included and their model/markup tests pass;
+the frontend is unchanged and its4.3.15 browser evidence still applies. All56 source/
+assets/default files match wheel and sdist; isolated4.3.16 import passes.
+The30s hold,90s delivery timer and
+immediate reported-error policy are unchanged. Actual installation cause/recovery
+remains unverified without its recent incident trace. No live HA, installation
+database, hardware operation, real notification or deployment occurred.
+
 ## 4.3.15 — EV controller-action display
 
 283 Python tests pass53.03s;55 frontend tests, Ruff and mypy35 pass. New read-only
@@ -24,9 +51,8 @@ hardware latency), four fake service calls. See offline-e2e.json. This release s
 does not change command sequencing, watchdogs, error policy or any charging duration.
 The separate start/revision and immediate-error-latch findings are synthetic code-path
 evidence in WORK_STATE.md, not identification of the user's incident. The charging
-fix remains pending the explicit scope answer; the visual scope is independently
-authorized. No live HA, installation database, physical hardware, real notice or
-deployment was accessed.
+fix was outside4.3.15 and subsequently authorized for4.3.16. No live HA, installation
+database, physical hardware, real notice or deployment was accessed.
 
 ## 4.3.14 — Cancel/replace recalculation and visual activity
 

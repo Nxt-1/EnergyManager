@@ -310,6 +310,19 @@ notify. Preserve prior instructions only while valid, and clear the attention it
 acceptance. Standing ready-release commit/push permission applies. No live installation,
 hardware, actual phone alert or deployment is authorized in development.
 
+## 27 October2026 — Fix revision changes interrupting EV start confirmation
+
+The user explicitly approved fixing the reproduced revision/start issue alongside
+the EV visual indicator. The indicator was already published in4.3.15;4.3.16 includes
+it and fixes the charging path. Continue identical submitted commands across control
+revisions, with the original confirmation deadline and advancing device readback;
+never re-enter stop preparation solely because the revision changed. Preserve
+enabled/generation guards on writes and all real stop/fault/input conditions. An
+unsent revoked write must not leave a phantom pending acknowledgement or erase a
+restart hold. Do not relax the separate immediate reported-error policy without
+actual incident evidence and a confirmed policy choice. Standing ready-release
+authorization applies; no live installation operation is authorized.
+
 ## 27 October2026 — Investigate rapid EV stops; show controller actions
 
 The user reports charging starting then stopping/erroring after a few seconds and
@@ -317,8 +330,8 @@ requests investigation of timing/checks, plus a visual controller-action indicat
 on the EV page, especially for the artificial30second restart holds. Implement the
 read-only action/countdown display while preserving charger measurements and fault
 details. Timer expiry is not evidence of charging or authority to start. Charging
-behavior changes require explicit authorization beyond this investigation; the
-separate reproduced revision/start-readback issue is recorded in WORK_STATE.md.
+behavior changes required separate authorization beyond this investigation; the
+user subsequently approved the reproduced revision/start-readback fix for4.3.16.
 
 ## 27 October2026 — Recalculate replaces active work
 
