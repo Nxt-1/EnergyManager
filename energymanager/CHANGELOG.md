@@ -1,3 +1,11 @@
+## 4.3.19 — Overview EV power and native sensor history
+
+- Show actual measured EV charging power in the Overview EV box, including zero and
+  signed readings. Missing data remains unavailable and never uses the requested power.
+- Open mapped HA entity histories from the EV visualization's readings and diagnostics.
+  Preserve status colors, keyboard focus, selectable text and separate phase controls.
+  Explain unmapped/derived values without inventing HA sensors.
+
 ## 4.3.18 — Accept signed EV power and explain invalid inputs
 
 - Accept finite negative EV power readings without rejecting inputs or invalidating

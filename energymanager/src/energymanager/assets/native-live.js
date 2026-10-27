@@ -25,7 +25,7 @@ export function nativeLiveState(state, hass, manifest) {
     if (unit === 'kW' && declared === 'W' && value !== null) value /= 1000;
     else if (declared !== unit) value = null;
     if (unit === '%' && (value < 0 || value > 100)) value = null;
-    if (unit === 'kW' && key !== 'ess_kw' && value < 0) value = null;
+    if (unit === 'kW' && !['ess_kw', 'ev_kw'].includes(key) && value < 0) value = null;
     readings[key] = {
       ...state.live_inputs?.readings?.[key],
       value,

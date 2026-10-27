@@ -73,9 +73,12 @@ async def preview() -> None:
                     ev_scenario = message["scenario"]
                     ev_scenario_at = datetime.now(UTC)
                     if ev_scenario not in ("sampled", "charging", "phase_switch", "fault", "device_fault",
-                                           "stopped", "stale", "disconnected", "settling"):
+                                           "stopped", "stale", "disconnected", "settling", "negative"):
                         raise ValueError("Unknown synthetic EV display scenario")
-                    for key, value in {"ev_kw": "4140" if ev_scenario == "charging" else "0",
+                    ev_power = -35 if ev_scenario == "negative" else 4140 if ev_scenario == "charging" else 0
+                    net_grid = 400 + ev_power - 1000  # Keep the synthetic 400W household balance consistent.
+                    for key, value in {"ev_kw": str(ev_power), "grid_import_kw": str(max(0, net_grid)),
+                                       "grid_export_kw": str(max(0, -net_grid)),
                                        "ev_soc": "57", "connected": "off" if ev_scenario == "disconnected" else "on"}.items():
                         states[manifest["entities"][key]]["state"] = "unavailable" if ev_scenario == "stale" else value
                     result = states

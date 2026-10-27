@@ -80,6 +80,14 @@ shown without automatic retries. Demo, standalone and unavailable mappings disab
 these actions. Charger details are now in the sidebar, including raw codes, current,
 status age and HA/device frame times. Stale raw values remain labelled unverified.
 
+Release4.3.19 adds actual charging power to the Overview EV box. In the native HA EV
+visualization, click or keyboard-activate a sensor/setting value to open its mapped HA
+entity and available history. Phase-mode history and the1φ/3φ/Auto controls are separate
+actions. Colors and unverified labels remain. Unmapped/standalone/demo values explain
+why no HA history is offered; controller requests and internal timestamps are identified
+as EnergyManager data. Signed EV power remains visible. Update and reload HA; no new
+mapping or dashboard copying is needed. The planning issue is unchanged in this release.
+
 Release4.3.9 adds wheel navigation over either Overview graph: wheel down/right moves
 later, up/left earlier. Outside the graph, the wheel scrolls the page. Ctrl/Meta-wheel
 is left to the browser. On mobile use two fingers to pan horizontally or pinch to

@@ -6,6 +6,21 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
 const numeric = value => value !== null && value !== undefined && value !== '' &&
   Number.isFinite(Number(value)) ? Number(value) : null;
 
+export function evMeasuredPower(state) {
+  const fresh = at => {
+    const age = (Date.parse(state.now) - Date.parse(at)) / 1000;
+    return age >= -5 && age <= (state.policy?.measurement_max_age_seconds ?? 30);
+  };
+  if (!state.demo && state.live_inputs) {
+    const reading = state.live_inputs.readings?.ev_kw;
+    return reading && (reading.display_current || !reading.issue && fresh(reading.received_at)) ?
+      numeric(reading.value) : null;
+  }
+  const observation = state.observation || {};
+  return (state.demo || observation.quality === 'measured') && fresh(observation.at) ?
+    numeric(observation.ev_power_kw) : null;
+}
+
 export function evControlActivityModel(state, elapsed = 0) {
   const activity = !state.demo && state.charger?.activity;
   if (!activity) return null;
@@ -93,8 +108,7 @@ export function evStatusModel(state) {
     const row = inputs?.readings?.[key];
     return row && (row.display_current || !row.issue && fresh(row.received_at)) ? numeric(row.value) : null;
   };
-  let power = inputs ? reading('ev_kw') : observationKnown ? numeric(observation.ev_power_kw) : null;
-  if (power !== null && power < 0) power = null;
+  const power = evMeasuredPower(state);
   const capacity = numeric(capabilities.ev_capacity_kwh);
   const battery = numeric(observation.ev_kwh);
   let soc = inputs ? reading('ev_soc') : observationKnown && battery !== null && capacity > 0 ? battery / capacity * 100 : null;
@@ -150,21 +164,29 @@ export function evStatusMarkup(state, interaction = {}) {
   const activity = evControlActivityMarkup(state);
   const number = value => value === null ? '—' : String(Math.round(value * 10) / 10);
   const time = value => value ? evIncidentTime(value, state.policy?.timezone || 'UTC') : '—';
+  const historyValue = (key, content, label, identity = key) => {
+    const entity = !model.demo && interaction.entities?.[key];
+    if (entity) return `<button type="button" class="entity-reading" data-entity-key="${esc(key)}" data-ev-history="${esc(identity)}" title="Open ${esc(entity)} in Home Assistant" aria-label="${esc(label)}: open Home Assistant entity history">${content}</button>`;
+    const explanation = model.demo ? 'Synthetic demo reading; no Home Assistant history.' :
+      interaction.entities ? 'No Home Assistant entity is mapped for this reading.' :
+      'Entity history is available in the native Home Assistant dashboard.';
+    return `<span title="${explanation}">${content}</span>`;
+  };
   const phaseText = model.phase === 'auto' ? 'Auto' : model.phase ? `${model.phase} φ` : '—';
   const selector = !model.demo && state.phase_selector;
   const selectedPhaseText = ({0:'Auto', 1:'1 φ', 2:'3 φ'})[selector?.value] || phaseText;
   const buttons = [['1', '1 φ'], ['2', '3 φ'], ['0', 'Auto']].map(([value, label]) =>
     `<button type="button" data-ev-phase="${value}" aria-label="Set charger phase mode to ${label}" aria-pressed="${selector?.value === value}" ${!selector?.options?.includes(value) || interaction.phaseChanging ? 'disabled' : ''}>${label}</button>`).join('');
   const extraFields = [
-    ['Phase selector code', model.states.phase],
-    ['Device status age (s)', model.states.heartbeat],
-    ['HA read', time(model.charger?.at)], ['Device frame', time(model.charger?.device_at)]
+    ['Phase selector code', model.states.phase, 'phase'],
+    ['Device status age (s)', model.states.heartbeat, 'heartbeat'],
+    ['HA read', time(model.charger?.at), null], ['Device frame', time(model.charger?.device_at), null]
   ];
   const diagnostics = model.diagnostics.map(field => {
     const raw = field.key === 'connected' ? null : model.states[field.key];
     const text = field.text === 'Unverified' && raw !== null && raw !== undefined ?
       `Unverified · ${raw}` : field.key === 'charge_allowed' && raw ? `${field.text} (${raw})` : field.text;
-    return `<div data-ev-field="${field.key}" class="ev-reading-${field.tone}"><dt>${field.key === 'connected' ? connectionIcon(model.connected) : '<i aria-hidden="true"></i>'}${field.label}</dt><dd>${esc(text)}</dd></div>`;
+    return `<div data-ev-field="${field.key}" class="ev-reading-${field.tone}"><dt>${field.key === 'connected' ? connectionIcon(model.connected) : '<i aria-hidden="true"></i>'}${field.label}</dt><dd>${historyValue(field.key, esc(text), field.label)}</dd></div>`;
   }).join('');
   return `<div class="ev-status-heading"><h2>EV &amp; charger</h2><span class="ev-control-badge">${model.demo ? 'Synthetic demo' : model.controlled ? 'Hardware control on' : 'Hardware control off'}</span></div>
     <div class="ev-status-body ev-tone-${model.tone}">
@@ -184,13 +206,13 @@ export function evStatusMarkup(state, interaction = {}) {
           <rect class="ev-battery-track" x="350" y="91" width="59" height="14" rx="3" stroke="none"/>
           <rect class="ev-battery-fill" x="350" y="91" width="${model.soc === null ? 0 : 59 * model.soc / 100}" height="14" rx="3" stroke="none"/>
         </svg>
-        <div class="ev-annotation ev-on-current"><span>Current limit</span><strong>${number(model.current)} <small>A</small></strong></div>
-        <div class="ev-annotation ev-on-power"><span>Measured power</span><strong>${watts(model.power)} <small>W</small></strong></div>
-        <div class="ev-annotation ev-on-battery"><span>Battery</span><strong>${number(model.soc)} <small>%</small></strong></div>
-        <div class="ev-annotation ev-on-phase"><span>Phase mode · ${selectedPhaseText}</span><div class="ev-phase-options" role="group" aria-label="Charger phase mode" title="One-time charger change; EnergyManager may overwrite it. Auto is the charger's own phase mode and can leave EV control waiting for a fixed phase readback.">${buttons}</div>${interaction.phaseChanging ? '<small role="status">Sending…</small>' : ''}</div>
-        <div class="ev-annotation ev-on-request" title="Controller intent; not confirmed charger output. Hardware control must be on to apply requests."><span>Controller request</span><strong>${watts(model.requestedPower)} <small>W</small></strong></div>
+        <div class="ev-annotation ev-on-current"><span>Current limit</span><strong>${historyValue('current', `${number(model.current)} <small>A</small>`, 'Current limit', 'current-limit')}</strong></div>
+        <div class="ev-annotation ev-on-power"><span>Measured power</span><strong>${historyValue('ev_kw', `${watts(model.power)} <small>W</small>`, 'Measured power')}</strong></div>
+        <div class="ev-annotation ev-on-battery"><span>Battery</span><strong>${historyValue('ev_soc', `${number(model.soc)} <small>%</small>`, 'Battery state of charge')}</strong></div>
+        <div class="ev-annotation ev-on-phase"><span>Phase mode · ${historyValue('phase', selectedPhaseText, 'Phase mode', 'phase-mode')}</span><div class="ev-phase-options" role="group" aria-label="Charger phase mode" title="One-time charger change; EnergyManager may overwrite it. Auto is the charger's own phase mode and can leave EV control waiting for a fixed phase readback.">${buttons}</div>${interaction.phaseChanging ? '<small role="status">Sending…</small>' : ''}</div>
+        <div class="ev-annotation ev-on-request" title="EnergyManager command intent; no HA sensor history. Not confirmed charger output. Hardware control must be on to apply requests."><span>Controller request</span><strong>${watts(model.requestedPower)} <small>W</small></strong></div>
       </div>
-      <dl class="ev-diagnostic-readings">${diagnostics}<div><dt>Current setting</dt><dd>${esc(model.states.current ?? '—')} A${!model.healthy ? ' · unverified' : ''}</dd></div>${extraFields.map(([label, value]) => `<div><dt>${label}</dt><dd class="ev-reading-${label === 'Device frame' && model.healthy ? 'good' : 'neutral'}">${esc(value ?? '—')}${!model.healthy ? ' · unverified' : ''}</dd></div>`).join('')}</dl>
+      <dl class="ev-diagnostic-readings">${diagnostics}<div><dt>Current setting</dt><dd>${historyValue('current', `${esc(model.states.current ?? '—')} A${!model.healthy ? ' · unverified' : ''}`, 'Current setting', 'current-setting')}</dd></div>${extraFields.map(([label, value, key]) => `<div><dt>${label}</dt><dd class="ev-reading-${label === 'Device frame' && model.healthy ? 'good' : 'neutral'}">${key ? historyValue(key, esc(value ?? '—'), label, 'detail-' + key) : `<span title="EnergyManager ${label === 'HA read' ? 'input read' : 'validated device frame'} timestamp; no HA sensor history.">${esc(value ?? '—')}</span>`}${!model.healthy ? ' · unverified' : ''}</dd></div>`).join('')}</dl>
       </div>
       ${interaction.phaseError ? `<p class="error" role="alert">${esc(interaction.phaseError)}</p>` : ''}
       ${model.requestedPhases && model.requestedPhases !== model.phase ? `<p class="subtle">Requested phase mode: ${model.requestedPhases} φ · awaiting readback</p>` : ''}

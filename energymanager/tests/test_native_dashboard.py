@@ -5,7 +5,9 @@ from types import SimpleNamespace
 from aiohttp.test_utils import TestClient, TestServer
 
 from energymanager import __version__
+from energymanager.control import GuardedActuator
 from energymanager.dashboard import dashboard_manifest
+from energymanager.goe import GoEReadings
 from energymanager.service import Application
 from energymanager.store import Store
 from energymanager.web import create_web
@@ -21,6 +23,29 @@ def test_manifest_uses_active_entities_and_never_exposes_credentials(tmp_path):
     manifest = dashboard_manifest(application)
     assert manifest == {"protocol": 1, "version": __version__, "demo": False,
                         "entities": {"ev_soc": "sensor.synthetic_car"}, "phase_selector": None}
+    application.store.close()
+
+
+def test_manifest_exposes_only_configured_ev_history_sources_without_control_or_private_settings(tmp_path):
+    snapshot = tiny()
+    application = Application(Store(tmp_path / "synthetic.sqlite"), snapshot=snapshot)
+    application.ha = SimpleNamespace(entities={"ev_kw": "sensor.synthetic_power"}, token="PRIVATE")
+    actuators = {"force": "select.synthetic_force", "phase": "select.synthetic_phase",
+                 "current": "number.synthetic_current", "ess_setpoint": "number.private_ess"}
+    diagnostics = {key: f"sensor.synthetic_{key}" for key in
+                   ("ev_status", "charger_status", "charger_error", "heartbeat")}
+    diagnostics["charge_allowed"] = ""
+    application.actuator = GuardedActuator(SimpleNamespace(), actuators, snapshot.capabilities,
+                                           charger=GoEReadings(actuators, diagnostics))
+    assert dashboard_manifest(application)["entities"] == {}
+    application.demo = False
+    manifest = dashboard_manifest(application)
+    assert manifest["entities"] == {"ev_kw": "sensor.synthetic_power",
+                                    **{key: entity for key, entity in diagnostics.items() if entity},
+                                    **{key: actuators[key] for key in ("force", "phase", "current")}}
+    assert "charge_allowed" not in manifest["entities"]
+    assert "ess_setpoint" not in manifest["entities"] and "PRIVATE" not in str(manifest)
+    assert manifest["phase_selector"] == manifest["entities"]["phase"]
     application.store.close()
 
 

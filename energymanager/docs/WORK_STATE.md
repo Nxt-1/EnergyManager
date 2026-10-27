@@ -1,5 +1,20 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.19 Overview EV power and native sensor history
+
+AUTHORIZED27Oct: show actual EV power in the Overview EV box; make the EV visualization's
+sensor data open normal HA entity history. Implemented shared measured-power projection,
+mapped history buttons for power/SoC/connection and charger readings/settings, explicit
+derived/missing-source descriptions and focus preservation. Discovery exposes whitelisted
+EV diagnostic/actuator IDs; phase controls remain separate. Signed EV display follows4.3.18.
+LOCAL:334Python54.31s/59Node/Ruff/mypy35 pass. FakeE2E32.449s/2018intervals/max2.482ms/
+four fake calls passes. Native/standalone, actual/signed power, mapped more-info events,
+keyboard/focus and light/dark390px viewport checks pass.56 package files match wheel/
+sdist; isolated4.3.19 import passes. NEXT: final scope review and authorized ready-release
+commit/push with exact-head CI/image. Stage only the updated ARCH-014 entry
+from the pre-existing deferred tail. Other backlog/paused Maps stay separate. Planning
+reconciliation/restart investigation remains read-only; no live installation access.
+
 ## Current work —4.3.18 signed EV power and source-specific input errors
 
 AUTHORIZED27Oct: accept negative EV measured power and identify rejected inputs with

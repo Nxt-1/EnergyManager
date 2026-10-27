@@ -215,8 +215,26 @@ and the normal theme text color (white in dark HA) for neutral settings/waits/st
 Unknown and stale device states are explicitly unverified and cannot become green
 from cached codes. A historical latched incident can be red while the current charger
 error is green None(0). Normal forced stop and car waiting are neutral, not errors.
-The data display changes neither control validation nor recovery behavior. HA sensor
-history actions on these EV fields remain deferred under ARCH-014.
+The data display changes neither control validation nor recovery behavior. The mapped
+sensor-history portion of ARCH-014 is implemented in4.3.19 below.
+
+From4.3.19 the Overview EV box includes actual EV charging power in W beside its SoC
+and connection display. Overview and the EV visualization share the measured-power
+projection: native HA states update immediately; backend-only readings honor input
+quality/read freshness. Zero and finite signed power are valid; missing input shows a
+dash rather than substituting controller intent or an old observation.
+
+The native EV visualization opens standard HA more-info/history for mapped measured
+power, battery SoC, connection, charge permission, car/status/error codes, force,
+current setting, phase selector and device status age. Discovery includes only those
+configured entity IDs, never credentials or an ESS actuator. Color coding and unverified
+readings remain intact; a mapped unavailable entity can still open its history.
+History buttons support keyboard/touch, retain focus through refreshes and do not send
+charger commands. They are separate from the existing one-time phase controls. Demo,
+standalone and unmapped readings explain why no HA history action is offered. Controller
+request and internal HA/device-frame timestamps remain explicit EnergyManager data,
+with no invented HA sensor. Command/composite history beyond these explanations remains
+deferred. No scheduling, charging or recovery behavior changes in this release.
 
 From4.3.4 native and standalone dashboards use optional compact state polling. The
 first response projects accepted-plan display fields and at most120 recent samples;

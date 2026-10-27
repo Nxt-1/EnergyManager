@@ -1,6 +1,6 @@
 # EnergyManager 4
 
-Version **4.3.18**, the main Energy Manager application. One joint seven-day EV/ESS MILP
+Version **4.3.19**, the main Energy Manager application. One joint seven-day EV/ESS MILP
 feeds independent responsive control. The application includes configured input/actuator
 boundaries, persisted goals/approvals/decisions and Overview/Planning/EV pages.
 

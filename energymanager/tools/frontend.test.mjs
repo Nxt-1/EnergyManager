@@ -6,7 +6,7 @@ import {clockValue, localDateTime, localInstants, monthDays, validLocal}
   from '../src/energymanager/assets/date-time.js';
 import {eventsOnDay, evSchedule, scheduleDays} from '../src/energymanager/assets/ev-schedule.js';
 import {nativeLiveState, phaseSelector, setChargerPhase} from '../src/energymanager/assets/native-live.js';
-import {evControlActivityModel, evStatusModel, evStatusMarkup} from '../src/energymanager/assets/ev-status.js';
+import {evControlActivityModel, evMeasuredPower, evStatusModel, evStatusMarkup} from '../src/energymanager/assets/ev-status.js';
 import {PlanningActivity, planningActivityModel} from '../src/energymanager/assets/planning-activity.js';
 
 test('planning activity reports real stages and elapsed time without a fabricated percentage', () => {
@@ -166,6 +166,38 @@ test('EV visualization distinguishes measured power, command intent and selector
   assert.equal(evStatusModel(state).status, 'Disconnected');
 });
 
+test('actual EV power is independent of request and SoC, preserves signed/zero readings and input availability', () => {
+  const state = syntheticEVStatus();
+  state.observation.ev_state_known = false;
+  state.command.ev_kw = 11.04;
+  assert.equal(evMeasuredPower(state), 4.1);
+  for (const value of [0, -.035, 4.45]) {
+    state.live_inputs = {readings:{ev_kw:{value, received_at:state.now}}, cards:{ev:{label:'Connected'}}};
+    assert.equal(evMeasuredPower(state), value);
+    assert.equal(evStatusModel(state).power, value);
+  }
+  state.live_inputs.readings.ev_kw.issue = 'unavailable';
+  assert.equal(evMeasuredPower(state), null);
+  state.live_inputs.readings.ev_kw = {value:4.45, received_at:'2026-10-25T11:00:00Z'};
+  assert.equal(evMeasuredPower(state), null);
+  state.live_inputs.readings.ev_kw.display_current = true;
+  assert.equal(evMeasuredPower(state), 4.45); // HA's current state is independent of the backend input watchdog.
+  state.demo = true;
+  assert.equal(evMeasuredPower(state), 4.1);
+});
+
+test('native signed EV display uses the actual HA meter while remaining read-only', () => {
+  const state = syntheticEVStatus();
+  const manifest = {entities:{ev_kw:'sensor.synthetic_ev_power'}};
+  const hass = {states:{'sensor.synthetic_ev_power':{state:'-35',attributes:{unit_of_measurement:'W'}}},
+    callService:() => assert.fail('A display projection must never write to HA')};
+  const projected = nativeLiveState(state,hass,manifest);
+  assert.equal(evMeasuredPower(projected), -.035);
+  assert.equal(evStatusModel(projected).power, -.035);
+  assert.equal(projected.command, state.command);
+  assert.equal(projected.charger, state.charger);
+});
+
 test('EV visualization does not fabricate zero or verified settings from stale/missing readings', () => {
   const state = syntheticEVStatus();
   state.now = '2026-10-25T12:01:00Z';
@@ -268,6 +300,40 @@ test('EV sidebar retains raw diagnostics without the removed details foldout and
   assert.match(markup,/Unverified · 2/);
   assert.match(markup,/data-ev-phase="2"[^>]*disabled/);
   assert.match(markup,/&lt;SYNTHETIC error&gt;/);
+});
+
+test('EV sensor readings expose keyboard-native history buttons using only supplied entity mappings', () => {
+  const state = syntheticEVStatus();
+  const keys = ['ev_kw','ev_soc','connected','force','current','phase','charge_allowed','ev_status',
+    'charger_status','charger_error','heartbeat'];
+  const entities = Object.fromEntries(keys.map(key=>[key,'sensor.synthetic_'+key]));
+  let markup = evStatusMarkup(state,{entities});
+  for (const key of keys) {
+    assert.match(markup,new RegExp(`<button type="button" class="entity-reading" data-entity-key="${key}"`));
+    assert.ok(markup.includes(`Open ${entities[key]} in Home Assistant`));
+  }
+  assert.equal((markup.match(/data-ev-history="current-limit"/g)||[]).length,1);
+  assert.equal((markup.match(/data-ev-history="current-setting"/g)||[]).length,1);
+  assert.match(markup,/EnergyManager command intent; no HA sensor history/);
+  assert.match(markup,/EnergyManager input read timestamp; no HA sensor history/);
+  assert.match(markup,/EnergyManager validated device frame timestamp; no HA sensor history/);
+  assert.doesNotMatch(markup,/data-entity-key="(?:command|request|device_at|at)"/);
+  state.now='2026-10-25T12:01:00Z';
+  markup=evStatusMarkup(state,{entities});
+  assert.match(markup,/Unverified/);
+  assert.match(markup,/data-entity-key="charger_error"/); // Unavailable mapped entities still have their own HA history.
+});
+
+test('EV history actions are absent in demo/standalone and unmapped readings explain their source', () => {
+  const state=syntheticEVStatus();
+  assert.doesNotMatch(evStatusMarkup(state),/data-entity-key=/);
+  assert.match(evStatusMarkup(state),/Entity history is available in the native Home Assistant dashboard/);
+  assert.doesNotMatch(evStatusMarkup(state,{entities:{}}),/data-entity-key=/);
+  assert.match(evStatusMarkup(state,{entities:{}}),/No Home Assistant entity is mapped/);
+  state.demo=true;
+  const markup=evStatusMarkup(state,{entities:{ev_kw:'sensor.installation_power'}});
+  assert.doesNotMatch(markup,/data-entity-key=|sensor.installation_power/);
+  assert.match(markup,/Synthetic demo reading; no Home Assistant history/);
 });
 
 test('EV demo ignores installation charger faults and live readings', () => {

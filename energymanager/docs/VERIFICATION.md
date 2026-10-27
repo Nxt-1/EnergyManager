@@ -1,5 +1,32 @@
 # EnergyManager 4 verification
 
+## 4.3.19 — Overview EV watts and native history actions
+
+334 Python tests pass54.31s;59 frontend tests, Ruff and mypy35 pass. New discovery
+coverage checks configured EV diagnostic/current/phase/force entity IDs, omitted empty
+mappings and exclusion of credentials/ESS actuator/demo sources. Frontend regressions
+separate actual power from command and SoC, preserve signed/zero values, reject missing/
+stale display inputs, and verify every mapped sensor has a native button while derived,
+unmapped, demo and standalone values do not invent an HA entity action.
+
+Configured fake-HA E2E passes32.449s/2018intervals/maximum local control2.482ms (not
+hardware latency), four fake calls; see offline-e2e.json. The synthetic HA-contract
+browser preview verifies immediate4140W and−35W Overview updates; power, charger error,
+battery and phase more-info events carry the actual mapped IDs. Enter/Space work and
+history focus survives subsequent status refreshes. Phase history leaves the selected
+mode unchanged. Status colors remain green/red as appropriate; text stays selectable.
+Light/dark desktop and390px viewport checks pass:355px EV card within375px document,
+no horizontal page overflow. Standalone has measured power and zero entity-history
+buttons. Console errors/warnings are empty. The display fixture keeps P1/EV/PV balance
+consistent when changing synthetic charging power and never changes backend control.
+
+Proof is in ignored artifacts/release-4.3.19-overview-ev.png and
+artifacts/release-4.3.19-ev-history.png. All56 source/assets/defaults match wheel and
+sdist, with isolated4.3.19 import verified. Browser proof exercises the HA more-info
+event contract; real HA Recorder history and physical touch remain live-unverified.
+No live HA, installation database, hardware, real notice or deployment was accessed.
+The separately diagnosed planner reconciliation/restart issue is unchanged.
+
 ## 4.3.18 — Signed EV readings and sensor-specific validation errors
 
 330 Python tests pass54.58s, followed by36 focused live-input tests0.70s after

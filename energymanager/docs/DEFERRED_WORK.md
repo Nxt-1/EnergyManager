@@ -220,3 +220,26 @@ distinct from instantaneous power, forecast peaks, tariff floors and approval li
 Unavailable omits the line; real zero is valid. No scheduler/control-policy changes.
 Presentation updated in4.3.10: the Grid box also shows a peak-chart icon/value opening
 the actual mapped HA sensor history directly.
+
+## ARCH-014 — Clickable EV readings and states with history
+
+Recorded: 25 October 2026. Status: **mapped sensor history implemented in4.3.19**,
+explicitly authorized27October. Separate command/composite history remains deferred.
+
+Make the EV visualization's numbers and states clickable in the normal HA manner so
+the user can inspect their history. Include measured power, battery SoC, connection,
+charger state/error, charging permission and current/phase setting readbacks. Use the
+actual mapped HA entity and standard more-info/history when available. Distinguish
+controller requests, composite status and derived values from measured HA sensors;
+choose an appropriate command/event history or source-history explanation rather than
+inventing an HA sensor or implying that its history already exists. Unknown or unmapped
+sources must remain explicit. Keep keyboard/touch interaction usable.
+
+The user likes the charger/car drawing with diagnostic readings integrated into it.
+After the visual tryouts, the user approved the first design's annotated drawing with
+the third design's diagnostic sidebar and authorized implementation with red/neutral/
+green status colors in4.3.6. That layout is implemented. Release4.3.19 opens the actual
+mapped entities from the visualization, preserving keyboard focus, selectable text and
+phase controls. Missing mappings/demo/standalone explain the lack of an entity action.
+Controller requests and internal timestamps explain their source without inventing an
+HA sensor. A separate command/composite history UI remains deferred and is not authorized.

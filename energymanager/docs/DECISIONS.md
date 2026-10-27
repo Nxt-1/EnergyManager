@@ -8,6 +8,10 @@ New explicit user instructions take precedence. Deferred ideas are not authoriza
 
 ## Architecture and EV behavior retained
 
+- For4.3.19 the user authorized actual EV power in the Overview EV box and standard
+  HA sensor-history actions on the EV visualization. Use mapped entities for readings,
+  keep phase controls separate and explain derived/unmapped sources. Planning rejection
+  and repeated-calculation findings remain read-only while the user considers them.
 - For4.3.18 the user authorized accepting negative measured EV power after observing
   brief negative readings as the car connects internally. Other validation stays;
   errors must identify the sensor, original value/unit and read time. Signed readings

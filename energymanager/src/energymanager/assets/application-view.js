@@ -22,6 +22,7 @@ import {GraphCursor, plotInsets, clipSeries} from './graph-cursor.js';
 import {requestError, StatePoller} from './dashboard-client.js';
 import {hasTextSelection, clearTextSelection} from './text-selection.js';
 import {PlanningActivity} from './planning-activity.js';
+import {evMeasuredPower} from './ev-status.js';
 
 
 export async function mountApplication(root, options = {}) {
@@ -111,6 +112,7 @@ export async function mountApplication(root, options = {}) {
     },
     settings: () => showPage('settings'),
     phase: options.setPhase,
+    entities: options.native ? options.entities : null,
     sync: async () => {
       await api('calendars/sync', 'POST', {});
       pointerUntil = 0;
@@ -471,6 +473,7 @@ export async function mountApplication(root, options = {}) {
       const readings = state.live_inputs?.readings;
       if (key === 'solar') compact = `<span title="AC solar">∿ ${watts(readings ? readings.pv_ac_kw?.value : liveKnown ? o.pv_ac_kw : null)} W</span> · <span title="DC solar">⎓ ${watts(readings ? readings.pv_dc_kw?.value : liveKnown ? o.pv_dc_kw : null)} W</span>`;
       if (key === 'ess') compact = `<span title="Minimum battery state of charge">≥ ${num(c.ess_min_kwh/c.ess_capacity_kwh*100,0)}%</span> · ${watts(readings ? readings.ess_kw?.value : liveKnown ? o.ess_power_kw : null)} W`;
+      if (key === 'ev') compact = `<span title="Actual EV charging power" aria-label="Actual EV charging power: ${watts(evMeasuredPower(state))} W">⚡ ${watts(evMeasuredPower(state))} W</span>`;
       let connected = liveKnown ? o.connected : null;
       if (!state.demo && state.live_inputs) {
         const connection = state.live_inputs.cards.ev?.label;

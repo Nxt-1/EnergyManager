@@ -134,6 +134,7 @@ function goalStatus(goal) {
 export class EVSchedulePage {
   constructor(root, actions) {
     this.root = root;
+    this.entities = actions.entities;
     this.selectedDate = null;
     this.phaseChanging = false;
     this.phaseError = null;
@@ -309,10 +310,12 @@ export class EVSchedulePage {
     const card = this.root.querySelector('#ev-live-status');
     if (!card) return;
     const focused = this.root.getRootNode().activeElement;
-    const option = card.contains(focused) ? focused?.dataset.evPhase : undefined;
+    const focusAttribute = card.contains(focused) ?
+      ['data-ev-phase', 'data-ev-history'].find(name => focused.hasAttribute(name)) : null;
+    const focusValue = focusAttribute ? focused.getAttribute(focusAttribute) : null;
     card.innerHTML = evStatusMarkup(state, this);
     this.updateActivity();
-    if (option !== undefined) card.querySelector(`[data-ev-phase="${option}"]`)?.focus({preventScroll:true});
+    if (focusAttribute) card.querySelector(`[${focusAttribute}="${focusValue}"]`)?.focus({preventScroll:true});
   }
 
   updateActivity() {
