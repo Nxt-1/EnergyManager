@@ -33,6 +33,25 @@ def solve(snapshot, **kwargs):
     return result["flows"]
 
 
+@pytest.mark.parametrize("field", ["ev_kwh", "ess_kwh", "ess_grid_kwh"])
+def test_invalid_observation_stocks_name_the_field_and_value(field):
+    with pytest.raises(ValueError, match=f"Invalid negative observation {field}=-0.1"):
+        replace(tiny().observation, **{field: -.1})
+
+
+def test_signed_ev_reading_round_trips_and_still_plans_only_positive_charging():
+    from energymanager.domain import json_data
+
+    s = tiny()
+    s = replace(s, observation=replace(s.observation, ev_power_kw=-.035),
+                goals=(Goal("manual", "SYNTHETIC charge", s.intervals[-1].end, 42),))
+    restored = Snapshot.from_dict(json_data(s))
+    assert restored.observation.ev_power_kw == -.035 and restored.digest == s.digest
+    flows = solve(restored)
+    assert flows["ev_energy"][-1] >= 25.2 - 1e-6
+    assert min(flows["grid_ev"]) >= -1e-6
+
+
 def test_real_required_ev_energy_and_grid_arithmetic():
     s = tiny()
     goal = Goal("manual", "Charge", s.intervals[-1].end, 42)

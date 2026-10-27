@@ -149,6 +149,11 @@ Do not replace the force selector with the integration's `stop_charging` service
 that service can restore neutral mode automatically after five minutes.
 
 Persisted EV delivery incidents and optional bounded reboot recovery remain available.
+From4.3.18 a finite negative EV power reading is accepted, including during charging
+startup. It remains signed in measured history and net EV energy totals. Other invalid
+inputs name the mapped entity, original state/unit and UTC read time in the UI and
+input_error event; derived household mismatches identify their contributing sensors.
+Unavailable/non-finite EV readings, SoC validation and charger supervision still apply.
 Configure the reboot button, diagnostic entities and phone destination as described in
 SETTINGS.md; save/restart before relying on them. Do not acknowledge an unresolved
 incident before checking its reason and recorded states. Report JSON distinguishes

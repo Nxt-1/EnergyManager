@@ -1,5 +1,23 @@
 # V4 promotion checkpoint — 23 October 2026
 
+## Current work —4.3.18 signed EV power and source-specific input errors
+
+AUTHORIZED27Oct: accept negative EV measured power and identify rejected inputs with
+their sensor, raw state/unit and read time. Other validation remains. Implemented
+signed EV observation/history/net energy support, source-level rejection for other
+negative inputs, retained bounded raw states/units and explicit error context.
+Derived household errors list contributing readings and preserve settling behavior;
+domain-only negative stock errors identify the field/value. No planned EV discharge,
+charger fault/delivery-policy or timing changes.131 focused synthetic tests pass,
+including unchanged control validity through a signed read, continued charger start,
+stored/displayed error context, signed history/energy and a real validated joint solve.
+LOCAL:330Python54.58s, then36 focused live-input tests0.70s after the final contributor
+label refinement and three topology cases;55Node/Ruff/mypy35 pass. No frontend change.
+FakeE2E33.639s/2018intervals/max2.684ms/four fake calls passes;56 package files match
+wheel/sdist and isolated4.3.18 import passes. NEXT: final scope review and authorized
+commit/push, then exact-head CI/image checks. Preserve unrelated deferred tail and paused
+Maps. No live access.
+
 ## Current work —4.3.17 include EV incident onset in reports
 
 AUTHORIZED27Oct: implement the reporting change after the provided15minute waiting

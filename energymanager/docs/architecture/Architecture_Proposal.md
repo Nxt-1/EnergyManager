@@ -803,6 +803,19 @@ warning; unavailable components remain explicit. Actual charts use validated HA 
 Forecast issuance/expiry and permission/actuator guards remain unchanged. Installation
 integrations must accurately signal device loss via availability; this remains a live check.
 
+From4.3.18 finite EV power is a signed measurement: negative readings, including a
+brief startup transient, do not reject the input snapshot, invalidate the plan or
+request a stop merely because of their sign. Preserve the signed reading in actual
+graphs and integrate signed net EV energy without dropping other powers' coverage.
+This does not add planned EV discharge or change charger error/delivery supervision.
+Other range, availability, unit and finite-number checks remain. Remaining negative
+PV, separate grid import/export, quarter demand and monthly peak readings are rejected
+at their mapped source. Input errors include the entity ID, bounded original HA state,
+declared unit and UTC read time. Derived household errors list contributing readings
+rather than assigning a multi-sensor balance failure to one sensor. Preserve their
+HousePowerMismatch type and settling behavior. Domain-only invalid observations name
+the failed field and value, including when no HA mapping exists.
+
 From4.3.3 a derived household residual below−100W has a settling window equal to
 measurement_max_age_seconds (normally30s), only after a validated observation existed.
 The failed combination never refreshes Observation.at or invents nonnegative demand:

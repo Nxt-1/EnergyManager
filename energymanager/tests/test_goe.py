@@ -69,6 +69,20 @@ class ChargerFixture:
         await self.tick(amps=amps)
 
 
+async def test_negative_power_during_start_does_not_send_stop_or_latch_fault():
+    f = ChargerFixture()
+    await f.start()
+    f.calls.clear()
+    f.refresh()
+    await f.tick(power=-.035)
+    assert f.readings.code("force") == 2 and not f.incidents and not f.actuator.delivery_fault
+    assert not any(call[2].get("entity_id") == f.actuators["force"] for call in f.calls)
+    f.refresh()
+    await f.tick(power=1.38)
+    assert f.readings.code("force") == 2 and not f.incidents and not f.actuator.delivery_fault
+    assert not any(call[2].get("entity_id") == f.actuators["force"] for call in f.calls)
+
+
 async def test_controller_activity_distinguishes_restart_hold_start_ack_and_delivery_check():
     f = ChargerFixture()
     command, observation = await f.tick()

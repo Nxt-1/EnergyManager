@@ -13,7 +13,7 @@ import aiohttp
 
 from .domain import Capabilities, Goal, Interval, Observation, Policy, Snapshot, instant, time_grid
 from .forecasts import apply_requirements, daily_goals
-from .measurements import MeasurementOptions
+from .measurements import HousePowerMismatch, MeasurementOptions
 from .live_inputs import LiveInputs
 
 
@@ -115,19 +115,33 @@ class HomeAssistantAdapter:
 
         connected = str(self.inputs.readings["connected"].require(polled_at)).lower()
         if connected not in ("on", "off", "true", "false", "connected", "disconnected"):
-            raise ValueError(f"{self.entities['connected']}: unknown EV connection state {connected!r}")
+            raise ValueError(f"{self.entities['connected']}: unknown EV connection state {connected!r} "
+                             f"({self.inputs.readings['connected'].context()})")
         # This is a validated view of HA's current available states, not their last change time.
         at = polled_at
         ev_kw, ess_kw = number("ev_kw"), number("ess_kw")
         pv_ac_kw = number("pv_ac_kw")
+        house_keys: tuple[str, ...]
         if self.options.house_source == "separate_grid":
             imported, exported = number("grid_import_kw"), number("grid_export_kw")
-            if min(imported, exported) < 0:
-                raise ValueError("Separate grid import/export powers must be nonnegative")
             house_input_kw = imported - exported
+            house_keys = ("grid_import_kw", "grid_export_kw")
         else:
             house_input_kw = number("house_kw")
-        house_kw = self.options.house_power(house_input_kw, ev_kw, pv_ac_kw, ess_kw)
+            house_keys = ("house_kw",)
+        try:
+            house_kw = self.options.house_power(house_input_kw, ev_kw, pv_ac_kw, ess_kw)
+        except ValueError as exc:
+            if self.options.house_source == "total_consumption":
+                house_keys += ("ev_kw",)
+            elif self.options.house_source in ("signed_grid", "separate_grid"):
+                house_keys += ("ev_kw", "pv_ac_kw", "ess_kw")
+            context = "; ".join(f"{self.inputs.readings[key].entity_id} ({self.inputs.readings[key].context()})"
+                                for key in house_keys)
+            message = f"{exc}; contributing inputs: {context}"
+            if isinstance(exc, HousePowerMismatch):
+                raise HousePowerMismatch(message) from exc
+            raise ValueError(message) from exc
         quarter_kwh = self.options.quarter_energy(number("quarter_import_kwh"), polled_at)
         try:
             phases = self.options.phase_count(str(self.inputs.readings["ev_phases"].require(polled_at)))

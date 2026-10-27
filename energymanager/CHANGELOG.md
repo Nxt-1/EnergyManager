@@ -1,3 +1,11 @@
+## 4.3.18 — Accept signed EV power and explain invalid inputs
+
+- Accept finite negative EV power readings without rejecting inputs or invalidating
+  control. Preserve signed readings in graph history and net daily energy accounting.
+- Identify rejected sensors with their entity ID, original value/unit and read time.
+  Derived household errors list their contributing readings. Retain other validation,
+  household settling, charger supervision and charge-only planning.
+
 ## 4.3.17 — Include incident onset in EV reports
 
 - Export from five minutes before the incident began through ten minutes after fault

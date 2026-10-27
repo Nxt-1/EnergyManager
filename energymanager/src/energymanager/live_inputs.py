@@ -22,18 +22,25 @@ class Reading:
     maximum_read_age: float
     timestamp_source: str | None
     error: str | None = None
+    raw_state: str | None = None
+    raw_unit: str | None = None
 
     @classmethod
     def parse(cls, entity: str, row: dict[str, Any] | BaseException, received_at: datetime,
-              unit: str | None, maximum_read_age: float) -> Reading:
+              unit: str | None, maximum_read_age: float, *, nonnegative: bool = False) -> Reading:
         value: float | str | None = None
         reported_at = None
         source = None
         error = None
+        raw_state = None
+        raw_unit = None
         try:
             if isinstance(row, BaseException):
                 raise ValueError(f"could not read entity ({type(row).__name__})")
             raw = str(row["state"])
+            raw_state = raw[:256]
+            actual_unit = row.get("attributes", {}).get("unit_of_measurement")
+            raw_unit = str(actual_unit)[:64] if actual_unit is not None else None
             if raw.lower() in ("unknown", "unavailable", "none", ""):
                 raise ValueError(f"state is {raw or 'empty'}")
             if unit is None:
@@ -46,12 +53,14 @@ class Reading:
                 if unit == "%" and not 0 <= value <= 100:
                     value = None
                     raise ValueError("percentage must be between 0 and 100")
-                actual_unit = row.get("attributes", {}).get("unit_of_measurement")
                 if unit == "kW" and actual_unit == "W":
                     value /= 1000
                 elif actual_unit != unit:
                     value = None
                     raise ValueError(f"requires declared {unit} units (received {actual_unit!r})")
+                if nonnegative and value < 0:
+                    value = None
+                    raise ValueError("value must be nonnegative")
             source = "last_reported" if row.get("last_reported") else "last_updated"
             timestamp = row.get(source)
             if timestamp:
@@ -61,7 +70,12 @@ class Reading:
                     pass  # HA report metadata is diagnostic; availability/value checks grant authority.
         except (ValueError, TypeError, KeyError, AttributeError) as exc:
             error = str(exc)
-        return cls(entity, value, unit, reported_at, received_at, maximum_read_age, source, error)
+        return cls(entity, value, unit, reported_at, received_at, maximum_read_age, source, error,
+                   raw_state, raw_unit)
+
+    def context(self) -> str:
+        """Describe the original HA reading, even if numeric or unit validation failed."""
+        return f"state={self.raw_state!r}, unit={self.raw_unit!r}, read_at={self.received_at.isoformat()}"
 
     def issue(self, at: datetime) -> str | None:
         reason = self.error
@@ -71,7 +85,7 @@ class Reading:
                 reason = "HA input-read clock moved backwards"
             elif age > self.maximum_read_age:
                 reason = f"last read from HA {age:.1f} s ago; watchdog limit {self.maximum_read_age:g} s"
-        return f"{self.entity_id}: {reason}" if reason else None
+        return f"{self.entity_id}: {reason} ({self.context()})" if reason else None
 
     def require(self, at: datetime) -> float | str:
         issue = self.issue(at)
@@ -96,7 +110,9 @@ class LiveInputs:
                      quarter_import_kwh="kWh" if self.options.quarter_source == "energy" else "kW")
         self.readings = {}
         for key, row in values.items():
-            self.readings[key] = Reading.parse(self.entities[key], row, received_at, units.get(key), self.maximum_read_age)
+            self.readings[key] = Reading.parse(self.entities[key], row, received_at, units.get(key),
+                self.maximum_read_age, nonnegative=key in ("pv_ac_kw", "pv_dc_kw", "grid_import_kw",
+                    "grid_export_kw", "quarter_import_kwh", "monthly_peak_kw"))
 
     def number(self, key: str, at: datetime) -> float:
         return float(self.readings[key].require(at))

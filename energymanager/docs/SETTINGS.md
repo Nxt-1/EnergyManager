@@ -24,7 +24,10 @@ or enable an actuator. Overview values are read independently: available values 
 visible when another input fails. Cached values carry a watchdog warning if HA reads stop;
 unavailable values show dashes, and available solar components remain visible in the
 subtitle. Actual charts use complete measured observations. Input errors name the entity
-and failed check. The hardware switch still requires valid critical measurements.
+and failed check, original state/unit and UTC read time. Finite negative EV charging
+power is accepted as a signed reading; its sign does not block hardware control.
+EV SoC validation and other input checks remain. The hardware switch still requires
+valid critical measurements.
 
 The HA app's own Configuration tab still selects `demo` or `configured`. Demo mode
 cannot operate hardware. Choose `configured` and restart to use installation inputs.

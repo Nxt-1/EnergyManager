@@ -60,7 +60,7 @@ def power_components(sample: dict[str, Any]) -> dict[str, float] | None:
             return None
         values.append(float(value))
     house, ac, dc, ev, ess = values
-    if min(house, ac, dc, ev) < 0:
+    if min(house, ac, dc) < 0:
         return None
     grid = house + ev - ac - ess
     return {"import": max(0, grid), "export": max(0, -grid), "solar": ac + dc,

@@ -11,9 +11,9 @@ from aiohttp.test_utils import TestServer
 
 from energymanager.adapters import HomeAssistantAdapter
 from energymanager.control import FastControl
-from energymanager.domain import Capabilities, Policy
+from energymanager.domain import Capabilities, Policy, json_data
 from energymanager.forecasts import demo_snapshot
-from energymanager.measurements import MeasurementOptions
+from energymanager.measurements import HousePowerMismatch, MeasurementOptions
 from energymanager.service import Application
 from energymanager.store import Store
 
@@ -60,6 +60,131 @@ async def test_old_unchanged_available_states_are_usable_without_zero_exceptions
     assert not any(card["issues"] for card in view["cards"].values())
     assert view["readings"]["ess_soc"]["report_age_seconds"] == 10800
     assert view["readings"]["ess_soc"]["read_age_seconds"] == 0
+
+
+@pytest.mark.parametrize("power_w", [-1, -35, -2300])
+async def test_signed_ev_power_is_a_valid_observation_and_survives_history_projection(inputs, power_w):
+    from energymanager.graph_history import graph_values
+
+    adapter, rows, at = inputs
+    rows["ev_kw"]["state"] = str(power_w)
+    observation = await adapter.observe(Capabilities(), at=at)
+    assert observation.ev_power_kw == pytest.approx(power_w / 1000)
+    assert observation.quality == "measured" and adapter.last_observation is observation
+    view = adapter.inputs.view(at, Capabilities())
+    assert not any(card["issues"] for card in view["cards"].values())
+    assert view["readings"]["ev_kw"]["value"] == pytest.approx(power_w / 1000)
+    history = graph_values(json_data(observation), 60, 14, False)
+    assert history["ev"] == pytest.approx(power_w)
+    assert history["grid"] == pytest.approx(-1300)  # Signed power still reconstructs the actual P1 balance.
+    assert all(value is not None for value in history.values())
+
+
+@pytest.mark.parametrize("key", ["pv_ac_kw", "pv_dc_kw", "grid_import_kw", "grid_export_kw",
+                                 "quarter_import_kwh", "monthly_peak_kw"])
+async def test_other_negative_inputs_name_source_raw_value_unit_and_read_time(inputs, key):
+    adapter, rows, at = inputs
+    rows[key]["state"] = "-0.125"
+    with pytest.raises(ValueError) as failure:
+        await adapter.observe(Capabilities(), at=at)
+    message = str(failure.value)
+    assert f"sensor.{key}: value must be nonnegative" in message
+    assert "state='-0.125'" in message
+    assert f"unit={rows[key]['attributes']['unit_of_measurement']!r}" in message
+    assert f"read_at={at.isoformat()}" in message
+    assert adapter.inputs.readings[key].raw_state == "-0.125"
+    assert adapter.last_observation is None
+
+
+@pytest.mark.parametrize("key,state", [("ev_kw", "nan"), ("ev_kw", "unavailable"),
+                                      ("ess_soc", "-1"), ("ess_soc", "101")])
+async def test_remaining_invalid_values_report_original_read_context(inputs, key, state):
+    adapter, rows, at = inputs
+    rows[key]["state"] = state
+    with pytest.raises(ValueError) as failure:
+        await adapter.observe(Capabilities(), at=at)
+    message = str(failure.value)
+    assert f"sensor.{key}:" in message and f"state={state!r}" in message
+    assert f"unit={rows[key]['attributes']['unit_of_measurement']!r}" in message
+    assert f"read_at={at.isoformat()}" in message
+
+
+async def test_derived_house_failure_preserves_settling_type_and_identifies_contributing_inputs(inputs):
+    adapter, rows, at = inputs
+    rows["grid_export_kw"]["state"] = "3000"
+    with pytest.raises(HousePowerMismatch) as failure:
+        await adapter.observe(Capabilities(), at=at)
+    message = str(failure.value)
+    assert "Derived house demand is negative (-1.000 kW)" in message
+    for key in ("grid_import_kw", "grid_export_kw", "pv_ac_kw", "ev_kw", "ess_kw"):
+        assert f"sensor.{key} (state={rows[key]['state']!r}" in message
+    assert f"read_at={at.isoformat()}" in message
+
+
+@pytest.mark.parametrize("source,power,contributors", [
+    ("direct", -1, ("house_kw",)),
+    ("total_consumption", .5, ("house_kw", "ev_kw")),
+    ("signed_grid", -5, ("house_kw", "ev_kw", "pv_ac_kw", "ess_kw")),
+])
+async def test_house_error_names_only_inputs_used_by_the_configured_topology(inputs, source, power, contributors):
+    adapter, rows, at = inputs
+    adapter.options = replace(adapter.options, house_source=source)
+    adapter.entities["house_kw"] = "sensor.house_kw"
+    rows["house_kw"] = {"state": str(power), "attributes": {"unit_of_measurement": "kW"}}
+    with pytest.raises(ValueError) as failure:
+        await adapter.observe(Capabilities(), at=at)
+    assert isinstance(failure.value, HousePowerMismatch) == (source != "direct")
+    message = str(failure.value)
+    for key in ("house_kw", "ev_kw", "pv_ac_kw", "ess_kw", "grid_import_kw", "grid_export_kw"):
+        assert (f"sensor.{key} (" in message) == (key in contributors)
+    assert f"read_at={at.isoformat()}" in message
+
+
+@pytest.mark.parametrize("negative_ev", [True, False])
+async def test_input_loop_preserves_control_for_signed_ev_and_records_sensor_context_for_real_failure(
+        inputs, tmp_path, monkeypatch, negative_ev):
+    adapter, rows, at = inputs
+    original_observe = adapter.observe
+    previous = await original_observe(Capabilities(), at=at)
+    now = at + timedelta(seconds=5)
+
+    async def observe(capabilities):
+        return await original_observe(capabilities, at=now)
+
+    class Forecast:
+        async def read(self, observation, at):
+            raise asyncio.CancelledError  # A valid input reaches forecasting; no network or solver needed.
+
+    async def stop_loop(seconds):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(adapter, "observe", observe)
+    monkeypatch.setattr(asyncio, "sleep", stop_loop)
+    store = Store(tmp_path / "synthetic.sqlite")
+    app = Application(store, snapshot=demo_snapshot(goals=()), demo=False, ha=adapter, forecast=Forecast())
+    app.now = lambda: now
+    app.observation, app.forecast_data, app.status = previous, {}, "ready"
+    app.ev_valid = app.ess_valid = True
+    revision = app.revision
+    rows["ev_kw" if negative_ev else "pv_dc_kw"]["state"] = "-35"
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await app.input_loop()
+        events = store.events()
+        if negative_ev:
+            assert app.observation.ev_power_kw == -.035 and app.observation.at == now
+            assert app.error is None and app.ev_valid and app.ess_valid and app.revision == revision
+            assert not any(event["kind"] == "input_error" for event in events)
+            assert next(event["body"] for event in events if event["kind"] == "observed")["ev_power_kw"] == -.035
+        else:
+            assert app.status == "inputs_unavailable" and not app.ev_valid and not app.ess_valid
+            message = app.state()["error"]
+            assert "sensor.pv_dc_kw: value must be nonnegative" in message
+            assert "state='-35', unit='kW'" in message and f"read_at={now.isoformat()}" in message
+            assert next(event["body"] for event in events if event["kind"] == "input_error")["reason"] == message
+    finally:
+        await asyncio.gather(*app.protective_tasks, return_exceptions=True)
+        store.close()
 
 
 async def test_unchanged_zero_values_and_quarter_counter_remain_valid_across_quarters(inputs):

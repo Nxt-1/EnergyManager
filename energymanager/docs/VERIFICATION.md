@@ -1,5 +1,30 @@
 # EnergyManager 4 verification
 
+## 4.3.18 — Signed EV readings and sensor-specific validation errors
+
+330 Python tests pass54.58s, followed by36 focused live-input tests0.70s after
+refining household contributor labels and adding three topology cases.55 frontend
+tests, Ruff and mypy35 pass. Synthetic local HTTP tests accept−1,−35 and−2300W EV
+readings, preserve signed graph values and reconstruct the P1 balance. The input-loop
+regression retains EV/ESS validity, revision and observation freshness through a
+negative EV reading, while real remaining input failures reach UI state and the
+archived input_error reason with entity, original state/unit and read time.
+
+The fake go-e startup test passes through negative power to positive delivery without
+Stop or a fault. Domain stock validation names the field/value; negative PV, split
+grid, quarter demand and monthly peak still fail at their mapped sensor. Non-finite,
+unavailable and out-of-range SoC checks remain. All four household topologies identify
+only contributing sensors, preserving HousePowerMismatch and settling behavior.
+Signed net EV integration retains full sample coverage and other power totals. A
+signed-observation snapshot round-trips and solves with independent validation and
+positive charging flows. No planned EV discharge is introduced.
+
+Configured fake-HA E2E passes33.639s/2018intervals/maximum local control2.684ms
+(not hardware latency), four fake service calls; see offline-e2e.json. All56 source/
+assets/defaults match wheel and sdist, with isolated4.3.18 import verified. The frontend
+is unchanged; existing rendering and selection behavior still apply. No live HA,
+installation database, hardware, real notification or deployment was accessed.
+
 ## 4.3.17 — Incident reports include the beginning of long waits
 
 308 Python tests pass53.65s;55 frontend tests, Ruff and mypy35 pass. Eight new

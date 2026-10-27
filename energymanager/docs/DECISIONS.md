@@ -8,6 +8,11 @@ New explicit user instructions take precedence. Deferred ideas are not authoriza
 
 ## Architecture and EV behavior retained
 
+- For4.3.18 the user authorized accepting negative measured EV power after observing
+  brief negative readings as the car connects internally. Other validation stays;
+  errors must identify the sensor, original value/unit and read time. Signed readings
+  remain visible and usable without a sign-triggered control interruption. EV SoC
+  range checks, planned charge-only behavior and existing supervision are retained.
 - For4.3.17 the user authorized expanding incident reporting after a15minute wait's
   export missed its beginning. Anchor the pre-incident window to recorded onset,
   keep ten minutes after detection and existing read bounds, and clearly label a

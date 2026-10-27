@@ -40,6 +40,20 @@ def test_daily_energy_uses_legacy_archive_and_survives_restart(tmp_path):
     assert result["kwh"]["export"] == result["kwh"]["ess_discharge"] == 0
 
 
+def test_signed_ev_measurement_keeps_full_energy_coverage_and_net_meter_balance(tmp_path):
+    store = Store(tmp_path / "synthetic.sqlite")
+    start = datetime(2026, 10, 27, tzinfo=UTC)
+    for seconds, power in ((0, -.035), (5, 1.38), (10, 1.38)):
+        store.event("measurement", replace(tiny().observation, at=start + timedelta(seconds=seconds),
+                    ev_power_kw=power))
+    result = daily_energy(store.path, start + timedelta(seconds=10), "UTC", 30, False)
+    assert result["covered_seconds"] == 10 and not result["partial"]
+    assert result["kwh"]["ev"] == pytest.approx((-.035 + 1.38) * 5 / 3600)
+    assert result["kwh"]["house"] == pytest.approx(.4 * 10 / 3600)
+    assert result["kwh"]["import"] == pytest.approx((.4 * 10 + (-.035 + 1.38) * 5) / 3600)
+    store.close()
+
+
 def test_daily_energy_leaves_out_gaps_invalid_and_synthetic_measurements(tmp_path):
     store = Store(tmp_path / "synthetic.sqlite")
     start = datetime(2026, 10, 24, 0, tzinfo=UTC)

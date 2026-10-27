@@ -170,7 +170,7 @@ class Observation:
     house_kw: float
     pv_ac_kw: float
     pv_dc_kw: float
-    ev_power_kw: float = 0.0
+    ev_power_kw: float = 0.0  # Signed meter reading, including brief negative values at startup.
     ess_power_kw: float = 0.0  # Positive supplies the AC bus.
     quarter_import_kwh: float = 0.0
     monthly_peak_kw: float = 2.5
@@ -187,21 +187,11 @@ class Observation:
         for name, value in asdict(self).items():
             if isinstance(value, (float, int)) and not math.isfinite(value):
                 raise ValueError(f"Non-finite observation {name}")
-        if (
-            min(
-                self.ev_kwh,
-                self.ess_kwh,
-                self.house_kw,
-                self.pv_ac_kw,
-                self.pv_dc_kw,
-                self.ev_power_kw,
-                self.quarter_import_kwh,
-                self.monthly_peak_kw,
-                self.ess_grid_kwh,
-            )
-            < 0
-        ):
-            raise ValueError("Invalid negative observation")
+        for name in ("ev_kwh", "ess_kwh", "house_kw", "pv_ac_kw", "pv_dc_kw",
+                     "quarter_import_kwh", "monthly_peak_kw", "ess_grid_kwh"):
+            value = getattr(self, name)
+            if value < 0:
+                raise ValueError(f"Invalid negative observation {name}={value:g}")
         if self.ev_phases not in (1, 3) or not isinstance(self.connected, bool):
             raise ValueError("Invalid EV mode/connection observation")
 
