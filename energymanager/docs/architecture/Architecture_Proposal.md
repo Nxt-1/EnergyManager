@@ -153,9 +153,58 @@ changed-URL sources cannot resurrect old cached journeys. Demo mode never fetche
 configured calendars. The EV schedule still displays168hours; longer imported events
 remain available for subsequent planning windows. No automatic driving history is learned.
 
-After publishing4.3.0, Google Maps routing preparation is authorized but must remain
-unreleased. No origin, arrival margin, dwell/return formula, live API project/key or
-payment authorization has been assumed. Temperature compensation remains deferred.
+### Google Maps routing (4.4.0)
+
+Route selected subscribed calendars and manual journeys with a destination. Each calendar
+subscription has a routing checkbox in Settings. Disabled subscriptions retain the labelled
+legacy 50km/four-hour provisional trips. Manual journeys without a destination retain their
+existing kilometre entry. Use predicted traffic within the next seven days, refreshing
+daily, when events/locations change and on manual request.
+
+Each routed trip independently uses HA zone.home → venue → HA zone.home, including
+multiple events on one day. Do not chain venues. Referee calendars require arrival 60
+minutes before event start and departure from the venue two elapsed hours after start;
+ignore event end. Manual destination journeys accept desired venue arrival and departure.
+Derive home departure, home return and total distance from separate outward/return legs,
+using at most three outward traffic checks and one return request.
+
+Saving a nonempty Google Routes API key in Settings activates routing immediately, without
+a restart or another global enable switch. Google validates it on the first necessary route
+request; saving does not make a separate paid validation probe or guarantee account/billing
+readiness. Invalid/denied responses remain unresolved. Blank input preserves a saved key;
+replacement applies immediately; explicit clear disables new requests. Other installation
+settings, including calendar selection, retain their existing restart requirement. Demo
+mode does not initialize a routing worker or use configured credentials.
+
+The key is never returned in settings/state responses or transport errors. Private JSON
+configuration and its dated backups contain it under the existing file mechanism. Legacy
+maps.enabled values may remain in files but do not gate key-based activation. A credential
+generation rejects in-flight results from replaced/cleared keys. Future automatic route
+goals are reconciled; an already-underway checked trip retains its away period. Explicit
+manual overrides remain usable without a key. The first checked response establishes a
+route; a configured key alone is not labelled a validated route.
+
+Requests and local overrides are stored separately from calendar snapshots. Per-event
+local destination/distance/timing edits persist through refresh; Return to automatic clears
+the overlay. Source cancellation removes its managed request. Routed request APIs reject
+approval/authority injection. A lifecycle-managed asynchronous worker runs HTTP outside
+planning/control, serializes refreshes and rejects stale request or credential responses.
+It uses the fixed Google endpoint, bounded time/response sizes, no redirects or transport
+retries. Distances and times retain Google Maps attribution. Existing goals/decision audit
+storage is unchanged; no new archive expiry or deletion is introduced in this release.
+
+Missing/failed routes contribute no guessed distance or timing. Show persistent EV warnings
+and deduplicated alerts to the existing selected HA phone destination. Retry failed delivery
+independently. Other valid EV goals continue under ordinary connection, measurement,
+charger and permission guards; ESS authority is independent. A pending request without a
+checked goal does not revoke unrelated authority or cancel a same-revision calculation.
+Changing a previously checked trip invalidates affected work through Application.changed
+and request_plan. Unchanged scoped approvals are retained only after fresh reconciliation.
+
+Preserve 4.3.20 continuity/evidence-based replanning and the cancellable worker lifecycle.
+Route warnings coexist with planning/permission notices. The EV page retains native
+history, phase actions and charger activity. No solver objective, evidence threshold or
+charger timer changes belong to this release. Temperature compensation remains deferred.
 
 ### Native managed Home Assistant dashboard
 
@@ -803,12 +852,14 @@ and exact incident timestamps cannot be reconstructed retroactively for older fa
 An initial event-time index may take time to create on a large archive; no deletion or
 retention policy is introduced. No live HA/database/hardware/phone validation occurred.
 
-Google Maps preparation is paused at the user's request. Its code, tests and previous
-document changes are preserved in a hash-verified local archive outside the active
-package (`gpt/paused-maps-2026-10-25/`). The confirmed future policy remains HA home for
-both legs, arrival60minutes before start and venue departure two elapsed hours after
-start. Restore the code deliberately and reconcile the maintained docs; do not overwrite
-newer requirements with archived copies. No Maps activation is included in4.3.1.
+Google Maps preparation was paused for the4.3.x fault-handling work. Its hash-verified
+archive remains in the original checkout's ignored gpt/paused-maps-2026-10-25/ folder.
+For V4.4, routing.py and test_routing.py were copied unchanged into the separate
+codex/v4.4-google-maps worktree; archived documents were not restored. The implementation
+is authorized for a scheduled start on25 October2026 at18:29 Europe/Brussels. See the
+V4.4 scope above. The copied code has since been extended and connected to startup,
+calendars and Settings. The later 4.4.0 release activates routing from a saved API key. No Maps activation was
+included in4.3.x.
 
 ## Boundaries
 

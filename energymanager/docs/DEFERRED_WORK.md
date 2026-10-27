@@ -35,7 +35,7 @@ Keep this separate from ARCH-001: changing the number of days ahead and changing
 ## ARCH-003 — Automated trip-distance calculation and temperature compensation
 
 Recorded: 22 October 2026. Updated25 October2026: **calendar import authorized for4.3.0;
-Google Maps distance/time preparation authorized afterward, unreleased**.
+Google Maps integration implemented for4.4.0**.
 
 Initial agreed approach: the user enters expected trip kilometres; estimate battery energy using an assumed average consumption. No database of previous trips or learned driving schedule is required.
 
@@ -61,14 +61,30 @@ project/key/billing and failure/override policy still need resolution before ena
 live route requests. No paid API calls or live installation operation are authorized.
 Temperature compensation remains deferred; no calibration model has been selected.
 
-25October2026: Maps preparation is now **paused at the user's request** while EV fault
+25October2026 historical checkpoint: Maps preparation was **paused at the user's request** while EV fault
 handling takes priority. Tested routing code and16 synthetic routing cases, plus the
 previous doc changes, are preserved locally in `gpt/paused-maps-2026-10-25/` with a
 SHA256-verified ZIP. They are outside the active package and are not released in4.3.1.
-Confirmed future policy: HA home→venue→home; arrive60minutes before start and leave
-venue two elapsed hours after start. Restore code/tests deliberately and reconcile
-living docs rather than replacing them with older archived copies. Credentials/billing,
-traffic/quota and refresh/failure/override policy remain unfinished. No live routing.
+Subsequent V4.4 authorization: the prepared code/tests were copied unchanged into a
+separate codex/v4.4-google-maps worktree for scheduled implementation. The original
+archive remains intact. Confirmed policy: HA home to venue to home; arrive60minutes
+before start and leave the venue two elapsed hours after start. Selected calendars
+have routing toggles, and manual destination-based journeys are included. Use predicted
+traffic for the next seven days; refresh daily, on event changes and manually. Failed
+or missing routes remain unresolved and notify the user. Persistent per-event overrides
+survive calendar sync and support an explicit return to automatic. See the maintained
+architecture and decision log for the agreed scope and current4.4.0 implementation.
+Follow-up answers confirm independent home to venue to home trips, including same-day
+events. Manual destination journeys accept desired venue arrival/departure and derive
+home departure/return plus distance. Unresolved trips show a persistent EV warning and
+send one deduplicated notice to the existing selected phone destination. No venue
+chaining is included in V4.4.
+27 October2026: the user authorized key-based activation and publication to main.
+4.4.0 activates routing immediately after saving a Routes API key; the first required
+route request validates it with Google. This supersedes the draft activation/publication
+hold. Unresolved trips warn without blocking other valid goals. Key replacement/clear
+applies immediately; no live credentials or installation are used in development checks.
+Temperature compensation remains deferred. Current behavior is in the maintained architecture.
 
 Offline integration limitation observed25October2026: two synthetic50km journeys
 requiring additional charging from45%initialSoC produced no reference incumbent at
@@ -82,7 +98,13 @@ failed decision.4.3.11 corrects month-reset seed permissions and adds one bounde
 required-reference timeout recovery within the existing global budget. The supplied
 frozen failure reproduces before the fix and validates afterward; raw inputs/replays
 remain ignored local evidence. This does not establish that all calendar scenarios
-will solve within budget, and Maps/temperature work remains paused/deferred.
+will solve within budget. Maps activation was separately authorized for4.4.0 afterward;
+temperature compensation remains deferred.
+
+27 October2026: V4.4 is reconciled with the committed4.3.20 baseline in its separate
+worktree. This preserves the subsequently authorized planner fixes and current EV UI.
+The former Maps pause is historical; key-based activation and release are now authorized. Temperature compensation
+remains deferred. See WORK_STATE.md for compatibility verification and continuation.
 
 ## ARCH-004 — DHW scheduling and heating-model calibration
 

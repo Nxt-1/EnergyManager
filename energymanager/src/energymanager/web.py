@@ -18,6 +18,7 @@ from . import __version__
 from .dashboard import dashboard_manifest
 from .graph_history import graph_history
 from .calendars import CalendarSync
+from .journeys import Journeys
 from .ev_faults import incident_report
 
 
@@ -25,6 +26,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
     if configuration:
         application.hardware = HardwareControl(application, configuration)
         if not application.demo and not application.configuration_error:
+            application.journeys = Journeys(application, configuration.routing_settings())
             application.calendars = CalendarSync(application, configuration.started_values.get("calendars"))
     @web.middleware
     async def boundary(request: web.Request, handler: Any) -> web.StreamResponse:
@@ -66,6 +68,8 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
                         or not isinstance(body.get("values"), dict)):
                     raise ValueError("A settings revision and field values are required")
                 result = await asyncio.to_thread(configuration.save, body["revision"], body["values"])
+                if application.journeys:
+                    application.journeys.apply_settings(configuration.routing_settings())
                 application.store.event("configuration_saved", {
                     "revision": result["revision"], "fields": sorted(body["values"]),
                     "restart_required": result["restart_required"],
@@ -108,6 +112,22 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
             raise ValueError("Calendar sync requires configured mode and complete installation settings")
         await application.calendars.refresh()
         return web.json_response({"calendars": application.calendars.status()})
+
+    async def journeys(request: web.Request) -> web.Response:
+        if application.journeys is None:
+            raise ValueError("Routed journeys require configured mode")
+        identity = request.match_info.get("id")
+        if request.method == "DELETE":
+            application.journeys.delete(request.match_info["id"])
+            return web.json_response({"deleted": True})
+        if request.path.endswith("/reset"):
+            application.journeys.reset(request.match_info["id"])
+            return web.json_response({"reset": True})
+        if request.path.endswith("/refresh"):
+            application.journeys.request_refresh()
+            return web.json_response({"requested": True}, status=202)
+        result = application.journeys.upsert(await request.json(), identity)
+        return web.json_response(result, status=201)
 
     async def energy(request: web.Request) -> web.Response:
         now = application.now()
@@ -236,6 +256,11 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
             web.get("/api/history", history),
             web.get("/api/dashboard", dashboard),
             web.post("/api/calendars/sync", sync_calendars),
+            web.post("/api/journeys/refresh", journeys),
+            web.post("/api/journeys", journeys),
+            web.post("/api/journeys/{id}/reset", journeys),
+            web.post("/api/journeys/{id}", journeys),
+            web.delete("/api/journeys/{id}", journeys),
             web.post("/api/control", control),
             web.get("/api/settings", settings),
             web.post("/api/settings", settings),

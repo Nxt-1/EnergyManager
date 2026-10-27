@@ -25,27 +25,32 @@ MAX_BYTES = 2 * 1024 * 1024
 SYNC_SECONDS = 4 * 3600
 
 
-def calendar_sources(value: Any) -> list[dict[str, str]]:
+def calendar_sources(value: Any) -> list[dict[str, Any]]:
     """Validate optional labelled feeds without fetching or exposing their contents."""
     if value is None:
         return []
     if not isinstance(value, list) or len(value) > 20:
         raise ValueError("Use at most 20 calendar links")
-    result: list[dict[str, str]] = []
+    result: list[dict[str, Any]] = []
+    required = {"id", "label", "url"}
+    allowed = required | {"routing"}
     for entry in value:
-        if not isinstance(entry, dict) or set(entry) != {"id", "label", "url"}:
+        if not isinstance(entry, dict) or not required.issubset(entry) or set(entry) - allowed:
             raise ValueError("Each calendar needs an ID, label and link")
-        if not all(isinstance(entry[key], str) for key in entry):
+        if not all(isinstance(entry[key], str) for key in ("id", "label", "url")):
             raise ValueError("Calendar fields must be text")
         if not entry["id"] or len(entry["id"]) > 80 or not entry["label"].strip() or len(entry["label"]) > 100:
             raise ValueError("Give each calendar a short, unique ID and a label")
+        if "routing" in entry and type(entry["routing"]) is not bool:
+            raise ValueError("Calendar routing must be enabled or disabled")
         url = entry["url"].strip()
         if url.startswith("webcal://"):
             url = "https://" + url[len("webcal://"):]
         validate_url(url)
         if any(item["id"] == entry["id"] or item["url"] == url for item in result):
             raise ValueError("Calendar IDs and links must be unique")
-        result.append({"id": entry["id"], "label": entry["label"].strip(), "url": url})
+        result.append({"id": entry["id"], "label": entry["label"].strip(), "url": url,
+                       **({"routing": entry["routing"]} if "routing" in entry else {})})
     return result
 
 
@@ -116,7 +121,7 @@ def parse_calendar(body: bytes, now: datetime, timezone: str) -> tuple[list[dict
             raise ValueError("Calendar repetitions must be daily or less frequent")
     zone = ZoneInfo(timezone)
     calendar.setdefault("X-WR-TIMEZONE", timezone)
-    start, end = now - timedelta(hours=4), now + timedelta(days=90)
+    start, end = now - timedelta(days=1), now + timedelta(days=90)
     events = []
     skipped = 0
     query = recurring_ical_events.of(calendar)
@@ -133,7 +138,7 @@ def parse_calendar(body: bytes, now: datetime, timezone: str) -> tuple[list[dict
         at = at.astimezone(UTC)
         if at >= end:
             break
-        if at + timedelta(hours=4) <= now or str(component.get("STATUS", "")) == "CANCELLED":
+        if at + timedelta(days=1) <= now or str(component.get("STATUS", "")) == "CANCELLED":
             continue
         recurrence = component.get("RECURRENCE-ID")
         uid = str(component["UID"])
@@ -203,15 +208,26 @@ class CalendarSync:
         managed: list[Goal] = []
         metadata = {}
         duplicates = set()
+        routed = set()
         for source in self.sources:
             for event in self.cache.get(source["id"], {}).get("events", []):
-                if instant(event["start"]) + timedelta(hours=4) <= app.now():
+                if (not source.get("routing")
+                        and instant(event["start"]) + timedelta(hours=4) <= app.now()):
                     continue
                 duplicate = (event["uid"], event["start"], event["location"])
                 if duplicate in duplicates:
                     continue
                 duplicates.add(duplicate)
                 identity = "calendar-" + sha256(f"{source['id']}:{event['key']}".encode()).hexdigest()[:32]
+                if source.get("routing") and app.journeys is not None:
+                    routed.add(identity)
+                    app.journeys.calendar(identity, source["label"], event)
+                    checked = next((item for item in app.goals if item.id == identity), None)
+                    if checked is not None:
+                        managed.append(checked)
+                    metadata[identity] = {"source": source["label"], "location": event["location"],
+                                          "event_start": event["start"], "placeholder": False}
+                    continue
                 old = old_goals.get(identity)
                 goal = Goal(identity, f"{source['label']} · {event['title']}", instant(event["start"]),
                             kind="trip", distance_km=50, return_at=instant(event["start"]) + timedelta(hours=4))
@@ -224,6 +240,8 @@ class CalendarSync:
                 managed.append(goal)
                 metadata[identity] = {"source": source["label"], "location": event["location"],
                                       "event_start": event["start"], "placeholder": True}
+        if app.journeys:
+            app.journeys.retain_calendars(routed)
         goals = tuple(goal for goal in app.goals if not goal.id.startswith("calendar-")) + tuple(managed)
         app.calendar_items = metadata
         if goals != app.goals:

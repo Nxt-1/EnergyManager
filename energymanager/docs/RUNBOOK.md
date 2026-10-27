@@ -1,5 +1,23 @@
 # Run, configure, review and roll back
 
+## Google Maps release and offline verification (4.4.0)
+
+Save a Google Routes API key in Settings to activate routing immediately. Replacing or
+clearing it applies without restart; calendar/other installation settings retain their
+restart requirement. A first required route response validates the credential/service,
+not the save itself. Rejected credentials and route failures remain unresolved and warn.
+No separate paid validation probe or automatic retry loop is performed.
+
+Run python tools/offline_e2e.py --routing-fixture from energymanager/ for two synthetic
+calendar journeys through a local fake Google endpoint and a real seven-day joint solve.
+It checks independent round-trip legs, traffic parameters, routed goals, API/checksum
+persistence, real solver cancellation/reaping and latest-only adoption, fake hardware
+guards and fake notifications. Existing --calendar-fixture covers legacy subscriptions.
+All endpoints are fake/local; do not use a real key or installation for agent verification.
+When reusing another checkout's editable interpreter, point PYTHONPATH to this worktree's
+src and use a unique pytest --basetemp under ignored artifacts/. Keep preview ports and
+databases separate. A public release is distinct from installing/operating the HA app.
+
 ## Local use
 
 Release4.3.20 moves continuity selection into the full joint EV/ESS scheduling model,

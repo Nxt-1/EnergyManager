@@ -1,5 +1,30 @@
 # Settings and hardware control
 
+## Google Maps and journey routing (4.4.0)
+
+Settings → Google Maps accepts a masked Routes API key. Save activates routing immediately;
+there is no extra global enable switch or restart for a key change. Google validates the
+credential on required route requests. A rejected key or unavailable route stays unresolved
+and creates a warning. Blank preserves a saved key; replacement applies immediately; Clear
+saved key + Save stops new requests. The saved value never returns to the browser. Private
+configuration/backups contain it; write-only does not mean encrypted storage.
+
+Settings → EV calendars has a Google Maps journeys checkbox beside each subscription.
+Calendar configuration changes still require restart. Selected calendars route their venue
+with the referee attendance policy: arrive one hour before start and leave two elapsed hours
+after start, ignoring event end. Others retain labelled 50km/four-hour placeholders. Manual
+journeys can enter a destination plus venue arrival/departure instead of distance/home times.
+Each journey independently returns home. Refresh within seven days, daily, on event changes
+and with EV → Journey routes → Refresh routes. No automatic venue chaining is included.
+
+Edit / override corrects destination/attendance or sets explicit total distance and home
+departure/return. Overrides survive source refresh; Return to automatic removes them. Source
+cancellation/removal removes its request. Unresolved trips show a persistent warning and
+one deduplicated notice to the selected phone target. Failed deliveries retry; without a
+phone target, evidence stays local. Other valid goals continue with all ordinary guards.
+Agent development/release verification uses synthetic services only; no installation
+operation, actual key validation or real phone delivery is implied by release publication.
+
 The HA app connects through the built-in Supervisor proxy automatically. Settings no
 longer contains connection addresses, token-variable names, network permission choices,
 a forecast URL or a notification webhook. The Commissioning group is removed.
@@ -102,18 +127,19 @@ login, Google account or HA calendar entity is needed for this first integration
 
 At startup, every four hours or via EV → Subscribed calendars → Sync calendars, the app
 imports the next90days of timed occurrences. The EV calendar shows its normal168-hour
-window. Every imported event has provisional50km **total** distance and a four-hour
+window. Calendars without routing use provisional50km **total** distance and a four-hour
 away period beginning at event start. These placeholders participate in the existing
 shared charging plan; they are not measured distances or Google estimates. Location,
-source and placeholder status appear in the agenda/details. Change imported items in
-their original calendar; remove a link and restart to remove its managed journeys.
+source and placeholder status appear in the agenda/details. Routed calendars instead
+use the Maps policy above and permit local overrides. Change source events in their
+calendar; remove a link and restart to remove its managed journeys.
 
 Changed events revise requirements and reset their old peak approval. Cancelled/deleted
 events disappear after a successful refresh. Failed refreshes retain last-good items
 with a warning and last-sync time; cached data is marked stale after eight hours.
 All-day entries are skipped with a count because there is no departure time. Repeating
 events, exceptions and timezones are supported; repetitions faster than daily are not.
-Use at most20 distinct links. Google Maps distance/timing is a later, unreleased step.
+Use at most20 distinct links. Enable Google Maps beside a subscription to use route distance/timing with a saved Routes API key.
 
 ## Power units
 

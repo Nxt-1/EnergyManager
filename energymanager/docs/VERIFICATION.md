@@ -1,5 +1,131 @@
 # EnergyManager 4 verification
 
+## 4.4.0 — Google Maps activation and release verification (27 October 2026)
+
+The user authorized Settings-key activation and main release publication. The draft
+compile-time gate and extra global enable switch are removed. A saved key applies
+immediately; Google validates it on necessary route requests, without a separate paid
+validation probe. Blank preserves, replacement/clear applies immediately, and retired
+clients cannot issue later legs. Invalid keys/routes remain unresolved. Manual overrides,
+in-progress checked away periods and other valid EV work retain their existing guards.
+
+Final repository-root suite: **414 Python tests passed in 87.52s**.74 focused routing/
+journey/settings cases pass1.00s, including Settings API activation/rejection/clear without
+restart, secret redaction, stale credential results and retired-client request revocation.
+Ruff, mypy38 modules,59frontend tests, all JS syntax and CLI4.4.0 pass. The core4.3.20
+optimizer/planner/publication/replanning/worker/charger code remains unchanged.
+
+Configured routed E2E passed79.554s:2,022intervals, two89km journeys, six local fake
+Google queries, four fake HA service calls and maximum local control tick4.702ms.
+Real worker cancellation/reaping and latest-only adoption remain verified. CI now runs
+this routed fixture as well as the existing configured fixture. All data/services are
+synthetic, including90% initial EV SoC; no real Google/HA, hardware or phone was used.
+
+Browser Settings saved the dummy provider key, returned to a blank password field with
+Saved key placeholder, reported No restart is needed, and immediately resolved journeys
+through the fake provider. Explicit clear + Save immediately restored unresolved-key
+warnings without restart. Console warn/error log was empty. A lightweight synthetic
+release preview additionally checked current routed editing; screenshot:
+v440-key-activation.png in this chat's visualization folder. All temporary tabs/servers
+are closed. These are synthetic UI checks, not validation of the user's credential.
+
+4.4.0 wheel/source archives and isolated imports/resources are checked before commit.
+Exact-head CI and amd64 image publication results are recorded after push in the existing
+ignored local checkpoint and final reply. No physical installation deployment is claimed.
+The inherited publication-accounting limitation from4.3.20 is unchanged by this release.
+
+## Earlier V4.4 compatibility check — 27 October 2026
+
+The isolated Maps branch now uses committed main d48969c (4.3.20), preserving its
+charging-continuity optimization, evidence-based replanning, cancellable process
+worker, planning notices and current EV dashboard. Main's unrelated DEFERRED_WORK.md
+edit remains untouched. A recoverable pre-integration draft stash is retained.
+
+Seven conflicts were reconciled. Startup retains request_plan("startup"); routed goal
+changes use the existing Application.changed/request_plan path. Unresolved requests
+without a checked goal preserve active same-revision work. The planning_issue list
+remains visible alongside route warnings. The EV widget receives its current interaction
+object so native history, phase actions and charger activity remain available.
+The synthetic E2E tool keeps current cancellation/replacement and planner-failure
+fixtures while adding the routing fixture. The retired phase-dwell setting stays removed.
+
+Final combined suite: **411 Python tests passed in 87.14s**; Ruff passed again.
+Initial combined suite: 408 Python tests passed in 87.33s. A focused 95-case run in
+5.94s includes three added compatibility cases for checked versus pending request
+edits during active calculations and coexistence of planning/route warnings. Ruff,
+mypy (38 modules), 59 frontend tests and all JavaScript syntax checks passed.
+
+Configured local fake-route E2E passed in 73.671s: 2,022 intervals, two 89km journeys,
+six fake Google queries, four fake HA service calls and maximum local control tick
+5.020ms. It cancels/reaps a real HiGHS process and adopts only the latest replacement.
+The first run exposed an assertion using only the latest 100 events; its matching
+cancellation was sequence 34 while the newest event was 171. The tool now checks the
+matching request ID directly in its own synthetic archive. No application event
+retention or command behavior was changed. The rerun passed.
+
+Native browser checks opened measured-power history for sensor.ev_kw, retained current
+phase controls and charger-action display, saved a 101km route override and reset it
+to the 89km automatic result. The standalone EV view also renders current controls and
+routed journeys. Native warning/error console was empty. Preview evidence:
+v44-4320-native-check.png in this chat's visualization folder. All inputs are synthetic;
+HA built-in cards are simulated and no real notification/hardware/Google call occurred.
+
+Combined draft wheel/source archives and final docs build locally; all59 package
+code/assets/default files match both archives. A separate offline installation passes
+routing/replanning/worker imports, current UI resource and disabled-live-gate checks.
+Core planner/optimizer/publication, replanning, worker, control and charger files match
+committed main exactly. Temporary tabs/servers are closed.
+
+No 4.4.0 release has been published. Draft metadata follows the inherited 4.3.20
+baseline; live routing remains disabled pending retention compatibility and release
+scope. A special Google agreement has not been established as necessary. This check
+does not repair or override 4.3.20's separately recorded publication-accounting limitation.
+
+## V4.4 commit-ready offline draft — 25 October 2026
+
+The isolated branch is prepared for a source commit with live routing disabled. This
+is not release or commissioning approval. No commit, push, merge, version bump,
+publication or deployment was performed. Special Google approval has not been
+established as necessary; retention compatibility remains unresolved.
+
+Final offline checks: **291 Python tests passed in 44.72s**, including eight new
+regression cases for malformed attendance/override times, malformed HA home payloads,
+and an unrepresentable provider duration. Invalid inputs are rejected before mutation;
+a bad route stays unresolved while the worker continues with another valid journey.
+The focused routing/calendar/settings/journey run passed 77 cases in 0.95s. Ruff,
+mypy (37 source files), all JavaScript syntax checks and 33 frontend tests passed.
+Earlier cases also verify route failures without placeholders, persistent overrides,
+cancellation/edit during requests, revision/approval safeguards, notification dedup/retry,
+credential redaction and same-origin API enforcement. Other valid EV goals continue
+through unresolved routes; ordinary actuator connection guards still stop a disconnected car.
+
+Final configured --routing-fixture end-to-end run passed: 2,022 intervals, 71.467s,
+maximum control tick 3.248ms, two 89km journeys and six local fake Google queries.
+Four fake HA service calls include local notification verification. A real spawned
+HiGHS worker accepted the joint plan. All services/data are synthetic, including 90%
+initial EV SoC. Machine-readable results are in docs/offline-e2e.json. Earlier legacy
+calendar regression passed with 2,021 intervals in 68.891s, maximum control tick 3.337ms.
+No installation measurement, hardware, Google billing or real phone delivery is verified.
+
+Draft wheel/source archives built locally with existing 4.3.5 metadata; all 57 package
+code/assets/default files matched source byte-for-byte in both archives. A separate
+--no-index --no-deps installation passed isolated imports, the disabled routing gate
+and packaged route UI resource checks. Artifacts/preview data and the original Maps
+archive are excluded. These are draft package checks, not published release artifacts.
+
+Browser verification confirmed that reopening and saving a zero-kilometre manual
+route override retains zero and its home times. The unresolved warning says other
+valid goals can continue. Evidence: v44-commit-override-check.png in this chat's
+visualization folder. Earlier standalone/native checks covered destination correction,
+per-calendar selection, masked credentials, phone-width layout and automatic reset.
+Temporary browser tabs/servers are closed.
+
+Read-only three-way comparisons against committed main 4fe2291 (4.3.8) found clean
+combinations for the overlapping application-view.js, style.css and view.html edits.
+DECISIONS.md, VERIFICATION.md, WORK_STATE.md and offline-e2e.json need reconciliation
+when integration is authorized. Main also has ongoing uncommitted feature changes;
+no merge or overwrite was attempted. See WORK_STATE.md for continuation boundaries.
+
 ## 4.3.20 — Joint EV continuity and evidence-based recalculation
 
 362 Python tests pass102.73s;59 frontend tests, Ruff and mypy36 pass. No frontend

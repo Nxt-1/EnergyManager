@@ -1,4 +1,310 @@
-# V4 promotion checkpoint — 23 October 2026
+# EnergyManager work state
+
+## Current work — 4.4.0 activated-key release (27 October 2026)
+
+AUTHORIZED: user explicitly requested activation on a valid Settings API key and
+publication to the main release. This supersedes the earlier offline gate and Maps
+publication hold. Prepare/test in codex/v4.4-google-maps (base d48969c), commit, fast-
+forward main while preserving its unrelated DEFERRED_WORK.md edits, push main and
+verify exact-head CI and ghcr.io/nxt-1/energymanager:4.4.0 publication. Do not access
+actual keys, live Google/HA/databases/hardware, send real notices or install the release.
+
+IMPLEMENTED: remove compile-time gate and extra global enable switch; save a key to
+activate immediately, blank preserves, replacement/clear applies without restart.
+The first required route request validates it with Google; no separate paid probe.
+Reject invalid keys/routes with existing unresolved warning/notice. Credential generations
+reject obsolete responses; old clients cannot request subsequent legs after revocation.
+Explicit manual overrides and checked in-progress away periods remain. All 4.3.20
+behavior is retained. Settings success copy correctly says no restart for key-only changes.
+Release metadata is4.4.0; current architecture/settings/runbook/changelog/decisions updated.
+CI now also runs the local fake routed end-to-end fixture. Existing archive behavior is
+unchanged; no new expiry/deletion or provider-rights assertion is introduced.
+
+FINAL LOCAL:414 root Python tests passed87.52s,74 focused cases1.00s, Ruff/mypy38,
+59frontend, all JS syntax and CLI4.4.0 pass. Configured routed E2E passed79.554s,
+2,022intervals, two89km trips, six fake Google queries/four fake HA calls, maximum
+control4.702ms. Current Settings browser save/clear works immediately with the dummy
+key; saved field is redacted and No restart is needed is shown. Route resolution and
+clear-to-unresolved were observed with fake endpoints only; browser logs were clean.
+Screenshot: C:/Users/Arne/.codex/visualizations/2026/10/25/01a1736b-2b27-7952-a275-df6d08645259/v440-key-activation.png
+All preview tabs/servers are closed. Package build/content and isolated4.4.0 import
+checks complete before commit. Remote CI/image results belong only in ignored local
+checkpoint/final after publication; no extra documentation-only release commit.
+
+Main is currentlyd48969c, remote matches, with an unrelated deferred backlog edit.
+Do not accidentally include that edit in the release. Recovery stash from compatibility:
+e23e5a11caca9a1c7af3c51f3eea535abd930048. Preserve it and the original Maps archive.
+NEXT: complete verification, record local evidence, build4.4.0, scope-review and commit
+only release files. Preserve/stash main's unrelated backlog while fast-forwarding;
+restore it afterward, then push and verify CI/image at the resulting exact SHA.
+
+## Earlier compatibility checkpoint — 27 October 2026
+
+AUTHORIZED: compare V4.4 with subsequent V4.3.x changes and correct compatibility before
+release. Code-writer and current project instructions read. The isolated branch
+codex/v4.4-google-maps was fast-forwarded from 304e386 to d48969c (main 4.3.20), then
+the saved draft was reapplied. Recovery stash e23e5a11caca9a1c7af3c51f3eea535abd930048
+is retained; details are in ignored artifacts/v44-4320-compatibility/recovery.txt.
+No feature commit, push, release, live calls or deployment occurred. Main checkout
+has only its unrelated DEFERRED_WORK.md edit and was not modified.
+
+RESOLVED: seven stash-apply conflicts. Preserve request_plan("startup") and the new
+PlanningWorker lifecycle, evidence-based replanning and planning_issue state; add the
+journey lifecycle alongside them. Preserve the EV widget's new interaction object,
+history/phase controls and action countdown while adding the route panel. Retain real
+solver cancellation/latest-request checks and planner-failure fixture in offline_e2e.py;
+wait for routed inputs before cancellation. Merge maintained docs instead of restoring
+old copies. The original paused Maps archive and the recovery stash remain intact.
+
+FINAL VERIFICATION: 411 Python tests passed in 87.14s; 95 focused cases passed in
+5.94s. Ruff, mypy (38 modules), 59 frontend tests and all JS syntax pass. Initial
+combined run was 408 tests in 87.33s before the three added compatibility cases.
+The routed configured E2E passed in 73.671s: 2,022 intervals, two 89km trips, six local
+fake Google queries, four fake HA calls and maximum local control tick 5.020ms.
+Real solver cancellation/reaping/latest-only adoption is verified. A bounded recent-
+event assertion failed after the longer solve; its matching event was retained in
+the synthetic archive (sequence34 versus newest171). The tool now queries that exact
+request ID instead of the latest100-event display feed; the rerun passed.
+
+BROWSER: latest native widget opened mapped sensor.ev_kw history, retained phase
+controls and charger activity, saved a101km override, then returned to the automatic
+89km route. Standalone EV rendering passed; native warn/error console was empty.
+Evidence: C:/Users/Arne/.codex/visualizations/2026/10/25/01a1736b-2b27-7952-a275-df6d08645259/v44-4320-native-check.png
+Tabs/servers closed; ports8102/8103 have no remaining listeners. All services/data are
+synthetic; no actual HA histories, hardware, Google billing or real phone verified.
+
+PACKAGING: combined draft wheel/source archives build with inherited4.3.20 metadata;
+all59 package code/assets/default files match both archives. Final maintained docs
+are included. Isolated offline installation verifies routing/replanning/worker imports,
+current UI resources and the disabled live gate. Core optimizer/planner/publication,
+replanning, worker and charger/control files are byte-identical to committed main.
+No optimizer/charger policy or timers were altered by the compatibility work.
+
+LIVE_ROUTING_AVAILABLE remains False. Retention compatibility is still unresolved;
+no special Google agreement is asserted necessary. Before public release, resolve live
+activation/retention and release scope, then apply 4.4.0 versioning and run publication
+checks. Current work is compatibility preparation, not authorization for live services.
+NEXT: compatibility review/fixes are complete on the isolated branch. Before publication,
+resolve the existing activation/retention and release-scope question, apply4.4.0 metadata,
+and run the normal release/CI/image workflow. Do not publish an enabled Maps release
+from this checkpoint. Preserve main's unrelated backlog edit and the recovery stash.
+4.3.20's separately documented publication-accounting limitation remains unchanged.
+Commands: pytest -q -p no:cacheprovider --basetemp artifacts/v44-4320-final-suite;
+ruff check --no-cache src tests tools; mypy --no-incremental src/energymanager;
+node --test tools/frontend.test.mjs; all asset node --check; tools/offline_e2e.py
+--routing-fixture --serve (closed); build --no-isolation. PYTHONPATH selects this
+worktree's src when reusing the original checkout's interpreter. Changes are unstaged.
+
+## Earlier commit-preparation checkpoint — 25 October 2026
+
+The scheduled commit-preparation run began at 23:30 Brussels / 22:30 UTC; automation
+start-v4-4-google-maps-implementation was immediately PAUSED. Only this worktree was
+edited: C:/Users/Arne/.codex/worktrees/v4-4-google-maps/EnergyManager, branch
+codex/v4.4-google-maps, based on 304e386. No staging, commit, push, merge, release,
+deployment, live Google/HA/database access or real notifications occurred.
+
+READY: the offline integration diff, including new routing.py, journeys.py and their
+tests, is prepared for a source commit. The current request authorizes preparation;
+leave the changes uncommitted. Release metadata remains 4.3.5, with an explicitly
+unreleased V4.4 changelog. LIVE_ROUTING_AVAILABLE remains False. Retention compatibility
+is unresolved; a special Google agreement has NOT been established as necessary.
+Clarification under applicable standard terms or a compatible retention design may
+resolve it. A seven-day routing horizon is not a storage-expiry policy.
+
+REVIEW FIXES: reject malformed attendance and override date types before changing
+requests; reject non-object zone.home replies; handle unrepresentable provider times
+as an unresolved trip while continuing other requests; retain saved override distance
+(including zero) and home times when reopening the editor. Eight regressions reproduced
+the failures before the fixes. Existing confirmed routing/notification/EV policies remain.
+
+FINAL VERIFICATION: 291 Python tests passed in 44.72s; 77 focused routing/calendar/
+settings/journey cases passed in 0.95s. Ruff, mypy (37 modules), all JavaScript syntax
+and 33 frontend tests passed. The seven-day configured --routing-fixture passed with
+2,022 intervals in 71.467s, maximum control tick 3.248ms, two 89km journeys, six fake
+Google queries and four local fake HA service calls. Initial EV SoC 90% is synthetic.
+Draft wheel/source archives built with --no-isolation and no downloads; all 57 package
+files matched source, and a separate offline installation passed isolated imports,
+resource and live-gate checks. Final docs are included in the local draft packages.
+
+BROWSER: synthetic standalone editor retained 0km and saved home times through reopen
+and save. It displayed the confirmed continue-other-goals warning. Screenshot:
+C:/Users/Arne/.codex/visualizations/2026/10/25/01a1736b-2b27-7952-a275-df6d08645259/v44-commit-override-check.png
+Browser tab/server closed; ports 8144/8145 have no remaining preview listeners.
+Earlier native/mobile evidence remains described below; physical commissioning is unverified.
+
+INTEGRATION: main advanced to 4fe2291 (4.3.8), and its feature chat now has additional
+uncommitted edits. Do not edit or stage that checkout. Read-only three-way comparisons
+of file copies found application-view.js, style.css and view.html combine cleanly with
+committed 4.3.8; DECISIONS.md, VERIFICATION.md, WORK_STATE.md and offline-e2e.json require
+manual reconciliation when a merge is authorized. Recheck live Git state then: the
+comparison does not cover main's ongoing uncommitted work. No branch merge was performed.
+The original gpt/paused-maps-2026-10-25 archive remains intact.
+
+NEXT: user can review/commit this isolated offline draft. Before any later merge or
+release, reconcile latest main changes and docs, rerun affected checks, resolve the
+publication hold and version appropriately. Live activation remains separate pending
+retention compatibility; no paid API tests or installation operation are authorized.
+Use the existing interpreter read-only, with PYTHONPATH selecting this worktree's src.
+Commands: pytest -q -p no:cacheprovider --basetemp artifacts/<unique>; ruff check
+--no-cache src tests tools; mypy --no-incremental src/energymanager; node --test
+tools/frontend.test.mjs; node --check for each asset JS; tools/offline_e2e.py
+--routing-fixture; python -m build --no-isolation --outdir artifacts/v44-commit-package.
+Full suite temp dir: artifacts/v44-commit-final-suite. Preview/package/temp files are ignored.
+
+## Earlier V4.4 implementation checkpoint — 25 October 2026
+
+The scheduled start fired at17:29:24 UTC /18:29 Brussels. Its one-time automation
+start-v4-4-google-maps-implementation is now PAUSED. Work remains exclusively in
+C:/Users/Arne/.codex/worktrees/v4-4-google-maps/EnergyManager, branch
+codex/v4.4-google-maps, based on304e386. No commits/push/merge/publication occurred.
+
+IMPLEMENTED: per-calendar routing checkboxes; backwards-compatible legacy subscriptions;
+manual destination journeys with venue arrival/departure; independent home/venue/home
+traffic-aware routing (at most4 HTTP queries per journey); seven-day routing horizon;
+daily/event-change/manual refresh; write-only masked Maps key entry/replace/explicit
+clear with blank-preserve behavior; persistent per-event overrides and automatic reset;
+async journey API; stale-response rejection; revisions/approval revocation on changed
+requirements; unchanged scoped approvals retained only after fresh restart reconciliation;
+persistent EV unresolved-route warnings and deduplicated existing-phone notices/retry.
+Source parsing retains up to one day of past events so longer routed returns are not
+silently dropped at the old four-hour placeholder boundary. No venue chaining.
+
+LIVE ACTIVATION IS EXPLICITLY WITHHELD: journeys.LIVE_ROUTING_AVAILABLE=False. The
+standard Routes policies only explicitly grant certain caching exceptions, while
+current goals/decision archives retain route-derived inputs indefinitely. A question
+about any additional storage rights was sent. Do not assume transient raw HTTP replies
+solve derived-input retention, or flip the gate without a compatible design/terms.
+Credential/API/billing readiness remains unverified. No real credential was accessed.
+
+CONFIRMED AND IMPLEMENTED FOLLOW-UP: unresolved/pending routes do not block other valid
+EV goals. The trip contributes no guessed distance/times; its warning and deduplicated
+phone notice remain. A pending request with no published goal preserves unrelated EV
+command authority. Changing/removing an existing checked trip still revokes the affected
+plan normally, then valid remaining work can replan. Ordinary measurement, connection,
+charger and permission guards remain; ESS is independent. The former global route
+hold and its UI text were removed.80 focused tests pass1.16s, including a real locally
+solved independent EV plan continuing through a route failure and fake actuator stop
+on disconnect. Ruff, mypy37 and changed JS syntax pass.
+
+The user questioned whether seven days is permitted caching. Clarification: seven days
+is the planning horizon, not the current storage TTL. Route results are held for reuse
+between refreshes, and route-derived goals/decision inputs enter the indefinite archive.
+Current EEA3.3.2(b) prohibits caching except service-specific permissions; Routes20.2
+explicitly permits latitude/longitude30days, not a general seven-day distance/time cache.
+No documented allowance for seven-day distance/duration retention was identified. Do not
+misstate this as a ruling about every operational derived value, or silently purge archives.
+Sources: https://cloud.google.com/terms/maps-platform/eea
+https://cloud.google.com/terms/maps-platform/eea/maps-service-terms
+
+LATEST FOLLOW-UP: full Python suite283 passed44.80s after the confirmed continue-other-
+goals policy;80 focused cases1.16s, Ruff/mypy37 and changed JS syntax also pass. Main
+checkout remains untouched by this chat. No live calls, commit, publication or deployment.
+
+Earlier verification: full Python suite281 passed44.29s, followed by68 focused routing/calendar/
+settings/journey cases0.89s after the final restart-approval change.33 frontend cases,
+changed JavaScript syntax, Ruff and mypy37 source modules pass. Real aiohttp transport
+was exercised against a local fake Google server. Seven-day configured fake-HA/calendar
+regression:68.891s,2021intervals,max control3.337ms,four fake service calls. Added
+--routing-fixture: two routed89km journeys, six local fake Google HTTP requests,
+71.483s,2021intervals,max control4.141ms,four fake HA service calls. Both accepted valid
+plans from the real spawned solver. These are synthetic evidence, not installation data.
+
+BROWSER: standalone synthetic fixture on8144 verified missing destination -> edit ->
+resolved route, venue timing inputs, per-calendar checkbox and masked password input.
+At390px viewport, route card351px and page scroll width equals client width375px.
+Screenshot is a labelled synthetic preview with unchanged4.3.5 release metadata:
+C:/Users/Arne/.codex/visualizations/2026/10/25/01a1736b-2b27-7952-a275-df6d08645259/v44-synthetic-mobile.jpg
+The temporary standalone preview tab/server were closed; the normal viewport was restored.
+Native HA-contract preview additionally verified editing a calendar trip, saving a101km
+explicit override and Return to automatic restoring the92km synthetic route. Console
+had no warnings/errors. Native proof is v44-synthetic-native.jpg beside the mobile proof.
+Both preview tabs/servers were closed. Physical installation commissioning is unverified.
+The preview used a fake router and a local fixture discovery URL; no live Google,
+installation database, hardware or real phone delivery was used for verification.
+
+NEXT: resolve route-data retention/activation, reconcile latest main/other-chat changes
+without overwriting them, finish policy/API review, and only then prepare V4.4 release
+metadata/package/release approval. Earlier Maps publication hold remains. Preserve
+original ignored Maps archive. No new release automation or automatic continuation is
+promised; resume from this checkpoint and actual files. Existing interpreter can be
+used read-only with PYTHONPATH pointing to this worktree's energymanager/src and unique
+pytest --basetemp under this worktree's ignored artifacts/.
+
+## V4.4 preparation — 25 October 2026
+
+AUTHORIZED in the V4.4 implementation chat: create a separate worktree/branch, restore
+prepared Maps code there, and begin new implementation after 2 hours 50 minutes.
+Worktree: C:/Users/Arne/.codex/worktrees/v4-4-google-maps/EnergyManager
+Branch: codex/v4.4-google-maps, based on 304e386d7c2d363bc2fc93630df10ff50a53bb64.
+The original checkout is used by another active chat; do not edit/stage/commit there.
+A one-time chat automation is scheduled for 25 October 2026 at 18:29:09 Europe/Brussels
+(17:29:09 UTC), id start-v4-4-google-maps-implementation. Disable/delete it after its
+first invocation. Scheduling requires the computer on and desktop app running.
+
+COPIED WITHOUT MODIFICATION: src/energymanager/routing.py and tests/test_routing.py
+from the original checkout's gpt/paused-maps-2026-10-25 archive. SHA256 matches:
+routing.py 3E6A381F1FAE82D9D918CEAFEB94EF3E5C12BDDD776E08708221E6AEE95C991F
+ test_routing.py E4E26440247F9B9D50424726957B47AE0D05C7B29300D4FF759B729C6ADC0612
+The original ignored archive remains intact. No archived documents were restored.
+No startup/calendar/UI integration or new application behavior has been written yet.
+The user has a Google credential, but its type, enabled API and billing are unverified.
+No credential has been requested/read/stored and no live service has been contacted.
+
+CONFIRMED referee policy: HA home to venue to HA home, arrive 60 minutes before event
+start, leave venue two elapsed hours after start, ignore calendar event end. Existing
+energy-consumption/reserve and permission rules remain; temperature compensation deferred.
+
+CONFIRMED V4.4 choices from the user's answers:
+- Route selected calendars and manual journeys that have a destination. Each calendar
+  has an enable slider/checkbox alongside its subscription configuration.
+- Use predicted traffic.
+- Route the next seven days; refresh daily, on event changes and on manual request.
+- Missing/failed estimates stay unresolved and create an intervention notification;
+  do not substitute the old 50 km/four-hour placeholder for a failed enabled route.
+- Preserve per-event local destination/distance/timing overrides across calendar refresh;
+  include an explicit return-to-automatic action.
+- The user believes the credential is a Maps API key with everything enabled/configured;
+  treat service readiness as unverified, without requesting or exposing the secret.
+
+FOLLOW-UP ANSWERS CONFIRMED:
+- Every routed trip independently uses HA home to venue to HA home, including multiple
+  events on one day. Do not chain venues in V4.4.
+- Manual destination-based journeys accept desired venue arrival and venue departure;
+  Maps calculates home departure, home return and total round-trip distance.
+- Unresolved routes produce a persistent EV warning plus one deduplicated alert per
+  unresolved trip to the existing selected HA phone destination. Development uses fakes.
+The requested behavior choices are now resolved. Credential/API/billing readiness is
+still unverified; no live requests are authorized. Recheck latest chat answers at start.
+
+IMPLEMENTATION must reconcile the maintained architecture/decisions/settings/runbook and
+this checkpoint. Read AGENTS.md and the code-writer skill. Keep source archive outside
+releases. Prior Maps release hold remains pending explicit clarification; prepare and
+verify implementation but do not commit/push/publish Maps merely from older release mandates.
+Do not merge main or publish concurrently with another chat. Use fake/local HA, Routes
+and actuator endpoints; no live Google/paid API calls, live HA/databases, hardware, real
+notifications or deployment without separate explicit authorization.
+
+Research before integrating persistence: Google Routes policies restrict content caching
+and distinguish EEA billing terms. Existing app stores goals/decision history indefinitely;
+check permitted retention and attribution before persisting route-derived content. Sources:
+https://developers.google.com/maps/documentation/routes/policies
+https://developers.google.com/maps/documentation/routes/usage-and-billing
+Traffic-aware requests use the Pro category. No paid/request-volume promise is made.
+
+VERIFIED now: 28 existing synthetic routing/calendar tests passed in 0.49 seconds.
+Tests imported this worktree through PYTHONPATH using the existing interpreter. Initial
+attempts failed only on temporary-directory setup; final run used a unique directory
+under this worktree's ignored energymanager/artifacts/. No tests/source were altered.
+Run: python -m pytest -q -p no:cacheprovider --basetemp <unique-worktree-artifacts-path>
+     tests/test_routing.py tests/test_calendars.py
+
+NEXT at scheduled start: reconcile latest chat answers and Git state; verify copied
+routing/calendar baseline, then implement independent plumbing and resolved policy choices.
+The original environment is energymanager/.venv313/Scripts/python.exe; it is ignored and
+not copied. When using that interpreter, set PYTHONPATH to THIS worktree's energymanager/src
+so tests import this branch rather than the original editable checkout. Keep preview ports,
+fixture databases, dependency installation and release actions separate from other chats.
+
 
 ## Current work —4.3.19 Overview EV power and native sensor history
 

@@ -44,8 +44,12 @@ class SettingField:
 def setting_fields() -> tuple[SettingField, ...]:
     result = [SettingField("notification_target", "Phone notifications (optional)", "Notifications",
                            "notification", domains=("notify",), required=False)]
+    result.extend([
+        SettingField("maps.api_key", "Google Routes API key", "Google Maps", "secret", required=False,
+                     help="Save a valid Routes API key to activate routing immediately. Leave blank to keep the saved key, or clear it to stop new requests."),
+    ])
     result.append(SettingField("calendars", "Subscribed calendars", "EV calendars", "calendars", required=False,
-                               help="Label each iCalendar link. Imported journeys use provisional 50 km total and four hours from event start. Save and restart to sync."))
+                               help="Label each iCalendar link. Enable Google Maps per calendar to calculate attendance journeys. Other calendars retain labelled provisional 50 km/four-hour trips. Save and restart to sync."))
     measurements = (
         ("ev_soc", "EV state of charge", ("%",)),
         ("ess_soc", "ESS state of charge", ("%",)),
@@ -172,7 +176,14 @@ class ConfigurationFile:
     @staticmethod
     def values(document: dict[str, Any]) -> dict[str, Any]:
         prepared = installation_configuration(document)
-        return {field.path: field_value(prepared, field.path) for field in SETTING_FIELDS}
+        return {field.path: "" if field.kind == "secret" else field_value(prepared, field.path)
+                for field in SETTING_FIELDS}
+
+    def routing_settings(self) -> dict[str, Any]:
+        """Read the server-side key without including it in the settings response."""
+        document = json.loads(self.path.read_bytes())
+        value = document.get("maps", {})
+        return value if isinstance(value, dict) else {}
 
     def read(self) -> dict[str, Any]:
         original = self.path.read_bytes()
@@ -187,11 +198,14 @@ class ConfigurationFile:
             "fields": [asdict(field) for field in SETTING_FIELDS],
             "addon": self.addon, "mode": self.mode,
             "restart_required": values != self.started_values,
+            "secrets": {"maps.api_key": bool(field_value(prepared, "maps.api_key"))},
             "issues": self.issues(prepared),
         }
 
     def validate(self, document: dict[str, Any]) -> None:
         errors = {}
+        if not isinstance(document.get("maps", {}), dict):
+            errors["maps.api_key"] = "Maps settings must be an object"
         for field in SETTING_FIELDS:
             value = field_value(document, field.path)
             if field.kind == "calendars":
@@ -208,7 +222,9 @@ class ConfigurationFile:
                 except ValueError as exc:
                     errors[field.path] = str(exc)
                 continue
-            if field.kind == "boolean":
+            if field.kind == "secret":
+                valid = isinstance(value, str) and len(value) <= 500 and not any(ord(c) < 32 for c in value)
+            elif field.kind == "boolean":
                 valid = type(value) is bool
             elif field.kind in ("number", "integer"):
                 valid = type(value) in (int, float) and math.isfinite(value)
@@ -281,7 +297,11 @@ class ConfigurationFile:
                     parent = parent.setdefault(key, {})
                     if not isinstance(parent, dict):
                         raise ValueError(f"Configuration section {key} must be an object")
-                parent[keys[-1]] = value
+                if path == "maps.api_key" and isinstance(value, str):
+                    value = value.strip()
+                if path == "maps.api_key" and value == "":
+                    continue  # An empty redacted field never erases a saved credential.
+                parent[keys[-1]] = "" if path == "maps.api_key" and value is None else value
             if "calendars" in document:
                 try:
                     document["calendars"] = calendar_sources(document["calendars"])

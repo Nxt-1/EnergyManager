@@ -383,3 +383,85 @@ Later stage selection preserves known continuity within the same shared allowanc
 Short power mismatch is ordinary control work. Sustained energy evidence must change
 near-term forecast assumptions before requesting another solve; deduplicate unchanged
 bias and normal resource progress. New publication repair is explicitly excluded.
+
+
+## 25 October 2026 — V4.4 routing scope and scheduled implementation
+
+The user authorized a separate worktree/branch for V4.4 and restoration of the prepared
+routing code there. New coding starts at18:29 Europe/Brussels, following the requested
+2h50 delay. Scope includes per-calendar routing toggles beside subscription configuration
+and manual destination-based journeys. Use predicted traffic, a seven-day routing
+window, daily refresh, event-change refresh and a manual refresh action. Missing/failed
+routes remain unresolved and notify the user to intervene; the old placeholder is not
+an implicit substitute. Persistent per-event overrides survive calendar refreshes and
+can be returned explicitly to automatic values.
+
+The referee attendance/home policy is retained. Follow-up answers confirm that every
+trip independently starts and ends at HA home, even for multiple same-day events;
+venue chaining is outside V4.4. Manual destination journeys accept desired venue
+arrival/departure, and Maps derives home departure/return plus total distance. An
+unresolved trip shows a persistent EV warning and generates one deduplicated alert to
+the existing selected HA phone destination; development uses fake notifications only.
+The user believes their new credential is a configured Maps API
+key; no secret/service/billing validation has occurred. There is no authorization for
+live/paid API tests, installation operations or deployment. Earlier Maps publication
+hold still requires clarification before commit/push/publication. Temperature adjustment
+remains deferred. At the preparation checkpoint, 28 synthetic routing/calendar cases
+passed; the subsequent offline integration is recorded in WORK_STATE.md.
+
+
+## 25 October 2026 — Unresolved trips preserve other valid EV work
+
+The user explicitly selected continuing other valid EV goals while an unresolved route
+contributes no guessed distance/times. Persistent warnings and the deduplicated phone
+notice remain. Remove the provisional blanket EV route hold. Pending requests without
+a checked goal do not revoke unrelated work; changing/removing a previously checked
+trip still invalidates its affected plan normally. Existing measurement, charger,
+connection and permission guards remain unchanged. Verified against a real locally
+solved EV plan plus fake actuator stop on disconnect; no installation operations.
+
+The user questioned whether a seven-day lifetime should be ordinary use rather than
+long-term caching. The current seven-day horizon does not expire stored goals/decision
+inputs: the archive currently retains them indefinitely. Current EEA3.3.2(b) and Routes
+service-specific20.2 were checked; an express general seven-day distance/time caching
+allowance was not identified. This does not establish a definitive interpretation for
+every transient operational calculation. Retention/activation remains unresolved; no
+historical records are purged and no new API usage is authorized by the discussion.
+
+
+## 25 October 2026 — Prepare the offline V4.4 diff for commit
+
+The user requested commit preparation beginning at 23:30 Europe/Brussels. The one-time
+schedule was paused on invocation. Review and offline fixes are authorized; this task
+will not commit, push, merge, publish or deploy. The draft remains on its isolated
+codex/v4.4-google-maps branch. Existing release metadata is unchanged.
+
+A special Google agreement has not been established as necessary. Current retention
+compatibility remains unresolved: clarification under the applicable standard terms or
+an appropriate retention design may resolve it. Keep live routing disabled; this issue
+does not prevent committing the offline implementation. Do not claim that a seven-day
+planning horizon itself grants retention rights.
+
+
+## 27 October 2026 — Reconcile V4.4 with the latest V4.3.x baseline
+
+The user requested a compatibility check before a V4.4 release. Integrate the committed
+4.3.20 baseline into the isolated Maps branch and fix interactions within V4.4 scope.
+Retain newer charging continuity, evidence-based replanning, cancellable worker lifecycle,
+planning failure notices, EV history/actions and charger timing. Preserve main's unrelated
+working edits. This does not resolve the existing live-routing retention question or
+authorize live API/installation operations; no release is published during the review.
+
+
+## 27 October 2026 — Activate from a saved key and publish 4.4.0 to main
+
+The user explicitly requested activation when a valid API token is entered in Settings
+and publication to the main release. This supersedes the draft live-routing gate and
+prior Maps publication hold. Saving a key activates immediately; Google's first required
+route response validates it. Do not make a separate paid validation probe. Replacing or
+clearing applies immediately; blank preserves. No extra global enable switch is needed.
+Preserve calendar selection, all agreed routing/override/failure policies and existing
+4.3.20 behavior. This release does not introduce archive deletion or claim new provider
+retention rights. Development uses fake services; actual credentials, HA, hardware and
+real notifications remain outside agent verification. Commit/push and the existing main
+image-publication workflow are authorized; physical installation deployment is not.

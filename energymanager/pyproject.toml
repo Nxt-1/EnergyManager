@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "energymanager"
-version = "4.3.20"
+version = "4.4.0"
 description = "Joint EV/ESS planning and independent local control"
 requires-python = ">=3.12"
 dependencies = ["aiohttp==3.13.3", "highspy==1.15.1", "numpy==2.4.2", "tzdata==2026.2", "icalendar==7.3.0", "recurring-ical-events==3.8.2"]

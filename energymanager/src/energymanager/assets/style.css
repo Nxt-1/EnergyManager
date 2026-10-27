@@ -844,3 +844,10 @@ em-entity-picker > input { padding-right:36px; }
   .settings-save .actions { justify-content:flex-end; flex-wrap:wrap; }
   .settings-entities button { flex:1 1 auto; }
 }
+
+/* Destination routing and corrections share the existing calendar/settings layout. */
+.calendar-routing {grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:0}
+.calendar-link .calendar-routing input {width:auto}
+.route-requests .route-item {border-top:1px solid var(--border,#dce2ea);padding:12px 0}
+.route-requests .route-item p {margin:6px 0;overflow-wrap:anywhere}
+.route-requests .route-item button {margin:4px 6px 0 0}

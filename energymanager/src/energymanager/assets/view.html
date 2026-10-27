@@ -33,6 +33,10 @@
 <input name="id" type="hidden"><label>Name<input name="title" required maxlength="120" placeholder="e.g. Monday journey"></label>
 <label>Goal type<select name="kind"><option value="manual">Timed SoC goal</option><option value="trip">Journey (total distance, including return)</option></select></label>
 <label id="soc-field">Target SoC (%)<input name="target_soc_percent" type="number" min="0" max="100" step="0.1" value="70"></label>
+<label id="destination-field" hidden>Destination (optional)<input name="destination" maxlength="1000" placeholder="Venue address"></label>
+<label id="arrival-field" hidden>Desired venue arrival<input name="arrival" type="hidden"></label>
+<label id="venue-departure-field" hidden>Venue departure<input name="venue_departure" type="hidden"></label>
+<label id="override-field" hidden><input name="route_override" type="checkbox"> Override route distance and home times</label>
 <label id="distance-field" hidden>Total journey distance (km)<input name="distance_km" type="number" min="0" step="1" value="120"></label>
 <label>Deadline / departure<input name="deadline" type="hidden"></label>
 <label id="return-field" hidden>Return time (optional)<input name="return_at" type="hidden"><small>Unknown return means unavailable until reconnection.</small></label>

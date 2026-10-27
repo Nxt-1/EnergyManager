@@ -60,6 +60,10 @@ jobs:
         working-directory: energymanager
         run: python tools/offline_e2e.py
 
+      - name: Verify routed calendar application
+        working-directory: energymanager
+        run: python tools/offline_e2e.py --routing-fixture
+
       - name: Build Python package
         run: python -m build --no-isolation energymanager
 

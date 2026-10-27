@@ -23,6 +23,7 @@ from .validation import validate
 from .worker import PlanningWorker, WorkerExited
 from .hardware import HardwareControl
 from .calendars import CalendarSync
+from .journeys import Journeys
 from .ev_faults import EVFaults
 from .daily_estimates import DailyEstimates
 from .measurements import HousePowerMismatch
@@ -84,6 +85,7 @@ class Application:
         self.notifications = Notifications(store)
         self.hardware: HardwareControl | None = None
         self.configuration_error: str | None = None
+        self.journeys: Journeys | None = None
         self.calendars: CalendarSync | None = None
         self.calendar_items: dict[str, dict[str, Any]] = {}
         self.ev_faults: EVFaults | None = None
@@ -112,12 +114,16 @@ class Application:
             self.input_task = asyncio.create_task(self.input_loop())
         elif not self.configuration_error:
             self.request_plan("startup")
+        if self.journeys:
+            self.journeys.start()
         if self.ev_faults:
             self.ev_faults.start()
 
     async def close(self) -> None:
         self.shutdown = True
         await self.daily_estimates.close()
+        if self.journeys:
+            await self.journeys.close()
         if self.ev_faults:
             await self.ev_faults.close()
         if self.calendars:
@@ -659,6 +665,9 @@ class Application:
 
     def upsert_goal(self, data: dict[str, Any]) -> Goal:
         old = next((g for g in self.goals if g.id == data.get("id")), None)
+        if (str(data.get("id", "")).startswith(("calendar-", "journey-"))
+                or self.journeys and data.get("id") in self.journeys.requests):
+            raise ValueError("Use the routed journey editor for managed trips")
         if old and old.id.startswith("calendar-"):
             raise ValueError("This journey is managed by its calendar; change the source event or calendar link")
         allowed = {
@@ -687,6 +696,9 @@ class Application:
         return new
 
     def delete_goal(self, identity: str) -> None:
+        if self.journeys and identity in self.journeys.requests and not identity.startswith("calendar-"):
+            self.journeys.delete(identity)
+            return
         if identity.startswith("calendar-"):
             raise ValueError("This journey is managed by its calendar; remove the source event or calendar link")
         if not any(g.id == identity for g in self.goals):
@@ -840,6 +852,7 @@ class Application:
             "schedule_goals": [{**json_data(goal), **({"calendar": self.calendar_items[goal.id]}
                                 if goal.id in self.calendar_items else {})} for goal in (*self.goals, *requirements)],
             "calendars": self.calendars.status() if self.calendars else [],
+            "routes": self.journeys.status() if self.journeys else {"items": []},
             "accepted": self.accepted,
             "ev_plan_valid": self.ev_valid,
             "issues": list(self.store.get("issues", {}).values()) + (

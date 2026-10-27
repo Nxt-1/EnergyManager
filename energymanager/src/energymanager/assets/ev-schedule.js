@@ -226,7 +226,7 @@ export class EVSchedulePage {
         state.policy.consumption_kwh_per_100km / state.capabilities.ev_capacity_kwh) : goal.target_soc_percent;
     const action = event => event.session ? `data-ev-session="${esc(event.session.id)}"` :
       `data-ev-goal="${esc(event.goal.id)}"`;
-    const editActions = event => event.goal?.calendar ? '' : (['trip', 'manual'].includes(event.type) ||
+    const editActions = event => event.goal?.calendar || event.goal?.id.startsWith('journey-') ? '' : (['trip', 'manual'].includes(event.type) ||
       event.type === 'away' && event.start < event.left ?
       `<div class="actions"><button data-ev-edit="${esc(event.goal.id)}">Edit</button><button data-ev-remove="${esc(event.goal.id)}">Remove</button></div>` : '');
     const description = event => {
@@ -277,18 +277,31 @@ export class EVSchedulePage {
     const agenda = selectedEvents.map(event => `<section class="ev-agenda-item ev-${event.type}">
       <small>${event.start < selectedDay.start ? 'Continues · ' : ''}${clock(event.left)}${event.end > event.start ? ` — ${event.end >= selectedDay.end ? '24:00' : clock(event.right)}` : ''}${event.end > selectedDay.end ? ' · continues' : ''}</small>
       <button class="ev-agenda-title" ${action(event)}>${esc(event.title)}</button><p>${esc(description(event))}</p>
-      ${event.goal?.calendar ? `<p class="calendar-provisional">Calendar · ${esc(event.goal.calendar.source)} · provisional 50 km / 4 h${event.goal.calendar.location ? `<br>${esc(event.goal.calendar.location)}` : ''}</p>` : ''}
+      ${event.goal?.calendar ? `<p class="calendar-provisional">Calendar · ${esc(event.goal.calendar.source)}${event.goal.calendar.placeholder ? ' · provisional 50 km / 4 h' : ' · routed journey'}${event.goal.calendar.location ? `<br>${esc(event.goal.calendar.location)}` : ''}</p>` : ''}
       ${event.goal && ['trip', 'manual', 'daily'].includes(event.type) ? `<p>${event.goal.planned_kwh === undefined || event.goal.planned_kwh === null ? '' : `${number(event.goal.planned_kwh / state.capabilities.ev_capacity_kwh * 100)}% planned at deadline · `}${event.type === 'trip' ? `${number(event.goal.distance_km)} km total · ${state.policy.arrival_reserve_km} km arrival reserve` : 'No journey or battery withdrawal assumed'}</p>${event.goal.external_charging_required ? '<p class="error">Charging away must be arranged. Return SoC is unknown.</p>' : ''}${event.type === 'daily' ? '<button data-ev-settings="true">Daily readiness settings</button>' : ''}` : ''}${editActions(event)}
     </section>`).join('');
+    const routes = state.routes?.items || [];
+    const routePanel = routes.length ? `<article class="card route-requests"><h2>Journey routes</h2>
+      ${state.routes.activation_note ? `<p class="muted">${esc(state.routes.activation_note)}</p>` : ''}
+      <button data-route-refresh="true">Refresh routes</button>
+      ${routes.map(item => `<section class="route-item"><strong>${esc(item.title)}</strong>
+        <p class="${item.state === 'unresolved' ? 'error' : 'muted'}">${esc(item.state === 'unresolved' ? 'Route unresolved · intervention needed' : item.state === 'pending' ? 'Awaiting route' : item.state === 'outside_horizon' ? 'Routing begins within seven days' : item.provider)}${item.overridden ? ' · local override' : ''}</p>
+        <p>${esc(item.destination || 'Destination missing')}</p>
+        <p>Venue arrival ${stamp(item.arrival)} · leave ${stamp(item.venue_departure)}</p>
+        ${item.state === 'resolved' ? `<p>Home departure ${stamp(item.deadline)} · return ${stamp(item.return_at)} · ${number(item.distance_km)} km total</p>` : ''}
+        ${item.state === 'unresolved' ? `<p>This trip has no charging estimate yet. Other valid goals can continue. ${item.phone_configured ? 'Phone alert uses the selected destination.' : 'Phone not configured; warning remains here.'}</p>` : ''}
+        <button data-route-edit="${esc(item.id)}">Edit / override</button>
+        ${item.overridden ? `<button data-route-reset="${esc(item.id)}">Return to automatic</button>` : ''}
+        ${!item.calendar ? `<button data-route-delete="${esc(item.id)}">Remove</button>` : ''}</section>`).join('')}</article>` : '';
     this.root.innerHTML = `
       <section class="page-heading"><div><h1>EV schedule</h1><p class="muted">${stamp(schedule.start)} — ${stamp(schedule.end)} · ${esc(zone)}</p></div>
       <div class="actions"><button data-ev-add="trip" class="primary">＋ Journey</button><button data-ev-add="manual">＋ SoC goal</button><button data-fault-history="true">EV fault history</button></div></section>
       <article class="card ev-status" id="ev-live-status">${evStatusMarkup(state, this)}</article>
-      <div class="ev-summary">
+      ${routePanel}<div class="ev-summary">
       <article class="live-item"><span class="muted">Next requirement</span><strong>${nextGoal ? `${number(target(nextGoal))}%` : '—'}</strong><small>${nextGoal ? `${esc(nextGoal.title)} · ${stamp(nextGoal.deadline)}` : 'No upcoming requirements'}</small></article>
       <article class="live-item"><span class="muted">Planned EV charging</span><strong>${schedule.current ? charging.length : '—'} <small>sessions</small></strong><small>${charging[0] ? `Next ${stamp(Math.max(schedule.start, charging[0].start))}` : schedule.current ? 'No charging selected' : 'Awaiting a current validated plan'}</small></article></div>
       <p class="ev-message error" role="alert">${esc(this.error || '')}</p>
-      ${(state.calendars || []).length ? `<details class="calendar-sync"${calendarExpanded ? ' open' : ''}><summary>Subscribed calendars · ${(state.calendars || []).length}${state.calendars.some(item => item.error || item.stale) ? ' · refresh needed' : ''}</summary>${state.calendars.map(item => `<p><strong>${esc(item.label)}</strong> · ${item.events} items · ${item.last_success ? `Last synced ${stamp(item.last_success)}` : 'Not synced yet'}${item.error ? ` · <span class="error">${esc(item.error)}</span>` : item.stale ? ' · cached items may be outdated' : ''}${item.skipped_all_day ? ` · ${item.skipped_all_day} all-day items skipped (no departure time)` : ''}</p>`).join('')}<button data-ev-sync="true">Sync calendars</button><button data-ev-settings="true">Calendar settings</button><p class="subtle">Imported journeys use provisional 50 km total and four hours from event start. Edit events in their source calendar.</p></details>` : ''}
+      ${(state.calendars || []).length ? `<details class="calendar-sync"${calendarExpanded ? ' open' : ''}><summary>Subscribed calendars · ${(state.calendars || []).length}${state.calendars.some(item => item.error || item.stale) ? ' · refresh needed' : ''}</summary>${state.calendars.map(item => `<p><strong>${esc(item.label)}</strong> · ${item.events} items · ${item.last_success ? `Last synced ${stamp(item.last_success)}` : 'Not synced yet'}${item.error ? ` · <span class="error">${esc(item.error)}</span>` : item.stale ? ' · cached items may be outdated' : ''}${item.skipped_all_day ? ` · ${item.skipped_all_day} all-day items skipped (no departure time)` : ''}</p>`).join('')}<button data-ev-sync="true">Sync calendars</button><button data-ev-settings="true">Calendar settings</button><p class="subtle">Calendars without routing use provisional 50 km / four-hour journeys. Routed events use venue attendance and the Journey routes editor.</p></details>` : ''}
       <p class="status-line" role="status">${schedule.current ? 'Charging and deadline outcomes are forecasts from the accepted plan.' : 'Charging and deadline outcomes will appear after a current plan is accepted. Entered journeys and requirements remain visible.'}${state.status === 'planning' ? ' Recalculating…' : ''}${state.error ? ` <span class="error">${esc(powerText(state.error))}</span>` : ''}</p>
       <div class="ev-layout"><article class="card ev-calendar"><div class="card-heading"><div><h2>Seven-day calendar</h2><p class="subtle">Expected away · planned charging · minimum SoC / ↗ departure</p></div><button data-ev-today="true">Today</button></div>
       <div class="ev-calendar-scroll" tabindex="0" aria-label="Seven-day EV calendar; scroll horizontally for all hours"><div class="ev-calendar-days">${calendar}</div></div>

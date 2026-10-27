@@ -1,3 +1,17 @@
+## 4.4.0 — Google Maps journeys for EV charging
+
+- Route selected calendars and destination-based manual journeys using predicted traffic
+  and separate home-to-venue/return legs. Calendar selection sits beside each subscription.
+- Activate immediately when a Routes API key is saved in Settings. Keep the key write-only;
+  blank preserves it, replacement applies immediately and explicit clear stops new requests.
+  Google validates the credential on required route requests; failures stay unresolved.
+- Refresh the next seven days daily, after event changes and on demand. Preserve local
+  per-event overrides and provide Return to automatic.
+- Warn and send deduplicated intervention notifications for unresolved trips while other
+  valid EV goals continue under ordinary charger, measurement and permission guards.
+- Retain all 4.3.20 planner/charging-continuity fixes, cancellable calculations, EV history,
+  phase actions and countdowns. Reject route results from replaced credentials.
+
 ## 4.3.20 — Joint charging continuity and evidence-based recalculation
 
 - Choose EV continuity within the full joint EV/ESS optimization and the existing

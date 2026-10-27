@@ -1,8 +1,17 @@
 # EnergyManager 4
 
-Version **4.3.20**, the main Energy Manager application. One joint seven-day EV/ESS MILP
+Version **4.4.0**, the main Energy Manager application. One joint seven-day EV/ESS MILP
 feeds independent responsive control. The application includes configured input/actuator
 boundaries, persisted goals/approvals/decisions and Overview/Planning/EV pages.
+
+## Google Maps journeys
+
+Save a Google Routes API key under Settings → Google Maps to activate routing immediately.
+The first required route request validates the key with Google; rejected requests stay
+unresolved and warn you. Clear the saved key to stop new requests. The key is write-only.
+Enable routing beside each selected calendar subscription, or add a manual journey with
+a destination and desired venue arrival/departure. Calendar configuration changes still
+require restart; key changes apply immediately. Each trip independently returns home.
 
 ## Local deterministic demo
 

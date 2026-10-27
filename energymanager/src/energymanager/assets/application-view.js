@@ -127,6 +127,8 @@ export async function mountApplication(root, options = {}) {
   const dateTimePicker = new DateTimePicker(() => state.policy.timezone, () => state.now, root);
   dateTimePicker.bind($('goal-form').elements.deadline, 'Deadline / departure', true);
   dateTimePicker.bind($('goal-form').elements.return_at, 'Return time');
+  dateTimePicker.bind($('goal-form').elements.arrival, 'Desired venue arrival');
+  dateTimePicker.bind($('goal-form').elements.venue_departure, 'Venue departure');
   const graphCursor = new GraphCursor(root, at => new Date(at).toLocaleString('en-GB', {
     timeZone: state.policy.timezone, day: '2-digit', month: 'short',
     hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'shortOffset'
@@ -499,17 +501,22 @@ export async function mountApplication(root, options = {}) {
   }
 
   function openGoal(goal, kind = 'manual') {
-    if (goal?.calendar) { showGoalDetail(goal.id); return; }
+    const routed = state?.routes?.items.find(item => item.id === goal?.id);
+    if (goal?.calendar && !routed) { showGoalDetail(goal.id); return; }
     if (!state) return;
     const form = $('goal-form');
     form.reset();
     form.elements.id.value = goal?.id || '';
+    form.elements.destination.value = routed?.destination || '';
+    form.elements.route_override.checked = !!routed?.override;
+    dateTimePicker.setValue(form.elements.arrival, routed?.arrival || new Date(Date.parse(state.now) + 24 * 3600000).toISOString());
+    dateTimePicker.setValue(form.elements.venue_departure, routed?.venue_departure || new Date(Date.parse(state.now) + 26 * 3600000).toISOString());
     form.elements.title.value = goal?.title || '';
     form.elements.kind.value = goal?.kind || kind;
     form.elements.target_soc_percent.value = goal?.target_soc_percent ?? 70;
-    form.elements.distance_km.value = goal?.distance_km || 120;
-    dateTimePicker.setValue(form.elements.deadline, goal?.deadline || new Date(Date.parse(state.now) + 24 * 3600000).toISOString());
-    dateTimePicker.setValue(form.elements.return_at, goal?.return_at || null);
+    form.elements.distance_km.value = routed?.override?.distance_km ?? goal?.distance_km ?? 120;
+    dateTimePicker.setValue(form.elements.deadline, routed?.override?.deadline || goal?.deadline || new Date(Date.parse(state.now) + 24 * 3600000).toISOString());
+    dateTimePicker.setValue(form.elements.return_at, routed?.override?.return_at || goal?.return_at || null);
     form.elements.priority.value = goal?.priority ?? 50;
     $('form-title').textContent = goal ? 'Edit EV goal' : 'Add an EV goal';
     $('form-error').textContent = '';
@@ -518,10 +525,19 @@ export async function mountApplication(root, options = {}) {
   }
 
   function toggleKind() {
-    const trip = $('goal-form').elements.kind.value === 'trip';
+    const form = $('goal-form');
+    const trip = form.elements.kind.value === 'trip';
+    const routed = trip && (!!form.elements.destination.value.trim() ||
+      state.routes?.items.some(item => item.id === form.elements.id.value));
+    const overridden = routed && form.elements.route_override.checked;
     $('soc-field').hidden = trip;
-    $('distance-field').hidden = !trip;
-    $('return-field').hidden = !trip
+    $('destination-field').hidden = !trip;
+    $('arrival-field').hidden = $('venue-departure-field').hidden = !routed;
+    $('override-field').hidden = !routed;
+    $('distance-field').hidden = $('return-field').hidden = !trip || routed && !overridden;
+    form.elements.deadline.closest('label').hidden = routed && !overridden;
+    form.elements.arrival.required = form.elements.venue_departure.required = routed;
+    form.elements.deadline.required = !routed || overridden
   }
 
   function detail(title, body) {
@@ -530,6 +546,8 @@ export async function mountApplication(root, options = {}) {
   }
 
   function showGoalDetail(id) {
+    const routed = state.routes?.items.find(item => item.id === id);
+    if (routed) { openGoal(state.goals.find(item => item.id === id) || {id, title: routed.title, kind: 'trip', priority: routed.priority}); return; }
     const goal = state.goals.find(goal => goal.id === id) || state.schedule_goals.find(goal => goal.id === id);
     if (!goal) return;
     detail(goal.title,
@@ -675,14 +693,38 @@ export async function mountApplication(root, options = {}) {
       $('graph-history-status').textContent = error.message;
     }
   };
+  root.addEventListener('click', async event => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    try {
+      if (button.dataset.routeRefresh) await api('journeys/refresh', 'POST', {});
+      if (button.dataset.routeEdit) showGoalDetail(button.dataset.routeEdit);
+      if (button.dataset.routeReset) await api(`journeys/${encodeURIComponent(button.dataset.routeReset)}/reset`, 'POST', {});
+      if (button.dataset.routeDelete) await api(`journeys/${encodeURIComponent(button.dataset.routeDelete)}`, 'DELETE', {});
+      if (button.dataset.routeRefresh || button.dataset.routeReset || button.dataset.routeDelete) await refresh(true);
+    } catch (error) { $('ev-panel').querySelector('.ev-message').textContent = error.message; }
+  }, {signal: lifecycle.signal});
   $('new-goal').onclick = () => openGoal();
   $('close-dialog').onclick = $('cancel-dialog').onclick = () => $('goal-dialog').close();
   $('close-detail').onclick = () => $('detail-dialog').close();
   $('goal-form').elements.kind.onchange = toggleKind;
+  $('goal-form').elements.destination.oninput = toggleKind;
+  $('goal-form').elements.route_override.onchange = toggleKind;
   $('goal-form').onsubmit = async event => {
     event.preventDefault();
     const f = event.target.elements;
     try {
+      if (f.kind.value === 'trip' && (f.destination.value.trim() || state.routes?.items.some(item => item.id === f.id.value))) {
+        const body = {title: f.title.value, destination: f.destination.value.trim(),
+          arrival: dateTimePicker.instant(f.arrival), venue_departure: dateTimePicker.instant(f.venue_departure),
+          priority: Number(f.priority.value)};
+        if (f.route_override.checked) body.override = {deadline: dateTimePicker.instant(f.deadline),
+          return_at: dateTimePicker.instant(f.return_at), distance_km: Number(f.distance_km.value)};
+        await api(f.id.value ? `journeys/${encodeURIComponent(f.id.value)}` : 'journeys', 'POST', body);
+        $('goal-dialog').close();
+        await refresh(true);
+        return;
+      }
       const body = {
         title: f.title.value,
         kind: f.kind.value,

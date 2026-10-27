@@ -23,6 +23,8 @@ from energymanager.settings import ConfigurationFile, SETTING_FIELDS
 from energymanager.notifications import Notifications, NotificationTarget
 from energymanager.store import Store
 from energymanager.web import create_web
+from energymanager.journeys import Journeys
+from energymanager.routing import GoogleRoutesClient, RefereeJourneyRouter
 
 
 class VerificationResolver(AbstractResolver):
@@ -40,8 +42,8 @@ class VerificationResolver(AbstractResolver):
 
 
 async def run(*, serve: bool = False, preview_fault: str | None = None,
-              history_fixture: bool = False, calendar_fixture: bool = False, ev_fault_fixture: bool = False,
-              planner_failure_fixture: bool = False) -> None:
+              history_fixture: bool = False, calendar_fixture: bool = False, routing_fixture: bool = False,
+              ev_fault_fixture: bool = False, planner_failure_fixture: bool = False) -> None:
     issued = datetime.now(UTC)
     calls = []
     weather_queries = []
@@ -136,6 +138,15 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         return web.json_response([])
 
     fake = web.Application()
+    route_queries = []
+    async def google_routes(request: web.Request) -> web.Response:
+        assert routing_fixture and request.headers.get("X-Goog-Api-Key") == "synthetic-routing-key"
+        body = await request.json()
+        assert body["routingPreference"] == "TRAFFIC_AWARE"
+        route_queries.append(body)
+        distance = 47000 if "address" in body["origin"] else 42000
+        return web.json_response({"routes": [{"distanceMeters": distance, "duration": "1800s"}]})
+
     async def calendar_feed(request: web.Request) -> web.Response:
         def item(uid: str, hours: int) -> str:
             start = (issued + timedelta(hours=hours)).strftime("%Y%m%dT%H%M%SZ")
@@ -151,6 +162,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
             web.get("/core/api/services", services),
             web.get("/weather", weather),
             web.get("/calendar/{name}", calendar_feed),
+            web.post("/synthetic-google-routes", google_routes),
             web.post("/core/api/services/{domain}/{service}", service),
         ]
     )
@@ -172,7 +184,8 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         if calendar_fixture:
             config["policy"]["planning_budget_seconds"] = 60
             config["calendars"] = [{"id": name, "label": f"SYNTHETIC {name}",
-                                     "url": f"https://calendar.example/{name}"} for name in ("referee", "second")]
+                                     "url": f"https://calendar.example/{name}",
+                                     **({"routing": True} if routing_fixture else {})} for name in ("referee", "second")]
         path = stem.with_suffix(".json")
         path.write_text(json.dumps(config), encoding="utf-8")
         store = Store(stem.with_suffix(".sqlite"))
@@ -189,7 +202,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                     assert response.status == 200
                     return await response.read()
 
-        with patch("aiohttp.ClientSession", local_session), patch("energymanager.calendars.fetch_calendar", local_calendar), patch.dict("os.environ", {
+        with patch("energymanager.routing.ROUTES_URL", str(endpoint.make_url("/synthetic-google-routes"))), patch("aiohttp.ClientSession", local_session), patch("energymanager.calendars.fetch_calendar", local_calendar), patch.dict("os.environ", {
             "SUPERVISOR_TOKEN": "synthetic-supervisor-credential"
         }):
             application = configured_application(path, store, addon=True,
@@ -204,11 +217,17 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
             assert application.ha.url == "http://supervisor/core/api"
             configuration = ConfigurationFile(path, addon=True, mode="configured")
             before = monotonic()
-            async with TestClient(TestServer(create_web(application, configuration=configuration), port=8102 if serve else None)) as client:
+            server_app = create_web(application, configuration=configuration)
+            if routing_fixture:
+                application.journeys = Journeys(application, router=RefereeJourneyRouter(
+                    GoogleRoutesClient("synthetic-routing-key", allow_requests=True)))
+            async with TestClient(TestServer(server_app, port=8102 if serve else None)) as client:
                 # Cancel an actual full-horizon HiGHS solve through the public button API.
                 async with asyncio.timeout(30):
                     while (application.planning_activity.get("state") != "calculating"
-                           or application.planning_activity.get("stage") == "inputs"):
+                           or application.planning_activity.get("stage") == "inputs"
+                           or routing_fixture and (len(application.journeys.requests) != 2
+                                                       or application.journeys.needs_attention)):
                         await asyncio.sleep(.05)
                 cancelled_request = application.planning_request_id
                 cancelled_pid = application.worker.process.pid
@@ -217,7 +236,10 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                     assert response.status == 202
                     replacement = (await response.json())["planning_activity"]["request_id"]
                     assert replacement != cancelled_request
-                while monotonic() - before < (180 if calendar_fixture else 60) and application.accepted is None:
+                while monotonic() - before < (240 if calendar_fixture else 60) and (
+                        application.accepted is None or routing_fixture and (
+                            application.accepted["revision"] != application.revision
+                            or application.journeys.needs_attention)):
                     await asyncio.sleep(0.2)
                 assert application.accepted is not None, (application.status, application.error)
                 response = await client.get("/api/state")
@@ -226,11 +248,18 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                 assert current["planning_activity"]["state"] == "ready"
                 from multiprocessing import active_children
                 assert cancelled_pid not in {child.pid for child in active_children()}
-                assert any(event["kind"] == "planning_cancelled" for event in store.events())
+                # A full routed solve can outlive the recent-event display window.
+                cancelled = store.connection.execute(
+                    "SELECT 1 FROM events WHERE kind='planning_cancelled' "
+                    "AND json_extract(body,'$.request_id')=? LIMIT 1", (cancelled_request,)).fetchone()
+                assert cancelled is not None
                 if calendar_fixture:
                     assert len([goal for goal in current["goals"] if goal.get("calendar")]) == 2
                     assert len(current["calendars"]) == 2 and not any(item["error"] for item in current["calendars"])
-                    assert all(goal["distance_km"] == 50 for goal in current["goals"])
+                    assert all(goal["distance_km"] == (89 if routing_fixture else 50) for goal in current["goals"])
+                    if routing_fixture:
+                        assert len(route_queries) == 6
+                        assert all(item["state"] == "resolved" for item in current["routes"]["items"])
                 assert current["accepted"]["valid"] and current["provenance"].startswith("SYNTHETIC")
                 assert abs(current["observation"]["house_kw"] - 0.4) < 1e-9
                 assert current["observation"]["ev_phase_source"] == "goe_selector"
@@ -284,6 +313,8 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                     "fake_service_calls": len(calls),
                     "calendar_imports": len([goal for goal in current["goals"] if goal.get("calendar")]),
                     "calendar_fixture": calendar_fixture,
+                    "routing_fixture": routing_fixture,
+                    "synthetic_route_queries": len(route_queries),
                     "initial_ev_soc_percent": values["ev_soc"][0],
                     "weather_queries": weather_queries,
                     "forecast_status": current["forecast_status"],
@@ -357,6 +388,8 @@ if __name__ == "__main__":
                         help="Seed explicitly SYNTHETIC old graph measurements, including gaps")
     parser.add_argument("--calendar-fixture", action="store_true",
                         help="Sync two SYNTHETIC calendar feeds served only by the local fake endpoint")
+    parser.add_argument("--routing-fixture", action="store_true",
+                        help="Route two calendar journeys through a local fake Google endpoint")
     parser.add_argument("--ev-fault-fixture", action="store_true",
                         help="Show a SYNTHETIC unresolved EV incident and five-minute diagnostic trace")
     parser.add_argument("--planner-failure-fixture", action="store_true",
@@ -371,5 +404,8 @@ if __name__ == "__main__":
     if arguments.planner_failure_fixture and not arguments.serve:
         parser.error("--planner-failure-fixture requires --serve")
     asyncio.run(run(serve=arguments.serve, preview_fault=arguments.input_fault,
-                    history_fixture=arguments.history_fixture, calendar_fixture=arguments.calendar_fixture,
-                    ev_fault_fixture=arguments.ev_fault_fixture, planner_failure_fixture=arguments.planner_failure_fixture))
+                    history_fixture=arguments.history_fixture,
+                    calendar_fixture=arguments.calendar_fixture or arguments.routing_fixture,
+                    routing_fixture=arguments.routing_fixture,
+                    ev_fault_fixture=arguments.ev_fault_fixture,
+                    planner_failure_fixture=arguments.planner_failure_fixture))

@@ -195,13 +195,20 @@ class CalendarLinks extends HTMLElement {
       row.remove();
       this.dispatchEvent(new Event('change', {bubbles: true}));
     };
-    row.append(label, url, remove);
+    const routingLabel = element('label', 'calendar-routing');
+    const routing = element('input');
+    routing.type = 'checkbox';
+    routing.checked = entry.routing === true;
+    routing.setAttribute('aria-label', 'Calculate journeys with Google Maps');
+    routingLabel.append(routing, document.createTextNode('Google Maps journeys'));
+    row.append(label, url, remove, routingLabel);
     this.rows.append(row);
   }
 
   get value() {
     return [...this.rows.children].map(row => ({id: row.dataset.id,
-      label: row.children[0].value.trim(), url: row.children[1].value.trim()}));
+      label: row.children[0].value.trim(), url: row.children[1].value.trim(),
+      routing: row.querySelector('input[type="checkbox"]').checked}));
   }
 }
 
@@ -273,7 +280,7 @@ export class SettingsPage {
     heading.append(title);
     this.container.append(heading);
     const info = element('div', 'notice');
-    info.append(element('strong', '', 'Saved settings apply in configured mode after restarting EnergyManager.'), element('p', '',
+    info.append(element('strong', '', 'Installation settings apply in configured mode after restart. Google Maps key changes apply immediately.'), element('p', '',
       `Current input mode: ${this.document.mode}. ${this.document.restart_required ? 'Saved changes are waiting for a restart.' : ''}`),
       element('small', '', `Configuration: ${this.document.path}`));
     this.container.append(info);
@@ -328,7 +335,7 @@ export class SettingsPage {
         control.value = [...(value || [])].sort().join(',');
       } else {
         control = element('input');
-        control.type = field.kind === 'boolean' ? 'checkbox' :
+        control.type = field.kind === 'secret' ? 'password' : field.kind === 'boolean' ? 'checkbox' :
           ['number', 'integer'].includes(field.kind) ? 'number' :
             ['url', 'optional_url'].includes(field.kind) ? 'url' : field.kind === 'time' ? 'time' : 'text';
         if (field.kind === 'boolean') control.checked = value === true;
@@ -341,7 +348,11 @@ export class SettingsPage {
           control.inputMode = 'decimal';
         }
         control.required = field.required && field.kind !== 'boolean';
-        control.autocomplete = 'off';
+        control.autocomplete = field.kind === 'secret' ? 'new-password' : 'off';
+        if (field.kind === 'secret') {
+          control.placeholder = this.document.secrets?.[field.path] ? 'Saved key · leave blank to keep' : 'Enter API key';
+          control.spellcheck = false;
+        }
         control.dataset.savedValue = control.value;
       }
       if (!(control instanceof EntityPicker)) control.id = id;
@@ -350,6 +361,13 @@ export class SettingsPage {
       if (field.kind === 'boolean') {
         wrapper.append(control, label);
       } else wrapper.append(label, control);
+      if (field.kind === 'secret') {
+        const clear = element('button', '', 'Clear saved key');
+        clear.type = 'button';
+        clear.onclick = () => { control.value = ''; control.dataset.clearSecret = 'true'; this.markDirty(); };
+        control.oninput = () => { delete control.dataset.clearSecret; };
+        wrapper.append(clear);
+      }
       if (field.help) wrapper.append(element('small', 'muted field-help', field.help));
       const error = element('small', 'error field-error');
       error.id = `${id}-error`;
@@ -441,6 +459,7 @@ export class SettingsPage {
       else if (field.kind === 'phases') values[field.path] = control.value.split(',').filter(Boolean).map(Number);
       else if (['number', 'integer'].includes(field.kind)) values[field.path] =
         control.value === control.dataset.savedValue ? this.document.values[field.path] : storedSetting(field, control.value);
+      else if (field.kind === 'secret') values[field.path] = control.dataset.clearSecret ? null : control.value.trim();
       else values[field.path] = control.value.trim();
     }
     this.saveButton.disabled = true;
@@ -451,13 +470,15 @@ export class SettingsPage {
       for (const field of this.document.fields) {
         const control = this.controls.get(field.path);
         if (['number', 'integer'].includes(field.kind)) control.dataset.savedValue = control.value;
+        if (field.kind === 'secret') { control.value = ''; delete control.dataset.clearSecret; control.placeholder = result.secrets?.[field.path] ? 'Saved key · leave blank to keep' : 'Enter API key'; }
       }
       this.dirty = false;
       this.validateFields();
       this.message.className = 'settings-success';
       const restart = result.mode === 'demo' && result.addon ?
         'Choose configured in the HA app Configuration tab and restart to apply them.' :
-        'Restart EnergyManager in configured mode to apply them.';
+        result.restart_required ? 'Restart EnergyManager in configured mode to apply them.' :
+        'No restart is needed.';
       this.message.textContent = result.backup ?
         `Settings saved. ${restart} Previous settings backed up as ${result.backup}.` :
         `Settings are already saved. ${restart}`;
