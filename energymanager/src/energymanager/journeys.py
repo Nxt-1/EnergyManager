@@ -271,12 +271,15 @@ class Journeys:
                         provider = "Manual override"
                     else:
                         if not request["destination"].strip():
-                            raise RoutingUnavailable("Destination is missing; edit the journey")
+                            raise RoutingUnavailable("Destination is missing; edit the journey", code="destination")
                         if not self.synthetic and not self.settings.get("api_key"):
-                            raise RoutingUnavailable("Enter a Google Routes API key in Settings")
+                            raise RoutingUnavailable("Enter a Google Routes API key in Settings", code="credentials")
                         if self.app.ha is None:
-                            raise RoutingUnavailable("Home Assistant home location is unavailable")
-                        home = await self.app.ha.entity_state("zone.home")
+                            raise RoutingUnavailable("Home Assistant home location is unavailable", code="home_location")
+                        try:
+                            home = await self.app.ha.entity_state("zone.home")
+                        except (ValueError, aiohttp.ClientError, TimeoutError) as exc:
+                            raise RoutingUnavailable("Home state could not be read", code="home_location") from exc
                         if generation != self.settings_generation:
                             continue
                         estimate = await router.journey(home, request["destination"], arrival,
@@ -285,12 +288,21 @@ class Journeys:
                                     distance_km=estimate.distance_km, return_at=estimate.return_at)
                         provider = "Google Maps"
                     goal = replace(goal, priority=request.get("priority", 50))
-                except (RoutingUnavailable, ValueError, OverflowError, aiohttp.ClientError, TimeoutError):
-                    # Do not expose addresses, keys or transport exception bodies to event logs.
+                except (RoutingUnavailable, ValueError, OverflowError, aiohttp.ClientError, TimeoutError) as exc:
+                    if isinstance(exc, RoutingUnavailable):
+                        failure = exc
+                    else:
+                        code = "timeout" if isinstance(exc, TimeoutError) else (
+                            "connection" if isinstance(exc, aiohttp.ClientError) else "invalid_journey")
+                        failure = RoutingUnavailable("Journey resolution failed", code=code)
+                    # Only allowlisted categories and numeric status may leave this boundary.
                     if (generation == self.settings_generation and identity in self.requests
                             and self.effective(identity) == request):
                         self.results[identity] = {"state": "unresolved", "checked_at": now.isoformat(),
-                                                  "error": "Route unresolved; check destination, times and Maps settings"}
+                                                  "error": failure.public_message, "error_code": failure.code,
+                                                  "http_status": failure.http_status}
+                        self.app.store.event("journey_route_failed", {"journey_id": identity,
+                            "at": now, "error_code": failure.code, "http_status": failure.http_status})
                         self.remove_goal(identity)
                     continue
                 if (generation != self.settings_generation or identity not in self.requests

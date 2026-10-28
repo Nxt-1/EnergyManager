@@ -1,6 +1,43 @@
 # EnergyManager work state
 
-## Current work — expired manual goals (28 October 2026)
+## Current work — stable route timing and safe diagnostics (28 October2026)
+
+AUTHORIZED: user said Go ahead to fixing intermittent route resolution and exposing
+safe failure reasons. Base5ea9dfe (published4.4.2); use isolated V4.4 branch. Preserve
+main's unrelated DEFERRED_WORK.md edit. No live Google/HA/database/hardware/phone calls.
+
+IMPLEMENTED:4.4.3 reserves60seconds when choosing each traffic-aware departure and
+still requires an actual response at that exact departure to predict on-time arrival.
+Max3 outward/1 return requests, no transport retries, no deadline waiver, no guessed/
+last-good fallback. Genuinely unsettled or past timings remain unresolved. Fixed public
+codes/text distinguish access/quota/provider/connection/timeout/response/timing and
+missing home/destination/invalid journey. Raw provider bodies and exception text never
+reach diagnostics. UI renders the escaped safe reason; archived failure events contain
+only journey ID/code/numeric HTTP status/time. Credential/request-generation guards
+and existing retention/notification policies remain.
+
+VERIFIED:468 Python tests passed85.63s;78 focused routing/worker cases passed0.96s.
+All61 frontend tests, Ruff, mypy38 modules, changed-JS syntax and whitespace checks pass.
+Synthetic one-second/subsecond duration changes resolve with a checked on-time departure;
+material nonconvergence rejects. HTTP/access/quota/timeout/connection/body/home/privacy
+and failed-refresh/no-fallback/recovery cases pass. Browser4.4.3 shows the safe429 quota
+message, clears it through the actual refresh worker and keeps both89km routes resolved
+across three refresh clicks despite increasing fake durations. Warning/error console
+is empty. Screenshots in this chat's visualization folder: v443-routing-error.png and
+v443-routing-recovered.png. All services/data are fake; no real credential/API/HA used.
+Temporary preview tab/server are closed.
+
+Wheel/sdist match all59 package files and current maintained docs. Isolated4.4.3 wheel
+imports, timing constant, updated UI resource and safe-error boundary pass. Source
+archive is refreshed after this checkpoint. Main/origin remain5ea9dfe at final fetch.
+
+NEXT: scope-review/commit4.4.3, fast-forward/push main while
+preserving unrelated edits, then verify exact-head CI/image publication (including both
+configured fake E2E runs). Record remote results only in ignored checkpoint/final reply;
+no success-only docs commit. This fixes a reproduced code failure mode, not proof that
+it caused every particular installation failure.
+
+## Earlier release checkpoint — expired manual goals (28 October 2026)
 
 AUTHORIZED: user requested a fix for a past manual trip still shown as Waiting.
 Base a06b471 (published4.4.1); isolated V4.4 branch. Main backlog edits remain unrelated.

@@ -166,7 +166,13 @@ multiple events on one day. Do not chain venues. Referee calendars require arriv
 minutes before event start and departure from the venue two elapsed hours after start;
 ignore event end. Manual destination journeys accept desired venue arrival and departure.
 Derive home departure, home return and total distance from separate outward/return legs,
-using at most three outward traffic checks and one return request.
+using at most three outward traffic checks and one return request. From4.4.3 each
+traffic-aware candidate departure includes60seconds of travel-time slack. The last
+outward response must be requested at the exact published departure and predict arrival
+by the required time. Small duration changes can fit inside this slack; a response
+exceeding the final budget still rejects the route. This is a bounded routing allowance,
+not a calibrated traffic guarantee or permission to relax the attendance deadline.
+Static routing retains its existing two-leg behavior; no transport retries are added.
 
 Saving a nonempty Google Routes API key in Settings activates routing immediately, without
 a restart or another global enable switch. Google validates it on the first necessary route
@@ -192,6 +198,16 @@ planning/control, serializes refreshes and rejects stale request or credential r
 It uses the fixed Google endpoint, bounded time/response sizes, no redirects or transport
 retries. Distances and times retain Google Maps attribution. Existing goals/decision audit
 storage is unchanged; no new archive expiry or deletion is introduced in this release.
+
+Routing failures carry fixed categories and allowlisted public messages for missing
+credentials/home/destination, invalid/past timing, unsettled traffic, HTTP access/quota/
+provider rejection, timeouts, connection failure and malformed/no route responses.
+Only a validated numeric HTTP status can accompany them. Never expose raw provider
+bodies, addresses, keys or exception text through diagnostics. EV Journey routes shows
+the safe reason. Archived journey_route_failed events hold only journey ID, category,
+HTTP status and time; obsolete request/credential responses cannot record/adopt failures.
+A later successful result clears the displayed failure. Retry/notification/retention
+policy is unchanged.
 
 Missing/failed routes contribute no guessed distance or timing. Show persistent EV warnings
 and deduplicated alerts to the existing selected HA phone destination. Retry failed delivery

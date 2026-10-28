@@ -4,7 +4,7 @@ import {dailyEnergyRows, goalStatus, connectionIcon, displaySetting, entityState
   from '../src/energymanager/assets/display.js';
 import {clockValue, localDateTime, localInstants, monthDays, validLocal}
   from '../src/energymanager/assets/date-time.js';
-import {eventsOnDay, evSchedule, scheduleDays} from '../src/energymanager/assets/ev-schedule.js';
+import {EVSchedulePage, eventsOnDay, evSchedule, scheduleDays} from '../src/energymanager/assets/ev-schedule.js';
 import {nativeLiveState, phaseSelector, setChargerPhase} from '../src/energymanager/assets/native-live.js';
 import {evControlActivityModel, evMeasuredPower, evStatusModel, evStatusMarkup} from '../src/energymanager/assets/ev-status.js';
 import {PlanningActivity, planningActivityModel} from '../src/energymanager/assets/planning-activity.js';
@@ -1158,4 +1158,29 @@ test('past trips show underway or awaiting return rather than waiting for a new 
   assert.equal(goalStatus({...goal, return_at: '2026-10-28T11:00Z'}, now), 'Awaiting return');
   assert.equal(goalStatus({...goal, deadline: '2026-10-28T13:00Z'}, now), 'Waiting');
   assert.equal(goalStatus({...goal, deadline: '2026-10-28T13:00Z', status: 'scheduled'}, now), 'Scheduled');
+});
+
+
+test('journey route failures render an escaped reason and clear it after successful resolution', () => {
+  const scroller = {scrollLeft: 0};
+  const root = {hidden: true, innerHTML: '', addEventListener() {}, contains: () => false,
+    getRootNode: () => ({activeElement: null}),
+    querySelector: selector => selector === '.ev-calendar-scroll' ? scroller : null};
+  const page = new EVSchedulePage(root, {entities: {}});
+  const state = {...syntheticEVStatus(), ...syntheticSchedule(), accepted: null};
+  Object.assign(state.policy, {arrival_reserve_km: 30, consumption_kwh_per_100km: 18});
+  state.schedule_goals = state.schedule_goals.map(goal => ({distance_km: 44, target_soc_percent: 50, ...goal}));
+  const error = 'Route timed out <img src=x onerror=alert(1)> & retry';
+  state.routes = {items: [{id: 'journey-synthetic', title: 'SYNTHETIC route', state: 'unresolved',
+    error, destination: 'SYNTHETIC venue', arrival: '2026-10-25T17:00Z', venue_departure: '2026-10-25T20:00Z'}]};
+  try {
+    page.render(state);
+    assert.match(root.innerHTML, /Route timed out &lt;img src=x onerror=alert\(1\)&gt; &amp; retry/);
+    assert.doesNotMatch(root.innerHTML, /<img src=x/);
+    state.routes.items[0] = {...state.routes.items[0], state: 'resolved', provider: 'Google Maps',
+      deadline: '2026-10-25T16:29Z', return_at: '2026-10-25T20:30Z', distance_km: 81};
+    page.render(state);
+    assert.doesNotMatch(root.innerHTML, /Route timed out/);
+    assert.match(root.innerHTML, /81\.0 km total/);
+  } finally { page.dispose(); }
 });

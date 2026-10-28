@@ -1,5 +1,21 @@
 # EnergyManager 4 verification
 
+## 4.4.3 — Stable traffic routing and safe diagnostics (28 October2026)
+
+Synthetic duration sequences reproduce the original false rejection. Regressions require
+that the final checked departure equals the published departure, predicts on-time arrival
+and supplies its own distance, including one-second/subsecond changes, a boundary at the
+60second slack and a second adjustment. Genuine unsettled and past timings still reject.
+Transport tests distinguish HTTP400/401/403/429/5xx/redirect, timeout, connection, malformed
+JSON and no-route responses; non-200 bodies are never read. Worker tests ensure raw
+exception details cannot enter public state/failure events and no old estimate is used
+following a failed refresh. Home-read failures remain distinct. UI tests cover escaped
+failure text and its removal on success.468 Python tests passed85.63s;78 focused
+routing/worker cases passed0.96s;61 frontend cases, Ruff, mypy38 and changed-JS syntax
+passed. Browser verification confirms safe429 text, actual worker refresh/recovery and
+stable repeated resolution; warning/error console is empty. Evidence is in WORK_STATE.md.
+No live Google/paid API, installation database, HA, hardware or phone is used.
+
 ## 4.4.2 — Expired manual goals (28 October2026)
 
 Synthetic lifecycle tests cover elapsed trip/SoC retirement, complete archived records,

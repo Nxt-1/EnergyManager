@@ -1,3 +1,15 @@
+## 4.4.3 — Stable traffic routing and useful failure reasons
+
+- Allow a60second travel-time margin when choosing a traffic-aware departure, then
+  require an actual estimate at that exact departure to predict arrival by the deadline.
+  Small traffic-duration changes no longer exhaust the two adjustments. Keep the existing
+  maximum of three outward requests and one return; reject genuinely unsettled timing.
+- Show safe failure reasons for access denial, rate/quota limits, provider/connection/
+  timeout/response problems, missing home/destination and past/invalid timing.
+- Archive only journey ID, fixed error category, numeric HTTP status and time. Never
+  expose provider bodies, raw exception text or credentials. Failed routes remain
+  unresolved with no stale/guessed charging estimate; existing alert deduplication stays.
+
 ## 4.4.2 — Retire elapsed manual goals
 
 - Remove elapsed manual SoC requirements and finished manual journeys from active goals.

@@ -530,3 +530,60 @@ async def test_key_clear_revokes_old_client_before_it_can_request_another_leg(ro
     with pytest.raises(RoutingUnavailable, match="not been enabled"):
         await old.leg((50, 4), "SYNTHETIC venue", NOW + timedelta(hours=4), traffic_aware=True)
     assert not journeys.status()["live_available"]
+
+
+@pytest.mark.parametrize(
+    "code", ["traffic_timing", "quota", "access_denied", "timeout", "connection", "invalid_response"]
+)
+async def test_route_failure_exposes_safe_reason_and_keeps_raw_details_out_of_state_and_events(
+    routed_app, code
+):
+    app, journeys, router = routed_app
+    item = journeys.upsert(request())
+    await journeys.refresh()
+    assert any(g.id == item["id"] for g in app.goals)
+
+    async def failure(*args, **kwargs):
+        raise RoutingUnavailable(
+            "PRIVATE transport text with a key and address",
+            code=code,
+            http_status=429 if code == "quota" else None,
+        )
+
+    router.journey = failure
+    await journeys.refresh()
+    status = journeys.status()["items"][0]
+    assert status["state"] == "unresolved" and status["error_code"] == code
+    assert status["error"] != "Route unresolved; check destination, times and Maps settings"
+    assert "PRIVATE" not in json.dumps(status)
+    assert not any(g.id == item["id"] for g in app.goals)  # No stale-route fallback.
+    events = [e["body"] for e in app.store.events() if e["kind"] == "journey_route_failed"]
+    assert events[-1]["error_code"] == code and "PRIVATE" not in json.dumps(events)
+    assert set(events[-1]) == {"journey_id", "at", "error_code", "http_status"}
+
+
+async def test_invalid_home_location_is_distinct_from_google_failures(routed_app):
+    app, journeys, router = routed_app
+    journeys.upsert(request())
+
+    async def failed_home(entity):
+        raise ValueError("PRIVATE HA transport details")
+
+    app.ha.entity_state = failed_home
+    await journeys.refresh()
+    status = journeys.status()["items"][0]
+    assert status["error_code"] == "home_location" and "zone.home" in status["error"]
+    assert not router.calls and "PRIVATE" not in json.dumps(status)
+
+
+async def test_successful_refresh_clears_previous_safe_failure(routed_app):
+    app, journeys, router = routed_app
+    journeys.upsert(request())
+    router.failure = True
+    await journeys.refresh()
+    assert journeys.status()["items"][0]["error_code"] == "unavailable"
+    router.failure = False
+    await journeys.refresh()
+    status = journeys.status()["items"][0]
+    assert status["state"] == "resolved" and status["distance_km"] == 89
+    assert "error" not in status and "error_code" not in status and "http_status" not in status

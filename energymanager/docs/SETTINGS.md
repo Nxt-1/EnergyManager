@@ -17,6 +17,14 @@ journeys can enter a destination plus venue arrival/departure instead of distanc
 Each journey independently returns home. Refresh within seven days, daily, on event changes
 and with EV → Journey routes → Refresh routes. No automatic venue chaining is included.
 
+From4.4.3, an unresolved route shows its failure reason under EV → Journey routes:
+access/key/API/billing checks, rate/quota limit, provider/connection/timeout, missing
+home/destination, invalid response or timing. These are safe categories; no provider
+body or credential is displayed. Clearing an external problem does not notify the app;
+use Refresh routes to retry. A rejected refresh contributes no stale/guessed estimate.
+Traffic-aware departure checks include one minute of slack while retaining the required
+venue arrival deadline and the same maximum number of requests.
+
 Edit / override corrects destination/attendance or sets explicit total distance and home
 departure/return. Overrides survive source refresh; Return to automatic removes them. Source
 cancellation/removal removes its request. Unresolved trips show a persistent warning and

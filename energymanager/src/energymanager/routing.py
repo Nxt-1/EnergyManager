@@ -16,11 +16,40 @@ from .domain import instant
 
 ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
 FIELD_MASK = "routes.distanceMeters,routes.duration"
+TRAFFIC_SLACK_SECONDS = 60.0
+ROUTING_REASONS = {
+    "unavailable": "Route could not be resolved. Check the destination and Maps settings, then refresh routes.",
+    "credentials": "Enter a Google Routes API key in Settings.",
+    "access_denied": "Google refused access. Check key restrictions, Routes API access and billing.",
+    "quota": "Google rejected the request because of a rate or quota limit. Check the limit before refreshing.",
+    "provider": "Google's routing service is temporarily unavailable. Try Refresh routes later.",
+    "request_rejected": "Google rejected the routing request. Check the destination, times and Maps settings.",
+    "timeout": "The route request timed out. Try Refresh routes again.",
+    "connection": "Could not connect to Google's routing service. Check the connection, then refresh routes.",
+    "no_route": "Google returned no driving route for this destination. Edit the destination and try again.",
+    "invalid_response": "Google returned an incomplete or invalid route response. Try Refresh routes again.",
+    "home_location": "Home Assistant home coordinates could not be read. Check zone.home, then refresh routes.",
+    "destination": "A valid destination is missing. Edit the journey destination.",
+    "invalid_journey": "Journey times or override values are invalid. Edit the journey.",
+    "past_arrival": "The required venue arrival time has passed. Check the journey date and times.",
+    "past_departure": "The departure needed to arrive on time has passed. Check the journey date and times.",
+    "traffic_timing": "Changing traffic estimates could not confirm an on-time arrival. Try Refresh routes again.",
+}
 Location = str | tuple[float, float]
 
 
 class RoutingUnavailable(RuntimeError):
-    """No usable routing estimate; callers must retain explicit uncertainty."""
+    """Keep fixed public diagnostics separate from private provider/transport messages."""
+
+    def __init__(self, message: str, *, code: str = "unavailable", http_status: int | None = None) -> None:
+        super().__init__(message)
+        self.code = code if code in ROUTING_REASONS else "unavailable"
+        self.http_status = http_status if type(http_status) is int and 100 <= http_status <= 599 else None
+
+    @property
+    def public_message(self) -> str:
+        message = ROUTING_REASONS[self.code]
+        return f"{message} (HTTP {self.http_status})" if self.http_status is not None else message
 
 
 def waypoint(location: Location) -> dict[str, Any]:
@@ -51,16 +80,18 @@ class RouteLeg:
 def route_leg(document: dict[str, Any]) -> RouteLeg:
     """Read metric distance and protobuf seconds without inferring a missing route."""
     routes = document.get("routes")
+    if routes == []:
+        raise RoutingUnavailable("Google Routes found no route", code="no_route")
     if not isinstance(routes, list) or len(routes) != 1 or not isinstance(routes[0], dict):
-        raise RoutingUnavailable("Google Routes did not return one usable route")
+        raise RoutingUnavailable("Google Routes did not return one usable route", code="invalid_response")
     distance, duration = routes[0].get("distanceMeters"), routes[0].get("duration")
     if (type(distance) is not int or distance < 0 or not isinstance(duration, str)
             or not re.fullmatch(r"[0-9]+(?:\.[0-9]{1,9})?s", duration)):
-        raise RoutingUnavailable("Google Routes returned incomplete distance or duration")
+        raise RoutingUnavailable("Google Routes returned incomplete distance or duration", code="invalid_response")
     try:
         return RouteLeg(distance / 1000, float(duration[:-1]))
     except (ValueError, OverflowError) as exc:
-        raise RoutingUnavailable("Google Routes returned an invalid route") from exc
+        raise RoutingUnavailable("Google Routes returned an invalid route", code="invalid_response") from exc
 
 
 @dataclass(frozen=True)
@@ -116,12 +147,12 @@ class GoogleRoutesClient:
     async def leg(self, origin: Location, destination: Location, departure: datetime,
                   *, traffic_aware: bool) -> RouteLeg:
         if self.allow_requests is not True:
-            raise RoutingUnavailable("Google routing requests have not been enabled")
+            raise RoutingUnavailable("Google routing requests have not been enabled", code="credentials")
         if not self.api_key.strip() or "\n" in self.api_key or "\r" in self.api_key:
-            raise RoutingUnavailable("A server-side Google Routes API key is required")
+            raise RoutingUnavailable("A server-side Google Routes API key is required", code="credentials")
         departure = instant(departure)
         if departure < datetime.now(UTC):
-            raise ValueError("Google driving estimates require a future departure")
+            raise RoutingUnavailable("Google driving estimates require a future departure", code="past_departure")
         body = {"origin": waypoint(origin), "destination": waypoint(destination), "travelMode": "DRIVE",
                 "routingPreference": "TRAFFIC_AWARE" if traffic_aware else "TRAFFIC_UNAWARE",
                 "computeAlternativeRoutes": False, "units": "METRIC"}
@@ -132,19 +163,30 @@ class GoogleRoutesClient:
             async with asyncio.timeout(15), aiohttp.ClientSession() as session:
                 async with session.post(ROUTES_URL, json=body, headers=headers, allow_redirects=False) as response:
                     if response.status != 200:
-                        raise RoutingUnavailable(f"Google Routes returned HTTP {response.status}")
+                        code = "request_rejected"
+                        if response.status in (401, 403):
+                            code = "access_denied"
+                        elif response.status == 429:
+                            code = "quota"
+                        elif response.status >= 500:
+                            code = "provider"
+                        raise RoutingUnavailable(f"Google Routes returned HTTP {response.status}",
+                                                 code=code, http_status=response.status)
                     result = bytearray()
                     async for chunk in response.content.iter_chunked(16384):
                         result.extend(chunk)
                         if len(result) > 65536:
-                            raise RoutingUnavailable("Google Routes response exceeds the size limit")
+                            raise RoutingUnavailable("Google Routes response exceeds the size limit", code="invalid_response")
                     document = json.loads(result)
             if not isinstance(document, dict):
-                raise RoutingUnavailable("Google Routes returned invalid data")
+                raise RoutingUnavailable("Google Routes returned invalid data", code="invalid_response")
             return route_leg(document)
-        except (aiohttp.ClientError, TimeoutError, ValueError) as exc:
-            # Neither addresses nor the API key belong in user-visible transport errors.
-            raise RoutingUnavailable("Google Routes could not provide an estimate") from exc
+        except TimeoutError as exc:
+            raise RoutingUnavailable("Google Routes timed out", code="timeout") from exc
+        except aiohttp.ClientError as exc:
+            raise RoutingUnavailable("Google Routes connection failed", code="connection") from exc
+        except ValueError as exc:
+            raise RoutingUnavailable("Google Routes returned invalid JSON", code="invalid_response") from exc
 
 
 class RefereeJourneyRouter:
@@ -162,31 +204,41 @@ class RefereeJourneyRouter:
     async def journey(self, home_state: dict[str, Any], venue: str, arrival: datetime,
                       venue_departure: datetime, *, traffic_aware: bool = True) -> JourneyEstimate:
         """Check an arrival deadline using at most three outward queries and one return query."""
-        home = home_coordinates(home_state)
-        waypoint(venue)
-        arrival, venue_departure = instant(arrival), instant(venue_departure)
-        if venue_departure < arrival:
-            raise ValueError("Venue departure cannot precede arrival")
+        try:
+            home = home_coordinates(home_state)
+        except ValueError as exc:
+            raise RoutingUnavailable("Home coordinates are invalid", code="home_location") from exc
+        try:
+            waypoint(venue)
+        except ValueError as exc:
+            raise RoutingUnavailable("Destination is invalid", code="destination") from exc
+        try:
+            arrival, venue_departure = instant(arrival), instant(venue_departure)
+            if venue_departure < arrival:
+                raise ValueError("Venue departure cannot precede arrival")
+        except ValueError as exc:
+            raise RoutingUnavailable("Journey times are invalid", code="invalid_journey") from exc
         if arrival <= datetime.now(UTC):
-            raise RoutingUnavailable("The referee arrival time has already passed")
+            raise RoutingUnavailable("The venue arrival time has already passed", code="past_arrival")
 
         # DRIVE has no arrival-time routing. Seed a duration, then check the resulting departure.
         outward = await self.client.leg(home, venue, arrival, traffic_aware=traffic_aware)
-        duration_budget = outward.duration_seconds
+        duration_budget = outward.duration_seconds + (TRAFFIC_SLACK_SECONDS if traffic_aware else 0)
         departure = arrival - timedelta(seconds=duration_budget)
         if departure <= datetime.now(UTC):
-            raise RoutingUnavailable("The estimated home departure has already passed")
+            raise RoutingUnavailable("The estimated home departure has already passed", code="past_departure")
         if traffic_aware:
             for _ in range(2):
                 outward = await self.client.leg(home, venue, departure, traffic_aware=True)
                 if outward.duration_seconds <= duration_budget:
                     break  # This request predicts arrival by the required time, with any slack retained.
-                duration_budget = outward.duration_seconds
+                # Reserve a minute against small changes, then check this exact departure.
+                duration_budget = outward.duration_seconds + TRAFFIC_SLACK_SECONDS
                 departure = arrival - timedelta(seconds=duration_budget)
                 if departure <= datetime.now(UTC):
-                    raise RoutingUnavailable("The estimated home departure has already passed")
+                    raise RoutingUnavailable("The estimated home departure has already passed", code="past_departure")
             else:
-                raise RoutingUnavailable("Traffic estimates could not establish the required arrival time")
+                raise RoutingUnavailable("Traffic estimates could not establish the required arrival time", code="traffic_timing")
 
         homeward = await self.client.leg(venue, home, venue_departure, traffic_aware=traffic_aware)
         return JourneyEstimate(departure, venue_departure + timedelta(seconds=homeward.duration_seconds),

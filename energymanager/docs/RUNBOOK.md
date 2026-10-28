@@ -20,6 +20,13 @@ databases separate. A public release is distinct from installing/operating the H
 
 ## Local use
 
+Release4.4.3 fixes false traffic-timing rejections from tiny duration changes and shows
+safe failure reasons under EV → Journey routes. Update/reload HA, then Refresh routes
+to retry previously unresolved trips. No configuration change or key re-entry is needed.
+The minute of routing slack does not relax arrival deadlines or increase the request
+limit. Real access/quota/connection/time problems still require the displayed action.
+Archived journey_route_failed events provide code/status/time without raw provider data.
+
 Release4.4.2 automatically retires elapsed manual goals and finished manual trips,
 including older saved entries. No manual deletion or configuration migration is needed.
 Unknown/external returns still require a fresh known home connection when applicable.

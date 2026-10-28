@@ -286,6 +286,7 @@ export class EVSchedulePage {
       <button data-route-refresh="true">Refresh routes</button>
       ${routes.map(item => `<section class="route-item"><strong>${esc(item.title)}</strong>
         <p class="${item.state === 'unresolved' ? 'error' : 'muted'}">${esc(item.state === 'unresolved' ? 'Route unresolved · intervention needed' : item.state === 'pending' ? 'Awaiting route' : item.state === 'outside_horizon' ? 'Routing begins within seven days' : item.provider)}${item.overridden ? ' · local override' : ''}</p>
+        ${item.state === 'unresolved' && item.error ? `<p class="error">${esc(item.error)}</p>` : ''}
         <p>${esc(item.destination || 'Destination missing')}</p>
         <p>Venue arrival ${stamp(item.arrival)} · leave ${stamp(item.venue_departure)}</p>
         ${item.state === 'resolved' ? `<p>Home departure ${stamp(item.deadline)} · return ${stamp(item.return_at)} · ${number(item.distance_km)} km total</p>` : ''}

@@ -492,3 +492,16 @@ so later unplugging/restart cannot resurrect a trip. Keep other valid command au
 Calendar/routed managers retain ownership; active projections hide elapsed known returns.
 This is a focused lifecycle correction, not authorization for the wider deferred
 Goals & progress redesign (ARCH-012). No live installation operations are authorized.
+
+
+## 28 October2026 — Stabilize routing and expose safe failures (4.4.3)
+
+After reports of alternating resolution on refresh, a read-only synthetic reproduction
+showed30:00→30:01→30:02 duration responses rejecting while30:00→30:01→30:00 succeeded.
+The user authorized the proposed fix. Reserve60seconds when choosing a candidate
+traffic-aware departure, still requiring a checked response at that exact departure
+to predict on-time arrival. Keep3 outward/1 return request maximum, no transport retry
+and no guessed/stale route fallback. Show fixed safe error reasons and archive only
+ID/category/numeric HTTP status/time. Raw provider bodies and exception text remain
+private. This reproduces a failure mode, not proof of a particular live Google failure.
+No live Google/HA/credential/hardware or real notification access is authorized.
