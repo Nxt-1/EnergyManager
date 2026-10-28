@@ -248,8 +248,9 @@ the actual mapped HA sensor history directly.
 Recorded: 25 October2026. Status: **specified cleanup implemented in4.4.5** after the
 user's28October request. Broader unspecified redesign remains deferred.
 
-Overview omits goal cards. Planning lists all goals, including morning minima, together
-chronologically. Trips show driving kWh alongside total distance and departure target.
+From4.4.7, Overview shows goals due within the next24 elapsed hours and omits the
+forecast cost card. Planning retains the full chronological goal list and cost breakdown.
+Trips show driving kWh alongside total distance and departure target.
 The user explicitly chose a current-charge bar only for the earliest upcoming goal;
 later goals retain predicted SoC/readiness without implying today's energy is reserved
 for each trip. Unknown/unusable current EV energy hides the bar. The EV agenda/details

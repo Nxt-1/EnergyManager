@@ -429,8 +429,15 @@ export async function mountApplication(root, options = {}) {
         ${goal.external_charging_required ? '<p class="error">Charging away must be arranged. Return SoC is unknown.</p>' : ''}
         ${meter}<div class="actions"><button data-detail="${esc(goal.id)}">Details</button>${goal.kind !== 'daily' && !goal.calendar ? `<button data-edit="${esc(goal.id)}">Edit</button><button data-delete="${esc(goal.id)}">Remove</button>` : ''}</div></section>`;
     };
-    $('goal-card').hidden = page !== 'planning';
-    $('goals').innerHTML = goals.map(goalCard).join('') || '<p class="empty">Add a journey or timed SoC goal.</p>';
+    const now = Date.parse(state.now);
+    const overviewEnd = now + 24 * 3600000;
+    const visibleGoals = page === 'overview' ? goals.filter(goal =>
+      Date.parse(goal.deadline) > now && Date.parse(goal.deadline) <= overviewEnd) : goals;
+    $('goal-card').hidden = false;
+    $('goal-card').querySelector('h2').textContent = page === 'overview' ? 'Goals · next 24 hours' : 'Goals & progress';
+    $('goals').innerHTML = visibleGoals.map(goalCard).join('') || (page === 'overview' ?
+      '<p class="empty">No goals due in the next 24 hours.</p>' : '<p class="empty">Add a journey or timed SoC goal.</p>');
+    $('cost-card').hidden = page !== 'planning';
     $('approvals').innerHTML = state.issues.length ? state.issues.map(i => i.kind === 'planning' ?
       `<section class="issue"><strong>${esc(i.title)}</strong><p>${esc(powerText(i.text))}</p><p>${time(i.first_at)} · ${i.state === 'retrying' ? 'Recalculating' : 'Attention needed'}${i.notification ? ' · ' + esc(notificationStatus(i.notification)) : ''}</p><button data-decision="${esc(i.decision_id)}">Decision evidence</button></section>` :
       `<section class="issue"><strong>${esc(i.title||goals.find(g=>g.id===i.goal_id)?.title||'EV goal')}</strong><p>${esc(powerText(i.text))}</p><p>${i.kind==='ess_peak'?'Specific forecast peak':i.shortfall_kwh===null?'Awaiting measured reconnection':num(i.shortfall_kwh)+' kWh short'} · ${esc(i.state)}</p>${i.notification ? `<p>${esc(notificationStatus(i.notification))}</p>` : ''}${i.proposed_peak_kw && i.state === 'pending'?`<p>Requested ceiling ${watts(i.proposed_peak_kw)} W</p><button data-approve="${esc(i.goal_id)}">Approve</button> <button data-reject="${esc(i.goal_id)}">Reject</button>`:''}</section>`

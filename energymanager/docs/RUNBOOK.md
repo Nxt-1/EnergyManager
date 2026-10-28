@@ -11,10 +11,11 @@ the same energy claim. Retained stock includes any required reserve/SoC level.
 Older saved decisions have no detailed allocation; a fresh calculation supplies it.
 Update/reload the add-on for the release; no settings or goal migration is required.
 
-## Goal presentation (4.4.5)
+## Goal presentation (4.4.7)
 
-Overview leaves space for upcoming features by omitting goal cards. Use Planning for
-the combined chronological list of journeys and morning requirements. Trip driving kWh
+Overview shows goals due within the next24 elapsed hours, with an explicit empty-window
+message. Its forecast cost card has moved to Planning. Use Planning for the complete
+chronological goal list and Forecast costs & energy assets breakdown. Trip driving kWh
 uses configured consumption and excludes the arrival reserve; the departure SoC target
 includes that reserve. Only the earliest future goal shows a current-charge/target
 bar, with both kWh quantities labelled. Unknown/stale/settling EV readings hide it.

@@ -1,3 +1,10 @@
+## 4.4.7 — Near-term goals on Overview
+
+- Replace the Overview forecast-cost card with chronological goals due in the next
+  24 elapsed hours, including morning requirements and an explicit empty-window message.
+- Keep the full goal list and forecast cost/energy-assets breakdown on Planning.
+- Preserve trip energy, the earliest-goal bar, session details and scheduling behavior.
+
 ## 4.4.6 — Meaningful EV session contributions
 
 - Replace the all-future-goals count with named trips and planned driving kWh, accounting

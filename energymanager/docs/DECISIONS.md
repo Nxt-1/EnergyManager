@@ -565,3 +565,13 @@ first target support is separately labelled, overlapping evidence. Keep unknown 
 barriers and deadline causality. This does not alter the shared battery optimization,
 charging behavior or permissions; physical future use cannot be measured in advance.
 Per-task source labels and energy-profile visualization remain separate deferred work.
+
+
+## 28 October2026 — Restore a near-term Overview goal list (4.4.7)
+
+The user explicitly requested implementation of a revised Overview: remove Forecast
+costs & energy assets and restore goal cards for only the next24hours. This supersedes
+4.4.5's removal of Overview goals. Use the rolling interval(now,now+24 elapsed hours],
+not the next calendar date; keep chronological ordering, trip kWh and the existing
+single earliest-goal progress bar. Planning retains the full goals and cost breakdown.
+No scheduling, goal persistence, control or cost arithmetic changes are authorized.

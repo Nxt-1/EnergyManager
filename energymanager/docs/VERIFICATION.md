@@ -1,5 +1,21 @@
 # EnergyManager 4 verification
 
+## 4.4.7 — Rolling Overview goals (28 October2026)
+
+25 focused native/dashboard/schedule API cases and63 frontend cases pass. All shipped
+JavaScript syntax, Ruff and CLI4.4.7 pass. The diff changes only card visibility and
+displayed goal selection; no planner, controller, accounting or persistence changes.
+
+Configured routed fake E2E passes2023 intervals/2journeys/6fake route queries/4local HA
+calls; acceptance60.77s/max control tick5.20ms. Standalone and native HA-contract browsers
+show only the next morning and first trip on Overview, excluding the later trip and
+six later morning goals. Planning shows all9 goals and forecast costs. Switching back
+restores the2-goal window and hides costs. The current-charge meter remains on the
+earliest goal only. Warning/error consoles are empty. Screenshot:v447-overview-24h.png
+in the task visualization folder. Temporary tabs/servers are closed. The window uses
+strictly future deadlines through now+24 elapsed hours; an empty list has an explicit
+message. All services/data are synthetic/local; no live installation/API/hardware used.
+
 ## 4.4.6 — Named EV session contributions (28 October2026)
 
 496 Python tests pass88.41s;19 focused attribution/native cases pass1.84s. All63 frontend

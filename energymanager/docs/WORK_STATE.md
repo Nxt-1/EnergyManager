@@ -1,6 +1,38 @@
 # EnergyManager work state
 
-## Current work — meaningful EV session contributions (28 October2026)
+## Current work — next-day Overview goals (28 October2026)
+
+AUTHORIZED: user explicitly requested removal of Overview forecast costs and restoration
+of goals for only the next24hours. Base85e2574 (published4.4.6; exact-head CI/image success
+in ignored prior checkpoint). Isolated V4.4 branch. Main pending backlog bytes are saved
+in ignored artifacts/v447-overview-goals/main-backlog-original.md. Prepared main-backlog-
+after.md changes only the authorized ARCH-012 paragraph, preserving every other byte.
+
+IMPLEMENTED4.4.7: Overview replaces the forecast-cost card with chronological deadlines
+in(now,now+24 elapsed hours], with a clear empty state and window heading. Planning
+retains the full goal list and forecast costs. Existing single earliest-goal meter,
+trip kWh/session explanations and planner/control behavior remain unchanged.
+
+VERIFIED:25 focused native/dashboard/schedule API cases0.72s,63 frontend cases, Ruff,
+shipped-JS syntax and CLI4.4.7 pass. Configured routed fake E2E passes2023 intervals,
+2journeys/6fake routes/4local calls; acceptance60.77s/max control tick5.20ms. Standalone
+and native Overview show2 goals (next morning/first trip), excluding later trip/mornings;
+Planning shows all9 and forecast costs. Back navigation restores the2-goal/no-cost view.
+One earliest-goal meter remains. Warn/error console empty. Screenshot:v447-overview-24h.png.
+Temporary tabs/servers closed. Low-impact presentation verified with existing suites and
+actual rendered behavior; no implementation-mirroring tests added. No live installation/
+HA/Google/database/credential/hardware/phone operations. Living docs synchronized.
+
+Wheel/sdist/isolated install match all61 package files; source archive matches all14
+maintained Markdown documents. Isolated4.4.7 import and updated view resources pass.
+Source archive is refreshed after this final checkpoint. Main pending backlog bytes
+still match the saved original; only the scoped ARCH-012 paragraph changes in release.
+
+NEXT: scope-review/commit4.4.7, integrate main preserving all unrelated pending backlog
+bytes, then check exact-head CI/image.
+Record remote outcomes only in ignored release-state.txt/final; no success-only commit.
+
+## Earlier release checkpoint — meaningful EV session contributions (28 October2026)
 
 AUTHORIZED: user explicitly said Implement that after agreeing to named goals and
 planned kWh contributions, accounting for existing battery energy, intervening trips

@@ -66,8 +66,11 @@ prematurely. ARCH-009 is implemented as a dedicated visual EV schedule page.
   concise live summaries, actual/planned power and SoC, time navigation, grouped sessions,
   seven-day planning, goals/progress and inspectable reasons/approvals. ESS is blue;
   EV is green. Keep implementation details outside the main household flow.
-- From4.4.5, Overview omits the Goals & progress card. Planning shows all current goals
-  together by deadline, including morning requirements interleaved with journeys.
+- From4.4.7, Overview shows Goals · next24hours, including only deadlines strictly
+  after now and at most24 elapsed hours ahead, in chronological order. An empty window
+  states that no goals are due. The forecast cost/energy-assets card appears only on
+  Planning. Planning retains all current goals together by deadline, including morning
+  requirements interleaved with journeys. This supersedes4.4.5's removal of Overview goals.
   Trip summaries show driving energy (`distance_km * consumption_kwh_per_100km / 100`)
   in kWh separately from the departure target, which includes the arrival reserve.
   EV agenda/details use the same estimate. Only the earliest upcoming goal has a current
