@@ -1,6 +1,58 @@
 # EnergyManager work state
 
-## Current checkpoint — earlier required charging (4.4.9,28 October2026)
+## Current checkpoint — EV detection update (4.4.10,28 October2026)
+
+AUTHORIZED: user said go after proposed120second blocked-wait fallback and configurable
+FordConnect vehicle charging status. Required code-writer and maintained docs reviewed.
+Base4.4.9 at1ebc40cd21fc44ff2fd5df2b1fcb1c8d3e379d95. Three pending review docs are ours;
+main DEFERRED_WORK.md changes are unrelated and must remain byte-for-byte preserved.
+
+IMPLEMENTED:120second persistent blocked non-delivery wait, existing90second ordinary
+non-delivery watchdog unchanged. Optional ev_diagnostics.vehicle_charging sensor, blank
+by default. A recently read explicitFAULT stops/latches without reboot, including during
+pending recovery; persistent cloud HA state is reported evidence, not a proven new car
+measurement. Unknown/unsupported/stale optional telemetry keeps normal power detection
+but cannot authorize reboot. Waiting clears on actualpower. Incident snapshots/sampler
+retain selected bounded attributes with HA read/report times and unknown vehicle source
+time. Settings/native history/EV sidebar expose the optional source; reported faults must
+clear before acknowledgement. No planner, first-stop hypothesis or live control-policy
+change beyond authorized EV supervision. Version4.4.10 prepared.
+
+VERIFIED: full519tests102.40s; final146affected cases6.19s;64frontend,Ruff/mypy41modules
+and4.4.10sdist/wheel pass. Mixed status/current
+updates cannot reset continuous acknowledged-request/non-delivery; normal continuous
+healthy90second reboot eligibility remains. Actual power/intentional stop reset clocks.
+Routed fake E2E passes2023intervals/2journeys/6fake routes/4local calls;65.66s acceptance,
+max tick3.06ms. Final code/source review and docs synchronized; initial bootstrap-template
+mismatch corrected and full suite passed. Private incident evidence remains ignored.
+NEXT: package/commit/main fast-forward preserving unrelated backlog bytes, push and verify
+exact-head CI/image. No installation deployment. Local evidence:v4410-vehicle-fault/.
+
+## Earlier checkpoint — EV incident review (28 October2026)
+
+READ-ONLY request: investigate supplied EV incident and discuss shorter waiting plus
+configurable Ford charging status. Base4.4.9 at1ebc40cd21fc44ff2fd5df2b1fcb1c8d3e379d95;
+exact-head CI40771893411 and image40771893306 succeeded. Isolated worktree was clean;
+main pending DEFERRED_WORK.md is unrelated. No application code or version changes.
+
+Export5776events,not truncated; original bytes and review preserved ignored under
+artifacts/ev-incident-a895697f-review/.SHA2564acac01dcf6899cb6b813f35538e22e9c66ee5deddb0e500434e7e02775f6b9a.
+Brussels21:38:39EM stop,21:40:19restart;power stays nearzero;21:41:01car-complete
+waiting starts;21:56:01incident/alert,no reboot eligibility. go-e error0 throughout;
+phase unchanged. First stop follows44->46.5percent SoC jump by about20s; live interval-
+stock cap/smoothing is a plausible cause, but the referenced plan is absent. No proof
+of hardware/Ford fault; the Ford charging-state sensor was not collected in this report.
+
+User confirmed no15minute wait and configurable Ford charging-state source. Proposed
+120second blocked fallback plus existing90second confirmed non-delivery, immediate
+fresh explicit vehicleFAULT, archive raw status/attributes; preserve charger/phase/ESS
+and reboot guards. Reviewed exact FordConnect2026.10.7 tag:const_tags passes through
+xevBatteryChargeDisplayStatus;const_shared includesFAULT;cloud polling/default60s.
+Architecture marks accepted requirements pending;DECISIONS records scope. No code,
+commit/release, live HA/provider/database/credential/hardware/notification operations.
+NEXT: explain findings; await explicit implementation request before application changes.
+
+## Earlier checkpoint — earlier required charging (4.4.9,28 October2026)
 
 AUTHORIZED: user reaffirmed the original early-charging requirement and explicitly said
 Fix that. Base4.4.8 at7806b51961a703d724729950a0205db29d613248. Required code-writer,

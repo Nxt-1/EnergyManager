@@ -1,5 +1,16 @@
 # Run, configure, review and roll back
 
+## EV waiting and vehicle status (4.4.10)
+
+Persistent blocked charging requests now escalate after2minutes instead of15; confirmed
+non-delivery still uses90seconds. Actual delivery clears the blocked timer. To add Ford
+vehicle faults, select the optional Vehicle charging state sensor under EV fault recovery,
+save and restart. A reported FAULT stops/latches without charger reboot and must clear
+before acknowledgement. Missing optional telemetry does not replace the measured-power
+watchdog or go-e guards. Reported state/selected attributes are preserved in incident
+evidence with HA timestamps; physical cloud-telemetry age remains unknown. No vehicle
+entity is selected automatically. Update/reload the add-on to receive4.4.10.
+
 ## Required charging timing (4.4.9)
 
 Required grid charging now prefers earlier delivery after cost/continuity selection when

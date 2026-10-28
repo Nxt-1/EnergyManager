@@ -1,3 +1,14 @@
+## 4.4.10 — Faster EV failure alerts and vehicle charging status
+
+- Shorten persistent charging-wait escalation from15minutes to2minutes, retaining the
+  existing90second confirmed non-delivery watchdog and start/phase protections.
+- Add an optional FordConnect vehicle charging-state sensor. A reported FAULT stops EV
+  charging and escalates without automatic charger reboot; current readings and selected
+  attributes appear in incident evidence and the EV diagnostic sidebar.
+- Preserve measured-power fallback when vehicle telemetry is unavailable. Actual power
+  delivery clears the waiting timer. Configured unknown/blocked vehicle status cannot
+  authorize an automatic charger reboot. ESS control and scheduling remain unchanged.
+
 ## 4.4.9 — Earlier required charging when waiting has no benefit
 
 - Restore the existing preference for early required charging after joint economic and

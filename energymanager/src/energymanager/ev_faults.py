@@ -60,7 +60,8 @@ class EVFaults:
     def capture(self, command: Command, observation: Observation, since: datetime) -> None:
         if self.current and self.current["status"] not in CLOSED:
             if self.current["status"] == "verifying":
-                self.unresolved("Charging did not resume after the single reboot attempt")
+                self.current["recovery_charger"] = self.actuator.charger.view(command.at) if self.actuator.charger else None
+                self.unresolved(self.actuator.delivery_reason + "; charging recovery failed")
             return
         self.current = {"id": uuid4().hex, "started_at": since.isoformat(),
                         "detected_at": command.at.isoformat(), "status": "pending",
@@ -106,6 +107,11 @@ class EVFaults:
         if not incident or incident["status"] in CLOSED:
             return
         at = self.app.now()
+        charger = self.actuator.charger
+        if (incident["status"] in ("pending", "rebooting", "verifying") and charger
+                and (fault := charger.vehicle.fault(at))):
+            incident["recovery_charger"] = charger.view(at)
+            self.unresolved(fault)
         if incident["status"] == "pending":
             charger = self.actuator.charger
             if not incident.get("reboot_allowed", False):
@@ -214,6 +220,13 @@ class EVFaults:
             raise ValueError("Fresh connected EV inputs are required before acknowledging recovery")
         if self.actuator.charger and self.actuator.charger.error():
             raise ValueError("The go-e fault must clear before acknowledging recovery")
+        reported_vehicle_fault = any((frame or {}).get("vehicle_charging", {}).get("error")
+                                     for frame in (self.current.get("charger"), self.current.get("recovery_charger")))
+        if (self.actuator.charger and self.actuator.charger.vehicle.entity and reported_vehicle_fault
+                and self.actuator.charger.vehicle.issue(self.app.now())):
+            raise ValueError("Fresh vehicle charging status is required to confirm the reported fault has cleared")
+        if self.actuator.charger and self.actuator.charger.vehicle.fault(self.app.now()):
+            raise ValueError("The reported vehicle charging fault must clear before acknowledging recovery")
         self.current.update(status="acknowledged", resolved_at=self.app.now().isoformat(),
                             reason="Acknowledged by user; normal planning and input guards still apply")
         self.save()
@@ -258,6 +271,10 @@ class EVFaults:
         if self.actuator.charger:
             self.actuator.charger.update(raw_rows, self.app.now())
             self.update_limits()
+            vehicle = self.actuator.charger.vehicle.view(self.app.now())
+            if vehicle["entity_id"] in readings:
+                readings[vehicle["entity_id"]]["attributes"] = vehicle["attributes"]
+                readings[vehicle["entity_id"]]["vehicle_observed_at"] = None
         self.app.store.event("ev_diagnostics", {"at": self.app.now().isoformat(), "entities": readings})
 
     def update_limits(self) -> None:

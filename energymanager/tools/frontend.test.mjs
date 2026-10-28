@@ -1214,3 +1214,19 @@ test('session details keep only compact target rows and brief unknown or legacy 
   assert.doesNotMatch(compact, /23.40|towards|Stored|stored|No driving|Battery targets supported|Contributes to/);
   assert.equal(JSON.stringify(session), before);
 });
+
+
+test('vehicle fault has its own diagnostic/history source and stale reports remain unverified', () => {
+  const state = syntheticEVStatus();
+  state.charger.vehicle_charging = {configured: true, state: 'FAULT', read_at: state.now,
+    issue: null, error: 'Vehicle reports charging FAULT'};
+  let model = evStatusModel(state);
+  assert.equal(model.tone, 'fault');
+  assert.match(model.reason, /Vehicle reports/);
+  assert.equal(model.diagnostics.find(f => f.key === 'vehicle_charging').tone, 'error');
+  assert.match(evStatusMarkup(state), /data-ev-field="vehicle_charging"/);
+  state.now = '2026-10-25T12:01:00Z';
+  model = evStatusModel(state);
+  assert.equal(model.diagnostics.find(f => f.key === 'vehicle_charging').text, 'Unverified');
+  assert.equal(model.diagnostics.find(f => f.key === 'vehicle_charging').tone, 'neutral');
+});

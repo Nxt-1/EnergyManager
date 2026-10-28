@@ -602,3 +602,26 @@ continuity, and retain a checked earlier incumbent when the timing solve times o
 Useful later PV still justifies waiting. Keep all holds, physical/permission/health
 constraints and snapshot/live-control separation; no new live invalidation or extra
 load-mismatch rescheduling. Release publication is distinct from installation deployment.
+
+
+## 28 October2026 — Shorter EV waiting escalation and vehicle status
+
+The user supplied incident a895697fea0047579922e7b33c8103dd for investigation and
+confirmed that15minutes of waiting is no longer needed: at most a couple of minutes.
+They identified a configurable FordConnect Query2026.10.7 vehicle charging-state
+sensor as an additional direct fault signal. Source review confirms elvehcharging
+passes through xevBatteryChargeDisplayStatus, including FAULT; it is cloud-polled.
+The current log lacks that sensor, so it proves failed resumption after a commanded
+stop but no specific Ford fault.120seconds is the proposed concrete waiting limit.
+This discussion records requirements and evidence; application implementation/release
+has not been authorized by the investigation question. Existing charger guards and
+reported-fault reboot exclusions remain the starting contract.
+
+
+28October2026 — The user subsequently said go, authorizing implementation of the proposed
+120second persistent-wait limit and configurable Ford charging-state source in4.4.10.
+Preserve90second confirmed-non-delivery, ordinary phase/start guards and ESS response.
+ReportedFAULT latches without reboot; actual delivery resets waiting. Optional unknown
+telemetry retains ordinary control and cannot qualify a reboot. HA read/report times
+remain separate from unverified vehicle telemetry age. Keep the suspected initial-stop
+cause out of this release; the supplied export does not prove its controlling branch.

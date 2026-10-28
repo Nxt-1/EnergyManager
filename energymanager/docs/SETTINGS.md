@@ -71,7 +71,7 @@ From4.3.13 the old Minimum phase dwell setting is removed. Its default was600sec
 (10minutes); existing JSON values are accepted but ignored. Automatic restarts instead
 wait30seconds after a phase acknowledgement or confirmed stopped/low-power state.
 Time already spent stopped counts. Current-only adjustments have no stop or hold.
-No new setting or mapping is needed; the15minute persistent-wait alarm is separate.
+No new setting or mapping is needed; the persistent-wait alarm is separate and now120seconds (4.4.10).
 
 After updating, select these go-e APIv2 Connect entities under EV fault recovery:
 
@@ -102,11 +102,23 @@ opts into one automatic reboot after an eligible delivery fault; leave it blank 
 stopped and escalate immediately. No installation entity ID is built in. Select the
 numeric EV/charger status/error entities above and optional charging permission.
 Existing EV measurements and actuator states are collected without extra mappings.
+Optionally select **Vehicle charging state · FordConnect** for the car's elvehcharging
+sensor. Keep the numeric go-e Car state mapping too. No vehicle entity is preselected.
+Save and restart to apply this mapping. A reported FAULT read from HA stops/latches EV
+immediately, not after the waiting timeout, and prohibits charger reboot. Clear the
+vehicle fault before acknowledging the incident. A configured sensor becoming unavailable
+is not evidence that a previously reported fault cleared. Ordinary Ford paused/scheduled states
+are not themselves explicit faults. Missing/unknown/stale optional telemetry leaves
+normal power-based supervision active; it cannot authorize automatic charger reboot.
+Only a current recognized IN_PROGRESS value can supplement the existing reboot guards.
+Cloud telemetry may arrive late; HA read/report times are recorded separately and the
+actual vehicle observation time remains unknown. Selected charging attributes appear
+in incident evidence; the optional sidebar row opens this sensor's native HA history.
 Choose the destination under Phone notifications, then save and restart.
 
 The90second watchdog starts only after current/force readback confirms the request and
 go-e reports a charging state. Normal car waits, minimum pauses and phase transitions
-do not trigger it. Persistent blocking escalates after15minutes; command readbacks
+do not trigger it. Persistent blocking escalates after120seconds (4.4.10); command readbacks
 have30second deadlines and phase sequencing has a bounded deadline. These blocked or
 failed-command cases never permit reboot. All nonzero errors, unknown values and stale
 data also prohibit it. This does not prove a charger defect. Recovery requires

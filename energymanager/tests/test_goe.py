@@ -398,15 +398,21 @@ async def test_normal_two_minute_pause_and_wait_car_do_not_trigger_90_second_fau
     assert not f.actuator.delivery_fault
 
 
-async def test_waiting_has_bounded_escalation_without_reboot():
+@pytest.mark.parametrize("car,status,reason", [(2, 28, "OCPP"), (4, 3, "complete")])
+async def test_waiting_has_bounded_escalation_without_reboot(car, status, reason):
     f = ChargerFixture()
     f.auto_model = False
-    f.set("charger_status", 28)
+    f.set("charger_status", status)
+    f.set("ev_status", car)
     f.refresh()
     await f.start()
-    f.refresh(900)
+    f.refresh(119)
     await f.tick()
-    assert f.actuator.delivery_fault and "OCPP" in f.incidents[0]
+    assert not f.actuator.delivery_fault
+    f.refresh(1)
+    await f.tick()
+    assert f.actuator.delivery_fault and reason in f.incidents[0]
+    assert "2 minutes" in f.incidents[0]
     assert not f.actuator.delivery_reboot_allowed
 
 

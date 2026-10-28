@@ -1,8 +1,15 @@
 # EnergyManager 4
 
-Version **4.4.9**, the main Energy Manager application. One joint seven-day EV/ESS MILP
+Version **4.4.10**, the main Energy Manager application. One joint seven-day EV/ESS MILP
 feeds independent responsive control. The application includes configured input/actuator
 boundaries, persisted goals/approvals/decisions and Overview/Planning/EV pages.
+
+## EV failure detection
+
+Blocked charging now raises attention after two minutes; confirmed non-delivery retains
+its90second watchdog. Optionally select the FordConnect vehicle charging-state sensor in
+Settings → EV fault recovery, then save and restart. A reported FAULT stops EV charging
+without automatic charger reboot. Vehicle/cloud state supplements measured power.
 
 ## Google Maps journeys
 

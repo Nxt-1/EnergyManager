@@ -887,6 +887,34 @@ ignoring a genuine safety stop or bypassing a goal/permission revision.
 
 ### EV charging supervision and incident recovery (4.3.2)
 
+From4.4.10 persistent blocked charging requests escalate after120seconds. The existing
+90second confirmed-non-delivery check and start/phase safeguards remain. Actual measured
+power at/above100W ends the blocked non-delivery wait even if a status lags. A commanded
+stop or lost connection resets that wait; it is not a fault merely to be intentionally off.
+Changing ordinary/waiting status codes or current limits cannot restart the continuous
+acknowledged-request/no-power window. A mixed-state120second failure cannot qualify
+for reboot without the separate continuous90second healthy-delivery evidence.
+
+Settings optionally maps ev_diagnostics.vehicle_charging to FordConnect Query's vehicle
+charging-state sensor. Its2026.10.7 elvehcharging exposes raw Ford charge-display states,
+including FAULT. It supplements go-e numeric diagnostics and measured power. A recently
+successfully read HA value FAULT while connected immediately latches EV stopping without
+charger reboot, including during recovery; it must clear before acknowledgement. The
+current reported fault is conservatively honored even if unchanged. A configured source
+that becomes unavailable cannot count as clearance of an incident carrying its fault.
+The HA read/report
+times do not prove a fresh physical vehicle observation: vehicle_observed_at remains
+unknown. No Ford polling/refresh, remote vehicle command or automatic fault clearing is
+added. Readings unavailable, unsupported or older than the sampler guard do not disable
+ordinary EV/ESS control; the existing go-e/power safeguards remain. If the optional source
+is configured, only a current recognized IN_PROGRESS read may supplement existing reboot
+eligibility; unknown or blocked/reported-fault states cannot authorize a charger reboot.
+
+Incident snapshots, sampled evidence and exports retain raw bounded vehicle state,
+selected charging attributes and separate HA read/report times. The optional EV sidebar
+row and native history link identify the actual mapped entity. No VIN/entity is hardcoded
+or preselected. Configuration changes retain the usual save/restart requirement.
+
 From4.3.15 the EV page shows a separate EnergyManager action strip, alongside the
 charger's reported state and measured power. The read-only `charger.activity` API
 projection exposes the active step, detail, server timestamp and actual timer deadline.
@@ -945,14 +973,14 @@ after the start is acknowledged, not during settling. Initial/recovered control 
 unknown stop duration waits conservatively. Phase sequencing times out after180s,
 independently of non-delivery. The old `phase_dwell_seconds` field is optional,
 hidden and ignored, retained only for old JSON/decision compatibility; the prior
-default was600s, not900s. The separate15minute waiting escalation remains.
+default was600s, not900s. The separate persistent-wait escalation is120seconds from4.4.10.
 Continuing power for30seconds after stop escalates. A disabled hardware stop is also
 checked for30seconds in the incident worker; failure notifies without re-enabling or
 issuing recovery writes. Every command still passes enabled/generation guards.
 
 The delivery watchdog begins only after current/forced-start readback and an ordinary
 charging state are confirmed. Car waiting/complete/idle and documented charger waits
-pause it; persistent blockers escalate after15minutes without reboot. Unknown state
+pause it; persistent blockers escalate after120seconds without reboot. Unknown state
 combinations also block recovery. All nonzero error codes and explicit error/overheat
 states stop and escalate immediately, never reboot. The watchdog detects90seconds of
 confirmed EV power request above100W while measured EV power stays below100W. This is

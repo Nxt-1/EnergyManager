@@ -67,7 +67,7 @@ const waitingStates = {
   32: 'Unbalanced-load protection', 34: 'Grid monitoring', 35: 'OCPP fallback'
 };
 
-function diagnosticReadings(healthy, states, connected) {
+function diagnosticReadings(healthy, states, connected, vehicle, vehicleHealthy) {
   const field = (key, label, text, tone = 'neutral') => ({key, label, text, tone});
   const coded = (key, label, names, good = [], errors = []) => {
     const code = numeric(states[key]);
@@ -89,7 +89,9 @@ function diagnosticReadings(healthy, states, connected) {
     coded('ev_status', 'Car state', {1: 'No car', 2: 'Charging', 3: 'Waiting', 4: 'Charging complete', 5: 'Error'}, [2, 4], [5]),
     coded('charger_status', 'Charger status', chargerNames, [...chargingStates], [1, 26]),
     field('charger_error', 'Charger error', !healthy || error === null ? 'Unverified' : error === 0 ? 'None (0)' : `Error (${error})`,
-      healthy && error !== null ? error > 0 ? 'error' : error === 0 ? 'good' : 'neutral' : 'neutral')
+      healthy && error !== null ? error > 0 ? 'error' : error === 0 ? 'good' : 'neutral' : 'neutral'),
+    ...(vehicle?.configured ? [field('vehicle_charging', 'Vehicle charging',
+      !vehicleHealthy ? 'Unverified' : String(vehicle.state), vehicleHealthy && vehicle.error ? 'error' : 'neutral')] : [])
   ];
 }
 
@@ -130,7 +132,10 @@ export function evStatusModel(state) {
   const incident = state.demo ? null : state.ev_incident;
   const activeIncident = incident && !['recovered', 'acknowledged'].includes(incident.status);
   const recovering = activeIncident && ['pending', 'rebooting', 'verifying'].includes(incident.status);
-  const deviceFault = healthy && (numeric(states.charger_error) > 0 || numeric(states.ev_status) === 5 ||
+  const vehicle = charger?.vehicle_charging;
+  const vehicleHealthy = vehicle?.configured && !vehicle.issue && fresh(vehicle.read_at);
+  const vehicleFault = connected === true && vehicleHealthy && vehicle.error;
+  const deviceFault = vehicleFault || healthy && (numeric(states.charger_error) > 0 || numeric(states.ev_status) === 5 ||
     [1, 26].includes(numeric(states.charger_status)));
   const deliveryFault = !state.demo && state.actuator_health?.delivery_fault;
   let status = 'Connected · idle', tone = 'idle';
@@ -143,7 +148,7 @@ export function evStatusModel(state) {
   else if (numeric(states.charger_status) === 4 || numeric(states.force) === 1) status = 'Stopped';
   else if (charger?.waiting || requestedPower > 0) status = 'Waiting to charge';
   const reason = activeIncident ? evFaultText(incident, policy.timezone || 'UTC') :
-    charger?.issue || (deviceFault ? `go-e fault ${states.charger_error} · car ${states.ev_status} · status ${states.charger_status}` :
+    vehicleFault || charger?.issue || (deviceFault ? `go-e fault ${states.charger_error} · car ${states.ev_status} · status ${states.charger_status}` :
       charger?.waiting || charger?.control || commandKnown && command.reason || '');
   const summary = recovering ? 'EnergyManager is checking recovery' :
     activeIncident || deviceFault || deliveryFault ? 'EV charging needs attention' :
@@ -154,7 +159,7 @@ export function evStatusModel(state) {
     status === 'Readings unavailable' ? 'Charger state cannot currently be verified' :
     status === 'Waiting to charge' ? 'Waiting for charging to start' : 'Car is connected';
   return {soc, power, connected, phase, current, requestedPower, summary,
-    diagnostics: diagnosticReadings(healthy, states, connected),
+    diagnostics: diagnosticReadings(healthy, states, connected, vehicle, vehicleHealthy),
     requestedPhases, status, tone, reason, healthy, states, charger,
     flowing: power > 0.1, demo: !!state.demo, controlled: !!state.control_enabled};
 }

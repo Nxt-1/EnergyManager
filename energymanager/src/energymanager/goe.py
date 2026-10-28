@@ -6,6 +6,8 @@ import math
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from .vehicle_charging import VehicleCharging
+
 if TYPE_CHECKING:
     from .control import Command, GuardedActuator
     from .domain import Observation
@@ -21,6 +23,7 @@ WAITING = {
 }
 CHARGING = {3, 7, 8, 9, 10, 11, 12, 13, 14, 15, 19, 20, 33}
 RESUME_DELAY_SECONDS = 30
+WAITING_TIMEOUT_SECONDS = 120
 
 
 class GoEReadings:
@@ -29,7 +32,8 @@ class GoEReadings:
     def __init__(self, actuators: dict[str, str], diagnostics: dict[str, str], maximum_age: float = 30) -> None:
         self.entities = {key: actuators.get(key, "") for key in ("force", "current", "phase")}
         self.entities.update({key: diagnostics.get(key, "") for key in
-                              ("ev_status", "charger_status", "charger_error", "charge_allowed", "heartbeat")})
+                              ("ev_status", "charger_status", "charger_error", "charge_allowed", "heartbeat", "vehicle_charging")})
+        self.vehicle = VehicleCharging(diagnostics.get("vehicle_charging", ""), maximum_age)
         self.maximum_age = maximum_age
         self.rows: dict[str, dict[str, Any]] = {}
         self.at: datetime | None = None
@@ -61,9 +65,10 @@ class GoEReadings:
         self.rows = {key: row if isinstance(row := rows.get(entity), dict) else {}
                      for key, entity in self.entities.items()}
         self.at = at
+        self.vehicle.update(self.rows.get("vehicle_charging", {}), at)
         try:
             for key, entity in self.entities.items():
-                if key != "charge_allowed" and not entity:
+                if key not in ("charge_allowed", "vehicle_charging") and not entity:
                     raise ValueError(f"Select go-e {key.replace('_', ' ')} for EV control")
             for key in ("ev_status", "charger_status", "charger_error"):
                 self.code(key)
@@ -120,6 +125,8 @@ class GoEReadings:
     def reboot_issue(self, at: datetime) -> str | None:
         if issue := self.issue(at):
             return issue
+        if issue := self.vehicle.reboot_issue(at):
+            return issue
         if issue := self.error():
             return issue + "; automatic reboot is not permitted"
         stopped_after_request = self.code("charger_status") == 4 and self.code("ev_status") == 3
@@ -139,7 +146,8 @@ class GoEReadings:
                 "states": {key: row.get("state") for key, row in self.rows.items()},
                 "current_limits": {key: self.attributes("current").get(key)
                                    for key in ("min", "max")},
-                "waiting": self.waiting() if not issue else None}
+                "waiting": self.waiting() if not issue else None,
+                "vehicle_charging": self.vehicle.view(at)}
 
 
 class GoEControl:
@@ -150,6 +158,7 @@ class GoEControl:
         self.pending: dict[str, tuple[int, datetime]] = {}
         self.phase_started: datetime | None = None
         self.waiting_since: datetime | None = None
+        self.no_power_since: datetime | None = None
         self.unhealthy_since: datetime | None = None
         self.stop_sent: datetime | None = None
         self.stopping_since: datetime | None = None
@@ -159,7 +168,7 @@ class GoEControl:
 
     def reset(self) -> None:
         self.pending.clear()
-        self.phase_started = self.waiting_since = self.unhealthy_since = self.stop_sent = None
+        self.phase_started = self.waiting_since = self.no_power_since = self.unhealthy_since = self.stop_sent = None
         self.stopping_since = self.disabled_stop_at = None
         self.observed_phase = None
         self.actuator.resume_after = None
@@ -178,6 +187,8 @@ class GoEControl:
             return activity("disabled", "Automatic EV control off")
         if a.delivery_fault:
             return activity("fault", "Stopped for attention", a.delivery_reason)
+        if observation.connected and (error := r.vehicle.fault(at)):
+            return activity("fault", "Stopping for vehicle fault", error)
         if issue := r.issue(at):
             return activity("blocked", "Waiting for charger inputs", issue)
         if error := r.error():
@@ -220,12 +231,19 @@ class GoEControl:
         if "current" in self.pending:
             return activity("settings", f"Confirming {command.current_a} A limit", "Current changes do not require a restart hold.")
         if self.waiting_since is not None:
-            return activity("waiting", "Waiting for car or charger", self.status)
+            return activity("waiting", "Waiting for car or charger", self.status,
+                            until=self.waiting_since + timedelta(seconds=WAITING_TIMEOUT_SECONDS),
+                            seconds=WAITING_TIMEOUT_SECONDS, timer="Charging wait")
         if observation.ev_power_kw >= .1:
             return activity("charging", "Charging", "Measured power is reaching the car.")
         if a.charging_since is not None:
+            delivery_deadline = a.charging_since + timedelta(seconds=90)
+            waiting_deadline = self.no_power_since + timedelta(seconds=WAITING_TIMEOUT_SECONDS) if self.no_power_since else delivery_deadline
+            blocked_first = waiting_deadline < delivery_deadline
             return activity("power", "Waiting for charging power", "Start confirmed; checking measured delivery.",
-                            until=a.charging_since + timedelta(seconds=90), seconds=90, timer="Delivery check")
+                            until=min(delivery_deadline, waiting_deadline),
+                            seconds=WAITING_TIMEOUT_SECONDS if blocked_first else 90,
+                            timer="Charging wait" if blocked_first else "Delivery check")
         return activity("waiting", "Waiting to start", self.status)
 
     def observe_stopped(self, command: Command, observation: Observation, confirmed: bool) -> None:
@@ -235,18 +253,19 @@ class GoEControl:
             a.resume_after = None
         elif a.resume_after is None:
             a.resume_after = command.at + timedelta(seconds=RESUME_DELAY_SECONDS)
-        self.waiting_since = None
+        self.waiting_since = self.no_power_since = None
 
     def fault(self, command: Command, observation: Observation, reason: str, *, reboot: bool = False) -> None:
         a = self.actuator
         a.delivery_fault, a.delivery_fault_at = True, command.at
         a.delivery_reason, a.delivery_reboot_allowed = reason, reboot
         if a.on_delivery_fault:
-            since = (a.charging_since or self.phase_started or self.unhealthy_since
+            since = (self.no_power_since or a.charging_since or self.phase_started or self.unhealthy_since
                      or self.waiting_since or self.stopping_since or command.at)
             a.on_delivery_fault(command, observation, since)
 
     async def stop(self, command: Command) -> None:
+        self.no_power_since = None
         # A stop must still be attempted when the readbacks themselves are unavailable.
         if self.stop_sent is None or (command.at - self.stop_sent).total_seconds() >= 10:
             await self.actuator.write("select", "select_option", "force", "option", "1")
@@ -303,6 +322,9 @@ class GoEControl:
             self.status = "EV fault; stopped"
             await self.stop(command)
             return
+        if observation.connected and (error := r.vehicle.fault(command.at)):
+            await self.fail(command, observation, error)
+            return
         issue = r.issue(command.at)
         if issue:
             a.charging_since = None
@@ -324,7 +346,7 @@ class GoEControl:
         self.observed_phase = phase
         if not command.current_a or not observation.connected:
             a.charging_since = None
-            self.waiting_since = None
+            self.waiting_since = self.no_power_since = None
             self.phase_started = None
             self.pending.pop("phase", None)
             self.pending.pop("current", None)
@@ -347,6 +369,7 @@ class GoEControl:
             return
         if command.phases != {1: 1, 2: 3}[r.code("phase")] or self.phase_started is not None:
             self.status = "Preparing charger phase change"
+            self.no_power_since = None
             a.charging_since = None
             self.phase_started = self.phase_started or command.at
             a.target_phase = a.target_phase or command.phases
@@ -377,6 +400,11 @@ class GoEControl:
             self.phase_started = None
             if command.phases != phase_target:
                 return
+        if (self.no_power_since is not None and observation.ev_power_kw < .1
+                and (command.at - self.no_power_since).total_seconds() >= WAITING_TIMEOUT_SECONDS):
+            reason = r.waiting() or "Requested charging delivered less than 100 W across changing states"
+            await self.fail(command, observation, reason + "; waiting exceeded 2 minutes")
+            return
         # Current-only changes stay live. Every actual restart waits for a settled stop.
         pending_force = self.pending.get("force")
         starting = (pending_force is not None and pending_force[0] == 2
@@ -405,19 +433,22 @@ class GoEControl:
         a.resume_after = None
         self.stopping_since = None
         self.stop_sent = None
+        self.no_power_since = (self.no_power_since or command.at) if observation.ev_power_kw < .1 else None
         waiting = r.waiting()
         if waiting or r.entities["charge_allowed"] and str(r.rows["charge_allowed"].get("state")).lower() not in ("on", "true"):
             a.charging_since = None
-            self.waiting_since = self.waiting_since or command.at
             self.status = waiting or "Charger does not allow charging"
-            if (command.at - self.waiting_since).total_seconds() >= 900:
-                await self.fail(command, observation, self.status + "; waiting exceeded 15 minutes")
+            if observation.ev_power_kw >= .1:
+                self.waiting_since = None  # Actual delivery ends a non-delivery wait, despite a lagging status.
+                return
+            self.waiting_since = self.no_power_since
             return
         self.waiting_since = None
         self.status = "Charging command confirmed"
         if observation.ev_power_kw < .1:
             a.charging_since = a.charging_since or command.at
             if (command.at - a.charging_since).total_seconds() >= 90:
-                await self.fail(command, observation, "Confirmed charging request delivered less than 100 W for 90 seconds", reboot=True)
+                await self.fail(command, observation, "Confirmed charging request delivered less than 100 W for 90 seconds",
+                                reboot=r.vehicle.reboot_issue(command.at) is None)
         else:
             a.charging_since = None

@@ -89,6 +89,8 @@ def setting_fields() -> tuple[SettingField, ...]:
                                    domains=("sensor", "binary_sensor", "select", "switch", "input_boolean"),
                                    units=("s",) if key == "heartbeat" else (),
                                    required=False))
+    result.append(SettingField("ev_diagnostics.vehicle_charging", "Vehicle charging state · FordConnect (optional)",
+                               "EV fault recovery", "entity", domains=("sensor",), required=False))
     for key, label, group, minimum, maximum in (
         ("ev_capacity_kwh", "EV capacity (kWh)", "EV and charger", 0.01, None),
         ("voltage", "Phase voltage (V)", "EV and charger", 1, None),

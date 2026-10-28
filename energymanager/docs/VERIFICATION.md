@@ -1,5 +1,28 @@
 # EnergyManager 4 verification
 
+## 4.4.10 — Bounded EV waiting and optional Ford state (28 October2026)
+
+519 Python tests pass102.40s; final146 affected control/incident/configuration/native
+cases pass6.19s.64 frontend cases, Ruff, mypy41modules and the4.4.10 package build pass.
+Cases cover exact119/120second blocked escalation (including the supplied incident's car-
+complete state), unchanged90second confirmed non-delivery, mixed status/current changes
+without timer resets, actual-power recovery and intentional stops. Configured FordFAULT
+immediately stops/latches, persists selected attributes and prohibits reboot; pending/
+rebooting/verifying recovery cannot falsely succeed. Acknowledgement requires fault clear.
+Unavailable/unknown/future optional states preserve ordinary power supervision but cannot
+qualify reboot. Source telemetry age remains unknown despite a current HA read. Blank
+configuration compatibility, saved sensor wiring, native history and diagnostic red/
+unverified states pass. One initial full-run failure exposed an unsynchronized second
+example template; the templates were synchronized before the successful full run.
+
+Configured routed fake E2E passes2023intervals/2journeys/6fake route queries/4local HA
+calls; acceptance65.66s/max control tick3.06ms. It reads configured IN_PROGRESS/attributes
+from fake HA, preserves unknown vehicle measurement age, and verifies independent control,
+worker cancellation/latest-only adoption, immutable-snapshot admission and checksums.
+The incident's5776-event export is private ignored evidence; no new diagnosis of the
+initial stop is claimed. No live HA/provider/database/credentials/hardware/notifications
+or installation deployment. Remote exact-head checks are recorded after publication.
+
 ## 4.4.9 — Earlier required grid charging (28 October2026)
 
 502 Python tests pass99.06s; the final27 focused timing/continuity/release-contract tests

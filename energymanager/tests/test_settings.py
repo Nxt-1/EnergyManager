@@ -279,3 +279,18 @@ async def test_discovery_outage_does_not_block_editing_or_expose_error_body(tmp_
             }, headers={"X-EnergyManager": "1"})
             assert response.status == 200
             assert (await response.json())["values"]["policy.daily_soc_percent"] == 62
+
+
+def test_optional_vehicle_charging_sensor_round_trips_and_reaches_configured_sampler(tmp_path):
+    editor = configuration_file(tmp_path)
+    loaded = editor.read()
+    assert loaded["values"]["ev_diagnostics.vehicle_charging"] == ""
+    saved = editor.save(loaded["revision"], {"ev_diagnostics.vehicle_charging": "sensor.synthetic_ford_charging"})
+    assert saved["restart_required"]
+    store = Store(tmp_path / "vehicle.sqlite")
+    try:
+        app = configured_application(editor.path, store)
+        assert app.actuator.charger.vehicle.entity == "sensor.synthetic_ford_charging"
+        assert app.actuator.charger.entities["vehicle_charging"] == "sensor.synthetic_ford_charging"
+    finally:
+        store.close()

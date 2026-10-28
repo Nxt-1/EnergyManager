@@ -35,6 +35,7 @@ def test_manifest_exposes_only_configured_ev_history_sources_without_control_or_
     diagnostics = {key: f"sensor.synthetic_{key}" for key in
                    ("ev_status", "charger_status", "charger_error", "heartbeat")}
     diagnostics["charge_allowed"] = ""
+    diagnostics["vehicle_charging"] = "sensor.synthetic_ford_status"
     application.actuator = GuardedActuator(SimpleNamespace(), actuators, snapshot.capabilities,
                                            charger=GoEReadings(actuators, diagnostics))
     assert dashboard_manifest(application)["entities"] == {}

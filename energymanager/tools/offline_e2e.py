@@ -66,6 +66,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         "force": (1, None), "current": (6, "A"), "ess_setpoint": (0, "W"),
         "ev_status": (2, None), "charger_status": (4, None), "charger_error": (0, None),
         "heartbeat": (0, "s"), "charge_allowed": ("on", None),
+        "vehicle_charging": ("IN_PROGRESS", None),
     }
     if calendar_fixture:
         values["ev_soc"] = (90, "%")  # Enough measured energy for both provisional trips and daily readiness.
@@ -88,6 +89,8 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         attributes = {"unit_of_measurement": unit, "friendly_name": key.replace("_", " ")}
         if key == "current":
             attributes.update(min=6, max=16)
+        if key == "vehicle_charging":
+            attributes.update(chargingStatus=value, stateOfCharge=values["ev_soc"][0])
         return {"entity_id": entity, "state": str(value),
                 "attributes": attributes,
                 "last_updated": (issued - timedelta(hours=2)).isoformat(), "last_reported": reported_at.isoformat()}
@@ -181,7 +184,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         config["token_environment"] = "UNUSED_LEGACY_TOKEN"
         config["allow_remote"] = False
         config["ev_diagnostics"] = {key: f"sensor.{key}" for key in
-                                    ("ev_status", "charger_status", "charger_error", "heartbeat", "charge_allowed")}
+                                    ("ev_status", "charger_status", "charger_error", "heartbeat", "charge_allowed", "vehicle_charging")}
         config["policy"]["planning_budget_seconds"] = 15
         if calendar_fixture:
             config["policy"]["planning_budget_seconds"] = 60
@@ -274,6 +277,9 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                 assert current["forecast_status"]["weather_error"] is None
                 assert application.forecast_data["intervals"][0]["pv_ac_kw"] > 0
                 assert application.forecast_data["intervals"][0]["pv_dc_kw"] > 0
+                vehicle = current["charger"]["vehicle_charging"]
+                assert vehicle["configured"] and vehicle["state"] == "IN_PROGRESS"
+                assert vehicle["vehicle_observed_at"] is None and vehicle["attributes"]["chargingStatus"] == "IN_PROGRESS"
                 assert not calls  # Startup and planning do not enable hardware.
                 baseline_control_max = max(application.response_seconds, default=0)
                 baseline_ticks = len(application.response_seconds)
@@ -348,6 +354,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                         "separate P1 powers, kW quarter demand and go-e selector readback",
                         "all HA states carry three-hour-old report metadata; validated input reads still drive forecasting/control",
                         "go-e numeric states, advancing seconds heartbeat and current/force/phase readbacks on fake HA",
+                        "configured optional vehicle status and bounded attributes from fake HA; vehicle measurement age remains unknown",
                         "hardware-off stop confirmed by new device and zero-power observations before injecting preview faults",
                         "spawned real full-horizon HiGHS plan",
                         "manual replan cancels and reaps real HiGHS; only the latest replacement is adopted",

@@ -17,7 +17,7 @@ def dashboard_manifest(application: Application) -> dict[str, Any]:
                          if (entity := actuator.entities.get(key))})
         if actuator.charger:
             entities.update({key: entity for key in ("ev_status", "charger_status", "charger_error",
-                                                    "charge_allowed", "heartbeat")
+                                                    "charge_allowed", "heartbeat", "vehicle_charging")
                              if (entity := actuator.charger.entities.get(key))})
     return {
         "protocol": 1,

@@ -5,7 +5,8 @@
     "charger_status": "",
     "charger_error": "",
     "charge_allowed": "",
-    "heartbeat": ""
+    "heartbeat": "",
+    "vehicle_charging": ""
   },
   "_description": "SYNTHETIC EXAMPLE ONLY. Review capacities, tariffs and entity mappings.",
   "capabilities": {
