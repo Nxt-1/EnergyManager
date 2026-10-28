@@ -574,6 +574,9 @@ and already sufficient pre-deadline solar cannot leave a nominal required-grid p
 From4.3.20 the model’s positive-deficit witness exceeds the independent energy tolerance
 by a numerical margin; a sub-tolerance solar deficit cannot unlock a whole grid rounding
 increment. The independent audit itself is unchanged.
+Required charging prefers earlier useful delivery when waiting has no actual benefit.
+Useful later PV and genuine cost/peak/physical/source benefits still justify waiting.
+This is the original early-winter requirement, retained through joint continuity selection.
 A final certificate minimizes grid within the chosen modes, non-grid/storage allocations
 and per-quarter import envelopes. Its Optimal status has this bounded scope, not a
 global optimality claim. From4.3.12 it also bounds the EV start/phase/power-variation
@@ -793,6 +796,20 @@ selector change. The initial selector and power are included, so switching away 
 current setting is priced from the first interval. These are internal search priorities,
 not monetary wear charges. Selector auxiliary rows are added to operational searches and
 source certificates; the pure economic reference omits this unpriced bookkeeping.
+From4.4.9 a bounded earlier-required-charging preference resolves timing indifference
+before the final grid certificate fixes quarter envelopes. It minimizes the energy-weighted
+time of required direct-grid EV delivery on the same immutable snapshot. The selected
+non-grid EV/PV/ESS/house dispatch, total direct-grid EV energy, terminal inventories,
+monthly peaks and achieved service are preserved. Required readiness may improve;
+economic/cash and continuity objectives cannot worsen (numerical tolerance only, with
+no additional0.02EUR allowance). Original holds, availability, integer current/phase,
+health ceilings, source and permission rows remain hard constraints. Whole grid-only
+session profiles are first tried earlier as fully row/bound/integer-checked incumbents;
+the bounded model can refine them without discarding a useful checked start on timeout.
+A candidate replaces the selected result only after independent physical/source/permission
+and applicable rolling checks. Timing-stage status is separate from economic optimality.
+This is planning on frozen inputs, not a publication repair or live schedule check.
+
 Optional searches use the checked reference-ceiling seed selection, rather than only
 trying an automatic-ceiling seed that may violate their tighter peak envelope. Joint
 continuity candidates also retain rolling opportunity checks before replacing the economic

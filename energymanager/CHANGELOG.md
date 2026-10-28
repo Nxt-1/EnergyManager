@@ -1,3 +1,12 @@
+## 4.4.9 — Earlier required charging when waiting has no benefit
+
+- Restore the existing preference for early required charging after joint economic and
+  continuity selection, before final grid certification.
+- Preserve useful PV waiting, grid energy, ESS/source dispatch, cost, monthly peaks,
+  readiness, health ceilings, charger holds and permissions. A checked earlier candidate
+  remains available when the bounded timing solve reaches its limit.
+- Keep snapshot planning, five-minute recalculation and live ESS/EV modulation unchanged.
+
 ## 4.4.8 — Compact EV session details
 
 - Keep session title, times, battery kWh and a short named Supports list.

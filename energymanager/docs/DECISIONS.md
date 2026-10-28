@@ -587,3 +587,18 @@ labels when needed and combine same-goal rows without adding overlapping quantit
 Keep brief truthful legacy/unknown/no-named-goal fallbacks. The existing attribution
 math/data and planner/control/permission semantics remain unchanged. The separately
 queued charging-delay review is read-only and follows this cleanup's completed release.
+
+
+## 28 October2026 — Restore early required charging (4.4.9)
+
+The user reaffirmed the existing requirement to start useful required charging early
+when waiting has no PV or genuine economic benefit, then explicitly requested the fix.
+This is an implementation correction, not a new policy. A supplied frozen decision
+allowed an identical6A session three hours earlier without a cost, peak, source or
+continuity penalty. Joint continuity had omitted the former timing coefficients; its
+score alone did not distinguish the schedules. Add a separate bounded timing preference
+before grid certification, preserve the chosen sources/energy/cost/peak/service and
+continuity, and retain a checked earlier incumbent when the timing solve times out.
+Useful later PV still justifies waiting. Keep all holds, physical/permission/health
+constraints and snapshot/live-control separation; no new live invalidation or extra
+load-mismatch rescheduling. Release publication is distinct from installation deployment.

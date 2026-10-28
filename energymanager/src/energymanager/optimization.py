@@ -61,6 +61,26 @@ class LinearModel:
     def equality(self, terms: Sequence[tuple[int, float]], value: float = 0) -> None:
         self.row(terms, value, value)
 
+    def accepts(self, values: list[float], tolerance: float = 1e-6) -> bool:
+        """Check a complete candidate against every bound, integer and sparse row."""
+        candidate = np.asarray(values)
+        if len(values) != len(self.lower) or not np.all(np.isfinite(candidate)):
+            return False
+        if np.any(candidate < np.asarray(self.lower) - tolerance) or np.any(
+            candidate > np.asarray(self.upper) + tolerance
+        ):
+            return False
+        integers = candidate[self.integer]
+        if np.any(np.abs(integers - np.rint(integers)) > tolerance):
+            return False
+        starts = np.asarray(self.starts)
+        occupied = np.diff(starts) > 0
+        totals = np.zeros(len(self.row_lower))
+        products = np.asarray(self.values) * candidate[self.indices]
+        totals[occupied] = np.add.reduceat(products, starts[:-1][occupied])
+        return bool(np.all(totals >= np.asarray(self.row_lower) - tolerance)
+                    and np.all(totals <= np.asarray(self.row_upper) + tolerance))
+
     def solver(self) -> highspy.Highs:
         model = highspy.Highs()
         for name, value in (

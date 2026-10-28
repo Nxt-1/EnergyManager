@@ -11,6 +11,7 @@ from collections.abc import Callable
 from copy import deepcopy
 
 from .domain import PeakPermission, Snapshot, json_data, instant
+from .charging_timing import ChargingTiming
 from .incumbent import seed
 from .optimization import JointModel
 from .validation import TOL, accounting, rolling_comparison_errors, validate
@@ -196,6 +197,33 @@ class Planner:
         # Carry the same reference forward: comparing stages must not stack allowances.
         chosen["economic_baseline"], chosen["cash_baseline"] = reference, cash_reference
         return preferred
+
+    def prefer_earlier(self, model: JointModel, result: dict[str, Any], allowance: float) -> dict[str, Any]:
+        """Resolve equal-benefit required timings on this snapshot before grid certification."""
+        if allowance < .3 or not any(value > TOL for value in result["flows"]["grid_ev"]):
+            return result
+        started = monotonic()
+        timing = ChargingTiming(model, result["flows"])
+        warm = timing.earlier_seed(min(2.0, max(0, allowance - (monotonic() - started)) * .4))
+        trial = self.run_model("earlier_required_charging", timing.model,
+                               allowance - (monotonic() - started), warm, objective=timing.objective)
+        # The checked seed is a candidate even when the timed solver has no incumbent.
+        candidates = [warm]
+        if trial["feasible"]:
+            candidates.append(trial["values"])
+        original = timing.model.warm_from(result["flows"])
+        best_score = timing.model.value(timing.objective, original)
+        for values in sorted(candidates, key=lambda v: timing.model.value(timing.objective, v)):
+            score = timing.model.value(timing.objective, values)
+            if score >= best_score - 1e-6 or not timing.model.linear.accepts(values):
+                continue
+            flows = {name: [values[index] for index in indexes]
+                     for name, indexes in timing.model.linear.variables.items()}
+            original_values = model.warm_from(flows)
+            if not model.linear.accepts(original_values) or self.continuity_errors(model, flows):
+                continue
+            return {**result, "flows": flows, "values": original_values}
+        return result
 
     def plan(self, snapshot: Snapshot) -> dict[str, Any]:
         self.started = monotonic()
@@ -696,6 +724,7 @@ class Planner:
                                     "text": "A smaller peak during this specific precharge avoids a larger forecast household peak within 24 hours. The automatic portion continues while approval is pending.",
                                 }
                             )
+        selected = self.prefer_earlier(selected_model, selected, min(8.0, self.remaining() * .35))
         economic_status = selected["status"]
         polish_reference_summary = accounting(s, selected["flows"])
         before_score = selected.get("economic_baseline", selected_model.value(

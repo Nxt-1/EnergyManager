@@ -1,5 +1,31 @@
 # EnergyManager 4 verification
 
+## 4.4.9 — Earlier required grid charging (28 October2026)
+
+502 Python tests pass99.06s; the final27 focused timing/continuity/release-contract tests
+pass37.08s.63 frontend cases, Ruff, mypy40modules and CLI4.4.9 pass. New deterministic
+cases cover a delayed overnight session moving to the first valid opportunity, a held
+start, existing quarter-peak constraints and ESS dispatch, tighter health ceilings,
+useful later PV allocation, fixed required-grid quantity and checked-incumbent retention
+when the timing solver returns no feasible solution. Candidate checks include every
+original and timing-model row/bound/integer, plus independent physical/source/permission
+and applicable rolling checks. Empty sparse rows and invalid integer/non-finite values
+are also covered. All inputs/services are synthetic/local or the supplied frozen export.
+
+The supplied export's SHA-256 and snapshot/result digests verify. A complete seven-day
+replay is valid in106.77s with no independent or rolling errors. Its first6A/1.38kW
+session moves from29Oct00:15–02:35 to28Oct21:15–23:35 Brussels, after the21:13:59 hold,
+with the same2.898kWh,9.557428EUR predicted bill and5.49kW peak. The timing solve reaches
+its bound; a checked earlier incumbent is retained. Final minimum-grid certification
+succeeds in its bounded scope; global economic optimality is not claimed. Private
+reproduction and reports remain ignored under artifacts/charging-delay-review/.
+
+Configured routed fake E2E passes2023intervals/2journeys/6fake route queries/4local HA
+calls; acceptance65.89s and max control tick4.19ms. Worker cancellation/latest-only
+adoption, checksum persistence and guarded fake operations pass. No UI/control-policy
+change or live installation, provider, credential, database, hardware or notification
+access. Remote CI/image results are recorded separately after release publication.
+
 ## 4.4.8 — Compact EV details (28 October2026)
 
 25 focused native/dashboard/schedule API cases pass0.63s;63 frontend cases and Ruff pass.

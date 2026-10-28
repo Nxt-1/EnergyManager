@@ -1,6 +1,51 @@
 # EnergyManager work state
 
-## Current work — scheduled compact session details (28 October2026,21:41 Brussels)
+## Current checkpoint — earlier required charging (4.4.9,28 October2026)
+
+AUTHORIZED: user reaffirmed the original early-charging requirement and explicitly said
+Fix that. Base4.4.8 at7806b51961a703d724729950a0205db29d613248. Required code-writer,
+architecture/deferred/decisions and actual Git state reviewed. Main has unrelated pending
+DEFERRED_WORK.md changes; preserve them byte-for-byte. Isolated V4.4 branch only.
+
+IMPLEMENTED: separate bounded direct-grid delivery-time preference before final grid
+certification, with checked whole-profile earlier incumbents that survive solver timeout.
+Keep original model rows/bounds/integrality, chosen non-grid/ESS dispatch, grid quantity,
+monthly peaks, service/terminal stocks, readiness and no-worse cost/cash/continuity.
+Physical/permission/rolling checks still gate selection on the same frozen snapshot.
+No live invalidation, extra mismatch solves, controller or UI changes. Docs/version4.4.9
+prepared. No live installation/API/credential/database/hardware/notification access.
+
+VERIFIED:502 Python tests99.06s; final27 timing/continuity/release-contract tests37.08s;
+63 frontend cases, Ruff/mypy40modules and CLI4.4.9 pass. Full frozen seven-day replay
+valid106.77s, independent/rolling errors empty; first session moves00:15–02:35 to
+21:15–23:35 Brussels after21:13:59 hold, same2.898kWh/9.557428EUR bill/5.49kW peak.
+Final bounded grid certificate succeeds; global economic optimality is not claimed.
+Routed fake E2E2023intervals/2journeys/6fake routes/4local calls passes; acceptance65.89s,
+max control tick4.19ms. Private evidence:ignored artifacts/charging-delay-review/;
+local checks:artifacts/v449-timing/. NEXT: package/diff review, commit/integrate preserving
+main backlog, publish and verify exact-head CI/image. No installation deployment.
+
+## Earlier checkpoint — charging-delay review (28 October2026)
+
+The sequential first task is complete. Current base:4.4.8 at
+7806b51961a703d724729950a0205db29d613248. Prior cleanup verification/publication evidence
+is in ignored artifacts/v448-compact-session/release-state.txt.
+
+Read-only review of the supplied frozen decision is complete. Export digest/file hash
+verify; original audits pass. Moving the identical6A/1.38kW/2.898kWh session from29Oct
+00:15–02:35 to28Oct21:15–23:35 Brussels passes independent/rolling and all joint-model
+row/bound/integrality checks. Hold ends21:13:59. Same bill9.557428EUR,peak5.49kW,ESS
+flows/terminal stocks and continuity score51.978. Current objectives have no preference
+between these timings once cost,continuity and15-minute readiness margin are satisfied.
+Final grid certification retains chosen quarter envelopes; its Optimal is narrowly scoped.
+
+At this historical investigation checkpoint the fix was proposed only. The subsequent
+user correction and explicit Fix that authorize the implementation recorded above.
+Reproduction and detailed evidence:ignored artifacts/charging-delay-review/review.py,
+evidence.json,counterfactual-flows.json and review-state.txt. No live installation access.
+This investigation checkpoint is intentionally uncommitted; no success-only release commit.
+
+## Earlier release checkpoint — scheduled compact session details (28 October2026,21:41 Brussels)
 
 AUTHORIZED: user scheduled implementation of a much shorter EV detail dialog, keeping
 only title/time/battery kWh and short named contributions from the highlighted screenshot.

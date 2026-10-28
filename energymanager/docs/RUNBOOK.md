@@ -1,5 +1,14 @@
 # Run, configure, review and roll back
 
+## Required charging timing (4.4.9)
+
+Required grid charging now prefers earlier delivery after cost/continuity selection when
+waiting offers no benefit. Useful PV waiting and existing cost, peak, health, availability,
+hold, source and permission constraints remain. A solver timeout retains a checked earlier
+incumbent; its timing status is not a global economic optimality claim. No settings or
+sensor migration is required. Update/reload the add-on to receive the planner change.
+Snapshot planning, periodic recalculation and live EV/ESS control remain unchanged.
+
 ## Session contributions (4.4.8)
 
 Click a scheduled EV session for its time, battery kWh and a compact Supports list.
