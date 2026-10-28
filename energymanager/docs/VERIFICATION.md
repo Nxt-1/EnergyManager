@@ -1,5 +1,22 @@
 # EnergyManager 4 verification
 
+## 4.4.5 — Goal presentation (28 October2026)
+
+25 focused native/dashboard/schedule API tests and61 frontend cases pass. All shipped
+JavaScript syntax, Ruff and the4.4.5 CLI pass. This presentation-only change leaves
+planner, controller, goal lifecycle and persistence source unchanged.
+
+Configured synthetic routed E2E passes with2023 intervals, two journeys, six fake Maps
+queries and four local HA calls; acceptance60.77s, max control tick4.17ms. Real spawned
+HiGHS/manual cancellation/reaping/latest-only adoption remain exercised. Standalone and
+native HA-contract previews show chronological morning/trip interleaving, exactly one
+labelled current-charge bar and no Overview goal card, including after navigation back.
+The89km fixture shows16.02kWh driving separately from its reserve-inclusive35.7% target;
+the EV selected-day agenda uses the same energy estimate. Warning/error consoles are
+empty. Screenshots live in the task visualization folder; v445-planning-goals.png shows
+the chronological cards and single bar. Both temporary tabs/servers are closed.
+All data/endpoints are synthetic/local; no live HA/Google/database/hardware/phone used.
+
 ## 4.4.4 — Frozen schedules and adaptive execution (28 October2026)
 
 482 Python tests passed86.69s;61 frontend cases, all shipped JavaScript syntax, Ruff

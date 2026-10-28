@@ -110,3 +110,7 @@ export function goalStatus(goal, now) {
   return goal.shortfall_kwh > .001 ? 'Shortfall' : goal.status === 'scheduled' ? 'Scheduled' :
     goal.status === 'unknown_return_state' ? 'Unknown state' : 'Waiting';
 }
+
+export function journeyEnergyKwh(goal, policy) {
+  return goal.distance_km * policy.consumption_kwh_per_100km / 100;
+}

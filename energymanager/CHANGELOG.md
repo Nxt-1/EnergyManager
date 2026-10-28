@@ -1,3 +1,12 @@
+## 4.4.5 — Focused, chronological goal details
+
+- Remove goal cards from Overview; show all Planning goals in deadline order, with
+  morning requirements interleaved with journeys.
+- Show trip driving energy in kWh alongside distance and departure SoC, consistently
+  in Planning, EV agenda and goal details. Keep arrival reserve separate from usage.
+- Keep a labelled current-charge/target bar only for the earliest upcoming goal, hiding
+  it for unknown or unusable EV readings. Preserve predicted readiness for later goals.
+
 ## 4.4.4 — Snapshot schedules with adaptive live control
 
 - Validate each schedule and its economic reference against the optimizer's original

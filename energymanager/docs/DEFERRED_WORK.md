@@ -243,6 +243,20 @@ Unavailable omits the line; real zero is valid. No scheduler/control-policy chan
 Presentation updated in4.3.10: the Grid box also shows a peak-chart icon/value opening
 the actual mapped HA sensor history directly.
 
+## ARCH-012 — Clean up goals and progress
+
+Recorded: 25 October2026. Status: **specified cleanup implemented in4.4.5** after the
+user's28October request. Broader unspecified redesign remains deferred.
+
+Overview omits goal cards. Planning lists all goals, including morning minima, together
+chronologically. Trips show driving kWh alongside total distance and departure target.
+The user explicitly chose a current-charge bar only for the earliest upcoming goal;
+later goals retain predicted SoC/readiness without implying today's energy is reserved
+for each trip. Unknown/unusable current EV energy hides the bar. The EV agenda/details
+share the same driving-energy estimate. Scheduling and goal semantics are unchanged.
+
+Any broader layout or interaction change still needs its own scope/authorization.
+
 ## ARCH-014 — Clickable EV readings and states with history
 
 Recorded: 25 October 2026. Status: **mapped sensor history implemented in4.3.19**,

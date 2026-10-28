@@ -1,5 +1,16 @@
 # Run, configure, review and roll back
 
+## Goal presentation (4.4.5)
+
+Overview leaves space for upcoming features by omitting goal cards. Use Planning for
+the combined chronological list of journeys and morning requirements. Trip driving kWh
+uses configured consumption and excludes the arrival reserve; the departure SoC target
+includes that reserve. Only the earliest future goal shows a current-charge/target
+bar, with both kWh quantities labelled. Unknown/stale/settling EV readings hide it.
+Later goals still show forecast departure SoC/readiness. EV agenda/details show the same
+trip estimate. Update/reload the add-on to receive the display change; no settings,
+sensor mapping, goal or schedule migration is required.
+
 ## Snapshot planning and live execution (4.4.4)
 
 Update the add-on and reload HA to use the release; no new setting or sensor mapping

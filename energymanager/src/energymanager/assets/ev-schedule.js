@@ -2,7 +2,7 @@ import {
   localDateTime,
   localInstants
 } from './date-time.js';
-import {powerText} from './display.js';
+import {journeyEnergyKwh, powerText} from './display.js';
 import {evControlActivityModel, evStatusMarkup} from './ev-status.js';
 import {hasTextSelection} from './text-selection.js';
 
@@ -278,7 +278,7 @@ export class EVSchedulePage {
       <small>${event.start < selectedDay.start ? 'Continues · ' : ''}${clock(event.left)}${event.end > event.start ? ` — ${event.end >= selectedDay.end ? '24:00' : clock(event.right)}` : ''}${event.end > selectedDay.end ? ' · continues' : ''}</small>
       <button class="ev-agenda-title" ${action(event)}>${esc(event.title)}</button><p>${esc(description(event))}</p>
       ${event.goal?.calendar ? `<p class="calendar-provisional">Calendar · ${esc(event.goal.calendar.source)}${event.goal.calendar.placeholder ? ' · provisional 50 km / 4 h' : ' · routed journey'}${event.goal.calendar.location ? `<br>${esc(event.goal.calendar.location)}` : ''}</p>` : ''}
-      ${event.goal && ['trip', 'manual', 'daily'].includes(event.type) ? `<p>${event.goal.planned_kwh === undefined || event.goal.planned_kwh === null ? '' : `${number(event.goal.planned_kwh / state.capabilities.ev_capacity_kwh * 100)}% planned at deadline · `}${event.type === 'trip' ? `${number(event.goal.distance_km)} km total · ${state.policy.arrival_reserve_km} km arrival reserve` : 'No journey or battery withdrawal assumed'}</p>${event.goal.external_charging_required ? '<p class="error">Charging away must be arranged. Return SoC is unknown.</p>' : ''}${event.type === 'daily' ? '<button data-ev-settings="true">Daily readiness settings</button>' : ''}` : ''}${editActions(event)}
+      ${event.goal && ['trip', 'manual', 'daily'].includes(event.type) ? `<p>${event.goal.planned_kwh === undefined || event.goal.planned_kwh === null ? '' : `${number(event.goal.planned_kwh / state.capabilities.ev_capacity_kwh * 100)}% planned at deadline · `}${event.type === 'trip' ? `${number(event.goal.distance_km)} km total · ${number(journeyEnergyKwh(event.goal, state.policy))} kWh driving · ${state.policy.arrival_reserve_km} km arrival reserve` : 'No journey or battery withdrawal assumed'}</p>${event.goal.external_charging_required ? '<p class="error">Charging away must be arranged. Return SoC is unknown.</p>' : ''}${event.type === 'daily' ? '<button data-ev-settings="true">Daily readiness settings</button>' : ''}` : ''}${editActions(event)}
     </section>`).join('');
     const routes = state.routes?.items || [];
     const routePanel = routes.length ? `<article class="card route-requests"><h2>Journey routes</h2>

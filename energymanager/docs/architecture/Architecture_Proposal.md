@@ -66,6 +66,15 @@ prematurely. ARCH-009 is implemented as a dedicated visual EV schedule page.
   concise live summaries, actual/planned power and SoC, time navigation, grouped sessions,
   seven-day planning, goals/progress and inspectable reasons/approvals. ESS is blue;
   EV is green. Keep implementation details outside the main household flow.
+- From4.4.5, Overview omits the Goals & progress card. Planning shows all current goals
+  together by deadline, including morning requirements interleaved with journeys.
+  Trip summaries show driving energy (`distance_km * consumption_kwh_per_100km / 100`)
+  in kWh separately from the departure target, which includes the arrival reserve.
+  EV agenda/details use the same estimate. Only the earliest upcoming goal has a current
+  charge/target bar, explicitly labelled with both kWh quantities and capped at100%.
+  Hide that bar when EV energy/input health is unknown, stale or settling. Later/past
+  goals retain forecast SoC/readiness without a current-charge bar. Display order and
+  these estimates do not change scheduling priority, withdrawals or charging authority.
 - Use typed settings and HA-style searchable entity/phone selectors. Highlight missing,
   placeholder, unavailable or incompatible required values immediately. Remove long
   explanatory entity subtitles and nonexistent house/phase sensor mappings.

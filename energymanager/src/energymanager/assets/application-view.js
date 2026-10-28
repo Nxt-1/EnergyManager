@@ -10,7 +10,8 @@ import {
   evFaultText,
   evIncidentTime,
   notificationStatus,
-  goalStatus
+  goalStatus,
+  journeyEnergyKwh
 } from './display.js';
 import {
   DateTimePicker
@@ -401,16 +402,34 @@ export async function mountApplication(root, options = {}) {
     const goals = [...state.goals.map(g => ({
       ...((plan?.goals || []).find(p => p.id === g.id && p.revision === g.revision) || {}),
       ...g
-    })), ...(plan?.goals || []).filter(g => g.kind === 'daily' && Date.parse(g.deadline) > Date.parse(state.now))];
-    const goalCard = g =>
-      `<section class="goal"><div class="goal-title"><strong>${esc(g.title)}</strong><span class="badge ${g.shortfall_kwh>0.001?'warning':''}">${goalStatus(g, state.now)}</span></div><p>${time(g.deadline)} · ${g.kind==='trip'?num(g.distance_km,0)+' km total / '+num((g.target_kwh ?? Math.min(c.ev_capacity_kwh,(g.distance_km+state.policy.arrival_reserve_km)*state.policy.consumption_kwh_per_100km/100))/c.ev_capacity_kwh*100,0)+'% departure target':num(g.target_soc_percent,0)+'% SoC'}</p><p>${g.planned_kwh!==undefined&&g.planned_kwh!==null?num(g.planned_kwh/c.ev_capacity_kwh*100,1)+'% planned · ':''}${g.shortfall_kwh>.001?num(g.shortfall_kwh)+' kWh shortfall':'One shared battery trajectory'}</p>${g.completion_margin_minutes !== undefined && g.completion_margin_minutes !== null ? `<p>${g.desired_margin_met ? `Ready at least ${state.policy.completion_margin_minutes} min early` : `Limited completion margin / ${num(g.completion_margin_minutes,0)} min`}</p>` : ''}${g.external_charging_required?'<p class="error">Charging away must be arranged. Return SoC is unknown.</p>':''}<div class="meter"><i style="width:${Math.min(100,o.ev_kwh/(g.target_kwh||c.ev_capacity_kwh*g.target_soc_percent/100||1)*100)}%;background:#16a34a"></i></div><div class="actions"><button data-detail="${esc(g.id)}">Details</button>${g.kind!=='daily'&&!g.calendar?`<button data-edit="${esc(g.id)}">Edit</button><button data-delete="${esc(g.id)}">Remove</button>`:''}</div></section>`;
-    const dailyGoals = goals.filter(goal => goal.kind === 'daily');
-    const primaryGoals = goals.filter(goal => goal.kind !== 'daily' || goal.id === dailyGoals[0]?.id);
-    const laterDaily = dailyGoals.slice(1);
-    $('goals').innerHTML = primaryGoals.map(goalCard).join('') + (laterDaily.length ?
-      `<details><summary>${laterDaily.length} later morning requirements</summary>${laterDaily.map(goalCard).join('')}</details>` :
-      '');
-    if (!goals.length) $('goals').innerHTML = '<p class="empty">Add a journey or timed SoC goal.</p>';
+    })), ...(plan?.goals || []).filter(g => g.kind === 'daily' && Date.parse(g.deadline) > Date.parse(state.now))]
+      .sort((a, b) => Date.parse(a.deadline) - Date.parse(b.deadline));
+    const nextGoal = goals.find(goal => Date.parse(goal.deadline) > Date.parse(state.now));
+    const observationAge = (Date.parse(state.now) - Date.parse(o.at)) / 1000;
+    const chargeKnown = o.ev_state_known && observationAge >= 0 &&
+      observationAge <= state.policy.measurement_max_age_seconds &&
+      !['unknown', 'stale', 'settling'].includes(o.quality);
+    const goalCard = goal => {
+      const tripEnergy = journeyEnergyKwh(goal, state.policy);
+      const target = goal.target_kwh ?? (goal.kind === 'trip' ?
+        Math.min(c.ev_capacity_kwh, tripEnergy + state.policy.arrival_reserve_km *
+          state.policy.consumption_kwh_per_100km / 100) : c.ev_capacity_kwh * goal.target_soc_percent / 100);
+      const requirement = goal.kind === 'trip' ?
+        `${num(goal.distance_km, 0)} km total · ${num(tripEnergy)} kWh driving · ${num(target / c.ev_capacity_kwh * 100, 0)}% departure target` :
+        `${num(goal.target_soc_percent, 0)}% SoC`;
+      const progress = target > 0 ? Math.max(0, Math.min(100, o.ev_kwh / target * 100)) : 100;
+      const meter = goal === nextGoal && chargeKnown ?
+        `<p class="subtle">Current charge / next goal target: ${num(o.ev_kwh)} / ${num(target)} kWh</p>
+        <div class="meter" role="progressbar" aria-label="Current charge towards next goal" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${num(progress, 0)}"><i style="width:${progress}%;background:#16a34a"></i></div>` : '';
+      return `<section class="goal"><div class="goal-title"><strong>${esc(goal.title)}</strong><span class="badge ${goal.shortfall_kwh > 0.001 ? 'warning' : ''}">${goalStatus(goal, state.now)}</span></div>
+        <p>${time(goal.deadline)} · ${requirement}</p>
+        <p>${goal.planned_kwh !== undefined && goal.planned_kwh !== null ? num(goal.planned_kwh / c.ev_capacity_kwh * 100, 1) + '% planned · ' : ''}${goal.shortfall_kwh > .001 ? num(goal.shortfall_kwh) + ' kWh shortfall' : 'One shared battery trajectory'}</p>
+        ${goal.completion_margin_minutes !== undefined && goal.completion_margin_minutes !== null ? `<p>${goal.desired_margin_met ? `Ready at least ${state.policy.completion_margin_minutes} min early` : `Limited completion margin / ${num(goal.completion_margin_minutes, 0)} min`}</p>` : ''}
+        ${goal.external_charging_required ? '<p class="error">Charging away must be arranged. Return SoC is unknown.</p>' : ''}
+        ${meter}<div class="actions"><button data-detail="${esc(goal.id)}">Details</button>${goal.kind !== 'daily' && !goal.calendar ? `<button data-edit="${esc(goal.id)}">Edit</button><button data-delete="${esc(goal.id)}">Remove</button>` : ''}</div></section>`;
+    };
+    $('goal-card').hidden = page !== 'planning';
+    $('goals').innerHTML = goals.map(goalCard).join('') || '<p class="empty">Add a journey or timed SoC goal.</p>';
     $('approvals').innerHTML = state.issues.length ? state.issues.map(i => i.kind === 'planning' ?
       `<section class="issue"><strong>${esc(i.title)}</strong><p>${esc(powerText(i.text))}</p><p>${time(i.first_at)} · ${i.state === 'retrying' ? 'Recalculating' : 'Attention needed'}${i.notification ? ' · ' + esc(notificationStatus(i.notification)) : ''}</p><button data-decision="${esc(i.decision_id)}">Decision evidence</button></section>` :
       `<section class="issue"><strong>${esc(i.title||goals.find(g=>g.id===i.goal_id)?.title||'EV goal')}</strong><p>${esc(powerText(i.text))}</p><p>${i.kind==='ess_peak'?'Specific forecast peak':i.shortfall_kwh===null?'Awaiting measured reconnection':num(i.shortfall_kwh)+' kWh short'} · ${esc(i.state)}</p>${i.notification ? `<p>${esc(notificationStatus(i.notification))}</p>` : ''}${i.proposed_peak_kw && i.state === 'pending'?`<p>Requested ceiling ${watts(i.proposed_peak_kw)} W</p><button data-approve="${esc(i.goal_id)}">Approve</button> <button data-reject="${esc(i.goal_id)}">Reject</button>`:''}</section>`
@@ -552,7 +571,7 @@ export async function mountApplication(root, options = {}) {
     const goal = state.goals.find(goal => goal.id === id) || state.schedule_goals.find(goal => goal.id === id);
     if (!goal) return;
     detail(goal.title,
-      `<p>Deadline ${time(goal.deadline)}</p><p>${goal.kind === 'trip' ? `Total journey ${num(goal.distance_km, 0)} km, arrival reserve ${state.policy.arrival_reserve_km} km. ${goal.return_at ? 'Expected return ' + time(goal.return_at) : 'Return unknown; unavailable until reconnection.'}` : 'Timed state-of-charge requirement. No journey or withdrawal is assumed.'}</p>${goal.calendar ? `<p>Calendar: ${esc(goal.calendar.source)}. Provisional 50 km total / four hours from event start.<br>${esc(goal.calendar.location)}</p>` : ''}<p>Priority ${goal.priority}. ${goal.approval_state === 'granted' ? 'Approved task ceiling ' + watts(goal.approved_peak_kw) + ' W' : 'Normal automatic peak policy applies.'}</p><p>Power changes stay within grouped charging sessions.</p>`);
+      `<p>Deadline ${time(goal.deadline)}</p><p>${goal.kind === 'trip' ? `Total journey ${num(goal.distance_km, 0)} km · ${num(journeyEnergyKwh(goal, state.policy))} kWh driving, arrival reserve ${state.policy.arrival_reserve_km} km. ${goal.return_at ? 'Expected return ' + time(goal.return_at) : 'Return unknown; unavailable until reconnection.'}` : 'Timed state-of-charge requirement. No journey or withdrawal is assumed.'}</p>${goal.calendar ? `<p>Calendar: ${esc(goal.calendar.source)}. Provisional 50 km total / four hours from event start.<br>${esc(goal.calendar.location)}</p>` : ''}<p>Priority ${goal.priority}. ${goal.approval_state === 'granted' ? 'Approved task ceiling ' + watts(goal.approved_peak_kw) + ' W' : 'Normal automatic peak policy applies.'}</p><p>Power changes stay within grouped charging sessions.</p>`);
   }
 
   async function showFaultHistory() {

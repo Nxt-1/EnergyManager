@@ -1,6 +1,47 @@
 # EnergyManager work state
 
-## Current release checkpoint — snapshot schedules with live control (28 October2026)
+## Current work — focused goal-card cleanup (28 October2026)
+
+AUTHORIZED: user requested removal of Overview goal cards, chronological Planning goals
+and trip energy in kWh; explicitly chose a bar only for the earliest upcoming goal.
+Base7a1c8c1 (published4.4.4; exact-head CI/image successful, see ignored prior checkpoint).
+Use isolated V4.4 worktree. Preserve main's unrelated backlog additions; original bytes
+are saved in ignored artifacts/v445-goal-cards/main-backlog-original.md.
+
+IMPLEMENTED4.4.5: hide the whole goals card on Overview; display all Planning goals,
+including morning minima, together by deadline. Show estimated driving kWh separately
+from the reserve-inclusive departure target, consistently in cards/EV agenda/details.
+Only the first future goal has a labelled current-charge/target meter, hidden when EV
+energy is unknown. Later/past goals retain planned SoC/readiness without a progress bar.
+Scheduling, charging and goal persistence are unchanged.
+
+VERIFIED:25 focused native/dashboard/schedule API cases and61 frontend cases pass;
+all shipped-JS syntax, Ruff and CLI4.4.5 pass. Configured routed fake E2E passes with
+2023 intervals,2 journeys,6 fake routes,4 local HA calls; acceptance60.77s/max control
+tick4.17ms. Standalone/native browsers show chronological mixed goals, only one labelled
+upcoming meter, Overview card removal after navigation and consistent89km/16.02kWh
+trip usage versus reserve-inclusive target. Warning/error console empty. Screenshot:
+v445-planning-goals.png in the task visualization folder. Temporary tabs/servers closed.
+No new low-impact UI implementation-mirroring tests; existing suites and actual rendered
+behavior verify the scope. No live installation/HA/Google/credential/database/hardware/
+real notification access. Scheduling/controller/persistence code unchanged.
+
+Main's ARCH-012 entry was an uncommitted backlog addition. This release incorporates
+only that authorized item's updated status; other pending entries remain uncommitted.
+Ignored main-backlog-after.md contains the exact original main text with only ARCH-012
+replaced; compare original bytes before integration and preserve all other entries.
+
+Wheel/sdist/isolated install match all59 package files; source archive matches all14
+maintained Markdown documents. Isolated4.4.5 module/assets import passes. Source archive
+is refreshed after this final checkpoint. Final diff is limited to presentation,
+release metadata and relevant docs; generated fake reports remain ignored.
+
+NEXT: scope-review/commit4.4.5, fast-forward/push main with its other backlog entries
+preserved, then check exact-head
+CI/image publication. Record remote outcomes only in ignored release-state.txt/final;
+no success-only documentation commit.
+
+## Earlier release checkpoint — snapshot schedules with live control (28 October2026)
 
 AUTHORIZED: user explicitly requested implementation of the agreed snapshot/live-
 control architecture. Isolated branchcodex/v4.4-google-maps, base d5c4373 (4.4.3).

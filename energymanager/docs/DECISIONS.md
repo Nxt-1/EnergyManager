@@ -539,3 +539,15 @@ periodic work without revoking accepted authority. Current revision, connection,
 input-health and physical/source/peak/charger protections remain; no live energy budget
 is added. Verification uses deterministic fixtures and fake local services. Publication
 through the existing release workflow is authorized; live installation operation is not.
+
+
+## 28 October2026 — Focus goal cards on Planning (4.4.5)
+
+The user requested space on Overview by removing duplicated goals, chronological goals
+on Planning and trip consumption in kWh. They explicitly selected a bar only for the
+earliest upcoming goal. Interleave all morning minima and explicit trips by deadline;
+keep planned SoC/readiness for later goals. Label the first bar as current charge versus
+its target, and hide it for unknown/unusable input. Show driving consumption separately
+from reserve-inclusive departure SoC, using existing consumption/withdrawal arithmetic
+in Planning cards, EV agenda and goal details. This is presentation only; it grants no
+new control authority and changes no optimizer/persistence behavior.
