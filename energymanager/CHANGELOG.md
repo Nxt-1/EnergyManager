@@ -1,3 +1,10 @@
+## 4.4.8 — Compact EV session details
+
+- Keep session title, times, battery kWh and a short named Supports list.
+- Remove generic reasons, repeated target capacity and accounting explanations from
+  normal EV details. Keep short driving/target labels and truthful fallback messages.
+- Preserve attribution data, charging behavior and the Overview/Planning layouts.
+
 ## 4.4.7 — Near-term goals on Overview
 
 - Replace the Overview forecast-cost card with chronological goals due in the next

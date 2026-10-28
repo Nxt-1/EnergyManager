@@ -597,7 +597,7 @@ export async function mountApplication(root, options = {}) {
     const session = state.accepted?.sessions.find(session => session.id === id);
     if (!session) return;
     detail(session.title,
-      `<p>${time(session.start)} — ${time(session.end)}</p><p>${num(session.energy_kwh)} kWh to the battery</p><p>${esc(powerText(session.reason))}</p>${session.resource === 'ev' ? sessionContributionMarkup(session, time) : '<p>Source-specific reservations preserve required EV and household peak support.</p>'}`);
+      `<p>${time(session.start)} — ${time(session.end)}</p><p>${num(session.energy_kwh)} kWh to battery</p>${session.resource === 'ev' ? sessionContributionMarkup(session, time) : `<p>${esc(powerText(session.reason))}</p><p>Source-specific reservations preserve required EV and household peak support.</p>`}`);
   }
   async function refresh(force = false) {
     if (loading) return;

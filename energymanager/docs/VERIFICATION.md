@@ -1,5 +1,17 @@
 # EnergyManager 4 verification
 
+## 4.4.8 — Compact EV details (28 October2026)
+
+25 focused native/dashboard/schedule API cases pass0.63s;63 frontend cases and Ruff pass.
+Frontend regressions check escaped goal names, distinct driving/target values in one
+row, short target-only rows, brief unknown/legacy fallbacks and unchanged input metadata.
+Configured routed fake E2E passes2023 intervals/2journeys/6fake routes/4local
+calls; acceptance60.94s/max tick5.16ms.
+Standalone/native browsers show only title,time,battery kWh and Supports rows, with no
+generic reason/accounting/stock/caveat blocks. Warning/error consoles are empty. Proof:
+v448-compact-session.png in the task visualization folder. Temporary tabs/servers closed.
+No attribution/optimizer/controller/permission changes or live installation access.
+
 ## 4.4.7 — Rolling Overview goals (28 October2026)
 
 25 focused native/dashboard/schedule API cases and63 frontend cases pass. All shipped

@@ -575,3 +575,15 @@ costs & energy assets and restore goal cards for only the next24hours. This supe
 not the next calendar date; keep chronological ordering, trip kWh and the existing
 single earliest-goal progress bar. Planning retains the full goals and cost breakdown.
 No scheduling, goal persistence, control or cost arithmetic changes are authorized.
+
+
+## 28 October2026 — Compact EV session details (4.4.8)
+
+The user highlighted only the session title/time/battery kWh and named target rows as
+useful, requested fewer words and scheduled implementation for21:41 Brussels. Keep one
+compact Supports list; omit repeated target capacity, generic reasons and accounting/
+retained-stock/caveat paragraphs. Distinguish driving from target support with short
+labels when needed and combine same-goal rows without adding overlapping quantities.
+Keep brief truthful legacy/unknown/no-named-goal fallbacks. The existing attribution
+math/data and planner/control/permission semantics remain unchanged. The separately
+queued charging-delay review is read-only and follows this cleanup's completed release.

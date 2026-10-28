@@ -1,6 +1,34 @@
 # EnergyManager work state
 
-## Current work — next-day Overview goals (28 October2026)
+## Current work — scheduled compact session details (28 October2026,21:41 Brussels)
+
+AUTHORIZED: user scheduled implementation of a much shorter EV detail dialog, keeping
+only title/time/battery kWh and short named contributions from the highlighted screenshot.
+One-time automation simplify-ev-session-details paused immediately on invocation. Base
+e9f3319 (published4.4.7; exact-head CI/image success in ignored prior checkpoint). Use
+isolated V4.4 worktree; preserve unrelated main backlog bytes saved in ignored v448
+artifacts. No live installation/HA/Google/database/credential/hardware/phone access.
+
+IMPLEMENTED4.4.8: remove generic EV charging reason and explanatory sections; render one
+compact Supports list. Same-goal driving/target amounts share one row, labelled separately
+without addition. Target-only rows omit repeated target capacity and wording. Keep brief
+legacy/unknown/no-named-goal fallbacks. Attribution data, optimizer/control/permissions,
+4.4.7 Overview24h goals and full Planning/cost view remain unchanged.
+
+VERIFIED:25 focused UI/API cases0.63s,63 frontend cases,Ruff pass. Routed fake E2E passes
+2023 intervals/2journeys/6fake routes/4local calls; acceptance60.94s/max tick5.16ms.
+Standalone/native dialogs contain only title,time,battery kWh and short Supports rows;
+console warnings/errors empty. Screenshot:v448-compact-session.png. Temporary tabs/servers
+closed. Maintained architecture/decisions/run instructions synchronized. Attribution
+metadata and 4.4.7 Overview/Planning behavior remain unchanged.
+
+NEXT: package/commit/push and exact-head CI/image verification. ONLY AFTER this cleanup/release
+finishes, investigate the preserved charging-delay decision read-only and propose a fix.
+No planner implementation is authorized by that second request. Frozen decision:
+artifacts/charging-delay-review/decision-2026-10-28.json, SHA256
+cb904e39ed6e99e85d90a8fb31c5893f344d158b5aa3b311bf1afcff3d21a496.
+
+## Earlier release checkpoint — next-day Overview goals (28 October2026)
 
 AUTHORIZED: user explicitly requested removal of Overview forecast costs and restoration
 of goals for only the next24hours. Base85e2574 (published4.4.6; exact-head CI/image success

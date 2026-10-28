@@ -706,13 +706,18 @@ threshold can claim an additional unclaimed portion, and later deliveries can he
 subsequent targets without being credited backwards to an earlier deadline. Trip target
 rows already fully explained by that trip's driving allocation are omitted. Any retained
 reserve/extra target support remains explicit. Target rows overlap the driving/stored
-partition and are labelled non-additive; they are partial contributions, not a claim
-that an unmet requirement is satisfied.
+partition; they are partial contributions, not a claim that an unmet requirement is
+satisfied. Driving/target quantities must remain distinct and must never be added.
 
 Session goal_ids now contain only these named contributions, ordered by deadline/ID.
-UI details distinguish planned driving use, retained energy, unresolved use and first
-target support. Older saved plans without this metadata state that detailed attribution
-will be available after recalculation; never reconstruct the old all-future-goals count.
+From4.4.8, the normal EV dialog shows only title, time range, delivered battery kWh and
+a compact Supports list (goal, date/time, contributed kWh). Target-only rows omit the
+full target and repeated prose. When driving/target values coexist, use short labels;
+combine same-goal values in one row without summing them. Do not show generic charging
+reasons, accounting primers, no-driving paragraphs, retained-stock exposition or lengthy
+caveats in the normal dialog. The full attribution metadata remains in the plan/export.
+Unknown/legacy/no-named-goal cases use brief truthful fallbacks; never reconstruct the
+old all-future-goals count.
 The optimizer, frozen flows, live control, permissions and measured history are unchanged.
 
 ### Planning lifecycle and continuity

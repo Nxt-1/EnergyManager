@@ -1193,19 +1193,24 @@ test('session details name allocated trips, distinguish target support and escap
   const markup = sessionContributionMarkup({energy_attribution:{method:'existing_charge_first',
     driving:[row, {...row, title:'Second trip', goal_id:'two', energy_kwh:2}],
     targets:[{...row, energy_kwh:8}], stored_kwh:0, unresolved_kwh:0}}, value => value);
-  assert.match(markup, /6.00 kWh for driving/);
-  assert.match(markup, /2.00 kWh for driving/);
-  assert.match(markup, /8.00 kWh towards the 8.00 kWh departure target/);
-  assert.match(markup, /not additional energy/);
+  assert.match(markup, /6.00 kWh driving \/ 8.00 kWh target/);
+  assert.match(markup, /2.00 kWh driving/);
+  assert.equal((markup.match(/<li>/g) || []).length, 2);
+  assert.doesNotMatch(markup, /towards|Planned energy use|Existing battery|not additional energy/);
   assert.match(markup, /Trip &lt;img src=x&gt; &amp; test/);
   assert.doesNotMatch(markup, /<img|Contributes to|shared goals/);
 });
 
-test('session details retain unknown and stored energy and handle legacy plans honestly', () => {
+test('session details keep only compact target rows and brief unknown or legacy fallbacks', () => {
   assert.match(sessionContributionMarkup({}, value => value), /older plan/);
   const markup = sessionContributionMarkup({energy_attribution:{driving:[], targets:[],
     stored_kwh:3, unresolved_kwh:5}}, value => value);
-  assert.match(markup, /3.00 kWh.*remains stored/);
-  assert.match(markup, /5.00 kWh.*cannot be assigned/);
-  assert.doesNotMatch(markup, /Battery targets supported|Contributes to/);
+  assert.equal(markup, '<p>Some contributions are unknown.</p>');
+  const row = {goal_id:'morning', title:'Morning minimum', deadline:'29 Oct, 07:00', energy_kwh:2.81, target_kwh:23.4};
+  const session = {energy_attribution:{driving:[], targets:[row], stored_kwh:2.9, unresolved_kwh:0}};
+  const before = JSON.stringify(session);
+  const compact = sessionContributionMarkup(session, value => value);
+  assert.match(compact, /Morning minimum<\/strong> · 29 Oct, 07:00 — 2.81 kWh<\/li>/);
+  assert.doesNotMatch(compact, /23.40|towards|Stored|stored|No driving|Battery targets supported|Contributes to/);
+  assert.equal(JSON.stringify(session), before);
 });

@@ -1,15 +1,13 @@
 # Run, configure, review and roll back
 
-## Session contributions (4.4.6)
+## Session contributions (4.4.8)
 
-Click a scheduled EV charging session to see named trips and planned driving kWh,
-energy retained after forecast trips and any use unresolved beyond unknown battery
-state. The explanation uses existing charge first, then charging sessions in time order.
-Battery targets supported are shown separately: those values reuse the energy above
-and must not be added to the session total. Equal future morning targets do not repeat
-the same energy claim. Retained stock includes any required reserve/SoC level.
-Older saved decisions have no detailed allocation; a fresh calculation supplies it.
-Update/reload the add-on for the release; no settings or goal migration is required.
+Click a scheduled EV session for its time, battery kWh and a compact Supports list.
+Each row names a goal, deadline and contributed kWh. Short driving/target labels keep
+mixed allocations distinct; overlapping amounts are never summed. Full attribution
+metadata remains in decision exports. Legacy/unknown cases have brief fallbacks.
+The accounting rules and charging behavior are unchanged. Update/reload the add-on for
+the display change; no settings or goal migration is required.
 
 ## Goal presentation (4.4.7)
 
