@@ -467,6 +467,19 @@ outdated outcomes are withheld. Current EV readings retain the live-input qualit
 Users can inspect items and add/edit/remove explicit goals through the existing API and
 date/time controls; daily readiness links to Settings. No new control authority is added.
 
+From4.4.2, the normal control tick durably retires manual SoC goals once their deadline
+passes and manual trips once their known return elapses. Unknown-return or externally
+charged trips remain until a fresh, known EV connection observed after departure;
+normal underway trips can also retire on that measured home state. Unknown/stale/settling
+input and unknown EV stock cannot establish return. Each retirement archives the full
+goal with time/reason, clears its pending issues and removes only its active requirement;
+existing decision/measurement history is retained. Grouped retirement requests one new
+planning revision without revoking useful EV/ESS authority for other goals. A persisted
+empty goal list remains empty on restart. Calendar/routed source records stay under their
+owners; active goals/schedule projections omit their elapsed known returns, while unknown
+external state remains visible. The frontend omits elapsed morning cards and labels
+retained past-departure trips Underway or Awaiting return, rather than Waiting.
+
 The frontend converts power to whole W for live summaries, AC/DC components, actual and
 planned charts, peak/approval values, settings and entity previews. Energy remains kWh.
 Settings converts limits back to the existing kW JSON/API values, preserving unchanged

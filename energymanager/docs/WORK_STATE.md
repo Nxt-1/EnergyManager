@@ -1,6 +1,39 @@
 # EnergyManager work state
 
-## Current work — charging publication repair (28 October 2026)
+## Current work — expired manual goals (28 October 2026)
+
+AUTHORIZED: user requested a fix for a past manual trip still shown as Waiting.
+Base a06b471 (published4.4.1); isolated V4.4 branch. Main backlog edits remain unrelated.
+
+IMPLEMENTED:4.4.2 durably retires elapsed manual SoC goals and finished manual trips.
+Keep ongoing trips until known return; unknown/external return needs a fresh known
+home observation after departure. Unknown/stale/settling inputs cannot establish return.
+Archive the full goal/time/reason, clear its issues and preserve prior decisions and
+useful control authority for other goals. Retired records stay retired after restart
+or later unplugging. Saved empty lists remain empty instead of injecting demo goals.
+Source managers keep calendar/routed records; active projections omit elapsed known
+returns. Omit past morning cards; display Underway/Awaiting return for retained trips.
+No broad ARCH-012 redesign, route activation or charging timer/permission change.
+
+VERIFIED:442 Python tests passed86.57s;38 focused lifecycle/replanning cases passed2.78s.
+All60 frontend tests, Ruff, mypy38 modules and changed-JS syntax pass. Synthetic control
+loop retires goals without a page request or solver; restart persistence/history and
+fresh versus stale return boundaries pass. Browser4.4.2 confirms expired entry absent,
+underway/unknown-return/future entries retained with correct labels. Screenshot:
+C:/Users/Arne/.codex/visualizations/2026/10/25/01a1736b-2b27-7952-a275-df6d08645259/v442-goal-retirement.png
+The lightweight in-memory fixture does not exercise graph history (unavailable there).
+Its temporary tab/server are closed. No actual HA/Google/database/hardware/phone used.
+
+Wheel/sdist match all59 package files and maintained docs; isolated4.4.2 wheel imports
+and updated UI resources pass (explicit UTF-8 for text inspection). Final source archive
+is refreshed after this checkpoint.
+
+NEXT: scope review/commit, fast-forward/push main while
+preserving its unrelated DEFERRED_WORK.md edit, then verify exact-head CI and image
+publication (including both configured fake E2E runs). Record remote outcomes only in
+ignored local evidence/final reply; no success-only documentation commit.
+
+## Earlier release checkpoint — charging publication repair (28 October 2026)
 
 AUTHORIZED: user requested completion of release leftovers and an independently
 established fix for the attached charging decision. 4.4.0 CI and image publication

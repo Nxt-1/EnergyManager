@@ -1,3 +1,14 @@
+## 4.4.2 — Retire elapsed manual goals
+
+- Remove elapsed manual SoC requirements and finished manual journeys from active goals.
+  Preserve the original goal in archived events and keep existing decision history.
+- Retain underway trips, unknown returns and journeys requiring external charging until
+  the expected return or a fresh, known home-connection reading, as applicable.
+- Keep retirement persistent through restart and later unplugging; a saved empty list
+  stays empty instead of restoring sample goals. Preserve other valid charging authority.
+- Hide elapsed source-managed journeys from active views without deleting source records.
+  Omit elapsed morning cards and label retained trips Underway or Awaiting return.
+
 ## 4.4.1 — Reconcile unconfirmed charging during calculation
 
 - Recover a required-goal shortfall caused by elapsed charging that the latest battery

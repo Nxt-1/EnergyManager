@@ -480,3 +480,15 @@ cannot fit. Reconcile and align the reference, preserve original evidence and up
 adopted session/completion metadata. Cache only repeated audit arithmetic, changing no
 policy or tolerances. Verification uses synthetic fixtures and the supplied frozen log;
 no live installation/database/API or hardware operations are authorized by this fix.
+
+
+## 28 October2026 — Retire expired manual goals (4.4.2)
+
+The user explicitly requested a fix for a24October manual journey still shown as Waiting.
+Retire elapsed manual requirements, preserving the full goal in archived events and all
+existing decisions. Keep ongoing/unknown returns until their applicable return condition;
+a fresh known home observation after departure can establish return. Persist retirement
+so later unplugging/restart cannot resurrect a trip. Keep other valid command authority.
+Calendar/routed managers retain ownership; active projections hide elapsed known returns.
+This is a focused lifecycle correction, not authorization for the wider deferred
+Goals & progress redesign (ARCH-012). No live installation operations are authorized.

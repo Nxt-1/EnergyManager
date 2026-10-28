@@ -101,3 +101,12 @@ function scaleDecimal(value, scale) {
   const [coefficient, exponent = '0'] = String(value).toLowerCase().split('e');
   return Number(`${coefficient}e${Number(exponent) + places}`);
 }
+
+
+export function goalStatus(goal, now) {
+  if (goal.kind === 'trip' && Date.parse(goal.deadline) <= Date.parse(now)) {
+    return goal.return_at && Date.parse(goal.return_at) > Date.parse(now) ? 'Underway' : 'Awaiting return';
+  }
+  return goal.shortfall_kwh > .001 ? 'Shortfall' : goal.status === 'scheduled' ? 'Scheduled' :
+    goal.status === 'unknown_return_state' ? 'Unknown state' : 'Waiting';
+}

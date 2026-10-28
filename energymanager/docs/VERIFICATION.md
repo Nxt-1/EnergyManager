@@ -1,5 +1,19 @@
 # EnergyManager 4 verification
 
+## 4.4.2 — Expired manual goals (28 October2026)
+
+Synthetic lifecycle tests cover elapsed trip/SoC retirement, complete archived records,
+active API/schedule projections, pending-issue cleanup, idempotence, preservation of
+other command authority, restart with future/empty saved goals, source ownership,
+underway/unknown/external returns and fresh versus stale/unknown/settling home input.
+A control-loop test checks retirement without a page request or solver. Frontend tests
+cover Underway/Awaiting return labels. 442 Python tests passed86.57s;38 focused lifecycle/replanning cases passed2.78s.
+All60 frontend cases, Ruff, mypy38 modules and changed-JS syntax passed. Browser
+verification confirms expired goals are absent and retained-trip labels are correct;
+the lightweight in-memory fixture intentionally does not provide graph history.
+Screenshot and final release state are recorded in WORK_STATE.md.
+All data/endpoints are synthetic/local; no actual HA or hardware verification is implied.
+
 ## 4.4.1 — Elapsed charging at publication (28 October2026)
 
 The supplied frozen decision reproduces Required outcome rejection before the fix.

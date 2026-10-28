@@ -47,11 +47,12 @@ class Application:
         self.input_task: asyncio.Task[None] | None = None
         self.policy = policy or Policy()
         self.revision = int(store.get("revision", 1))
-        self.goals = tuple(Goal.from_dict(g) for g in store.get("goals", []))
+        saved_goals = store.get("goals")
+        self.goals = tuple(Goal.from_dict(g) for g in saved_goals or [])
         self.snapshot = snapshot or demo_snapshot(
-            policy=self.policy, goals=self.goals or None, revision=self.revision
+            policy=self.policy, goals=self.goals if saved_goals is not None else None, revision=self.revision
         )
-        if not self.goals:
+        if saved_goals is None:
             self.goals = tuple(g for g in self.snapshot.goals if g.kind != "daily")
         self.observation = self.snapshot.observation
         self.demo_season = "winter" if "winter" in self.snapshot.forecast_id else "mixed"
@@ -624,6 +625,7 @@ class Application:
                     self.observe(observation)
                 else:
                     self.observation = observation
+            self.archive_finished_goals(at)
             command = self.controller.tick(
                 self.observation,
                 at,
@@ -662,6 +664,42 @@ class Application:
             if len(self.observed) > 2000:
                 self.observed = self.observed[-2000:]
             await asyncio.sleep(self.policy.control_period_seconds)
+
+    def goal_is_current(self, goal: Goal, at: datetime) -> bool:
+        """Past departures remain relevant only while their away/unknown state continues."""
+        if goal.deadline > at:
+            return True
+        if goal.kind != "trip":
+            return False
+        external = goal.withdrawal(self.policy) + (
+            self.policy.arrival_reserve_km * self.policy.consumption_kwh_per_100km / 100
+        ) > self.snapshot.capabilities.ev_capacity_kwh
+        return external or goal.return_at is None or goal.return_at > at
+
+    def archive_finished_goals(self, at: datetime, observed: Observation | None = None) -> None:
+        """Retire manual requirements durably; calendar and routed sources own their records."""
+        completed = []
+        for goal in self.goals:
+            if goal.id.startswith(("calendar-", "journey-")) or (
+                self.journeys and goal.id in self.journeys.requests
+            ):
+                continue
+            reconnected = (
+                goal.kind == "trip" and observed is not None and observed.connected
+                and observed.ev_state_known and goal.deadline < observed.at <= at
+                and (at - observed.at).total_seconds() <= self.policy.measurement_max_age_seconds
+                and observed.quality not in ("unknown", "stale", "settling")
+            )
+            if reconnected or not self.goal_is_current(goal, at):
+                reason = "measured_return" if reconnected else "time_elapsed"
+                completed.append(goal.id)
+                self.store.event("goal_archived", {"goal": json_data(goal), "at": at, "reason": reason})
+                self.clear_goal_issues(goal.id)
+        if completed:
+            self.goals = tuple(goal for goal in self.goals if goal.id not in completed)
+            self.store.put("goals", self.goals)
+            # Removing elapsed work does not revoke useful instructions for other goals.
+            self.changed("goals_archived")
 
     def upsert_goal(self, data: dict[str, Any]) -> Goal:
         old = next((g for g in self.goals if g.id == data.get("id")), None)
@@ -805,6 +843,8 @@ class Application:
                 self.store.event("resource_shortfall", shortfall)
                 self.changed("resource_shortfall", ess=shortfall["ess_shortfall_kwh"] >= 0.5)
 
+        self.archive_finished_goals(self.now(), observed=observation)
+
     def state(self) -> dict[str, Any]:
         now = self.now()
         activity = dict(self.planning_activity)
@@ -814,6 +854,7 @@ class Application:
         activity["budget_seconds"] = self.policy.planning_budget_seconds
         planning_issue = self.store.get("planning_issue")
         daily_approvals = self.store.get("daily_approvals", {})
+        current_goals = tuple(goal for goal in self.goals if self.goal_is_current(goal, now))
         requirements = []
         for goal in daily_goals(now, now + timedelta(hours=168), self.policy, self.goals):
             approved = daily_approvals.get(goal.id)
@@ -848,9 +889,9 @@ class Application:
             "capabilities": json_data(self.snapshot.capabilities),
             "policy": json_data(self.policy),
             "goals": [{**json_data(goal), **({"calendar": self.calendar_items[goal.id]}
-                       if goal.id in self.calendar_items else {})} for goal in self.goals],
+                       if goal.id in self.calendar_items else {})} for goal in current_goals],
             "schedule_goals": [{**json_data(goal), **({"calendar": self.calendar_items[goal.id]}
-                                if goal.id in self.calendar_items else {})} for goal in (*self.goals, *requirements)],
+                                if goal.id in self.calendar_items else {})} for goal in (*current_goals, *requirements)],
             "calendars": self.calendars.status() if self.calendars else [],
             "routes": self.journeys.status() if self.journeys else {"items": []},
             "accepted": self.accepted,

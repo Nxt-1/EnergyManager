@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {dailyEnergyRows, connectionIcon, displaySetting, entityState, evFaultText, evIncidentTime, monthlyPeakWatts, notificationStatus, powerText, settingLabel, storedSetting, watts}
+import {dailyEnergyRows, goalStatus, connectionIcon, displaySetting, entityState, evFaultText, evIncidentTime, monthlyPeakWatts, notificationStatus, powerText, settingLabel, storedSetting, watts}
   from '../src/energymanager/assets/display.js';
 import {clockValue, localDateTime, localInstants, monthDays, validLocal}
   from '../src/energymanager/assets/date-time.js';
@@ -1147,4 +1147,15 @@ test('planning notices distinguish HA handoff, local-only delivery and pending r
   assert.match(notificationStatus('retrying'), /delivery retrying/);
   assert.match(notificationStatus('waiting_for_retry'), /if recalculation fails/);
   assert.equal(notificationStatus(null), '');
+});
+
+
+test('past trips show underway or awaiting return rather than waiting for a new plan', () => {
+  const now = '2026-10-28T12:00Z';
+  const goal = {kind: 'trip', deadline: '2026-10-28T10:00Z', return_at: '2026-10-28T14:00Z'};
+  assert.equal(goalStatus(goal, now), 'Underway');
+  assert.equal(goalStatus({...goal, return_at: null}, now), 'Awaiting return');
+  assert.equal(goalStatus({...goal, return_at: '2026-10-28T11:00Z'}, now), 'Awaiting return');
+  assert.equal(goalStatus({...goal, deadline: '2026-10-28T13:00Z'}, now), 'Waiting');
+  assert.equal(goalStatus({...goal, deadline: '2026-10-28T13:00Z', status: 'scheduled'}, now), 'Scheduled');
 });

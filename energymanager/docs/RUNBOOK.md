@@ -20,6 +20,13 @@ databases separate. A public release is distinct from installing/operating the H
 
 ## Local use
 
+Release4.4.2 automatically retires elapsed manual goals and finished manual trips,
+including older saved entries. No manual deletion or configuration migration is needed.
+Unknown/external returns still require a fresh known home connection when applicable.
+Archived events retain full retired goals; decision history is preserved. Existing
+other charging authority remains usable during the refresh. A saved empty goal list
+stays empty after restart. Update the add-on and reload HA to use the published version.
+
 Release4.4.1 can extend an existing same-phase EV session when a calculation counted
 elapsed charging that the current battery reading did not confirm. The extension is
 limited to the missing required energy; all existing source, peak and economic checks
