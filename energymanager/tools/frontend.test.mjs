@@ -1,3 +1,4 @@
+import {sessionContributionMarkup} from '../src/energymanager/assets/session-details.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {dailyEnergyRows, goalStatus, connectionIcon, displaySetting, entityState, evFaultText, evIncidentTime, monthlyPeakWatts, notificationStatus, powerText, settingLabel, storedSetting, watts}
@@ -1183,4 +1184,28 @@ test('journey route failures render an escaped reason and clear it after success
     assert.doesNotMatch(root.innerHTML, /Route timed out/);
     assert.match(root.innerHTML, /81\.0 km total/);
   } finally { page.dispose(); }
+});
+
+
+test('session details name allocated trips, distinguish target support and escape goal text', () => {
+  const row = {goal_id:'one', title:'Trip <img src=x> & test', deadline:'2026-10-29T07:00Z',
+    kind:'trip', energy_kwh:6, target_kwh:8};
+  const markup = sessionContributionMarkup({energy_attribution:{method:'existing_charge_first',
+    driving:[row, {...row, title:'Second trip', goal_id:'two', energy_kwh:2}],
+    targets:[{...row, energy_kwh:8}], stored_kwh:0, unresolved_kwh:0}}, value => value);
+  assert.match(markup, /6.00 kWh for driving/);
+  assert.match(markup, /2.00 kWh for driving/);
+  assert.match(markup, /8.00 kWh towards the 8.00 kWh departure target/);
+  assert.match(markup, /not additional energy/);
+  assert.match(markup, /Trip &lt;img src=x&gt; &amp; test/);
+  assert.doesNotMatch(markup, /<img|Contributes to|shared goals/);
+});
+
+test('session details retain unknown and stored energy and handle legacy plans honestly', () => {
+  assert.match(sessionContributionMarkup({}, value => value), /older plan/);
+  const markup = sessionContributionMarkup({energy_attribution:{driving:[], targets:[],
+    stored_kwh:3, unresolved_kwh:5}}, value => value);
+  assert.match(markup, /3.00 kWh.*remains stored/);
+  assert.match(markup, /5.00 kWh.*cannot be assigned/);
+  assert.doesNotMatch(markup, /Battery targets supported|Contributes to/);
 });

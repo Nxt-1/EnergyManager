@@ -678,6 +678,40 @@ snapshot; preparing a correction alone does not revoke current authority or reta
 accepted plan's forecast identity/permissions. Original forecast costs and readiness remain
 labelled predictions; measured execution and later calculated schedules are separate evidence.
 
+### Session energy explanations (4.4.6)
+
+EV session details name the goals whose driving energy they supply and give the planned
+kWh for each. Use a FIFO explanatory ledger on the frozen calculated trajectory:
+consume initial battery energy first, then session deliveries in chronological order.
+Energy enters a session's lot only as its intervals deliver it, including charging
+losses; actual model withdrawals consume those lots. Attribute only matching in-horizon
+trips. Simultaneous trips use stable ID order. This is a declared forecast accounting
+convention, not measured electron tracing, a counterfactual optimization or a new control
+reservation. Other charging sessions and pre-existing inventory are accounted for once.
+
+Each session's driving allocations plus remaining known stored energy and unresolved
+energy partition that session's delivered battery kWh. Retained stock can be an arrival
+reserve, a SoC target or additional future energy; do not call all of it discretionary.
+Unknown battery-state barriers end attribution of the surviving lots, marking that
+quantity unresolved. Never infer the use or terminal value beyond unknown travel.
+
+Track target support separately from energy consumption. At a checkpoint, the highest
+simultaneous target explains the shared stock requirement; ties prefer explicit goals,
+then priority and stable ID. Credit only the first target use of each surviving energy
+portion. Equal later morning minima cannot each claim that same portion. A higher
+threshold can claim an additional unclaimed portion, and later deliveries can help
+subsequent targets without being credited backwards to an earlier deadline. Trip target
+rows already fully explained by that trip's driving allocation are omitted. Any retained
+reserve/extra target support remains explicit. Target rows overlap the driving/stored
+partition and are labelled non-additive; they are partial contributions, not a claim
+that an unmet requirement is satisfied.
+
+Session goal_ids now contain only these named contributions, ordered by deadline/ID.
+UI details distinguish planned driving use, retained energy, unresolved use and first
+target support. Older saved plans without this metadata state that detailed attribution
+will be available after recalculation; never reconstruct the old all-future-goals count.
+The optimizer, frozen flows, live control, permissions and measured history are unchanged.
+
 ### Planning lifecycle and continuity
 
 HiGHS runs in one spawned process; event-loop control normally ticks each second.

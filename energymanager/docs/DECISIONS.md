@@ -551,3 +551,17 @@ its target, and hide it for unknown/unusable input. Show driving consumption sep
 from reserve-inclusive departure SoC, using existing consumption/withdrawal arithmetic
 in Planning cards, EV agenda and goal details. This is presentation only; it grants no
 new control authority and changes no optimizer/persistence behavior.
+
+
+## 28 October2026 — Explain actual planned session contributions (4.4.6)
+
+After the user identified the meaningless Contributes to9shared goals count, read-only
+inspection confirmed it included every later goal. The user explicitly authorized the
+proposed replacement: named goals and planned kWh, accounting for existing battery
+energy and other sessions; avoid repeated claims by non-consuming morning minima and
+retain additional stored energy explicitly. Use chronological FIFO for explanatory
+allocation, with initial inventory first. Driving/stored/unresolved energy is disjoint;
+first target support is separately labelled, overlapping evidence. Keep unknown state
+barriers and deadline causality. This does not alter the shared battery optimization,
+charging behavior or permissions; physical future use cannot be measured in advance.
+Per-task source labels and energy-profile visualization remain separate deferred work.

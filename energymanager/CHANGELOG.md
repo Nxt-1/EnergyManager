@@ -1,3 +1,12 @@
+## 4.4.6 — Meaningful EV session contributions
+
+- Replace the all-future-goals count with named trips and planned driving kWh, accounting
+  for initial battery charge, intervening travel and other charging sessions.
+- Show retained energy and unknown future use explicitly. Distinguish first target
+  support from consumption so repeated morning minima do not claim the same energy.
+- Keep attribution on the frozen plan; optimization, live control and permissions are
+  unchanged. Explain unavailable detail honestly for older saved plans.
+
 ## 4.4.5 — Focused, chronological goal details
 
 - Remove goal cards from Overview; show all Planning goals in deadline order, with

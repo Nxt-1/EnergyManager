@@ -15,6 +15,7 @@ from .incumbent import seed
 from .optimization import JointModel
 from .validation import TOL, accounting, rolling_comparison_errors, validate
 from .reservations import reservations
+from .session_attribution import attribute_ev_sessions
 
 
 class Planner:
@@ -869,13 +870,12 @@ class Planner:
                             * s.capabilities.ev_efficiency
                             for k in range(left, t)
                         ),
-                        "goal_ids": [
-                            g["id"] for g in goals if g["deadline"] >= s.intervals[left].start.isoformat()
-                        ],
+                        "goal_ids": [],
                         "reason": "Required goal progress and/or jointly selected eligible solar inventory",
                     }
                 )
                 left = None
+        attribute_ev_sessions(s, flows, sessions)
         extra = max(0.0, flows["ev_energy"][-1] - reference["flows"]["ev_energy"][-1])
         conditional_tasks: list[dict[str, Any]] = []
         remaining_optional = extra
@@ -917,7 +917,7 @@ class Planner:
                     "forecast_id": s.forecast_id,
                 }
             )
-            session["title"] = "EV charging · solar capture and shared goals"
+            session["title"] = "EV charging · solar capture"
             remaining_optional -= quantity
         if extra > TOL and not any(r["kind"] == "joint_capture" for r in reasons):
             reasons.append(

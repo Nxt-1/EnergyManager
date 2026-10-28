@@ -1,5 +1,28 @@
 # EnergyManager 4 verification
 
+## 4.4.6 — Named EV session contributions (28 October2026)
+
+496 Python tests pass88.41s;19 focused attribution/native cases pass1.84s. All63 frontend
+cases, shipped-JS syntax, Ruff and mypy39 modules pass. Deterministic accounting cases
+cover8kWh split6/2 across actual trips, initial-stock-first use, multiple sessions,
+no backward deadline attribution, sessions crossing checkpoints, repeated/increasing/
+simultaneous morning/manual targets, reserve retention, overlapping departures, unknown
+battery barriers, remaining inventory, untouched ESS sessions and a real Planner output.
+Driving/stored/unresolved energy conserves each session's delivery; first target support
+is bounded separately. Frozen flows remain unchanged. Render tests cover named kWh,
+non-additive target support, escaped goal text, unresolved/retained stock and old plans.
+The versioned native asset endpoint serves the new session-details module.
+
+Configured routed fake E2E passes2023 intervals,2 journeys,6 fake route requests and4
+local HA calls; acceptance60.66s/max control tick4.14ms. Its real spawned HiGHS result
+passes the new session-energy conservation/named-goal assertions plus existing frozen
+admission, cancellation/reaping and latest-only adoption checks. Standalone and native
+HA-contract browsers show a0.28kWh session attributed only to the31October morning
+requirement, with retained stock and overlapping target support explicitly labelled;
+the old all-future-goal count is absent. Warn/error consoles are empty. Screenshot:
+v446-session-contribution.png in the task visualization folder. Temporary tabs/servers
+are closed. All endpoints/data are fake/local; no live installation or provider access.
+
 ## 4.4.5 — Goal presentation (28 October2026)
 
 25 focused native/dashboard/schedule API tests and61 frontend cases pass. All shipped

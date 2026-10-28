@@ -311,6 +311,15 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                 assert accepted["intervals"] == (accepted.get("effective_snapshot") or decision["snapshot"])["intervals"]
                 assert not validate(frozen, accepted["flows"], accepted.get("service"))
                 assert "adoption_snapshot" not in accepted and "publication_repair" not in accepted
+                for session in accepted["sessions"]:
+                    if session["resource"] != "ev":
+                        continue
+                    allocation = session["energy_attribution"]
+                    assigned = sum(row["energy_kwh"] for row in allocation["driving"])
+                    assert abs(assigned + allocation["stored_kwh"] + allocation["unresolved_kwh"]
+                               - session["energy_kwh"]) < 2e-5
+                    named = {row["goal_id"] for kind in ("driving", "targets") for row in allocation[kind]}
+                    assert set(session["goal_ids"]) == named
                 report = {
                     "version": current["version"],
                     "provenance": current["provenance"],
@@ -346,6 +355,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                         "independent guarded calls to local fake only",
                         "API state",
                         "persisted input checksum and accepted result",
+                        "named EV-session contributions conserve delivered energy",
                     ],
                 }
                 Path("docs/offline-e2e.json").write_text(json.dumps(report, indent=2), encoding="utf-8")

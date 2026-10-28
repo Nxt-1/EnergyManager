@@ -1,6 +1,49 @@
 # EnergyManager work state
 
-## Current work — focused goal-card cleanup (28 October2026)
+## Current work — meaningful EV session contributions (28 October2026)
+
+AUTHORIZED: user explicitly said Implement that after agreeing to named goals and
+planned kWh contributions, accounting for existing battery energy, intervening trips
+and other sessions. Repeated morning targets consume no energy; retain additional
+stored energy explicitly. Base59400a6 (published4.4.5; exact-head CI/image success in
+ignored prior checkpoint). Isolated codex/v4.4-google-maps worktree. Main's pending
+backlog entries are unrelated; original bytes saved in ignored v446 task artifacts.
+
+DESIGN: explanatory FIFO ledger (existing battery charge first, then chronological
+session charge), driven by the frozen plan's actual per-slot energy/withdrawals.
+Trip use partitions session energy across named trips and remaining/unresolved stock.
+First-use target support is separate, non-additive evidence; the same cohort is not
+credited to every later target. Unknown EV-state barriers stop future attribution.
+No optimization, live control, source permission or measured-history behavior changes.
+
+IMPLEMENTED4.4.6: session_attribution.py records disjoint named driving use, retained
+known stock and unresolved energy. First target support is tracked separately without
+repeated equal-target claims; redundant trip-target rows are omitted. Planner output
+uses this metadata/goal_ids; shared session details render named kWh, reserve/stock and
+unresolved/legacy cases. New asset has its versioned native route. Scheduling, frozen
+flows, controller behavior and permissions remain unchanged.
+
+VERIFIED:496 Python tests88.41s;19 focused attribution/native cases1.84s;63 frontend
+cases, Ruff, shipped-JS syntax and mypy39 pass. Tests cover6/2 split, initial inventory,
+other sessions, deadline/overlap/partial/target/reserve/unknown behavior and conservation;
+real Planner output, HTML escaping and legacy result rendering pass. Configured routed
+fake E2E passes2023 intervals/2journeys/6fake routes/4local calls; acceptance60.66s/max
+tick4.14ms, real HiGHS cancellation/admission and session allocations checked. Standalone
+and native dialogs show0.28kWh retained stock and only31October morning target support;
+no blanket goal count. Warn/error console empty. Screenshot:v446-session-contribution.png.
+Temporary tabs/servers closed. No live installation/HA/Google/database/credential/hardware/
+real phone operations. Maintained architecture/decisions/run instructions synchronized.
+
+Wheel/sdist/isolated install match all61 package files; source archive matches all14
+maintained Markdown documents. Isolated4.4.6 attribution import and new packaged asset
+pass. Source archive is refreshed after this final checkpoint. Main/origin remain
+59400a6 at pre-release fetch; pending main backlog bytes match the original copy.
+
+NEXT: scope-review/commit4.4.6, fast-forward/push main preserving pending backlog bytes,
+then check exact-head CI/image.
+Record remote outcomes only in ignored release-state.txt/final; no success-only commit.
+
+## Earlier release checkpoint — focused goal-card cleanup (28 October2026)
 
 AUTHORIZED: user requested removal of Overview goal cards, chronological Planning goals
 and trip energy in kWh; explicitly chose a bar only for the earliest upcoming goal.
