@@ -465,3 +465,18 @@ Preserve calendar selection, all agreed routing/override/failure policies and ex
 retention rights. Development uses fake services; actual credentials, HA, hardware and
 real notifications remain outside agent verification. Commit/push and the existing main
 image-publication workflow are authorized; physical installation deployment is not.
+
+
+## 28 October2026 — Recover elapsed delivery at publication (4.4.1)
+
+The user authorized an independently established fix for an attached rejected charging
+plan. Offline replay confirmed that the original candidate met the morning goal but
+elapsed held charging was not confirmed by the publication-time battery reading.
+This new authorization supersedes the4.3.20 exclusion of new publication repair for
+this specific defect. Use one bounded same-phase extension of existing future work,
+adding only the missing required energy. Keep measured inventory unchanged. Retain
+all independent source/peak/physical/rolling checks and safe rejection when an extension
+cannot fit. Reconcile and align the reference, preserve original evidence and update
+adopted session/completion metadata. Cache only repeated audit arithmetic, changing no
+policy or tolerances. Verification uses synthetic fixtures and the supplied frozen log;
+no live installation/database/API or hardware operations are authorized by this fix.

@@ -1,6 +1,39 @@
 # EnergyManager work state
 
-## Current work — 4.4.0 activated-key release (27 October 2026)
+## Current work — charging publication repair (28 October 2026)
+
+AUTHORIZED: user requested completion of release leftovers and an independently
+established fix for the attached charging decision. 4.4.0 CI and image publication
+succeeded at06fcf78; remote results are in the ignored recovery checkpoint.
+
+IMPLEMENTED:4.4.1 adds one bounded same-phase extension of existing future charging
+when elapsed calculated delivery was not confirmed by current EV stock. It adds only
+missing required energy, splits exact boundaries, reconciles the reference and keeps
+all independent source/physical/permission/rolling checks. Measured stock is unchanged;
+failed extensions remain rejected. Original evidence is preserved; adopted sessions,
+goal completion, reservations and aligned rejection evidence remain consistent.
+Cached cumulative audit arithmetic changes no equations/tolerances. No charger timers,
+route activation settings or unrelated backlog items were changed.
+
+VERIFIED:425 Python tests passed84.43s;16 publication cases cover the repair and safe
+rejections. Ruff, mypy38 modules,59 frontend tests and all asset JavaScript syntax pass.
+Original attached candidate, repaired candidate/reference and a forced peak violation
+produce identical old/new independent-audit results. Frozen replay adds0.140042kWh
+in135.306s; total local reconciliation fell from19.35s to0.894s (single measurements).
+The private attachment is not tracked. All committed regression fixtures are synthetic.
+Configured routed E2E passes60.800s with2,022 intervals, two imported journeys, six fake
+Google queries/four fake HA calls and maximum local control tick5.587ms. Actual HiGHS
+cancellation/reaping and latest-only adoption pass. All endpoints are fake/local.
+Wheel/sdist contain all59 package files byte-for-byte and maintained docs; isolated
+wheel import/resources/version4.4.1 pass. Source archive is refreshed after this checkpoint.
+
+NEXT: scope-review and commit4.4.1; fast-forward main, preserving its unrelated
+DEFERRED_WORK.md edit, then push and verify exact-head CI/image publication. Main and
+origin/main were06fcf78 at the final fetch. No actual HA/Google/database/hardware or real
+notification/installation operations occurred. Record subsequent remote outcomes only
+in ignored local evidence and the final reply; do not add a success-only docs commit.
+
+## Earlier release checkpoint — 4.4.0 activated-key release (27 October 2026)
 
 AUTHORIZED: user explicitly requested activation on a valid Settings API key and
 publication to the main release. This supersedes the earlier offline gate and Maps

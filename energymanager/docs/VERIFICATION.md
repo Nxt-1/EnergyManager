@@ -1,5 +1,27 @@
 # EnergyManager 4 verification
 
+## 4.4.1 — Elapsed charging at publication (28 October2026)
+
+The supplied frozen decision reproduces Required outcome rejection before the fix.
+The calculated morning stock was23.4142kWh; publication from unchanged measured stock
+left23.2600kWh against23.4kWh required. Offline repair adds0.140042kWh in a135.306s
+same-phase extension, with all independent and rolling checks passing. No sensor
+resolution/calibration or actual installation delivery is inferred. The private log
+is not included in tracked tests or release artifacts.
+
+Deterministic synthetic publication tests cover confirmed versus unconfirmed delivery,
+separately repaired reference boundaries, one/three-phase continuity, exact energy,
+metadata/evidence immutability, withdrawal splitting, failed references and rejection
+for disconnected/unavailable charging, deadline, measured loss, peak limit and missing future session.
+The unchanged audit now caches cumulative arithmetic: one attached-log reconciliation
+fell from19.35s to0.894s locally (single observations, not an installation benchmark).
+Final local suite:425 Python tests passed84.43s; Ruff, mypy38 modules,59 frontend
+cases and all asset JavaScript syntax passed. Configured routed E2E passed60.800s,
+2,022 intervals, two journeys, six fake route requests/four fake HA calls and maximum
+local control tick5.587ms. Wheel/sdist match all59 package files and current docs;
+isolated wheel imports/resources/version pass. Old/new audits agree on original and
+repaired candidate/reference inputs and an intentionally unapproved peak. No live HA/Google/database/hardware/real-notification check is performed.
+
 ## 4.4.0 — Google Maps activation and release verification (27 October 2026)
 
 The user authorized Settings-key activation and main release publication. The draft

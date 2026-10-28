@@ -719,8 +719,21 @@ the generation and coalesce a new solve. Household balancing remains useful when
 goal disappears. Before atomic adoption the application checks revision, slices elapsed
 power, rebuilds both battery trajectories from measured state, clamps excess future
 storage charging to headroom, and independently rechecks physical/source/permission and
-rolling economics against a reconciled reference. Failure retains still-valid accepted
-work. Restart initially revokes all recorded command authority until fresh reconciliation.
+rolling economics against a reconciled reference. From4.4.1, a candidate failing only
+required outcomes can receive one bounded same-phase extension of an existing future
+session. This recovers at most the calculated charging removed from the elapsed prefix,
+only when measured EV stock has not fallen and no elapsed trip withdrawal is involved.
+Use minimum supported current, split the last interval for exactly the missing energy,
+and finish before the earliest failed deadline; do not create a restart or phase change.
+An unavailable/unknown-state interval, a following session or the publication hold bounds
+where this can occur. Audit the complete repaired trajectory under every original source,
+capacity, grid-causality and permission rule. Reconcile the economic reference separately,
+align both on the union of split boundaries, then audit their rolling comparisons. Any
+failure retains rejection; repair never grants permission or credits unmeasured stock.
+Original calculation evidence remains immutable, publication_repair records the extension,
+and displayed session energy/end, goal completion and reservations follow the adopted
+schedule. Independent auditing reuses cumulative withdrawals/delivery and deadline indices;
+its equations and tolerances are unchanged. Failure retains still-valid accepted work. Restart initially revokes all recorded command authority until fresh reconciliation.
 Actuator failures are explicit events; repeated failure backs off, and non-delivery
 latches EV stopping. A solver-parent watchdog prevents orphan workers after service loss.
 

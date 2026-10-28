@@ -20,6 +20,15 @@ databases separate. A public release is distinct from installing/operating the H
 
 ## Local use
 
+Release4.4.1 can extend an existing same-phase EV session when a calculation counted
+elapsed charging that the current battery reading did not confirm. The extension is
+limited to the missing required energy; all existing source, peak and economic checks
+still apply. Infeasible extensions retain the usual rejection/retry/warning behavior.
+Decision exports retain candidate_at_calculation and label publication_repair separately;
+session/completion timing describes the adopted schedule. No configuration change is
+needed. Update the add-on and reload HA to use the published version. Agent verification
+uses only frozen inputs and synthetic/local endpoints, never the live installation.
+
 Release4.3.20 moves continuity selection into the full joint EV/ESS scheduling model,
 within the existing0.02EUR comparison/cash allowance. It can move ESS support to retain
 an EV session, varies current when needed, and prices actual phase changes from the

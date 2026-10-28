@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from bisect import bisect_left
 from collections import defaultdict
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -117,6 +118,10 @@ def validate(
     check(close(flows["ess_solar"][0] + flows["ess_grid"][0], o.ess_kwh - c.ess_min_kwh), "Initial ESS state")
     check(close(flows["ess_grid"][0], o.ess_grid_kwh), "Initial provenance")
     source_prefix = [0.0]
+    charged_prefix = [0.0]
+    withdrawal_prefix = [0.0]
+    interval_starts = [i.start for i in s.intervals]
+    goal_indices = {g.deadline: s.checkpoint_index(g.deadline) for g in s.goals}
     grid_total = 0.0
     quarters: dict[datetime, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
     for t, interval in enumerate(s.intervals):
@@ -209,6 +214,8 @@ def validate(
         source_prefix.append(
             source_prefix[-1] + (f["pv_ev"] + f["solar_dis_ev"]) * interval.hours * c.ev_efficiency
         )
+        charged_prefix.append(charged_prefix[-1] + ev_power * interval.hours * c.ev_efficiency)
+        withdrawal_prefix.append(withdrawal_prefix[-1] + interval.withdrawal_kwh)
         grid_total += f["grid_ev"] * interval.hours * c.ev_efficiency
     for t in range(n + 1):
         check(flows["ev_energy"][t] <= c.ev_capacity_kwh + TOL, f"EV capacity {t}")
@@ -220,12 +227,12 @@ def validate(
     for goal in s.goals:
         if not s.intervals[0].start <= goal.deadline <= s.intervals[-1].end:
             continue
-        k = s.checkpoint_index(goal.deadline)
+        k = goal_indices[goal.deadline]
         if not s.ev_known_at(k):
             continue
         target = (service or {}).get(goal.id, goal.target(c, p))
         check(flows["ev_energy"][k] + TOL >= target, f"Required outcome {goal.id}")
-        withdrawals = sum(i.withdrawal_kwh for i in s.intervals[:k])
+        withdrawals = withdrawal_prefix[k]
         causal_deficit = max(causal_deficit, target + withdrawals - o.ev_kwh - source_prefix[k])
     rounding = (
         min(c.phases)
@@ -249,16 +256,12 @@ def validate(
         )
         eligible = [g for g in s.goals if at < g.deadline and (g.earliest is None or at >= g.earliest)]
         automatic = max(baseline, p.automatic_peak_kw)
-        charged = sum(
-            (flows["grid_ev"][t] + flows["pv_ev"][t] + flows["solar_dis_ev"][t]) * i.hours * c.ev_efficiency
-            for t, i in enumerate(s.intervals)
-            if i.start < at + timedelta(minutes=15)
-        )
+        charged = charged_prefix[bisect_left(interval_starts, at + timedelta(minutes=15))]
         ev_limits = [automatic if eligible else baseline]
         for g in eligible:
             deficit = (
                 g.target(c, p)
-                + sum(i.withdrawal_kwh for i in s.intervals[: s.checkpoint_index(g.deadline)])
+                + withdrawal_prefix[goal_indices[g.deadline]]
                 - o.ev_kwh
             )
             if (

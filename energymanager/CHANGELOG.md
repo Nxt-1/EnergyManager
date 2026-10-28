@@ -1,3 +1,16 @@
+## 4.4.1 — Reconcile unconfirmed charging during calculation
+
+- Recover a required-goal shortfall caused by elapsed charging that the latest battery
+  reading has not confirmed. Extend one existing future session on the same phase by
+  only the missing energy; split its last interval for an exact duration.
+- Reconcile the economic reference on the same time boundaries and recheck all physical,
+  source, grid-purchase, peak-permission and rolling-economic limits. Infeasible repairs
+  remain rejected; no invented measured stock, new permission or restart is introduced.
+- Preserve original calculation evidence, record the repair separately and update session
+  duration, energy, goal completion and reservations for the adopted schedule.
+- Reuse cumulative arithmetic in the independent audit instead of repeatedly scanning
+  seven-day inputs. Charging and permission formulas are unchanged.
+
 ## 4.4.0 — Google Maps journeys for EV charging
 
 - Route selected calendars and destination-based manual journeys using predicted traffic
