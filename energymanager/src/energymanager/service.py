@@ -14,12 +14,11 @@ from . import __version__
 from .control import Actuator, Command, FakeActuator, FastControl, GuardedActuator
 from .adapters import ForecastSource, HomeAssistantAdapter, JsonForecastAdapter
 from .domain import Goal, Observation, PeakPermission, Policy, Snapshot, daily_goals, json_data
-from .publication import rebase
+from .publication import admit
 from .demo_plant import DemoPlant
 from .forecasts import demo_snapshot
 from .store import Store
 from .notifications import Notifications
-from .validation import validate
 from .worker import PlanningWorker, WorkerExited
 from .hardware import HardwareControl
 from .calendars import CalendarSync
@@ -318,15 +317,15 @@ class Application:
                 recovered = self.status == "forecast_unavailable"
                 if recovered:
                     self.error = None
-                if data["revision"] != last_forecast or initial or recovered:
-                    self.conditional_valid = False
+                if data["revision"] != last_forecast:
+                    self.store.event("forecast_updated", {"forecast_id": data["revision"], "queued_for_planning": True})
                     last_forecast = data["revision"]
-                    reason = "inputs_ready" if initial else "forecast_recovered" if recovered else "forecast_revision"
-                    self.changed(reason, ess=not initial)
-                elif correction:
-                    self.store.event("forecast_bias", correction)
-                    self.conditional_valid = False
-                    self.changed("forecast_bias", ess=True)
+                if correction:
+                    self.store.event("forecast_bias", {**correction, "queued_for_planning": True})
+                if initial or recovered:
+                    # Availability recovery is a planning event. New forecast values and
+                    # measured bias otherwise belong to the next periodic snapshot.
+                    self.changed("inputs_ready" if initial else "forecast_recovered", ess=not initial)
             except (ValueError, KeyError, OSError, RuntimeError, aiohttp.ClientError, TimeoutError) as exc:
                 if isinstance(exc, HousePowerMismatch) and self.settling_house_power(exc):
                     await asyncio.sleep(5)
@@ -461,7 +460,7 @@ class Application:
             if result is None:
                 continue
             self.planning_activity.update(state="checking", stage="validation")
-            # All changes are conservatively revalidated by a fresh solve; accepted unaffected work continues.
+            # Structural revisions supersede work; ordinary measurement drift does not.
             if self.house_mismatch_since is not None:
                 self.store.record(snapshot, result, "rejected_unsettled_power")
                 self.request_plan("power_balance_settling")
@@ -476,13 +475,10 @@ class Application:
                 if result.get("effective_snapshot")
                 else snapshot
             )
-            errors = (
-                validate(effective, result["flows"], result.get("service"))
-                if result.get("valid")
-                else [result.get("reason", "No incumbent")]
-            )
-            if not errors:
-                effective, result, errors = rebase(effective, result, self.observation, self.now())
+            if result.get("valid"):
+                result, errors = admit(effective, result, self.observation, self.now())
+            else:
+                errors = [result.get("reason", "No incumbent")]
             if errors:
                 result["publication_errors"] = errors
                 self.store.record(snapshot, result, "rejected")
@@ -497,7 +493,7 @@ class Application:
             self.accepted, self.snapshot = result, snapshot
             if self.demo:
                 self.demo_plant.snapshot = effective
-            self.ev_valid = self.observation.connected
+            self.ev_valid = self.observation.connected and self.observation.ev_state_known
             self.ess_valid = True
             self.conditional_valid = True
             self.status, self.error = "ready", None
@@ -835,13 +831,6 @@ class Application:
             )
         elif previous.ev_state_known != observation.ev_state_known:
             self.changed("ev_state_reconciled" if observation.ev_state_known else "ev_state_unknown", ev=True)
-        elif observation.monthly_peak_kw > previous.monthly_peak_kw + 0.05:
-            self.changed("actual_peak_increased")
-        else:
-            shortfall = self.replanning.resources(observation, self.accepted, self.snapshot)
-            if shortfall:
-                self.store.event("resource_shortfall", shortfall)
-                self.changed("resource_shortfall", ess=shortfall["ess_shortfall_kwh"] >= 0.5)
 
         self.archive_finished_goals(self.now(), observed=observation)
 

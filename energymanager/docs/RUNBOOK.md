@@ -1,5 +1,25 @@
 # Run, configure, review and roll back
 
+## Snapshot planning and live execution (4.4.4)
+
+Update the add-on and reload HA to use the release; no new setting or sensor mapping
+is required. Agent release publication does not perform that installation operation.
+Each schedule and its economic reference are validated on the original calculation
+snapshot. Accepted results retain their full calculation grid and evidence; live
+control selects the current interval and ignores elapsed work. Admission health,
+revision/connection and physical-bound checks still gate publication; its actual
+readings are recorded separately in result.admission.
+
+Live ESS balancing and EV power modulation remain active under existing safeguards.
+Load/PV mismatch, inventory drift and a higher measured peak alone do not request extra
+solves or invalidate accepted work. Forecast updates and supported bias corrections
+are queued for the next periodic snapshot. The five-minute idle refresh, manual
+recalculation and structural/safety/input-recovery handling remain. forecast_updated
+and forecast_bias events record queued inputs; they are not extra-solve requests.
+The4.4.1 publication repair is removed. Original forecast readiness and costs remain
+predictions; actual execution and later schedules are separate evidence. See the
+[maintained architecture](architecture/Architecture_Proposal.md#snapshot-planning-and-live-execution--accepted-28-october-2026).
+
 ## Google Maps release and offline verification (4.4.0)
 
 Save a Google Routes API key in Settings to activate routing immediately. Replacing or
@@ -34,32 +54,16 @@ Archived events retain full retired goals; decision history is preserved. Existi
 other charging authority remains usable during the refresh. A saved empty goal list
 stays empty after restart. Update the add-on and reload HA to use the published version.
 
-Release4.4.1 can extend an existing same-phase EV session when a calculation counted
-elapsed charging that the current battery reading did not confirm. The extension is
-limited to the missing required energy; all existing source, peak and economic checks
-still apply. Infeasible extensions retain the usual rejection/retry/warning behavior.
-Decision exports retain candidate_at_calculation and label publication_repair separately;
-session/completion timing describes the adopted schedule. No configuration change is
-needed. Update the add-on and reload HA to use the published version. Agent verification
-uses only frozen inputs and synthetic/local endpoints, never the live installation.
+Historical4.4.1 extended existing future sessions for unconfirmed elapsed charging.
+That publication repair and its fresh-stock audit are superseded by4.4.4. Old decision
+exports may contain candidate_at_calculation/publication_repair evidence; new admissions
+preserve the original schedule without an extension or a new remaining-energy budget.
 
-Release4.3.20 moves continuity selection into the full joint EV/ESS scheduling model,
-within the existing0.02EUR comparison/cash allowance. It can move ESS support to retain
-an EV session, varies current when needed, and prices actual phase changes from the
-current setting. Necessary availability/source/peak pauses remain possible. The displayed
-bill does not include an invented wear charge. Publication validation is unchanged.
-
-A sustained household/PV power mismatch no longer repeatedly requests full calculations.
-After15minutes of continuous fresh evidence, a material changed energy bias updates the
-next30minutes of forecast (fading by one hour) and requests one solve. An unchanged bias
-is deduplicated; new issuances rebase it against the updated forecast, and read gaps
-clear it. Completed appliance excursions do not predict another run. Expected battery charging/
-discharging no longer counts as a material event. Additional plan-relative energy deficits
-still request work. Immediate ESS balancing, EV peak protection, five-minute idle refresh,
-goal/permission/connection/input events and manual cancel-and-recalculate remain active.
-Events forecast_bias/resource_shortfall and planning_activity.reason identify why work
-was requested. Update/reload HA; no new sensor mapping or configuration field is needed.
-No new publication repair or charger-delay/fault-policy change is included.
+Release4.3.20 introduced joint EV/ESS continuity selection within the existing0.02EUR
+comparison/cash allowance. That objective remains, including actual phase transitions,
+necessary availability/source/peak pauses and no invented wear charge. Its mismatch-
+triggered solves/authority invalidation are superseded by4.4.4; the same supported
+forecast-correction evidence now informs subsequent periodic calculations.
 
 Release4.3.16 fixes an unnecessary EV stop if a control revision changes during
 confirmation of an otherwise unchanged start. Identical pending commands keep their

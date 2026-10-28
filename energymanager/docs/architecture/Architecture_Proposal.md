@@ -5,7 +5,9 @@ this same file as requirements and implementation evolve across releases and cha
 do not create a new handoff document for each version. The filename is retained from
 the original architecture proposal, but its content now describes the current system.
 The active application is `energymanager/`; its version is recorded in config.yaml and
-the changelog. Last reviewed: 27 October 2026.
+the changelog. Last reviewed: 28 October 2026.
+Accepted changes awaiting implementation are explicitly labelled below; they must not
+be mistaken for behavior already shipped in the application.
 
 Repository-wide chat and coding rules live in the root [AGENTS.md](../../../AGENTS.md).
 It directs chats to this architecture, the ongoing backlog and the required coding
@@ -30,7 +32,11 @@ Schedule EV and ESS jointly over the full seven-day horizon with intervals no lo
 than five minutes. Keep forecasting/input collection, explicit requirements, one bounded
 MILP planning process, independent fast control, validated publication and persistence
 as separate responsibilities. Full solves must not block live summaries or protective
-control. One accepted shared plan owns both resource trajectories and permissions.
+control. One accepted shared plan supplies both resources' intended trajectories and
+permission scope. Live ESS balancing and EV power modulation adapt execution to current
+loads and production; the schedule is not a rigid instruction to reproduce forecast powers.
+Ordinary execution differences do not make its original calculation invalid. See the
+snapshot-planning contract below, implemented in4.4.4.
 
 DHW, washing-machine/dishwasher scheduling, planned Mazak operation, appliance recognition,
 learned driving, advanced forecasting and a standing ESS reserve for unforeseen peaks
@@ -54,7 +60,8 @@ prematurely. ARCH-009 is implemented as a dedicated visual EV schedule page.
   Never invent replacement installation settings.
 - Keep daily readiness with EV settings. Morning minima require charge by a deadline;
   they assume no driving. With these alone, the planned EV SoC stays level or rises.
-  Explicit journeys withdraw estimated travel energy, and measurements reconcile state.
+  Explicit journeys withdraw estimated travel energy; fresh measurements inform live
+  control and the next planning snapshot.
 - Keep Overview and Planning inspired by the original first two dashboard pages:
   concise live summaries, actual/planned power and SoC, time navigation, grouped sessions,
   seven-day planning, goals/progress and inspectable reasons/approvals. ESS is blue;
@@ -215,9 +222,11 @@ independently. Other valid EV goals continue under ordinary connection, measurem
 charger and permission guards; ESS authority is independent. A pending request without a
 checked goal does not revoke unrelated authority or cancel a same-revision calculation.
 Changing a previously checked trip invalidates affected work through Application.changed
-and request_plan. Unchanged scoped approvals are retained only after fresh reconciliation.
+and request_plan. Unchanged scoped approvals are retained only after checking current
+requirements, revisions and permission scope.
 
-Preserve 4.3.20 continuity/evidence-based replanning and the cancellable worker lifecycle.
+Preserve4.3.20 charging continuity and the cancellable worker lifecycle. Its mismatch-
+triggered replanning policy is superseded by the snapshot/live-execution decision below.
 Route warnings coexist with planning/permission notices. The EV page retains native
 history, phase actions and charger activity. No solver objective, evidence threshold or
 charger timer changes belong to this release. Temperature compensation remains deferred.
@@ -541,7 +550,8 @@ Current-only adjustments stay live. It prepares a future phase during an off int
 The five-minute plan uses nominal slot power; sub-minute control holds can postpone
 actual delivery, which is reconciled from measurements rather than fabricated.
 Planning holds the currently valid EV setting through the calculation budget plus15s,
-so a candidate never assumes energy that could not have been delivered while solving.
+as a forecast of command continuity during the solve. It is not proof that the expected
+energy was measured as delivered, and does not require matching publication-time stock.
 
 For each known requirement checkpoint `k`, `B[k]=target[k]+prior withdrawals-initialEV`.
 Let `S[k]` be cumulative eligible non-grid EV battery energy and `G` total direct grid
@@ -556,7 +566,9 @@ A final certificate minimizes grid within the chosen modes, non-grid/storage all
 and per-quarter import envelopes. Its Optimal status has this bounded scope, not a
 global optimality claim. From4.3.12 it also bounds the EV start/phase/power-variation
 score to the selected schedule's score, so certification cannot undo continuity.
-All flows are independently audited outside the model builder.
+All flows are independently audited outside the model builder against the same immutable
+calculation inputs. New live readings are not substituted into that mathematical and
+economic proof.
 
 ## Economics, opportunities and permission
 
@@ -603,6 +615,61 @@ adopted deliberate peak-increase strategy. Ordinary successful peak suppression 
 quiet. No external notice was sent in development.
 
 ## Continuity, control and publication
+
+### Snapshot planning and live execution — accepted 28 October 2026
+
+**Implemented in4.4.4.** This is the current contract. It supersedes the4.4.1
+publication energy repair, fresh-stock revalidation and mismatch-only extra solves from
+4.3.20–4.4.3. Historical decisions and release evidence remain labelled below.
+
+The lifecycle is snapshot → calculate → validate against that snapshot → execute the
+remaining schedule until a replacement is accepted. Validate required outcomes, source
+accounting, grid-purchase causality, physical limits, permissions and economic comparisons
+using the optimizer's frozen inputs and matching reference. Preserve those inputs,
+results and validation evidence unchanged. A calculated schedule is a conditional forecast
+for that moment, not a guarantee that subsequent readings will reproduce its trajectory.
+
+Publication checks continued authority and usability: current requirement/configuration/
+permission revisions, a usable time horizon, and the required input/connection/charger
+health. Skip elapsed instructions and never repeat an elapsed withdrawal. Do not replace
+the calculation's EV/ESS inventories with newer readings and rerun its energy-purchase,
+required-outcome or economic proofs. A higher/lower battery reading or changed load/PV
+alone must not reject publication or start a schedule-repair optimization. The4.4.1
+energy-extension/reconciliation machinery is superseded; no new live remaining-grid-energy
+budget is introduced as its replacement. Keep current admission observations separately
+from the immutable calculation evidence. The accepted result retains its full original
+interval grid and all original arrays/reservation indices. Fast control selects the
+current interval by timestamp; it does not execute past intervals. Admission records
+its time, snapshot/digest identity, actual observation, first usable interval and errors.
+Current revision and physical balance/readback checks remain in the planning service.
+
+Live control remains active throughout execution and replacement calculations. ESS
+balances real demand/production within its physical and source limits. EV charging power
+responds to fluctuating loads, PV, available quarter-hour headroom and existing charging
+conditions. Current peak limits, battery bounds, source-specific reserves/permissions,
+input freshness, connection, phase/readback and charger-fault protections remain binding.
+A protective reduction or stop can suspend affected commands without declaring the
+original mathematical schedule invalid. Basic ESS balancing remains independent of EV
+instruction availability. No additional authority to buy optional grid energy is created.
+
+Load/PV forecast mismatch, including large or sustained mismatch, and the resulting
+deviation from predicted EV/ESS energy do not by themselves invalidate accepted work,
+cancel an in-flight calculation or request an extra solve. Subsequent periodic calculations
+use fresh measurements and any supported forecast corrections. Keep the existing periodic
+cadence; this decision does not introduce a stricter start-to-start timing requirement.
+Explicit goal/configuration/permission changes, connection and genuine safety/input-
+availability events, manual recalculation and necessary failure recovery keep their
+separate handling. Ordinary numerical mismatch must not be relabelled as such an event
+to restore the superseded trigger indirectly.
+
+Forecast/measurement drift is distinct from inconsistent measurements of the same physical
+power balance. Missing, stale or mutually inconsistent critical inputs still invoke the
+input-health safeguards described below. Forecast corrections may be prepared for the next
+snapshot; preparing a correction alone does not revoke current authority or retarget the
+accepted plan's forecast identity/permissions. Original forecast costs and readiness remain
+labelled predictions; measured execution and later calculated schedules are separate evidence.
+
+### Planning lifecycle and continuity
 
 HiGHS runs in one spawned process; event-loop control normally ticks each second.
 From4.3.14 each calculation owns a fresh terminable process. Manual Recalculate
@@ -689,13 +756,15 @@ the permission list. One immediate retry is automatic; another rejection escalat
 attention_required and a deduplicated configured-phone notice. Further failed solves
 update evidence without spawning an immediate retry loop or repeating delivered alerts.
 Acceptance clears the item and records recovery. Measurement/goal revisions do not
-reset an unresolved incident's retry budget or delivered-notice deduplication. Rejection never creates a peak grant/request: current-state revalidation
-and the normal physically useful diagnostics remain mandatory. Accepted pending EV/ESS
+reset an unresolved incident's retry budget or delivered-notice deduplication. Rejection
+never creates a peak grant/request: frozen-snapshot validation, current authority/input-
+health checks and physically useful diagnostics remain mandatory. Numerical drift alone
+is not a publication failure. Accepted pending EV/ESS
 permission proposals also receive deduplicated notices. Missing destinations are shown
 as local-only; failed HA handoffs remain retryable. Publication errors appear in history
-metadata/detail and the failed reconciled flows are labelled publication_candidate,
-separate from the original calculated flows. Prior valid instructions retain only their
-existing control authority.
+metadata/detail. Preserve the original calculated flows and the actual admission reason;
+legacy publication_candidate fields remain labelled evidence of historical reconciliation
+attempts. Prior valid instructions retain only their existing control authority.
 
 Continuity is selected inside each original joint scheduling stage within the single
 comparison/cash allowance described above. It cannot trade required outcomes for inventory.
@@ -716,55 +785,37 @@ entity report timestamps do not expire available states. The read watchdog and f
 Measurement loss stops new commands. Source and permission guards remain independent
 of economic score. Generation is checked between asynchronous actuator writes.
 
-From4.3.20 ordinary forecast power mismatch and protective EV current reductions do
-not request full solves. The fast controller remains responsible for immediate balancing
-and quarter-hour protection. A covered15-minute observation window separately integrates
-household, AC PV and DC PV forecast residuals. A new net-AC or DC bias of at least500W
-and0.1kWh changes the near-term forecast before requesting work: full measured correction
-for the first30minutes, fading to zero by one hour. Forecast estimates stay nonnegative;
-raw observations and the long-term learner/weather inputs are unchanged. Repeated unchanged
-bias does not retrigger; further bias changes are at least15minutes apart. Gaps beyond the
-read watchdog, invalid observations and a new issued forecast reset evidence coverage;
-a new forecast rebases the correction against its changed baseline, removing bias it
-already represents. Unchanged source values cannot rediscover the same bias on each
-issuance. Completed excursions are ignored once the current residual has recovered;
-read gaps clear corrections. Corrections require a currently fresh read. A corrected
-forecast has its own identity, so prior forecast-specific ESS peak grants cannot widen
-its authority. ESS forecast instructions/conditional capture are invalidated on correction;
-required EV authority remains usable while basic ESS balancing continues.
+Forecast correction can retain the existing evidence mechanism: a covered15-minute
+window integrates household, AC PV and DC PV residuals. A changed net-AC/DC bias of at
+least500W and0.1kWh can inform the next snapshot, with full measured correction over its
+first30minutes and a fade to zero by one hour. Forecast estimates stay nonnegative;
+raw observations and long-term learner/weather inputs remain unchanged. Coverage,
+deduplication, read-gap resets and rebasing against a new issued forecast still prevent
+rediscovering the same bias. Corrections still require fresh covered observations;
+recovered excursions and read gaps clear or suppress them under the existing evidence
+rules. This decision does not change correction formulas or evidence thresholds. These
+are forecast-input rules, not reasons to launch a calculation or revoke accepted instructions. A correction's identity belongs to the new
+snapshot; it cannot widen or transfer an accepted forecast-specific permission.
 
-Routine battery progress no longer invalidates instructions or launches a solve. Plan-relative
-inventory deficits request work only with new material evidence: at leastmax(0.5kWh,1% EV
-capacity) ormax(0.5kWh,2% ESS capacity) additional loss. The comparison interpolates accepted
-inventory trajectories; expected ESS discharge and increasing charge do not retrigger.
-Reported deficits are deduplicated per accepted plan. Material ESS shortfall revokes affected
-ESS authority. These provisional engineering thresholds do not relax goal validation.
-Normal five-minute idle refresh, material goal/connection/permission/forecast/input changes,
-manual cancel-and-recalculate and existing failure reporting remain. Persistent control
-unavailability is deduplicated; an identical reason/plan cannot launch repeated solves.
+**Historical implementation, superseded by the accepted contract:**4.3.20–4.4.3 request
+an extra solve for a changed sustained bias and for additional plan-relative inventory
+loss beyond max(0.5kWh,1% EV capacity) or max(0.5kWh,2% ESS capacity). Some corrections
+also invalidate ESS/conditional authority. Those mismatch-only triggers/invalidation
+paths are not the updated design. Physical protection and explicit structural-event
+handling remain; ordinary mismatch is handled by live control and periodic replanning.
 
 Goal/permission/connection changes invalidate affected EV or ESS authority, increment
 the generation and coalesce a new solve. Household balancing remains useful when an EV
-goal disappears. Before atomic adoption the application checks revision, slices elapsed
-power, rebuilds both battery trajectories from measured state, clamps excess future
-storage charging to headroom, and independently rechecks physical/source/permission and
-rolling economics against a reconciled reference. From4.4.1, a candidate failing only
-required outcomes can receive one bounded same-phase extension of an existing future
-session. This recovers at most the calculated charging removed from the elapsed prefix,
-only when measured EV stock has not fallen and no elapsed trip withdrawal is involved.
-Use minimum supported current, split the last interval for exactly the missing energy,
-and finish before the earliest failed deadline; do not create a restart or phase change.
-An unavailable/unknown-state interval, a following session or the publication hold bounds
-where this can occur. Audit the complete repaired trajectory under every original source,
-capacity, grid-causality and permission rule. Reconcile the economic reference separately,
-align both on the union of split boundaries, then audit their rolling comparisons. Any
-failure retains rejection; repair never grants permission or credits unmeasured stock.
-Original calculation evidence remains immutable, publication_repair records the extension,
-and displayed session energy/end, goal completion and reservations follow the adopted
-schedule. Independent auditing reuses cumulative withdrawals/delivery and deadline indices;
-its equations and tolerances are unchanged. Failure retains still-valid accepted work. Restart initially revokes all recorded command authority until fresh reconciliation.
-Actuator failures are explicit events; repeated failure backs off, and non-delivery
-latches EV stopping. A solver-parent watchdog prevents orphan workers after service loss.
+goal disappears. Publication follows the snapshot validation/admission separation above;
+normal measurement drift leaves the original validated schedule intact. While a new
+schedule is calculated, remaining accepted instructions retain their existing authority
+and live modulation, subject to all current protective guards. If a real admission or
+calculation failure occurs, retain still-usable prior work and record its specific reason.
+Restart withholds recorded command authority until fresh usable inputs and the required
+startup/authority checks are complete. Actuator failures remain explicit events; repeated
+failure backs off and non-delivery latches EV stopping. A solver-parent watchdog prevents
+orphan workers after service loss. None of this authorizes executing elapsed commands,
+ignoring a genuine safety stop or bypassing a goal/permission revision.
 
 ### EV charging supervision and incident recovery (4.3.2)
 

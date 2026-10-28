@@ -1,6 +1,81 @@
 # EnergyManager work state
 
-## Current work — stable route timing and safe diagnostics (28 October2026)
+## Current release checkpoint — snapshot schedules with live control (28 October2026)
+
+AUTHORIZED: user explicitly requested implementation of the agreed snapshot/live-
+control architecture. Isolated branchcodex/v4.4-google-maps, base d5c4373 (4.4.3).
+The five approved policy documents from main are included; original hashes are saved
+in ignored artifacts/v444-snapshot-control/main-policy-docs.sha256. Main's unrelated
+DEFERRED_WORK.md edit must remain byte-for-byte unchanged through integration.
+
+IMPLEMENTED4.4.4: frozen candidate/reference validation plus narrow health/authority
+admission. Keep original flows, forecast, goals, costs, reservations and interval grid;
+record actual admission readings separately and select remaining commands by timestamp.
+Remove fresh-stock revalidation/session repair and resource-deficit/monthly-peak extra
+solves. Queue forecast issuances/corrections for the next periodic snapshot without
+revoking accepted authority. Live ESS/EV modulation and existing structural, physical,
+source/peak, input-health, phase/readback and charger protections remain active. No
+new live grid-energy budget or stricter periodic cadence is introduced.
+
+VERIFIED:482 Python cases pass86.69s;95 focused cases pass4.70s. All61 frontend cases,
+shipped-JS syntax, Ruff and mypy38 pass; CLI reports4.4.4. Synthetic regressions cover
+frozen mathematical/source/economic failures, actual admission health, coarse positive/
+negative stock drift, in-flight continuity, adaptive live ESS/EV behavior and periodic
+fresh inputs. Neither original private Downloads export remains available; no fresh
+raw replay is claimed. A labelled synthetic case reproduces14.976→15.210kWh and
+8.43525 planned versus8.190 required /0.14175 apparent excess.
+
+Configured routed fake E2E passes:2023 intervals,2 imported journeys,6 fake Maps queries,
+4 local HA calls, real spawned HiGHS/manual cancellation/reaping/latest-only adoption.
+Routed acceptance60.78s/max tick4.22ms; standard acceptance25.36s/max tick3.30ms.
+Both strengthened E2E variants explicitly assert
+frozen validation, unchanged interval grid and separate persisted admission evidence.
+No live HA/Google/database/credential/hardware/phone or installation operations.
+
+Wheel/sdist/isolated offline install match all59 package files; source archive matches
+all14 maintained Markdown documents. Isolated4.4.4 CLI/module import and packaged assets
+pass. Source archive is refreshed after this final checkpoint. Final scope/whitespace
+review passes; generated E2E reports stay in ignored task artifacts.
+
+NEXT: commit4.4.4, fast-forward/push main preserving unrelated edits, then check
+exact-head CI and image publication. Main/origin remain d5c4373 at final pre-release
+fetch. Record remote outcomes only in the ignored checkpoint/final reply; no success-
+only docs commit. Build the source archive after this maintained checkpoint is final.
+
+## Earlier documentation checkpoint — snapshot planning with live control (28 October 2026)
+
+AUTHORIZED: documentation update requested after the user clarified the architecture.
+Snapshot → calculate → validate on the same snapshot → execute remaining schedule with
+adaptive live ESS/EV control until replacement. Ordinary and large/sustained load/PV
+mismatch and resulting inventory drift do not invalidate a schedule, cancel work or
+independently request an extra solve. Periodic calculations consume fresh inputs and
+supported forecast corrections. Structural goal/config/permission and genuine safety/
+availability events retain their handling. Physical/source/peak/input/charger guards
+remain active. No new live grid-energy budget, fresh-stock economic revalidation or
+publication energy-repair layer is part of the accepted design.
+
+DOCUMENTED: updated the existing Architecture_Proposal.md in place, replaced conflicting
+publication/mismatch-trigger requirements and labelled superseded implementation/history.
+DECISIONS.md records the new choice and the superseded4.4.1 repair decision. Supporting
+forecast/runbook notes distinguish accepted policy from the shipped implementation.
+
+IMPLEMENTATION GAP: current published baseline4.4.3 atd5c4373 still performs fresh-stock
+publication revalidation/repair and mismatch-triggered extra solves/invalidation. These
+have not been changed or newly verified. Do not infer code authorization from this docs
+request or previous routing-release mandates. A separately authorized migration should
+preserve full frozen-input audits and adaptive live control, narrow admission checks,
+remove mismatch-only triggers/repair and verify the supplied frozen rejection plus
+normal/coarse measurement drift and genuine safety/authority failures offline.
+
+This task changes documentation only: no application code/config/version change, commit,
+push, publication, live HA/database/API, hardware or notification operation. Preserve the
+pre-existing unrelated DEFERRED_WORK.md edits in the main checkout. Documentation diff
+and consistency checks are sufficient; application tests are not required for this edit.
+CHECKED: documentation-only diff, updated policy/implementation labels, new section links
+and git diff --check pass. The unrelated backlog remains byte-for-byte unchanged.
+
+
+## Earlier release checkpoint — stable route timing and safe diagnostics (28 October2026)
 
 AUTHORIZED: user said Go ahead to fixing intermittent route resolution and exposing
 safe failure reasons. Base5ea9dfe (published4.4.2); use isolated V4.4 branch. Preserve

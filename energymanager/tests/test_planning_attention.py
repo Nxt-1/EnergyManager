@@ -6,7 +6,7 @@ from copy import deepcopy
 from energymanager.notifications import Notifications, NotificationTarget
 from energymanager.service import Application
 from energymanager.planner import Planner
-from energymanager.publication import rebase
+from energymanager.publication import admit
 from energymanager.store import Store
 from test_first_slice import tiny
 
@@ -120,14 +120,14 @@ async def test_publication_loop_recovers_once_and_clears_attention_without_phone
 
     def reconcile(snapshot, result, observation, at):
         if len(attempts) == 1:
-            return snapshot, result, ["SYNTHETIC changed-state peak rejection"]
-        return rebase(snapshot, result, observation, at)
+            return result, ["SYNTHETIC current-input admission failure"]
+        return admit(snapshot, result, observation, at)
 
     async def accepted():
         app.shutdown = True
 
     monkeypatch.setattr(app, "calculate_plan", calculate)
-    monkeypatch.setattr("energymanager.service.rebase", reconcile)
+    monkeypatch.setattr("energymanager.service.admit", reconcile)
     monkeypatch.setattr(app, "notify_permission_issues", accepted)
     app.requested.set()
     await asyncio.wait_for(app.planning_loop(), 5)

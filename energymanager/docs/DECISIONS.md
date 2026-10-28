@@ -469,6 +469,9 @@ image-publication workflow are authorized; physical installation deployment is n
 
 ## 28 October2026 — Recover elapsed delivery at publication (4.4.1)
 
+Historical implementation decision. The later28October snapshot/live-control decision
+below supersedes this publication repair requirement;4.4.4 removes that code.
+
 The user authorized an independently established fix for an attached rejected charging
 plan. Offline replay confirmed that the original candidate met the morning goal but
 elapsed held charging was not confirmed by the publication-time battery reading.
@@ -505,3 +508,34 @@ and no guessed/stale route fallback. Show fixed safe error reasons and archive o
 ID/category/numeric HTTP status/time. Raw provider bodies and exception text remain
 private. This reproduces a failure mode, not proof of a particular live Google failure.
 No live Google/HA/credential/hardware or real notification access is authorized.
+
+
+## 28 October 2026 — Snapshot schedules with adaptive live control
+
+The user clarified that planning should use one snapshot, validate against that same
+snapshot and execute the remaining schedule with live control until replacement.
+Changing readings are expected in a dynamic system. ESS must remain active and EV power
+must respond to fluctuating demand/production, with physical/source/peak permissions and
+input/charger safeguards intact. These execution differences do not invalidate the
+original schedule. Large/sustained load/PV mismatches and resulting inventory deviations
+wait for periodic recalculation rather than independently requesting an extra solve or
+revoking authority. Retain useful forecast corrections for the next planning snapshot.
+Structural goal/configuration/permission changes and genuine safety/availability events
+retain their separate handling; forecast mismatch is not inconsistent live measurements.
+
+Keep full mathematical, source, required-grid and economic validation on the original
+calculation inputs. Publication checks continued authority/usability and skips elapsed
+instructions; do not substitute new EV/ESS stocks into that proof. Preserve original and
+admission evidence separately. The proposed live remaining-grid-energy budget was not
+adopted. Fresh-stock publication economic revalidation and4.4.1 energy repair are
+superseded, as are the mismatch-only extra-solve/invalidation requirements from4.3.20.
+See the maintained architecture for the complete current contract.
+
+Initially documented without changing4.4.3. The user subsequently explicitly requested
+implementation. Release4.4.4 validates frozen candidate/reference evidence, preserves the
+original grid and records admission readings separately. It removes fresh-stock repair
+and numerical mismatch/peak-only extra solves. Forecast issuances/corrections queue for
+periodic work without revoking accepted authority. Current revision, connection,
+input-health and physical/source/peak/charger protections remain; no live energy budget
+is added. Verification uses deterministic fixtures and fake local services. Publication
+through the existing release workflow is authorized; live installation operation is not.

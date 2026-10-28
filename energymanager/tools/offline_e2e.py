@@ -19,6 +19,8 @@ from aiohttp.abc import AbstractResolver
 from aiohttp.test_utils import TestClient, TestServer
 
 from energymanager.configuration import configured_application
+from energymanager.domain import Snapshot
+from energymanager.validation import validate
 from energymanager.settings import ConfigurationFile, SETTING_FIELDS
 from energymanager.notifications import Notifications, NotificationTarget
 from energymanager.store import Store
@@ -300,7 +302,15 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                 await application.notifications.inform("verification-only", {"message": "SYNTHETIC local test only"})
                 assert calls[-1]["domain"] == "notify"
                 assert application.store.decisions()[0]["disposition"] == "accepted"
-                assert application.store.decision(application.accepted["id"])["result"]["valid"]
+                decision = store.decision(application.accepted["id"])
+                assert decision is not None
+                accepted = decision["result"]
+                frozen = Snapshot.from_dict(accepted.get("effective_snapshot") or decision["snapshot"])
+                assert accepted["valid"] and accepted["admission"]["passed"]
+                assert accepted["admission"]["input_digest"] == frozen.digest
+                assert accepted["intervals"] == (accepted.get("effective_snapshot") or decision["snapshot"])["intervals"]
+                assert not validate(frozen, accepted["flows"], accepted.get("service"))
+                assert "adoption_snapshot" not in accepted and "publication_repair" not in accepted
                 report = {
                     "version": current["version"],
                     "provenance": current["provenance"],
@@ -332,7 +342,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                         "hardware-off stop confirmed by new device and zero-power observations before injecting preview faults",
                         "spawned real full-horizon HiGHS plan",
                         "manual replan cancels and reaps real HiGHS; only the latest replacement is adopted",
-                        "publication against current measurements",
+                        "frozen-snapshot validation with separate current admission evidence",
                         "independent guarded calls to local fake only",
                         "API state",
                         "persisted input checksum and accepted result",

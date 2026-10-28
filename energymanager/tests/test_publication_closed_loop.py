@@ -1,3 +1,7 @@
+"""Frozen-plan admission and adaptive execution with deterministic synthetic measurements."""
+
+import asyncio
+from copy import deepcopy
 from dataclasses import replace
 from datetime import timedelta
 
@@ -6,236 +10,434 @@ import pytest
 from energymanager.control import FastControl
 from energymanager.demo_plant import DemoPlant
 from energymanager.domain import Goal, json_data
-from energymanager.optimization import JointModel
 from energymanager.planner import Planner
-from energymanager.publication import rebase
+from energymanager.publication import admit
+from energymanager.reservations import reservations
+from energymanager.service import Application
+from energymanager.store import Store
 from energymanager.validation import accounting, validate
 from test_first_slice import tiny
 
 
-def test_elapsed_prefix_and_delivered_energy_are_not_repeated():
-    s = tiny(hours=1, ev=24, house=0.4, planning_budget_seconds=5)
-    hold = s.observation.at + timedelta(minutes=10)
-    s = replace(s, hold_until=hold, goals=(Goal("manual", "Required goal", s.intervals[-1].end, 42),))
-    result = Planner().plan(s)
-    assert result["valid"], result
-    assert sum(result["flows"]["grid_ev"][:2]) == pytest.approx(0)
-    at = s.observation.at + timedelta(minutes=6)
-    o = replace(s.observation, at=at, quarter_import_kwh=0.04)
-    current, adopted, errors = rebase(s, result, o, at)
-    assert not errors
-    assert adopted["intervals"][0]["start"] == at.isoformat()
-    assert adopted["flows"]["ev_energy"][0] == 24
-    assert adopted["candidate_at_calculation"]["intervals"][0]["start"] == s.observation.at.isoformat()
-    assert validate(current, adopted["flows"]) == []
+def scheduled_flows(snapshot, grid_rates):
+    names = (
+        "pv_ev",
+        "pv_house",
+        "pv_store",
+        "export",
+        "curtail",
+        "grid_ev",
+        "grid_house",
+        "grid_store",
+        "solar_dis_ev",
+        "solar_dis_house",
+        "grid_dis_house",
+        "dc_store",
+        "dc_invert",
+        "one",
+        "three",
+        "amps_one",
+        "amps_three",
+    )
+    n = len(snapshot.intervals)
+    flows = {name: [0.0] * n for name in names}
+    flows["grid_ev"] = list(grid_rates)
+    flows["grid_house"] = [i.house_kw for i in snapshot.intervals]
+    flows["export"] = [i.pv_ac_kw for i in snapshot.intervals]
+    flows["ev_energy"] = [snapshot.observation.ev_kwh]
+    flows["ess_grid"] = [snapshot.observation.ess_grid_kwh] * (n + 1)
+    flows["ess_solar"] = [
+        snapshot.observation.ess_kwh - snapshot.capabilities.ess_min_kwh - snapshot.observation.ess_grid_kwh
+    ] * (n + 1)
+    for t, interval in enumerate(snapshot.intervals):
+        if grid_rates[t]:
+            flows["one"][t] = 1.0
+            flows["amps_one"][t] = grid_rates[t] * 1000 / snapshot.capabilities.voltage
+        flows["ev_energy"].append(
+            flows["ev_energy"][-1]
+            + grid_rates[t] * interval.hours * snapshot.capabilities.ev_efficiency
+            - interval.withdrawal_kwh
+        )
+    return flows
 
 
-def test_publication_reconciles_additional_measured_ess_headroom():
-    s = tiny(hours=1, ev=50, ess=13, pv=4, dc=4, house=0, planning_budget_seconds=5)
-    result = Planner().plan(s)
-    at = s.observation.at + timedelta(minutes=1)
-    o = replace(s.observation, at=at, ess_kwh=13.5)
-    current, adopted, errors = rebase(s, result, o, at)
+def result_for(snapshot, flows):
+    goals = [
+        {
+            **json_data(g),
+            "target_kwh": g.target(snapshot.capabilities, snapshot.policy),
+            "shortfall_kwh": 0.0,
+            "planned_kwh": flows["ev_energy"][snapshot.checkpoint_index(g.deadline)],
+            "status": "scheduled",
+        }
+        for g in snapshot.goals
+    ]
+    return {
+        "id": "synthetic-plan",
+        "snapshot_id": snapshot.id,
+        "revision": snapshot.revision,
+        "valid": True,
+        "status": "SYNTHETIC",
+        "service": {},
+        "flows": flows,
+        "intervals": json_data(snapshot.intervals),
+        "summary": accounting(snapshot, flows),
+        "goals": goals,
+        "sessions": [],
+        "reasons": [],
+        "conditional_tasks": [],
+        "reservations": reservations(snapshot, flows),
+        "forecast_at": snapshot.forecast_at.isoformat(),
+    }
+
+
+def frozen_fixture():
+    s = tiny(ev=24, ess=5, house=0.4)
+    intervals = tuple(
+        replace(
+            s.intervals[-1],
+            start=s.observation.at + timedelta(minutes=t),
+            end=s.observation.at + timedelta(minutes=t + 5),
+        )
+        for t in range(0, 60, 5)
+    )
+    s = replace(
+        s,
+        intervals=intervals,
+        observation=replace(s.observation, monthly_peak_kw=4.5),
+        goals=(Goal("goal", "SYNTHETIC readiness", intervals[-1].end, 41),),
+    )
+    rates = [3.68] * 2 + [0.0] * (len(intervals) - 2)
+    # One extra integer-amp slice supplies the remaining required energy.
+    rates[2] = 1.38
+    flows = scheduled_flows(s, rates)
+    assert not validate(s, flows)
+    result = result_for(s, flows)
+    result["reference_flows"] = deepcopy(flows)
+    return s, result
+
+
+@pytest.mark.parametrize("ev_change,ess_change", [(0.0, 0.0), (0.234, 0.2), (-0.7, -1.0), (1.0, -0.1)])
+def test_admission_keeps_frozen_plan_and_records_changed_measurements_separately(ev_change, ess_change):
+    s, result = frozen_fixture()
+    original = deepcopy(result)
+    at = s.observation.at + timedelta(minutes=2)
+    observation = replace(
+        s.observation,
+        at=at,
+        ev_kwh=s.observation.ev_kwh + ev_change,
+        ess_kwh=s.observation.ess_kwh + ess_change,
+        quarter_import_kwh=1.1,
+    )
+    admitted, errors = admit(s, result, observation, at)
+    assert not errors, errors
+    assert result == original
+    for key, value in original.items():
+        assert admitted[key] == value
+    assert admitted["admission"]["observation"] == json_data(observation)
+    assert admitted["admission"]["input_digest"] == s.digest
+    assert admitted["admission"]["passed"]
+    assert "publication_repair" not in admitted and "adoption_snapshot" not in admitted
+    assert not validate(s, admitted["flows"])
+
+
+def test_admission_skips_elapsed_instructions_without_slicing_or_repeating_a_withdrawal():
+    s, result = frozen_fixture()
+    at = s.observation.at + timedelta(minutes=20)
+    observation = replace(s.observation, at=at)
+    admitted, errors = admit(s, result, observation, at)
     assert not errors
-    assert max(a + b for a, b in zip(adopted["flows"]["ess_solar"], adopted["flows"]["ess_grid"])) <= 11.20001
-    assert validate(current, adopted["flows"]) == []
+    assert admitted["admission"]["first_interval"] == 4
+    assert admitted["intervals"] == result["intervals"]
+    assert FastControl(s.capabilities, s.policy).tick(observation, at, admitted, 1).ev_kw == 0
+    trip = Goal(
+        "trip",
+        "SYNTHETIC elapsed trip",
+        s.intervals[2].start,
+        kind="trip",
+        distance_km=10,
+        return_at=s.intervals[6].start,
+    )
+    intervals = list(s.intervals)
+    intervals[2] = replace(intervals[2], withdrawal_kwh=trip.withdrawal(s.policy))
+    s = replace(s, intervals=tuple(intervals), goals=(trip,))
+    flows = scheduled_flows(s, [0.0] * len(intervals))
+    result = result_for(s, flows)
+    at = s.observation.at + timedelta(minutes=35)
+    observation = replace(s.observation, at=at, ev_kwh=24 - trip.withdrawal(s.policy))
+    admitted, errors = admit(s, result, observation, at)
+    assert not errors
+    assert admitted["intervals"] == result["intervals"]
+    plant = DemoPlant(s)
+    plant.observation = observation
+    assert plant.step(at + timedelta(minutes=1), None).ev_kwh == observation.ev_kwh
+
+
+@pytest.mark.parametrize("bad_reference", [False, True])
+def test_frozen_physical_and_reference_validation_are_still_mandatory(bad_reference):
+    s, result = frozen_fixture()
+    flows = result["reference_flows"] if bad_reference else result["flows"]
+    flows["grid_house"][3] += 1
+    admitted, errors = admit(s, result, s.observation, s.observation.at)
+    assert errors and any("House conservation" in e for e in errors)
+    assert not admitted["admission"]["passed"]
+    assert admitted["flows"] == result["flows"]
+
+
+def test_frozen_optional_economics_are_still_audited():
+    s = tiny(pv=2, house=0, ess=2.8, ev_value_eur_kwh=0)
+    reference = scheduled_flows(s, [0.0] * len(s.intervals))
+    flows = deepcopy(reference)
+    for t, i in enumerate(s.intervals):
+        flows["pv_ev"][t] = 1.38
+        flows["export"][t] -= 1.38
+        flows["one"][t] = 1
+        flows["amps_one"][t] = 6
+        flows["ev_energy"][t + 1] = flows["ev_energy"][t] + 1.38 * i.hours * s.capabilities.ev_efficiency
+    assert not validate(s, flows) and not validate(s, reference)
+    result = result_for(s, flows)
+    result["reference_flows"] = reference
+    _, errors = admit(s, result, s.observation, s.observation.at)
+    assert any("24-hour combined comparison worsens" in e for e in errors)
+
+
+@pytest.mark.parametrize(
+    "problem",
+    [
+        "stale",
+        "unknown",
+        "settling",
+        "future_read",
+        "connection",
+        "ev_availability",
+        "capacity",
+        "provenance",
+        "elapsed",
+        "early_clock",
+        "forecast_age",
+    ],
+)
+def test_real_admission_failures_remain_blocking(problem):
+    s, result = frozen_fixture()
+    at = s.observation.at + timedelta(minutes=2)
+    observation = replace(s.observation, at=at)
+    if problem == "stale":
+        observation = replace(observation, at=at - timedelta(minutes=1))
+    elif problem in ("unknown", "settling"):
+        observation = replace(observation, quality=problem)
+    elif problem == "future_read":
+        observation = replace(observation, at=at + timedelta(seconds=1))
+    elif problem == "connection":
+        observation = replace(observation, connected=False)
+    elif problem == "ev_availability":
+        observation = replace(observation, ev_state_known=False)
+    elif problem == "capacity":
+        observation = replace(observation, ev_kwh=61)
+    elif problem == "provenance":
+        observation = replace(observation, ess_grid_kwh=4)
+    elif problem == "elapsed":
+        at = s.intervals[-1].end
+    elif problem == "early_clock":
+        at = s.intervals[0].start - timedelta(seconds=1)
+    else:
+        s = replace(s, forecast_at=s.forecast_at - timedelta(hours=3))
+    admitted, errors = admit(s, result, observation, at)
+    assert errors and not admitted["admission"]["passed"]
+
+
+def test_unknown_ev_state_does_not_disable_a_valid_ess_schedule():
+    s = tiny(ess=5, house=1)
+    s = replace(
+        s,
+        observation=replace(s.observation, ev_state_known=False),
+        intervals=tuple(replace(i, ev_state_known=False, available=False) for i in s.intervals),
+    )
+    result = result_for(s, scheduled_flows(s, [0.0] * len(s.intervals)))
+    admitted, errors = admit(s, result, s.observation, s.observation.at)
+    assert not errors
+    command = FastControl(s.capabilities, s.policy).tick(s.observation, s.observation.at, admitted, 1)
+    assert command.ev_kw == 0 and command.ess_kw > 0
+
+
+def test_one_frozen_plan_keeps_live_ess_balancing_and_ev_peak_modulation():
+    s, result = frozen_fixture()
+    rates = [0.0] * len(s.intervals)
+    rates[2] = 3.68
+    target = 24 + 3.68 * s.intervals[2].hours * s.capabilities.ev_efficiency
+    s = replace(
+        s, goals=(replace(s.goals[0], target_soc_percent=target / s.capabilities.ev_capacity_kwh * 100),)
+    )
+    result = result_for(s, scheduled_flows(s, rates))
+    assert not validate(s, result["flows"])
+    at = s.observation.at + timedelta(minutes=15, seconds=-1)
+    observation = replace(
+        s.observation, at=at, ev_power_kw=3.68, ev_kwh=target - 0.01, quarter_import_kwh=1.1234
+    )
+    admitted, errors = admit(s, result, observation, at)
+    assert not errors
+    original = deepcopy(admitted)
+    commands = []
+    for house, pv in ((0.4, 0), (8, 0), (0.4, 8)):
+        o = replace(observation, house_kw=house, pv_ac_kw=pv)
+        commands.append(FastControl(s.capabilities, s.policy).tick(o, at, admitted, 1))
+    baseline, loaded, sunny = commands
+    assert baseline.ev_kw == pytest.approx(3.68)
+    assert loaded.ev_kw < baseline.ev_kw and loaded.ess_kw > 0
+    assert sunny.ess_kw < 0 and sunny.ev_kw > 0
+    assert all(not c.replan for c in commands)
+    assert admitted == original
+    assert observation.quarter_import_kwh + (8 - loaded.ess_kw + loaded.ev_kw) / 3600 <= 4.5 * 0.25 + 1e-8
+
+
+@pytest.mark.parametrize("ev_change", [0.0, 0.234, -0.7])
+async def test_measurement_drift_during_a_solve_does_not_cancel_or_reject_it(
+    tmp_path, monkeypatch, ev_change
+):
+    s, result = frozen_fixture()
+    app = Application(Store(tmp_path / "synthetic.sqlite"), snapshot=s, policy=s.policy, demo=False)
+    at = s.observation.at + timedelta(minutes=2)
+    app.now = lambda: at
+    monkeypatch.setattr(app, "build_snapshot", lambda: s)
+    running, release = asyncio.Event(), asyncio.Event()
+
+    async def calculate(snapshot, request_id):
+        running.set()
+        await release.wait()
+        return deepcopy(result)
+
+    async def accepted():
+        app.shutdown = True
+
+    monkeypatch.setattr(app, "calculate_plan", calculate)
+    monkeypatch.setattr(app, "notify_permission_issues", accepted)
+    app.requested.set()
+    loop = asyncio.create_task(app.planning_loop())
+    try:
+        await asyncio.wait_for(running.wait(), 2)
+        app.observe(replace(s.observation, at=at, ev_kwh=24 + ev_change, ess_kwh=4, house_kw=8))
+        assert not app.requested.is_set() and app.revision == s.revision
+        release.set()
+        await asyncio.wait_for(loop, 3)
+        assert app.status == "ready" and app.accepted["flows"] == result["flows"]
+        assert app.ev_valid and app.ess_valid and app.conditional_valid
+        assert {row["disposition"] for row in app.store.decisions()} == {"accepted"}
+    finally:
+        app.shutdown = True
+        loop.cancel()
+        await asyncio.gather(loop, return_exceptions=True)
+        app.store.close()
 
 
 def test_real_plan_and_fast_control_complete_required_goal_in_closed_loop():
     s = tiny(hours=1, ev=24, house=0.4, planning_budget_seconds=6)
-    s = replace(s, goals=(Goal("goal", "50 minute readiness", s.intervals[-1].end, 42),))
+    s = replace(s, goals=(Goal("goal", "SYNTHETIC readiness", s.intervals[-1].end, 42),))
     result = Planner().plan(s)
     assert result["valid"]
-    plant = DemoPlant(s)
-    controller = FastControl(s.capabilities, s.policy)
-    command = None
+    plant, control, command = DemoPlant(s), FastControl(s.capabilities, s.policy), None
     for second in range(0, 3601, 5):
         at = s.observation.at + timedelta(seconds=second)
-        o = plant.step(at, command)
-        command = controller.tick(o, at, result, 1)
+        observed = plant.step(at, command)
+        command = control.tick(observed, at, result, 1)
     assert plant.observation.ev_kwh >= 25.19
     assert plant.observation.monthly_peak_kw <= 4.0001
-    assert plant.observation.quality == "SYNTHETIC"
 
 
-def test_publication_releases_household_discharge_after_measured_balancing():
-    s = tiny(hours=2, ev=50, ess=4, house=1, planning_budget_seconds=4)
-    result = Planner().plan(s)
-    assert result["valid"]
+async def test_periodic_calculation_still_uses_fresh_forecast_and_measurements(tmp_path, monkeypatch):
+    s = tiny(hours=169, ev=50, ess=5)
+    app = Application(Store(tmp_path / "synthetic-periodic.sqlite"), snapshot=s, policy=s.policy, demo=False)
+    app.now = lambda: s.observation.at
+    updated = tuple(replace(i, house_kw=1.4) for i in s.intervals)
+    app.forecast_data = {
+        "issued_at": s.forecast_at.isoformat(),
+        "revision": "synthetic-new-forecast",
+        "provenance": "SYNTHETIC",
+        "intervals": json_data(updated),
+    }
+    app.observation = replace(s.observation, ev_kwh=50.234)
+    real_wait_for = asyncio.wait_for
+    periodic_waits = []
+
+    async def wait_for(awaitable, timeout):
+        if timeout == 300:
+            periodic_waits.append(timeout)
+            awaitable.close()
+            raise TimeoutError
+        return await real_wait_for(awaitable, timeout)
+
+    snapshots = []
+
+    async def calculate(snapshot, request_id):
+        snapshots.append(snapshot)
+        return result_for(snapshot, scheduled_flows(snapshot, [0.0] * len(snapshot.intervals)))
+
+    async def accepted():
+        app.shutdown = True
+
+    monkeypatch.setattr(asyncio, "wait_for", wait_for)
+    monkeypatch.setattr(app, "calculate_plan", calculate)
+    monkeypatch.setattr(app, "notify_permission_issues", accepted)
+    try:
+        await real_wait_for(app.planning_loop(), 5)
+        assert periodic_waits == [300]
+        assert app.planning_activity["reason"] == "periodic" and app.status == "ready"
+        assert snapshots[0].forecast_id == "synthetic-new-forecast"
+        assert snapshots[0].observation.ev_kwh == 50.234
+        assert snapshots[0].intervals[0].house_kw == 1.4
+    finally:
+        app.store.close()
+
+
+def test_reported_0234_kwh_increase_does_not_reject_the_original_grid_purchase():
+    s = tiny(hours=4, ev=14.976, ess=5)
+    intervals = tuple(
+        replace(
+            s.intervals[-1],
+            start=s.observation.at + timedelta(minutes=t),
+            end=s.observation.at + timedelta(minutes=t + 5),
+        )
+        for t in range(0, 240, 5)
+    )
+    s = replace(
+        s,
+        capabilities=replace(s.capabilities, ev_capacity_kwh=46.8),
+        intervals=intervals,
+        observation=replace(s.observation, monthly_peak_kw=5.49),
+        goals=(Goal("morning", "SYNTHETIC supplied-error reproduction", intervals[-1].end, 50),),
+    )
+    rates = [0.0] + [3.68] * 30 + [2.07] + [0.0] * 16
+    result = result_for(s, scheduled_flows(s, rates))
+    assert not validate(s, result["flows"])
+    grid = sum(rate * i.hours * s.capabilities.ev_efficiency for rate, i in zip(rates, intervals))
+    assert grid == pytest.approx(8.43525)
     at = s.observation.at + timedelta(minutes=2)
-    o = replace(s.observation, at=at, ess_kwh=s.observation.ess_kwh - 0.04)
-    current, adopted, errors = rebase(s, result, o, at)
-    assert not errors, errors
-    assert min(adopted["flows"]["ess_solar"]) >= -1e-8
-    assert not validate(current, adopted["flows"])
-    assert adopted["candidate_at_calculation"]["flows"] != adopted["flows"]
-
-
-def test_lower_measured_ess_rejects_a_new_peak_and_keeps_reconciliation_evidence():
-    s = tiny(hours=1, ev=24, ess=3, house=1)
-    s = replace(s, observation=replace(s.observation, monthly_peak_kw=4.5),
-                goals=(Goal("morning", "Synthetic morning", s.intervals[-1].end, 42),))
-    model = JointModel(s)
-    for index in model.linear.variables["solar_dis_ev"]:
-        model.linear.upper[index] = 0
-    for index in model.linear.variables["amps_one"][:4]:
-        model.linear.lower[index] = model.linear.upper[index] = 16
-    solved = model.run(2)
-    assert solved["feasible"]
-    assert not validate(s, solved["flows"])
-    result = {**solved, "intervals": json_data(s.intervals), "goals": [], "sessions": [],
-              "summary": accounting(s, solved["flows"])}
-    current, rejected, errors = rebase(s, result, replace(s.observation, ess_kwh=2.81), s.observation.at)
-    assert any("Unapproved EV peak" in error and "W allowance" in error for error in errors)
-    assert "publication_candidate" in rejected
-    assert rejected["flows"] == result["flows"]  # Original solver evidence is untouched.
-    assert validate(current, rejected["publication_candidate"]["flows"])
-
-
-def held_charging_fixture(*, reference=False, phase=3):
-    """Deterministic synthetic schedule; no installation measurements or solver replay."""
-    s = tiny(ev=24, house=.4)
-    intervals = tuple(replace(s.intervals[-1], start=s.observation.at + timedelta(minutes=t),
-                              end=s.observation.at + timedelta(minutes=t + 5)) for t in range(0, 60, 5))
-    s = replace(s, intervals=intervals)
-    s = replace(s, observation=replace(s.observation, ev_phases=phase, ev_power_kw=1.38 * phase),
-                hold_until=s.intervals[0].end, hold_ev_kw=1.38 * phase, hold_phases=phase,
-                goals=(Goal("morning", "SYNTHETIC morning", s.intervals[-1].end, 40 + phase / 3),))
-    names = ("pv_ev", "pv_house", "pv_store", "export", "curtail", "grid_ev", "grid_house",
-             "grid_store", "solar_dis_ev", "solar_dis_house", "grid_dis_house", "dc_store",
-             "dc_invert", "one", "three", "amps_one", "amps_three")
-    flows = {name: [0.] * len(s.intervals) for name in names}
-    flows["grid_house"] = [.4] * len(s.intervals)
-    flows["ev_energy"] = [24.]
-    flows["ess_grid"] = [0.] * (len(s.intervals) + 1)
-    flows["ess_solar"] = [0.] * (len(s.intervals) + 1)
-    for t, interval in enumerate(s.intervals):
-        if t < 2:
-            flows["grid_ev"][t] = 1.38 * phase
-            flows["three" if phase == 3 else "one"][t] = 1.
-            flows["amps_three" if phase == 3 else "amps_one"][t] = 6.
-        flows["ev_energy"].append(flows["ev_energy"][-1] + flows["grid_ev"][t] * interval.hours * .9)
-    assert not validate(s, flows)
-    result = {"flows": flows, "intervals": json_data(s.intervals), "service": {},
-              "summary": accounting(s, flows),
-              "goals": [{**json_data(s.goals[0]), "target_kwh": 24 + .2 * phase}],
-              "sessions": [{"resource": "ev", "start": s.intervals[0].start.isoformat(),
-                            "end": s.intervals[1].end.isoformat()}]}
-    if reference:
-        from copy import deepcopy
-        ref = deepcopy(flows)
-        ref["grid_ev"][1] += .69
-        ref["amps_three"][1] += 1
-        for k in range(2, len(ref["ev_energy"])):
-            ref["ev_energy"][k] += .69 / 12 * .9
-        assert not validate(s, ref)
-        result["reference_flows"] = ref
-    at = s.observation.at + timedelta(minutes=2)
-    observation = replace(s.observation, at=at, quarter_import_kwh=.15)
-    return s, result, observation, at
-
-
-def test_unconfirmed_held_delivery_extends_existing_session_by_only_missing_energy():
-    from copy import deepcopy
-    from energymanager.validation import rolling_comparison_errors
-    s, result, observation, at = held_charging_fixture(reference=True)
-    original = deepcopy(result)
-    current, adopted, errors = rebase(s, result, observation, at)
-    assert not errors, errors
-    assert result == original
-    assert not validate(current, adopted["flows"])
-    assert not validate(current, adopted["reference_flows"])
-    assert not rolling_comparison_errors(current, adopted["reference_flows"], adopted["flows"])
-    assert adopted["flows"]["ev_energy"][0] == observation.ev_kwh
-    assert adopted["flows"]["ev_energy"][-1] == pytest.approx(24.6)
-    assert adopted["publication_repair"]["energy_kwh"] == pytest.approx(.1032)
-    assert adopted["reference_publication_repair"]["energy_kwh"] == pytest.approx(.05145)
-    assert len(current.intervals) == len(s.intervals) + 2
-    session = adopted["sessions"][0]
-    assert session["end"] == adopted["publication_repair"]["end"]
-    assert session["energy_kwh"] == pytest.approx(.6)
-    assert adopted["goals"][0]["completion_at"] == session["end"]
-    assert adopted["adoption_snapshot"] == json_data(current)
-    assert adopted["adoption_digest"] == current.digest
-    assert adopted["candidate_at_calculation"]["flows"] == original["flows"]
-
-
-def test_confirmed_held_delivery_needs_no_extension():
-    s, result, observation, at = held_charging_fixture()
-    observation = replace(observation, ev_kwh=24 + 4.14 * 2 / 60 * .9)
-    current, adopted, errors = rebase(s, result, observation, at)
+    observed = replace(s.observation, at=at, ev_kwh=15.21)
+    assert 23.4 - observed.ev_kwh == pytest.approx(8.19)
+    assert grid - (23.4 - observed.ev_kwh) - 0.1035 == pytest.approx(0.14175)
+    admitted, errors = admit(s, result, observed, at)
     assert not errors
-    assert "publication_repair" not in adopted
-    assert not validate(current, adopted["flows"])
-    assert adopted["sessions"][0]["end"] == result["sessions"][0]["end"]
+    assert admitted["flows"] == result["flows"] and admitted["summary"] == result["summary"]
+    assert admitted["admission"]["observation"]["ev_kwh"] == 15.21
 
 
-@pytest.mark.parametrize("blocker", ["inventory_loss", "peak", "deadline", "away", "no_future_session", "disconnected"])
-def test_delivery_repair_does_not_bypass_existing_guards(blocker):
-    s, result, observation, at = held_charging_fixture()
-    if blocker == "inventory_loss":
-        observation = replace(observation, ev_kwh=23.8)
-    elif blocker == "peak":
-        observation = replace(observation, quarter_import_kwh=.3)
-    elif blocker == "disconnected":
-        observation = replace(observation, connected=False)
-    elif blocker == "deadline":
-        s = replace(s, goals=(replace(s.goals[0], deadline=s.intervals[1].end),))
-    elif blocker == "away":
-        intervals = list(s.intervals)
-        intervals[2] = replace(intervals[2], available=False)
-        s = replace(s, intervals=tuple(intervals))
-    else:
-        at = s.observation.at + timedelta(minutes=11)
-        observation = replace(observation, at=at, quarter_import_kwh=.15)
-    current, rejected, errors = rebase(s, result, observation, at)
-    assert errors
-    assert rejected["flows"] == result["flows"]
-    assert "publication_candidate" in rejected
-    assert "publication_repair" not in rejected
-    assert validate(current, rejected["publication_candidate"]["flows"])
-
-
-def test_lost_delivery_can_extend_one_phase_without_switching_modes():
-    s, result, observation, at = held_charging_fixture(phase=1)
-    current, adopted, errors = rebase(s, result, observation, at)
-    assert not errors, errors
-    assert not validate(current, adopted["flows"])
-    assert adopted["flows"]["ev_energy"][-1] == pytest.approx(24.2)
-    assert not any(adopted["flows"]["three"])
-    assert adopted["publication_repair"]["energy_kwh"] == pytest.approx(.0344)
-    assert adopted["publication_repair"]["phases"] == 1
-
-
-def test_failed_reference_preserves_original_candidate_and_labels_repair_evidence():
-    from copy import deepcopy
-    s, result, observation, at = held_charging_fixture(reference=True)
-    # A deliberately invalid comparison trajectory cannot authorize publication.
-    result["reference_flows"]["grid_house"][3] += 1
-    original = deepcopy(result)
-    current, rejected, errors = rebase(s, result, observation, at)
-    assert any("Reference cannot be reconciled" in error for error in errors)
-    assert rejected["flows"] == original["flows"]
-    assert rejected["publication_candidate"]["flows"] != rejected["flows"]
-    assert not validate(current, rejected["publication_candidate"]["flows"])
-    assert result == original
-    assert rejected["adoption_snapshot"] == json_data(current)
-    assert rejected["adoption_digest"] == current.digest
-
-
-def test_split_inventory_keeps_withdrawal_at_its_original_end_boundary():
-    from energymanager.publication import split_interval
-    s, result, _, _ = held_charging_fixture()
-    flows = result["flows"]
-    intervals = list(s.intervals)
-    intervals[2] = replace(intervals[2], withdrawal_kwh=2)
-    s = replace(s, intervals=tuple(intervals), goals=(replace(s.goals[0], deadline=intervals[1].end),))
-    for k in range(3, len(flows["ev_energy"])):
-        flows["ev_energy"][k] -= 2
-    assert not validate(s, flows)
-    boundary = intervals[2].start + timedelta(minutes=2)
-    split = split_interval(s, flows, boundary)
-    assert sum(i.withdrawal_kwh for i in split.intervals) == 2
-    assert flows["ev_energy"][3] == pytest.approx(flows["ev_energy"][2])
-    assert flows["ev_energy"][4] == pytest.approx(flows["ev_energy"][3] - 2)
-    assert not validate(split, flows)
+def test_lost_solar_keeps_the_plan_but_live_control_still_blocks_optional_grid_purchase():
+    s = tiny(pv=2, house=0, ess=2.8)
+    reference = scheduled_flows(s, [0.0] * len(s.intervals))
+    flows = deepcopy(reference)
+    for t, i in enumerate(s.intervals):
+        flows["pv_ev"][t] = 1.38
+        flows["export"][t] -= 1.38
+        flows["one"][t] = 1
+        flows["amps_one"][t] = 6
+        flows["ev_energy"][t + 1] = flows["ev_energy"][t] + 1.38 * i.hours * s.capabilities.ev_efficiency
+    result = result_for(s, flows)
+    result["reference_flows"] = reference
+    observed = replace(s.observation, ev_power_kw=1.38, pv_ac_kw=0)
+    admitted, errors = admit(s, result, observed, s.observation.at)
+    assert not errors
+    with_pv = FastControl(s.capabilities, s.policy).tick(
+        replace(observed, pv_ac_kw=2), observed.at, admitted, 1
+    )
+    without_pv = FastControl(s.capabilities, s.policy).tick(observed, observed.at, admitted, 1)
+    assert with_pv.ev_kw == 1.38 and without_pv.ev_kw == 0
+    assert not without_pv.replan
+    assert admitted["flows"] == result["flows"]

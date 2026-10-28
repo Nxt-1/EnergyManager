@@ -161,23 +161,20 @@ def test_expected_ess_discharge_is_not_a_resource_shortfall(tmp_path):
 
 
 @pytest.mark.parametrize("resource", ["ev", "ess"])
-def test_new_inventory_shortfall_requests_work_once_until_additional_evidence(tmp_path, resource):
+def test_large_inventory_drift_does_not_invalidate_or_request_extra_work(tmp_path, resource):
     s = tiny(hours=2, ess=5)
     store = Store(tmp_path / "synthetic.sqlite")
     app = Application(store, snapshot=s)
     app.accepted = flat_plan(s)
-    app.ev_valid = app.ess_valid = True
-    values = {f"{resource}_kwh": getattr(s.observation, f"{resource}_kwh") - 0.7}
-    app.observe(replace(s.observation, at=s.observation.at + timedelta(seconds=5), **values))
-    assert app.planning_activity["reason"] == "resource_shortfall"
-    assert app.revision == 2
-    app.requested.clear()
-    for t in range(10, 1800, 5):
-        app.observe(replace(s.observation, at=s.observation.at + timedelta(seconds=t), **values))
-    assert app.revision == 2 and not app.requested.is_set()
-    values[f"{resource}_kwh"] -= 0.7
-    app.observe(replace(s.observation, at=s.observation.at + timedelta(seconds=1800), **values))
-    assert app.revision == 3 and app.requested.is_set()
+    app.ev_valid = app.ess_valid = app.conditional_valid = True
+    for seconds, deficit in ((5, 0.7), (600, 1.4), (1200, 2.1)):
+        app.observe(replace(
+            s.observation, at=s.observation.at + timedelta(seconds=seconds),
+            **{f"{resource}_kwh": getattr(s.observation, f"{resource}_kwh") - deficit},
+        ))
+    assert app.revision == 1 and not app.requested.is_set()
+    assert app.ev_valid and app.ess_valid and app.conditional_valid
+    assert not any(e["kind"] == "resource_shortfall" for e in store.events())
     store.close()
 
 
@@ -193,7 +190,7 @@ def test_peak_protection_remains_immediate_without_continuous_solver_requests():
         assert not command.replan
 
 
-async def test_real_input_loop_requests_corrected_forecast_once_and_snapshot_uses_it(tmp_path, monkeypatch):
+async def test_real_input_loop_queues_correction_without_replanning_or_revoking_authority(tmp_path, monkeypatch):
     s = tiny(hours=169)
     store = Store(tmp_path / "synthetic.sqlite")
     clock = [s.observation.at + timedelta(seconds=895)]
@@ -210,6 +207,8 @@ async def test_real_input_loop_requests_corrected_forecast_once_and_snapshot_use
 
     app = Application(store, snapshot=s, ha=SyntheticHA(), forecast=SyntheticForecast(), demo=False)
     app.forecast_data = data
+    app.accepted = flat_plan(s)
+    app.ev_valid = app.ess_valid = app.conditional_valid = True
     for t in range(0, 895, 5):
         sample(app.replanning, s, t, house_kw=1.4)
     monkeypatch.setattr(app, "now", lambda: clock[0])
@@ -224,7 +223,10 @@ async def test_real_input_loop_requests_corrected_forecast_once_and_snapshot_use
     monkeypatch.setattr(asyncio, "sleep", advance)
     await app.input_loop()
     events = [event for event in store.events() if event["kind"] == "forecast_bias"]
-    assert len(events) == 1 and app.planning_activity["reason"] == "forecast_bias"
+    assert len(events) == 1 and events[0]["body"]["queued_for_planning"]
+    assert app.revision == 1 and not app.requested.is_set()
+    assert app.ev_valid and app.ess_valid and app.conditional_valid
+    assert app.planning_activity["state"] == "idle"
     prepared = app.build_snapshot()
     assert prepared.intervals[0].house_kw == pytest.approx(1.4)
     assert data["intervals"][0]["house_kw"] == .4
@@ -258,3 +260,57 @@ async def test_expired_control_instruction_requests_once_without_a_retry_loop(tm
     assert len([event for event in store.events() if event["kind"] == "planning_requested"]) == 1
     assert app.planning_activity["reason"] == "control_unavailable"
     store.close()
+
+
+async def test_new_forecast_is_queued_without_replacing_an_active_plan(tmp_path, monkeypatch):
+    s = tiny(hours=169, ess=5)
+    old = {
+        "issued_at": s.forecast_at.isoformat(), "revision": s.forecast_id,
+        "provenance": "SYNTHETIC", "intervals": json_data(s.intervals),
+    }
+    new = {**old, "revision": "synthetic-next-issuance"}
+    clock = [s.observation.at]
+
+    class SyntheticHA:
+        async def observe(self, capabilities):
+            return replace(s.observation, at=clock[0])
+
+    class SyntheticForecast:
+        async def read(self, observation, at):
+            return new
+
+    app = Application(Store(tmp_path / "synthetic-issuance.sqlite"), snapshot=s,
+                      ha=SyntheticHA(), forecast=SyntheticForecast(), demo=False)
+    app.now = lambda: clock[0]
+    app.forecast_data = old
+    accepted = flat_plan(s)
+    app.accepted = accepted
+    app.ev_valid = app.ess_valid = app.conditional_valid = True
+    real_sleep = asyncio.sleep
+
+    async def advance(seconds):
+        clock[0] += timedelta(seconds=5)
+        if clock[0] >= s.observation.at + timedelta(seconds=10):
+            app.shutdown = True
+        await real_sleep(0)
+
+    monkeypatch.setattr(asyncio, "sleep", advance)
+    await app.input_loop()
+    assert app.forecast_data["revision"] == "synthetic-next-issuance"
+    assert app.build_snapshot().forecast_id == "synthetic-next-issuance"
+    assert app.accepted is accepted
+    assert app.revision == 1 and not app.requested.is_set()
+    assert app.ev_valid and app.ess_valid and app.conditional_valid
+    assert any(e["kind"] == "forecast_updated" and e["body"]["queued_for_planning"] for e in app.store.events())
+    app.store.close()
+
+
+def test_a_new_measured_monthly_peak_does_not_launch_an_extra_solve(tmp_path):
+    s = tiny()
+    app = Application(Store(tmp_path / "synthetic-peak.sqlite"), snapshot=s)
+    app.ev_valid = app.ess_valid = app.conditional_valid = True
+    app.observe(replace(s.observation, at=s.observation.at + timedelta(seconds=1), monthly_peak_kw=6))
+    assert app.observation.monthly_peak_kw == 6
+    assert app.revision == 1 and not app.requested.is_set()
+    assert app.ev_valid and app.ess_valid and app.conditional_valid
+    app.store.close()

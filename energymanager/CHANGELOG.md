@@ -1,3 +1,16 @@
+## 4.4.4 — Snapshot schedules with adaptive live control
+
+- Validate each schedule and its economic reference against the optimizer's original
+  snapshot. Preserve calculated flows, goals, reservations, costs and forecast evidence;
+  record publication-time readings separately and skip elapsed instructions by time.
+- Remove fresh-stock publication revalidation and the4.4.1 session-extension repair.
+  Numerical EV/ESS drift no longer causes false grid-purchase or readiness rejection.
+- Queue forecast updates and measured bias corrections for the next periodic calculation.
+  Load/PV mismatch, inventory drift and higher measured peaks alone no longer revoke
+  accepted work, cancel a calculation or request extra solves.
+- Keep adaptive ESS balancing, EV power modulation, source/peak/physical safeguards,
+  structural-event replanning, input-health protection and manual recalculation active.
+
 ## 4.4.3 — Stable traffic routing and useful failure reasons
 
 - Allow a60second travel-time margin when choosing a traffic-aware departure, then

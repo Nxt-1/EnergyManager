@@ -1,5 +1,35 @@
 # EnergyManager 4 verification
 
+## 4.4.4 — Frozen schedules and adaptive execution (28 October2026)
+
+482 Python tests passed86.69s;61 frontend cases, all shipped JavaScript syntax, Ruff
+and mypy38 modules pass. Synthetic regressions verify frozen candidate/reference
+physical/source/grid/economic rejection, separate admission evidence, unchanged flows/
+goals/reservations/costs, elapsed instruction/withdrawal handling, and both higher/lower
+EV/ESS publication stocks. They reproduce the supplied0.234kWh inventory increase and
+0.14175kWh apparent excess without substituting newer stock into the original proof.
+The two private Downloads exports are no longer available; this is a labelled numerical
+reproduction, not a new raw-log replay.
+
+Live-control cases retain ESS demand balancing/PV absorption and EV power modulation
+through heavy load and changing PV. Lost solar cannot become optional grid charging.
+Quarter/source limits, stale/unknown/settling/future inputs, invalid battery/provenance,
+connection/EV-state availability, elapsed horizon and stale forecasts retain guards.
+In-flight numerical drift does not cancel work. Sustained forecast corrections, new
+issuances, inventory deficits and higher measured peaks do not request extra solves or
+revoke authority; periodic planning still consumes fresh measurements and forecasts.
+Existing structural revisions, worker cancellation, planning failure/recovery and
+notification deduplication regressions pass.
+
+Configured offline verification uses fake local HA/Maps/weather/phone endpoints and
+real seven-day HiGHS:2023 intervals, two imported/routed journeys, six fake route
+queries, four local service calls, manual cancellation/reaping and latest-only adoption.
+Routed acceptance60.78s/max control tick4.22ms; standard acceptance25.36s/3.30ms. Both
+variants pass. The tool explicitly checks
+frozen-snapshot validation, original interval boundaries and separate persisted admission
+evidence. These timings are synthetic host-specific evidence, not live commissioning.
+No live credentials, provider API, HA/database, hardware or real phone is accessed.
+
 ## 4.4.3 — Stable traffic routing and safe diagnostics (28 October2026)
 
 Synthetic duration sequences reproduce the original false rejection. Regressions require
