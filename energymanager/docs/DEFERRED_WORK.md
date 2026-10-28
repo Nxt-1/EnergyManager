@@ -280,3 +280,17 @@ mapped entities from the visualization, preserving keyboard focus, selectable te
 phase controls. Missing mappings/demo/standalone explain the lack of an entity action.
 Controller requests and internal timestamps explain their source without inventing an
 HA sensor. A separate command/composite history UI remains deferred and is not authorized.
+
+
+## ARCH-021 — Uninterrupted charging during application restarts
+
+Recorded:28 October2026. Status:**deferred pending a verified independent limit**.
+
+The user authorized fast saved-schedule startup recovery first (4.4.11). The explicit
+shutdown stop remains. Before allowing an update/restart to leave charging running,
+verify an independent charger-enforced time/energy bound and its interaction with
+forced start, plus loss of live load/ESS balancing. A Python timeout cannot enforce a
+stop while the application is offline. Do not assume a generic HTTP watchdog exists
+or that the documented energy limit overrides forced charging on installed firmware.
+A full HA/host outage and an explicit control-Off/fault must retain defined behavior.
+No live hardware testing or implementation of offline continuation is authorized here.

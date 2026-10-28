@@ -25,6 +25,7 @@ from .calendars import CalendarSync
 from .journeys import Journeys
 from .ev_faults import EVFaults
 from .daily_estimates import DailyEstimates
+from .plan_recovery import PlanRecovery
 from .measurements import HousePowerMismatch
 from .replanning import ReplanningEvidence
 
@@ -91,6 +92,7 @@ class Application:
         self.ev_faults: EVFaults | None = None
         self.daily_estimates = DailyEstimates(self)
         self.house_mismatch_since: datetime | None = None
+        self.plan_recovery = PlanRecovery(self)
 
     def now(self) -> datetime:
         return (
@@ -170,6 +172,8 @@ class Application:
         self.store.event("invalidation", {"reason": kind, "ev": ev, "ess": ess, "revision": self.revision})
 
     def changed(self, kind: str, *, ev: bool = False, ess: bool = False) -> None:
+        if kind not in ("hardware_control_enabled", "inputs_ready", "goe_current_limits") and (ev or ess):
+            self.plan_recovery.cancel("Startup instructions revoked: " + kind)
         self.revision += 1
         self.store.put("revision", self.revision)
         self.invalidate(kind, ev=ev, ess=ess)
@@ -489,6 +493,7 @@ class Application:
                 )
                 await self.reject_plan(result, errors)
                 continue
+            self.plan_recovery.stamp(result)
             self.store.record(snapshot, result, "accepted")
             self.accepted, self.snapshot = result, snapshot
             if self.demo:
@@ -622,6 +627,7 @@ class Application:
                 else:
                     self.observation = observation
             self.archive_finished_goals(at)
+            self.plan_recovery.attempt()
             command = self.controller.tick(
                 self.observation,
                 at,
@@ -885,6 +891,7 @@ class Application:
             "routes": self.journeys.status() if self.journeys else {"items": []},
             "accepted": self.accepted,
             "ev_plan_valid": self.ev_valid,
+            "plan_recovery": self.plan_recovery.view(),
             "issues": list(self.store.get("issues", {}).values()) + (
                 [planning_issue] if planning_issue else []),
             "command": self.last_command,

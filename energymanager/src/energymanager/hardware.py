@@ -63,6 +63,8 @@ class HardwareControl:
         app.snapshot = replace(app.snapshot, policy=app.policy)
         app.controller.p = app.policy
         app.changed("hardware_control_enabled" if enabled else "hardware_control_disabled", ev=True, ess=True)
+        if enabled:
+            app.plan_recovery.attempt()
 
     async def set_requested(self, enabled: bool) -> dict[str, Any]:
         self.epoch += 1

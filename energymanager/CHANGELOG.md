@@ -1,3 +1,15 @@
+## 4.4.11 — Resume saved schedules after startup checks
+
+- Restore compatible accepted instructions after fresh input/charger and current
+  settings/goal/permission checks, without waiting for a new optimization.
+- Keep original calculation evidence unchanged; expire past work and retain normal
+  live control, phase, source, peak and fault safeguards. Do not insert a new off hold
+  from the startup dry-run command. Recovered EV sessions remain visible as current.
+- Keep the explicit shutdown stop. Uninterrupted charging while the application is
+  offline remains deferred pending a verified independent limit.
+- Older plans without recovery metadata require one fresh calculation; subsequently
+  accepted plans can recover on later restarts. No new setting is required.
+
 ## 4.4.10 — Faster EV failure alerts and vehicle charging status
 
 - Shorten persistent charging-wait escalation from15minutes to2minutes, retaining the

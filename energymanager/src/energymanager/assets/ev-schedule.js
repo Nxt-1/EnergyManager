@@ -71,7 +71,9 @@ export function evSchedule(state) {
   const start = Date.parse(state.now),
     end = start + 168 * hour;
   const plan = state.accepted;
-  const current = !!plan && state.ev_plan_valid === true && plan.revision === state.revision &&
+  const recovered = state.plan_recovery?.state === 'restored' && state.plan_recovery.plan_id === plan?.id &&
+    state.plan_recovery.revision === state.revision;
+  const current = !!plan && state.ev_plan_valid === true && (plan.revision === state.revision || recovered) &&
     Date.parse(plan.intervals.at(-1)?.end) > start;
   const goals = state.schedule_goals.map(goal => ({
     ...(current ? plan.goals.find(item => item.id === goal.id && item.revision === goal.revision) : {}),

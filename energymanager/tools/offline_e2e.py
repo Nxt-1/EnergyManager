@@ -6,7 +6,7 @@ import argparse
 import asyncio
 import json
 import socket
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import monotonic
@@ -20,6 +20,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from energymanager.configuration import configured_application
 from energymanager.domain import Snapshot
+from energymanager.hardware import HardwareControl
 from energymanager.validation import validate
 from energymanager.settings import ConfigurationFile, SETTING_FIELDS
 from energymanager.notifications import Notifications, NotificationTarget
@@ -317,6 +318,28 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                 assert accepted["intervals"] == (accepted.get("effective_snapshot") or decision["snapshot"])["intervals"]
                 assert not validate(frozen, accepted["flows"], accepted.get("service"))
                 assert "adoption_snapshot" not in accepted and "publication_repair" not in accepted
+                # Reconcile a cloned synthetic archive without starting an input, solver or actuator task.
+                recovery_store = Store(stem.with_name(stem.name + "-recovery").with_suffix(".sqlite"))
+                try:
+                    store.connection.backup(recovery_store.connection)
+                    recovery_store.put("hardware_control_enabled", True)
+                    recovered = configured_application(path, recovery_store, addon=True, weather_url=str(endpoint.make_url("/weather")))
+                    recovered.hardware = HardwareControl(recovered, ConfigurationFile(path, addon=True, mode="configured"))
+                    recovered.observation = application.observation
+                    recovered.actuator.charger = application.actuator.charger
+                    recovered.actuator.goe_control.readings = application.actuator.charger
+                    recovered.actuator.enabled = True
+                    recovered.policy = replace(recovered.policy, control_enabled=True)
+                    recovered.controller.p = recovered.policy
+                    before_recovery = monotonic()
+                    calls_before_recovery = len(calls)
+                    assert recovered.plan_recovery.attempt(), recovered.plan_recovery.view()
+                    recovery_seconds = monotonic() - before_recovery
+                    assert recovered.ev_valid and recovered.ess_valid
+                    assert recovered.accepted == accepted and recovered.worker is None
+                    assert len(calls) == calls_before_recovery
+                finally:
+                    recovery_store.close()
                 for session in accepted["sessions"]:
                     if session["resource"] != "ev":
                         continue
@@ -328,6 +351,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                     assert set(session["goal_ids"]) == named
                 report = {
                     "version": current["version"],
+                    "startup_recovery_seconds": recovery_seconds,
                     "provenance": current["provenance"],
                     "accepted_seconds": monotonic() - before,
                     "intervals": len(current["accepted"]["intervals"]),
@@ -363,6 +387,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                         "API state",
                         "persisted input checksum and accepted result",
                         "named EV-session contributions conserve delivered energy",
+                        "cloned accepted archive regains authority with no solver, provider or actuator call",
                     ],
                 }
                 Path("docs/offline-e2e.json").write_text(json.dumps(report, indent=2), encoding="utf-8")

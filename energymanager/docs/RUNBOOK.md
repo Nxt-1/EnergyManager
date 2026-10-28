@@ -1,5 +1,19 @@
 # Run, configure, review and roll back
 
+## Saved-schedule startup recovery (4.4.11)
+
+Update/reload the add-on; no new setting is required. Shutdown still stops EV charging
+and clears the ESS setpoint. Startup automatically resumes a compatible saved schedule
+after fresh measurements/charger readbacks and the persisted hardware-On request are
+verified; it can run while the new optimizer is still calculating. Normal guards and
+phase/restart holds remain. Existing plans from earlier releases require one fresh
+4.4.11 calculation before subsequent restarts can recover quickly. Changed settings,
+goals, permissions, faults, stale/expired/corrupt history or missed travel require a new
+plan. plan_recovery in API state and archived events records the result/reason. A rejected
+startup candidate cannot reactivate after a structural invalidation or explicit Off.
+The archived calculation and economics remain unchanged. See ARCH-021 for the separately
+deferred uninterrupted-update behavior; this release does not remove the shutdown stop.
+
 ## EV waiting and vehicle status (4.4.10)
 
 Persistent blocked charging requests now escalate after2minutes instead of15; confirmed

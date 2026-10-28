@@ -1230,3 +1230,17 @@ test('vehicle fault has its own diagnostic/history source and stale reports rema
   assert.equal(model.diagnostics.find(f => f.key === 'vehicle_charging').text, 'Unverified');
   assert.equal(model.diagnostics.find(f => f.key === 'vehicle_charging').tone, 'neutral');
 });
+
+
+test('a restored schedule is current only with matching backend recovery authority', () => {
+  const state = syntheticSchedule();
+  state.accepted.id = 'saved-plan';
+  state.revision++;
+  state.plan_recovery = {state: 'restored', plan_id: 'saved-plan', revision: state.revision};
+  assert.equal(evSchedule(state).current, true);
+  state.plan_recovery.plan_id = 'other-plan';
+  assert.equal(evSchedule(state).current, false);
+  state.plan_recovery.plan_id = 'saved-plan';
+  state.ev_plan_valid = false;
+  assert.equal(evSchedule(state).current, false);
+});

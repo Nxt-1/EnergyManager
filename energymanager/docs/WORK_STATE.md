@@ -1,6 +1,36 @@
 # EnergyManager work state
 
-## Current checkpoint — EV detection update (4.4.10,28 October2026)
+## Current checkpoint — saved-plan startup recovery (4.4.11,28 October2026)
+
+AUTHORIZED: user said implement that after agreeing to fast startup recovery first,
+keeping shutdown stop until an independent offline bound is verified. Base4.4.10 at
+7f995fdda0a712c68671760e7ca761b864e06f52;CI40775629393/image40775629097 success.
+Required skill/project docs and clean isolated state checked. Main has unrelated pending
+backlog ARCH-015..020; preserve its original raw bytes (saved v4411 artifacts). This
+release appends ARCH-021 only; integrate without staging the unrelated main entries.
+
+IMPLEMENTED: format1 execution context stamped with accepted archive transaction; masked
+active-settings/requirements/permission identities and result/snapshot checksum checks.
+One startup candidate restores authority only after fresh measurements/go-e and compatible
+remaining inputs, without solver/economic recheck. Real invalidations/Off/faults/old history
+fail closed; legacy plans need one fresh calculation. Original evidence remains untouched.
+Restore runtime controller intent before hardware-enable protection/next snapshot so dry-
+run zero does not insert a new off hold. Backend recovery authority keeps EV sessions
+current in display without rewriting original revision. Shutdown stop unchanged. No live
+HA/database/Google/Ford/credential/hardware/notification/install operations.
+
+VERIFIED:540Python tests98.47s;65frontend,Ruff,mypy42modules,CLI4.4.11 pass.
+Configured routed fake E2E2023intervals/2journeys/6fake routes/5local calls passes;
+65.96s acceptance/max tick4.19ms. Cloned compatible archive reconciles57.45ms with no
+solver/provider/actuator call and unchanged evidence. This excludes fresh-input/startup
+and charger settling latency. Lifecycle regression executes6A while solver blocked;
+actual next snapshot holds recovered request. All unsafe/legacy/corrupt cases fail closed.
+Shutdown stop remains. Docs synchronized. Evidence:v4411-plan-recovery/.
+NEXT: package/commit, main integration preserving unrelated backlog bytes via path-scoped
+stash/composition (ours ARCH-021 only), push and verify exact-head CI/image. No live
+installation operations. No optional success-only documentation commit.
+
+## Earlier checkpoint — EV detection update (4.4.10,28 October2026)
 
 AUTHORIZED: user said go after proposed120second blocked-wait fallback and configurable
 FordConnect vehicle charging status. Required code-writer and maintained docs reviewed.

@@ -1,5 +1,32 @@
 # EnergyManager 4 verification
 
+## 4.4.11 — Saved-plan startup recovery (28 October2026)
+
+540 Python tests pass98.47s;65 frontend tests, Ruff, mypy42modules and CLI4.4.11 pass.
+New synthetic lifecycle tests run real hardware-enable/control/planning loops while the
+optimizer is deliberately blocked:6A charging continues without an unnecessary forced
+stop, recovered instructions remain intact, and the next real snapshot builder holds
+the recovered request rather than startup's dry-run zero. Closing still sends stop.
+Readiness can recover later without solving; structural invalidations/Off cancel it.
+Changed settings/capabilities/policy/goals/permissions, connection change, faults,
+stale forecast, elapsed horizon, missed travel, legacy/malformed context, altered flows
+and corrupt/compressed archive data never regain authority. Backend recovery identity
+allows current session display only for the matching valid plan and current revision.
+No historical economic comparison is rerun using live values.
+
+Configured routed fake E2E passes2023intervals/2journeys/6fake route queries/5local
+service calls; acceptance65.96s/max control tick4.19ms. A cloned synthetic accepted
+archive regains authority in57.45ms, with no solver/provider/actuator call and unchanged
+accepted evidence. This measures reconciliation after supplied fresh readings, not
+installation startup/charger-settling time. Existing cancellation/latest-only adoption,
+checksum, fault and guarded control checks pass. Initial fixture pending-settings
+rejection was corrected by modelling changed active settings accurately.
+
+No live HA/database/provider/credential/hardware/phone or deployment access. Older
+plans lack the new configuration identity and require one fresh4.4.11 calculation;
+shutdown stopping and normal live safeguards remain. Evidence stays ignored under
+artifacts/v4411-plan-recovery/. Remote exact-head release results are recorded separately.
+
 ## 4.4.10 — Bounded EV waiting and optional Ford state (28 October2026)
 
 519 Python tests pass102.40s; final146 affected control/incident/configuration/native

@@ -879,8 +879,32 @@ normal measurement drift leaves the original validated schedule intact. While a 
 schedule is calculated, remaining accepted instructions retain their existing authority
 and live modulation, subject to all current protective guards. If a real admission or
 calculation failure occurs, retain still-usable prior work and record its specific reason.
-Restart withholds recorded command authority until fresh usable inputs and the required
-startup/authority checks are complete. Actuator failures remain explicit events; repeated
+From4.4.11 startup can restore a compatible saved accepted schedule independently of
+optimization. The existing persisted hardware-On request, usable measured EV/ESS state,
+known connection/phase, advancing go-e readbacks and no latched/reported fault are required.
+An accepted result carries execution-context format1, active typed-settings and persisted
+requirements/permission identities, and a result checksum. Credentials are masked before
+settings identity is calculated. Recovery verifies the matching accepted archive and input
+checksum, successful original admission, current capabilities/policy, remaining horizon and
+forecast age. Travel/away boundaries since the saved calculation require a new plan. This
+checks instruction applicability; it does not repeat economics against live measurements.
+
+A successful recovery restores EV/ESS/conditional authority and runtime context while
+preserving every archived input, flow, reservation, original revision and admission record.
+The resumed controller request seeds the next calculation's hold; startup dry-run zero
+cannot manufacture a new off window. A different observed phase retains normal preparation.
+Hardware enable reconciles before its queued protective dispatch can stop a recovered task;
+otherwise the control loop retries only while startup readiness is pending. A structural
+invalidation/explicit Off cancels the startup candidate permanently. Failed/missing history,
+legacy metadata or changed context waits for a fresh calculation with a specific recovery
+reason. Older releases need one fresh4.4.11 calculation to obtain the metadata; no speculative
+migration reconstructs missing settings identity. Recovery state/plan/revision is a backend
+projection for current EV session display, never browser command authority.
+
+The shutdown EV stop and ESS setpoint clear remain. Continuing charging through offline
+updates is separately deferred (ARCH-021) until an independent device-side bound is verified.
+A new accepted plan replaces recovery atomically through the existing adoption transaction.
+Restart withholds recorded authority until these fresh startup checks complete. Actuator failures remain explicit events; repeated
 failure backs off and non-delivery latches EV stopping. A solver-parent watchdog prevents
 orphan workers after service loss. None of this authorizes executing elapsed commands,
 ignoring a genuine safety stop or bypassing a goal/permission revision.

@@ -1,8 +1,14 @@
 # EnergyManager 4
 
-Version **4.4.10**, the main Energy Manager application. One joint seven-day EV/ESS MILP
+Version **4.4.11**, the main Energy Manager application. One joint seven-day EV/ESS MILP
 feeds independent responsive control. The application includes configured input/actuator
 boundaries, persisted goals/approvals/decisions and Overview/Planning/EV pages.
+
+## Startup recovery
+
+After fresh checks, compatible saved schedules can resume while a new plan calculates.
+Shutdown still stops charging. Older schedules need one fresh4.4.11 calculation before
+later restarts can use this recovery. Existing faults, permissions and live guards remain.
 
 ## EV failure detection
 

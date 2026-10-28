@@ -625,3 +625,18 @@ ReportedFAULT latches without reboot; actual delivery resets waiting. Optional u
 telemetry retains ordinary control and cannot qualify a reboot. HA read/report times
 remain separate from unverified vehicle telemetry age. Keep the suspected initial-stop
 cause out of this release; the supplied export does not prove its controlling branch.
+
+
+## 28 October2026 — Fast startup recovery, retaining shutdown stop (4.4.11)
+
+After discussing interruption risk, the user explicitly authorized the two-step approach:
+first restore compatible saved schedules after fresh checks without waiting for optimization;
+keep shutdown stopping until a charger-enforced offline bound is verified. Persist format1
+execution identity alongside accepted evidence; check current configuration, requirements,
+permissions, device/measurement health and coverage, independently of fresh optimization.
+Do not re-evaluate historical economics on live inputs or replay elapsed work. Preserve
+original plan evidence and existing live modulation/guards. A startup dry-run zero must not
+become a new optimizer off hold. Legacy plans without settings identity need one new
+calculation; do not invent the missing identity. A real fault, explicit Off or incompatible
+context still blocks execution. Uninterrupted offline charging remains ARCH-021, not part
+of this release. No installation operation or live provider/hardware access is authorized.
