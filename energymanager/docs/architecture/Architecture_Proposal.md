@@ -358,8 +358,9 @@ An expression index on measurement timestamps covers legacy events too; range re
 use a separate read-only SQLite connection in a worker, outside the control event loop.
 Creating this index can take time on the first startup with a large existing archive.
 
-From4.2.3, compact rows use left/right arrows for grid import/export, alternating/direct
-current symbols for AC/DC solar and downward/upward arrows for ESS AC charge/discharge.
+Compact rows use alternating/direct current symbols for AC/DC solar. From4.4.14 grid
+import and ESS AC charge use a right arrow (→); grid export and ESS AC discharge use a
+left arrow (←), consistently in shared native and standalone live summaries.
 From4.3.3 every recorded subtotal is followed by a fixed expected end-of-day total.
 An independent task captures the accepted pre-midnight plan at the installation-local
 midnight, integrating that entire23/25-hour day with continuous coverage and a fresh
@@ -526,8 +527,9 @@ From4.4.12 displayed ESS AC power is positive for charging and negative for disc
 apply the sign conversion only when rendering live cards, planned charts and recent/
 archived chart measurements. Raw HA/configuration inputs, backend/API/archive values,
 house/grid balance and optimizer/control signs remain positive for AC discharge. SoC
-percentages and unsigned daily charge/discharge kWh totals are unchanged; their arrows
-point up for charging and down for discharge. The ESS line remains AC converter exchange,
+percentages and unsigned daily charge/discharge kWh totals are unchanged. From4.4.14 their
+arrows point right for charging and left for discharge, matching grid import/export.
+The ESS line remains AC converter exchange,
 including DC inversion, not net battery-port power; direct DC solar charging is separate.
 The legend/live-power tooltip identifies that boundary. Solar accounting/routing changes
 are outside this presentation-only release.

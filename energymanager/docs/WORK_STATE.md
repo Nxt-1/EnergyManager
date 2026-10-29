@@ -1,6 +1,22 @@
 # EnergyManager work state
 
-## Current checkpoint — reliable solar capture (4.4.13, 29 October 2026)
+## Current checkpoint — consistent direction arrows (4.4.14, 29 October 2026)
+
+AUTHORIZED: user requested → import/charge and ← export/discharge for grid/ESS summary
+markers. Required skill and living docs checked; isolated worktree clean at4.4.13
+035c990001b31d7fe62a3a85f1648bb23eb84cff. Exact-commit CI40875550803 and image40875550799
+succeeded. Main has unrelated pending DEFERRED_WORK.md; original bytes saved privately.
+
+IMPLEMENTED: change only the shared grid/ESS energy-row symbols; original values,
+forecast comparison markers, numeric signs, source accounting and control unchanged.
+Version4.4.14 and existing architecture/decisions/runbook/verification/changelog sync.
+VERIFIED:66frontend and15 native-dashboard/release tests10.31s;asset syntax passes.
+No live service/provider/database/credential/hardware/notification/install access.
+NEXT: commit/main fast-forward/push preserving pending backlog; verify exact-commit
+CI/image and record results in ignored artifacts/v4414-direction-arrows/release-state.txt.
+No optional success-only docs commit or installation deployment.
+
+## Earlier checkpoint — reliable solar capture (4.4.13, 29 October 2026)
 
 AUTHORIZED: user said implement stronger starting candidates, reserved solar refinement,
 checked timeout retention and regression checks on both supplied decisions. Keep existing

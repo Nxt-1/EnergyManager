@@ -36,9 +36,9 @@ export function dailyEnergyRows(summary, key, state) {
   const prediction = baseline?.kwh;
   const capture = baseline ? `${baseline.kind === 'midnight' ? 'Fixed midnight estimate' : 'First available estimate'}; captured ${evIncidentTime(baseline.captured_at, timezone)}.${baseline.partial ? ' Based on partial recorded coverage.' : ''}` : 'Daily estimate not yet available.';
   const definitions = {
-    grid: [['←', 'import', 'Grid import'], ['→', 'export', 'Grid export']],
+    grid: [['→', 'import', 'Grid import'], ['←', 'export', 'Grid export']],
     solar: [['∿', 'solar_ac', 'AC solar'], ['⎓', 'solar_dc', 'DC solar']],
-    ess: [['↑', 'ess_charge', 'ESS AC charge'], ['↓', 'ess_discharge', 'ESS AC discharge']],
+    ess: [['→', 'ess_charge', 'ESS AC charge'], ['←', 'ess_discharge', 'ESS AC discharge']],
     house: [['', 'house', 'Household energy']], ev: [['', 'ev', 'EV charging energy']]
   };
   const number = value => Number.isFinite(value) ? value.toFixed(2) : '—';

@@ -664,3 +664,11 @@ budgets before exceptional100% investigations. Existing required-grid timing rem
 Do not add a runtime economic recheck, arbitrary maximum time at full ESS or stored
 ESS-to-grid export. Both private supplied exports are offline regression evidence;
 public automated tests use synthetic scenarios, without publishing installation telemetry.
+
+
+## 29 October 2026 — Consistent grid/ESS direction arrows (4.4.14)
+
+The user explicitly requested right arrows for import/charge and left arrows for export/
+discharge. Apply that convention to grid and ESS summary markers in the shared renderer,
+superseding the earlier opposite grid and vertical ESS arrows. Keep numeric signs, daily
+energy totals, forecast comparison arrows and all planner/control behavior unchanged.

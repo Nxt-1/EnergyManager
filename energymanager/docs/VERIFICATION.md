@@ -1,5 +1,15 @@
 # EnergyManager 4 verification
 
+## 4.4.14 — Consistent energy direction arrows (29 October 2026)
+
+66 frontend tests and15 focused native-dashboard/release tests pass (10.31s). The existing
+mixed actual/forecast energy regression verifies → for grid import/ESS charge and ← for
+grid export/ESS discharge, with original values and missing/stale/partial handling intact.
+The shared renderer serves native and standalone summaries; asset syntax passes. No
+energy accounting, numeric sign, planning, sensor or actuator behavior changes. No live
+services/database/provider/credential/hardware/notification or installation deployment.
+Exact-commit CI/image results are kept in ignored artifacts/v4414-direction-arrows/.
+
 ## 4.4.13 — Reliable solar allocation (29 October 2026)
 
 552 Python tests pass in102.39s;66frontend cases, Ruff, mypy43modules and asset syntax

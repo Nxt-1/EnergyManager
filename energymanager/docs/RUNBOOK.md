@@ -1,5 +1,11 @@
 # Run, configure, review and roll back
 
+## Energy direction arrows (4.4.14)
+
+Update/reload the add-on for consistent summary markers: → means grid import/ESS charge;
+← means grid export/ESS discharge. No settings migration is needed. Numbers, signs,
+energy accounting, planning and control are unchanged.
+
 ## Reliable solar capture (4.4.13)
 
 Update/reload the add-on; no setting or sensor migration is required. The planner now

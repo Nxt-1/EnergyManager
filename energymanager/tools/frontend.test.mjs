@@ -694,11 +694,11 @@ test('compact daily energy keeps the frozen baseline across plans and rejects ot
     daily_estimate: {date: summary.date, timezone: summary.timezone, kind: 'midnight',
       captured_at: '2026-10-24T22:00:01Z', kwh: summary.predicted_kwh}};
   assert.deepEqual(dailyEnergyRows(summary, 'grid', state).map(row => [row.symbol,row.actual,row.predicted]),
-    [['←','4.00','6.00'],['→','2.00','3.00']]);
+    [['→','4.00','6.00'],['←','2.00','3.00']]);
   assert.deepEqual(dailyEnergyRows(summary, 'solar', state).map(row => row.symbol), ['∿','⎓']);
   assert.ok(dailyEnergyRows(summary, 'ess', state).every(row => row.partial));
   assert.deepEqual(dailyEnergyRows(summary, 'ess', state).map(row => [row.symbol, row.actual]),
-    [['↑', '1.50'], ['↓', '1.00']]);
+    [['→', '1.50'], ['←', '1.00']]);
   assert.equal(dailyEnergyRows(summary, 'house', {...state, revision: 3, accepted: null})[0].predicted, '5.00');
   assert.equal(dailyEnergyRows(null, 'house', state)[0].predicted, '5.00');
   assert.match(dailyEnergyRows(null, 'house', state)[0].capture, /Fixed midnight estimate; captured.*00:00:01/);

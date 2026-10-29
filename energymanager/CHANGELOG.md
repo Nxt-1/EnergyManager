@@ -1,3 +1,8 @@
+## 4.4.14 — Consistent energy direction arrows
+
+- Use → for grid import and ESS charging, and ← for grid export and ESS discharging,
+  consistently in native and standalone summaries. Values, signs and control are unchanged.
+
 ## 4.4.13 — Reliable solar-allocation candidates
 
 - Try bounded EV/solar/ESS allocation candidates before the full optional search, and
