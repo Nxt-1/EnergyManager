@@ -696,6 +696,8 @@ test('compact daily energy keeps the frozen baseline across plans and rejects ot
     [['←','4.00','6.00'],['→','2.00','3.00']]);
   assert.deepEqual(dailyEnergyRows(summary, 'solar', state).map(row => row.symbol), ['∿','⎓']);
   assert.ok(dailyEnergyRows(summary, 'ess', state).every(row => row.partial));
+  assert.deepEqual(dailyEnergyRows(summary, 'ess', state).map(row => [row.symbol, row.actual]),
+    [['↑', '1.50'], ['↓', '1.00']]);
   assert.equal(dailyEnergyRows(summary, 'house', {...state, revision: 3, accepted: null})[0].predicted, '5.00');
   assert.equal(dailyEnergyRows(null, 'house', state)[0].predicted, '5.00');
   assert.match(dailyEnergyRows(null, 'house', state)[0].capture, /Fixed midnight estimate; captured.*00:00:01/);
@@ -1121,6 +1123,25 @@ test('observed graphs merge older archive with recent snapshots while preserving
   assert.equal(ev.find(point => point[0] === start)[1], 40);
   assert.equal(ev.find(point => point[0] === start + 90000)[1], null);
   assert.equal(state.observed[0], sample); // Projection does not change backend evidence.
+});
+
+test('ESS display reverses raw discharge power across archive and live data without changing evidence or SoC', () => {
+  const start = Date.parse('2026-10-29T08:00Z');
+  const sample = {at: new Date(start).toISOString(), quality: 'measured',
+    house_kw: 2, pv_ac_kw: 1, pv_dc_kw: 0, ev_power_kw: 0, ess_power_kw: 1.5, ess_kwh: 7};
+  const state = {demo: false, now: new Date(start + 20000).toISOString(),
+    policy: {measurement_max_age_seconds: 30}, capabilities: {ess_capacity_kwh: 14},
+    observed: [sample, {...sample, at: new Date(start + 10000).toISOString(), ess_power_kw: -2},
+      {...sample, at: new Date(start + 20000).toISOString(), ess_power_kw: null}]};
+  const archive = {series: {ess: [[start - 30000, -500], [start - 20000, null],
+    [start - 10000, 1500]], ess_soc: [[start - 10000, 50]]}};
+  const evidence = structuredClone({state, archive});
+  assert.deepEqual(observedPoints(state, archive, 'ess'), [
+    [start - 30000, 500], [start - 20000, null], [start - 10000, -1500],
+    [start, -1500], [start + 10000, 2000], [start + 20000, null]]);
+  assert.equal(observedPoints(state, archive, 'grid').find(([at]) => at === start)[1], -500);
+  assert.deepEqual(observedPoints(state, archive, 'ess', true).map(([, value]) => value), [50, 50, 50, 50]);
+  assert.deepEqual({state, archive}, evidence);
 });
 
 test('a ring of repeated expired snapshots cannot erase the valid archived reading', () => {

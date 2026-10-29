@@ -1,5 +1,13 @@
 # Run, configure, review and roll back
 
+## ESS display direction (4.4.12)
+
+Update/reload the add-on for positive charging and negative discharge on dashboard ESS
+AC readings and charts, including recorded history. No sensor remapping or settings
+migration is required. The ESS input remains positive for discharge. Its display is AC
+converter exchange; direct DC solar charging is separate, so AC sign alone cannot always
+predict net battery SoC direction. Planner, live control and original evidence are unchanged.
+
 ## Saved-schedule startup recovery (4.4.11)
 
 Update/reload the add-on; no new setting is required. Shutdown still stops EV charging

@@ -4,6 +4,12 @@ export function watts(kilowatts) {
     '—' : String(Math.round(Number(kilowatts) * 1000) || 0);
 }
 
+// Internal ESS/HA/archive power stays positive for AC discharge; only the UI reverses it.
+export function essDisplayPower(value) {
+  if (!Number.isFinite(value)) return null;
+  return value === 0 ? 0 : -value;
+}
+
 // Display the recorded billing peak, never the tariff floor or a forecast/permission ceiling.
 export function monthlyPeakWatts(state) {
   const reading = state.demo ? null : state.live_inputs?.readings?.monthly_peak_kw;
@@ -32,7 +38,7 @@ export function dailyEnergyRows(summary, key, state) {
   const definitions = {
     grid: [['←', 'import', 'Grid import'], ['→', 'export', 'Grid export']],
     solar: [['∿', 'solar_ac', 'AC solar'], ['⎓', 'solar_dc', 'DC solar']],
-    ess: [['↓', 'ess_charge', 'ESS AC charge'], ['↑', 'ess_discharge', 'ESS AC discharge']],
+    ess: [['↑', 'ess_charge', 'ESS AC charge'], ['↓', 'ess_discharge', 'ESS AC discharge']],
     house: [['', 'house', 'Household energy']], ev: [['', 'ev', 'EV charging energy']]
   };
   const number = value => Number.isFinite(value) ? value.toFixed(2) : '—';

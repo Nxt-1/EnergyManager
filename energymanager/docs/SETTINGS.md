@@ -62,6 +62,12 @@ power is accepted as a signed reading; its sign does not block hardware control.
 EV SoC validation and other input checks remain. The hardware switch still requires
 valid critical measurements.
 
+From4.4.12 dashboard ESS power uses positive charging and negative discharge. Keep the
+ESS input sensor's existing positive-discharge convention; its mapping label explicitly
+says input power. The display converts the sign without changing control/house balance,
+recorded evidence or sensor configuration. Direct DC solar charging is separate from
+the displayed AC converter exchange.
+
 The HA app's own Configuration tab still selects `demo` or `configured`. Demo mode
 cannot operate hardware. Choose `configured` and restart to use installation inputs.
 

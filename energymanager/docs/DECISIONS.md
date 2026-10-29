@@ -640,3 +640,14 @@ become a new optimizer off hold. Legacy plans without settings identity need one
 calculation; do not invent the missing identity. A real fault, explicit Off or incompatible
 context still blocks execution. Uninterrupted offline charging remains ARCH-021, not part
 of this release. No installation operation or live provider/hardware access is authorized.
+
+
+## 29 October2026 — ESS display direction (4.4.12)
+
+The user explicitly authorized the visual ESS sign fix while preparing separate solar/
+full-battery follow-up prompts. Positive displayed AC power means charging; negative means
+discharge. Apply consistently to live cards and actual/planned/archived power charts, at
+the frontend boundary only. Input mappings, source math, raw evidence and live controls
+retain positive AC discharge. Do not invert SoC or energy totals. AC converter exchange
+still excludes direct DC solar charging and may include DC passthrough; do not imply a
+net battery measurement or implement the separate solar optimizer/accounting changes.

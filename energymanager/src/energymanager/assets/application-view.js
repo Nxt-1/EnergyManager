@@ -4,6 +4,7 @@ import {
 import {
   powerText,
   monthlyPeakWatts,
+  essDisplayPower,
   watts,
   dailyEnergyRows,
   connectionIcon,
@@ -191,7 +192,8 @@ export async function mountApplication(root, options = {}) {
             house: interval.house_kw,
             ev: flows.pv_ev[index] + flows.grid_ev[index] + flows.solar_dis_ev[index]
           };
-          value = powers[series] * 1000;
+          const power = series === 'ess' ? essDisplayPower(powers.ess) : powers[series];
+          value = Number.isFinite(power) ? power * 1000 : null;
         }
         planned.push([Date.parse(interval.start), value]);
         if (!soc) planned.push([Date.parse(interval.end), value]);
@@ -474,7 +476,7 @@ export async function mountApplication(root, options = {}) {
       ['Solar', o.pv_ac_kw + o.pv_dc_kw, 'W', `AC ${watts(o.pv_ac_kw)} W · DC ${watts(o.pv_dc_kw)} W`, 'solar'],
       ['House', o.house_kw, 'W', 'Uncontrolled demand', 'house'],
       ['ESS', o.ess_kwh / c.ess_capacity_kwh * 100, '%',
-        `Minimum ${num(c.ess_min_kwh/c.ess_capacity_kwh*100,0)}% · ${watts(o.ess_power_kw)} W`, 'ess'
+        `Minimum ${num(c.ess_min_kwh/c.ess_capacity_kwh*100,0)}% · ${watts(essDisplayPower(o.ess_power_kw))} W`, 'ess'
       ],
       ['EV', o.ev_state_known === false ? null : o.ev_kwh / c.ev_capacity_kwh * 100, '%', o.ev_state_known ===
         false ? 'State unknown / charging held' : o.connected ? 'Connected' : 'Away / disconnected', 'ev'
@@ -494,7 +496,7 @@ export async function mountApplication(root, options = {}) {
         if (key === 'solar' && inputs.pv_ac_kw && inputs.pv_dc_kw)
           label = `AC ${watts(inputs.pv_ac_kw.value)} W · DC ${watts(inputs.pv_dc_kw.value)} W`;
         if (key === 'ess' && inputs.ess_kw)
-          label = `Minimum ${num(c.ess_min_kwh/c.ess_capacity_kwh*100,0)}% · ${watts(inputs.ess_kw.value)} W`;
+          label = `Minimum ${num(c.ess_min_kwh/c.ess_capacity_kwh*100,0)}% · ${watts(essDisplayPower(inputs.ess_kw.value))} W`;
       } else if (!liveKnown) {
         value = null;
         label = 'Waiting for live input';
@@ -502,7 +504,7 @@ export async function mountApplication(root, options = {}) {
       let compact = '';
       const readings = state.live_inputs?.readings;
       if (key === 'solar') compact = `<span title="AC solar">∿ ${watts(readings ? readings.pv_ac_kw?.value : liveKnown ? o.pv_ac_kw : null)} W</span> · <span title="DC solar">⎓ ${watts(readings ? readings.pv_dc_kw?.value : liveKnown ? o.pv_dc_kw : null)} W</span>`;
-      if (key === 'ess') compact = `<span title="Minimum battery state of charge">≥ ${num(c.ess_min_kwh/c.ess_capacity_kwh*100,0)}%</span> · ${watts(readings ? readings.ess_kw?.value : liveKnown ? o.ess_power_kw : null)} W`;
+      if (key === 'ess') compact = `<span title="Minimum battery state of charge">≥ ${num(c.ess_min_kwh/c.ess_capacity_kwh*100,0)}%</span> · <span title="ESS AC power: positive charging, negative discharging. Direct DC solar charging is separate.">${watts(essDisplayPower(readings ? readings.ess_kw?.value : liveKnown ? o.ess_power_kw : null))} W</span>`;
       if (key === 'ev') compact = `<span title="Actual EV charging power" aria-label="Actual EV charging power: ${watts(evMeasuredPower(state))} W">⚡ ${watts(evMeasuredPower(state))} W</span>`;
       let connected = liveKnown ? o.connected : null;
       if (!state.demo && state.live_inputs) {

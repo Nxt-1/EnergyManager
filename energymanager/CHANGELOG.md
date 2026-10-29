@@ -1,3 +1,10 @@
+## 4.4.12 — ESS display direction
+
+- Show ESS AC charging above zero and discharge below zero in live cards and actual,
+  planned and archived charts. Match daily charge/discharge arrows to this convention.
+- Preserve raw input/archive signs, SoC, energy totals and all planner/hardware behavior.
+  Clarify the input label and AC-side power tooltip; direct DC charging remains separate.
+
 ## 4.4.11 — Resume saved schedules after startup checks
 
 - Restore compatible accepted instructions after fresh input/charger and current

@@ -1,8 +1,14 @@
 # EnergyManager 4
 
-Version **4.4.11**, the main Energy Manager application. One joint seven-day EV/ESS MILP
+Version **4.4.12**, the main Energy Manager application. One joint seven-day EV/ESS MILP
 feeds independent responsive control. The application includes configured input/actuator
 boundaries, persisted goals/approvals/decisions and Overview/Planning/EV pages.
+
+## ESS display sign
+
+ESS AC power is positive when charging and negative when discharging, in live cards and
+actual/planned/history charts. Input sensors and control retain their existing convention;
+no remapping is needed. Direct DC solar charging remains separate from this AC reading.
 
 ## Startup recovery
 

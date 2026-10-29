@@ -1,4 +1,5 @@
 import {scheduleDays} from './ev-schedule.js';
+import {essDisplayPower} from './display.js';
 
 export function historyDayRange(date, timezone) {
   const anchor = Date.parse(`${date}T00:00:00Z`);
@@ -123,15 +124,17 @@ export function observedPoints(state, archive, name, soc = false) {
     } else if (valid) {
       value = {grid: sample.house_kw + sample.ev_power_kw - sample.pv_ac_kw - sample.ess_power_kw,
         ess: sample.ess_power_kw, solar: sample.pv_ac_kw + sample.pv_dc_kw,
-        house: sample.house_kw, ev: sample.ev_power_kw}[name] * 1000;
-      if (!Number.isFinite(value)) value = null;
+        house: sample.house_kw, ev: sample.ev_power_kw}[name];
+      if (name === 'ess') value = essDisplayPower(value);
+      value = Number.isFinite(value) ? value * 1000 : null;
     }
     recent.set(at, {valid, value});
   }
   const samples = [...recent].sort((a, b) => a[0] - b[0]);
   const cutoff = archive ? samples.find(([, reading]) => reading.value !== null)?.[0] ?? Infinity :
     samples[0]?.[0] ?? Infinity;
-  const points = (archive?.series?.[series] || []).filter(point => point[0] < cutoff);
+  const points = (archive?.series?.[series] || []).filter(point => point[0] < cutoff)
+    .map(([at, value]) => [at, name === 'ess' && !soc ? essDisplayPower(value) : value]);
   const maxAge = state.policy.measurement_max_age_seconds * 1000;
   let previous = points.at(-1)?.[1] !== null ? points.at(-1)?.[0] ?? null : null;
   for (const [at, reading] of samples) {

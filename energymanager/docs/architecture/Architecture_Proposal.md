@@ -522,6 +522,15 @@ planned charts, peak/approval values, settings and entity previews. Energy remai
 Settings converts limits back to the existing kW JSON/API values, preserving unchanged
 numbers exactly; capacity tariff is displayed in EUR/W/month and stored in EUR/kW/month.
 Raw technical evidence retains original named units for reproducible replay.
+From4.4.12 displayed ESS AC power is positive for charging and negative for discharge:
+apply the sign conversion only when rendering live cards, planned charts and recent/
+archived chart measurements. Raw HA/configuration inputs, backend/API/archive values,
+house/grid balance and optimizer/control signs remain positive for AC discharge. SoC
+percentages and unsigned daily charge/discharge kWh totals are unchanged; their arrows
+point up for charging and down for discharge. The ESS line remains AC converter exchange,
+including DC inversion, not net battery-port power; direct DC solar charging is separate.
+The legend/live-power tooltip identifies that boundary. Solar accounting/routing changes
+are outside this presentation-only release.
 
 Journey and timed-SoC date/time fields use a Monday-first calendar, a 24-hour clock and
 an optional keyboard mode. They use the configured installation timezone rather than

@@ -1,5 +1,22 @@
 # EnergyManager 4 verification
 
+## 4.4.12 — ESS display direction (29 October2026)
+
+43 focused native dashboard/polling/history/settings/release tests pass13.38s;66frontend
+cases, asset JavaScript syntax,Ruff,mypy42modules,CLI andsdist/wheel pass. A deterministic
+mixed archive/recent regression verifies both ESS signs, missing gaps and unchanged raw
+samples, archive arrays, grid values and SoC. Daily charge/discharge kWh totals stay
+unchanged while arrows match the new display convention.
+
+Configured routed fake E2E passes2023intervals/2journeys/6fake route queries/4local service
+calls;66.03s acceptance/max tick6.68ms;cloned compatible archive recovery56.97ms. Standalone
+visual/cursor check shows planned AC charging+437W; native HA-contract preview with raw
++1500W discharge shows-1500W, unchanged400W house and50percent SoC. Light native/dark
+standalone layouts remain intact. These are synthetic fixtures, not installation evidence.
+AC converter exchange remains distinct from net battery power/direct DC charging. No
+planner/control logic or raw evidence sign changes, live service/hardware/credentials or
+installation deployment. Ignored local release evidence:artifacts/v4412-ess-sign/.
+
 ## 4.4.11 — Saved-plan startup recovery (28 October2026)
 
 540 Python tests pass98.47s;65 frontend tests, Ruff, mypy42modules and CLI4.4.11 pass.

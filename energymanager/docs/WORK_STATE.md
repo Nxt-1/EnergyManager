@@ -1,6 +1,55 @@
 # EnergyManager work state
 
-## Current checkpoint — saved-plan startup recovery (4.4.11,28 October2026)
+## Current checkpoint — ESS display sign (4.4.12,29 October2026)
+
+AUTHORIZED: user explicitly requested the visual ESS sign change while preparing separate
+prompts for the remaining solar/full-battery issues. Required code-writer and current
+project docs checked. Base4.4.11 at7aaf7c907c703343a4b15e1a6bc3cc6d1f189535. Main checkout
+has unrelated pending DEFERRED_WORK.md entries; preserve its raw bytes. Earlier solar
+review/evidence below remains private and is not authorization for an optimizer change.
+
+IMPLEMENTED: frontend ESS AC power positive charging/negative discharge for live cards,
+planned/recent/archived charts and cursors; charge/discharge arrows now up/down. Missing
+values remain gaps/dashes. Input mapping explicitly says input positive-discharge. No
+raw HA/backend/API/archive sign, house/grid balance, SoC, kWh totals, planner or actuator
+behavior changes. AC converter exchange still excludes direct DC charging and can
+include DC inversion; live/legend tooltips and docs identify that boundary. No net-battery
+sensor or solar-routing change. Version4.4.12 and maintained docs synchronized.
+
+VERIFIED:43 focused native/dashboard/history/settings/release cases13.38s;66frontend,
+all asset JS syntax,Ruff,mypy42modules,CLI and4.4.12sdist/wheel pass. Configured routed
+fake E2E passes2023intervals/2journeys/6fake routes/4local calls;66.03s acceptance/max tick
+6.68ms;cloned saved-plan recovery56.97ms. Standalone cursor shows charging+437W; native
+synthetic raw+1500W discharge shows-1500W, unchanged400W house and50percent SoC. Light
+native and dark standalone layouts checked. All evidence synthetic/local; no live HA,
+database/provider/credential/hardware/phone/install access. Private evidence:v4412-ess-sign/.
+NEXT: final review/commit/main fast-forward preserving pending backlog, push and verify
+exact-head CI/image. Remote results go ignored release-state, without success-only commit.
+
+## Earlier checkpoint — solar graph/full-ESS review (29 October2026)
+
+READ-ONLY user report: cursor powers do not add up; ESS stays full, suggesting earlier
+export. Base4.4.11 at7aaf7c907c703343a4b15e1a6bc3cc6d1f189535;CI40781457613/image40781457818
+success. Isolated worktree was clean;main pending unrelated backlog remains untouched.
+No application implementation requested/authorized. No version, commit or release change.
+
+Verified supplied export digest and original audits.12:15Brussels:Solar4.906kW is
+AC2.130+DC2.775;house.526,ACbatterycharge1.604,DCbatterycharge2.775. NegativeESS means
+charging. Chart mixes total rawPV andACconverter exchange, omitting directDCcharge from
+ESS line;true storage gain4.244kW after losses. ESSfull12:45-17:00 with5.12kWhunusedDC.
+
+Offline counterfactuals pass independent/rolling/full-model checks: direct unusedDCexport
+adds4.830kWh/.1917EUR with stocks/otherdispatch unchanged. Freeing only pre17solar charge/
+export routing adds5.143kWh/.2042EUR;ACcharge3.522->0kWh,DCcharge8.811->12.225kWh;fullat17:00
+andall17:00/futurestocks/dispatch fixed. Restricted solveOptimal0.109s,not globaloptimum.
+Seed convertsDC only for loads and fills storage greedily; all main economic stages
+timeout at unchanged objective; narrow finalmingridcertificate freezes solar decisions.
+NEXT: explain findings; proposed chart-accounting and robust solar-incumbent improvements
+need explicit implementation request. Do not add arbitrary early-discharge/SoC penalties.
+Evidence/reproduction/privatecopy:artifacts/solar-plateau-review-2026-10-29/,review-state.txt.
+No liveHA/database/provider/credential/hardware/notification/deployment access.
+
+## Earlier checkpoint — saved-plan startup recovery (4.4.11,28 October2026)
 
 AUTHORIZED: user said implement that after agreeing to fast startup recovery first,
 keeping shutdown stop until an independent offline bound is verified. Base4.4.10 at

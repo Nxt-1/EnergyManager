@@ -59,7 +59,7 @@ def setting_fields() -> tuple[SettingField, ...]:
         ("pv_ac_kw", "AC solar power", ("W", "kW")),
         ("pv_dc_kw", "DC solar power", ("W", "kW")),
         ("ev_kw", "EV charging power", ("W", "kW")),
-        ("ess_kw", "ESS power · positive discharge", ("W", "kW")),
+        ("ess_kw", "ESS input power · positive discharge", ("W", "kW")),
         ("quarter_import_kwh", "Current Quarter Average Demand", ("W", "kW")),
         ("monthly_peak_kw", "Measured monthly peak", ("W", "kW")),
     )
