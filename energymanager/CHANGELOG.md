@@ -1,3 +1,14 @@
+## 4.4.15 — Continuous charging across active limits
+
+- Try a continuous candidate for selected optional and required charging, even when
+  named targets are already satisfied or absent. Inherit actual model ceilings and
+  target authority rather than checking a particular SoC percentage.
+- Reserve part of each solar-refinement allowance for a bounded continuity candidate,
+  preserving future ESS supply. Try unchanged economics before the existing allowance;
+  carry the same economic reference so repeated smoothing cannot stack tolerances.
+- Preserve legitimate pauses, current/phase/availability/health/source/permission guards,
+  final checks and live control. Continuous charging remains a checked alternative.
+
 ## 4.4.14 — Consistent energy direction arrows
 
 - Use → for grid import and ESS charging, and ← for grid export and ESS discharging,

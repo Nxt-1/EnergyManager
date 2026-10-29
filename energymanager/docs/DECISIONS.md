@@ -672,3 +672,15 @@ The user explicitly requested right arrows for import/charge and left arrows for
 discharge. Apply that convention to grid and ESS summary markers in the shared renderer,
 superseding the earlier opposite grid and vertical ESS arrows. Keep numeric signs, daily
 energy totals, forecast comparison arrows and all planner/control behavior unchanged.
+
+
+## 29 October 2026 — Continuous fallback for every active charging limit (4.4.15)
+
+The user authorized extending the missing optional-capture continuity fallback and
+explicitly required coverage beyond80%. Selected charging work activates the candidate;
+inherit the model's actual ceilings and required-target authority, including authorised
+higher ceilings, without granting new charging permission. Reserve bounded continuity
+time inside solar refinement so its economic candidate is not left fragmented merely
+because the full search timed out. Preserve selected quantity/future supply, one carried
+economic/cash allowance and existing necessary pauses/live control. The supplied frozen
+decision is private offline evidence; public tests use deterministic synthetic cases.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 from time import monotonic
 from typing import Any
 from uuid import uuid4
@@ -96,10 +97,11 @@ class Planner:
         return result
 
     def prefer_continuity(self, name: str, model: JointModel, result: dict[str, Any],
-                          allowance: float) -> dict[str, Any]:
-        """Choose charger continuity in the full joint model within one economic allowance."""
-        economic = model.value(model.economic, result["values"])
-        cash = model.value(model.cash, result["values"])
+                          allowance: float, *, single_only: bool = False) -> dict[str, Any]:
+        """Choose charger continuity within the same carried economic/cash allowance."""
+        actual = (model.value(model.economic, result["values"]), model.value(model.cash, result["values"]))
+        carried = (result.get("economic_baseline", actual[0]), result.get("cash_baseline", actual[1]))
+        economic, cash = min(actual, carried)
         result["economic_baseline"], result["cash_baseline"] = economic, cash
         if allowance < 0.3:
             return result
@@ -115,13 +117,28 @@ class Planner:
         guided.linear.lower[ev[-1]] = result["flows"]["ev_energy"][-1] - 1e-6
         tolerance = model.snapshot.policy.polish_tolerance_eur
         bounds = [(guided.economic, economic + tolerance), (guided.cash, cash + tolerance)]
-        steady = self.single_session_model(guided, result)
+        steady = self.single_session_model(guided, result, bounded=single_only)
         if steady is not None:
-            trial = self.run_model(name + "_single_session", steady,
-                                  (allowance - (monotonic() - started)) * 0.35,
-                                  steady.warm_from(result["flows"]), objective=steady.continuity_objective(),
-                                  bounds=bounds)
-            if (trial["feasible"] and not self.continuity_errors(model, trial["flows"])
+            remaining = allowance - (monotonic() - started)
+            if single_only:
+                # Try an equal-cost continuation first; only use the existing allowance
+                # if that candidate cannot be found within its bounded share.
+                strict = deepcopy(steady)
+                trial = self.run_model(name + "_single_session", strict, remaining * .8,
+                                       strict.warm_from(result["flows"]), objective=strict.continuity_objective(),
+                                       bounds=[(strict.economic, economic + 1e-6), (strict.cash, cash + 1e-6)])
+                remaining = allowance - (monotonic() - started)
+                if not trial["feasible"] and remaining >= .3:
+                    trial = self.run_model(name + "_single_session_allowance", steady, remaining,
+                                           steady.warm_from(result["flows"]), objective=steady.continuity_objective(),
+                                           bounds=bounds)
+            else:
+                trial = self.run_model(name + "_single_session", steady, remaining * .35,
+                                       steady.warm_from(result["flows"]), objective=steady.continuity_objective(),
+                                       bounds=bounds)
+            if (trial["feasible"] and steady.linear.accepts(steady.warm_from(trial["flows"]))
+                    and model.linear.accepts(model.warm_from(trial["flows"]))
+                    and not self.continuity_errors(model, trial["flows"])
                     and steady.value(steady.continuity_objective(), trial["values"])
                     <= model.value(model.continuity_objective(), result["values"]) + 1e-6):
                 result = {**trial, "status": result["status"],
@@ -129,6 +146,9 @@ class Planner:
                 continuity = guided.continuity_objective()
                 guided.linear.row(list(continuity.items()), upper=model.value(
                     model.continuity_objective(), result["values"]) + 1e-6)
+        if single_only:
+            result["economic_baseline"], result["cash_baseline"] = economic, cash
+            return result
         refined = self.run_model(name + "_joint_continuity", guided, allowance - (monotonic() - started),
                                  guided.warm_from(result["flows"]), objective=guided.continuity_objective(),
                                  bounds=bounds)
@@ -148,23 +168,46 @@ class Planner:
             errors += rolling_comparison_errors(model.snapshot, self.reference_flows, flows)
         return errors
 
-    def single_session_model(self, model: JointModel, result: dict[str, Any]) -> JointModel | None:
-        """Try one fixed-phase session per connected window up to the next requirement.
+    def single_session_model(self, model: JointModel, result: dict[str, Any], *,
+                             bounded: bool = False) -> JointModel | None:
+        """Try one fixed-phase session for the next selected charging work.
 
-        This is a candidate, never a new charging constraint. The unrestricted joint
-        search can vary current, phases or session count when the constraints require it.
+        Required and optional work use the model's existing goals and interval ceilings;
+        no particular SoC percentage activates this candidate. The unrestricted joint
+        search remains available when pauses or phase changes are necessary.
         """
         s, c, o = model.snapshot, model.snapshot.capabilities, model.snapshot.observation
-        goals = [g for g in s.goals if s.intervals[0].start < g.deadline <= s.intervals[-1].end
-                 and g.target(c, s.policy) > o.ev_kwh + TOL]
+        charging_slots = [
+            t for t, (one, three) in enumerate(zip(result["flows"]["one"], result["flows"]["three"]))
+            if one + three > .5
+        ]
         phase = s.hold_phases if s.hold_ev_kw > TOL else min(c.phases)
-        if not goals or phase not in c.phases:
+        if not charging_slots or phase not in c.phases:
             return None
-        deadline = min(g.deadline for g in goals)
+        first = s.intervals[charging_slots[0]]
+        goals = [g for g in s.goals if first.end <= g.deadline <= s.intervals[-1].end]
+        # With no named checkpoint, bound optional work to its installation-local day.
+        day_end = (first.start.astimezone(ZoneInfo(s.policy.timezone)) + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0)
+        deadline = min(min((g.deadline for g in goals), default=day_end),
+                       first.start + timedelta(hours=24), s.intervals[-1].end)
         slots = [t for t, i in enumerate(s.intervals) if i.end <= deadline]
         if not slots:
             return None
-        steady = deepcopy(model)
+        if bounded:
+            starts = sum(result["flows"]["start"][t] for t in slots)
+            phases = {3 if result["flows"]["three"][t] > .5 else 1 for t in charging_slots if t <= slots[-1]}
+            if starts <= 1 and len(phases) <= 1:
+                return None
+        if bounded:
+            end = first.start + timedelta(hours=24)
+            last = next((t for t in range(charging_slots[0] + 1, len(s.intervals)) if s.intervals[t].start >= end),
+                        len(s.intervals))
+            steady = SolarCapture(model, result["flows"]).neighborhood(
+                charging_slots[0], last, economic_allowance=s.policy.polish_tolerance_eur,
+                preserve_ev_prefix=False)
+        else:
+            steady = deepcopy(model)
         v, m = steady.linear.variables, steady.linear
         continuing = s.hold_ev_kw > TOL and o.ev_power_kw > 0.1
         windows: list[list[int]] = []
@@ -179,8 +222,20 @@ class Planner:
             active, inactive = ("three", "one") if phase == 3 else ("one", "three")
             m.upper[v[inactive][t]] = 0
             m.upper[v[f"amps_{inactive}"][t]] = 0
-        # This candidate schedules the next goal jointly with ESS; keep later physical
-        # decisions as its feasible incumbent. The unrestricted search below frees them.
+        # Preserve the selected quantity at this boundary and keep later physical
+        # decisions intact. Charging ceilings and all source/permission rows are inherited.
+        boundary = slots[-1] + 1
+        ev = v["ev_energy"][boundary]
+        m.lower[ev] = max(m.lower[ev], result["flows"]["ev_energy"][boundary] - 1e-6)
+        if bounded:
+            # Smoothing preserves quantity. Keep partial-slot amperes as a checked
+            # candidate so tiny duration differences do not create an integer search.
+            m.lower[ev] = m.upper[ev] = result["flows"]["ev_energy"][boundary]
+            for t in slots:
+                if abs(s.intervals[t].hours - 5 / 60) > 1e-9:
+                    for name in ("one", "three", "amps_one", "amps_three"):
+                        index = v[name][t]
+                        m.lower[index] = m.upper[index] = result["flows"][name][t]
         fixed_later = ("one", "three", "amps_one", "amps_three", "battery_charge", "converter_charge",
                        "grid_direction", "pv_store_mode", "pv_ev", "pv_house", "pv_store", "export",
                        "curtail", "grid_ev", "grid_house", "grid_store", "solar_dis_ev",
@@ -219,6 +274,7 @@ class Planner:
         if allowance < .3:
             return result
         deadline = monotonic() + min(allowance, self.remaining())
+        allocation_deadline = deadline - min(3.0, allowance * .3)
 
         def consider(values: list[float]) -> None:
             nonlocal result
@@ -236,11 +292,11 @@ class Planner:
         consider(capture.export_seed())
         windows = capture.windows()
         for number, (first, last) in enumerate(windows):
-            remaining = min(deadline - monotonic(), self.remaining())
+            remaining = min(allocation_deadline - monotonic(), self.remaining())
             if remaining < .3:
                 break
             local = SolarCapture(model, result["flows"]).neighborhood(first, last)
-            remaining = min(deadline - monotonic(), self.remaining())
+            remaining = min(allocation_deadline - monotonic(), self.remaining())
             if remaining < .1:
                 break
             # Do not split a tiny budget into searches shorter than presolve. The
@@ -250,6 +306,11 @@ class Planner:
                                    local.warm_from(result["flows"]), objective=local.economic)
             if trial["feasible"] and local.linear.accepts(local.warm_from(trial["flows"])):
                 consider(model.warm_from(trial["flows"]))
+        remaining = min(deadline - monotonic(), self.remaining())
+        if remaining >= .3:
+            smoothed = self.prefer_continuity("solar_capture", model, result, remaining, single_only=True)
+            if self.prefer_result(result, model, smoothed, model):
+                result = smoothed
         return result
 
     def prefer_earlier(self, model: JointModel, result: dict[str, Any], allowance: float) -> dict[str, Any]:
@@ -518,10 +579,10 @@ class Planner:
             )
             normal_model.add_optional_peak_limits(reference_flows)
             # Preserve time for one final solar pass before optional probes consume the budget.
-            self.solar_reserve = min(6.0, self.remaining() * .10)
+            self.solar_reserve = min(9.0, self.remaining() * .12)
             solar_start = {**selected, "values": normal_model.warm_from(selected["flows"])}
             solar_start = self.prefer_solar(normal_model, solar_start,
-                                            min(8.0, max(2.5, self.remaining() * .15)))
+                                            min(11.0, max(3.0, self.remaining() * .18)))
             if self.prefer_result(selected, selected_model, solar_start, normal_model):
                 selected, selected_model = solar_start, normal_model
                 reasons.append({"kind": "joint_capture", "text":

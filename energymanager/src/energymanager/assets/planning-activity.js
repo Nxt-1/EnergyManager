@@ -1,7 +1,7 @@
 const activeStates = new Set(['requested', 'restarting', 'calculating', 'checking', 'waiting']);
 
 function stageLabel(stage = '') {
-  if (/continuity|steady_grid|operational_polish/.test(stage)) return 'Smoothing charging';
+  if (/continuity|single_session|steady_grid|operational_polish/.test(stage)) return 'Smoothing charging';
   if (/minimum_necessary/.test(stage)) return 'Checking energy';
   if (/exceptional|replacement|health_constrained/.test(stage)) return 'Checking solar';
   if (/normal_ceiling|peak_precharge|solar_capture/.test(stage)) return 'Optimizing energy';

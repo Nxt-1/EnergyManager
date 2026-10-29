@@ -49,7 +49,8 @@ class SolarCapture:
             first = last
         return windows
 
-    def neighborhood(self, first: int, boundary: int) -> JointModel:
+    def neighborhood(self, first: int, boundary: int, *, economic_allowance: float = 1e-6,
+                     preserve_ev_prefix: bool = True) -> JointModel:
         """Free one 24h window of solar/ESS routing and EV capture; preserve later supply.
 
         Later grid EV charging may shrink to avoid retaining a now-unnecessary purchase.
@@ -63,8 +64,9 @@ class SolarCapture:
         phase = min(s.capabilities.phases)
         other = "three" if phase == 1 else "one"
         # Keep achieved readiness, not just the minimum deadline target.
-        for t, index in enumerate(m.variables["ev_energy"]):
-            m.lower[index] = max(m.lower[index], flows["ev_energy"][t] - 1e-6)
+        if preserve_ev_prefix:
+            for t, index in enumerate(m.variables["ev_energy"]):
+                m.lower[index] = max(m.lower[index], flows["ev_energy"][t] - 1e-6)
         for name, indexes in m.variables.items():
             if name.startswith("margin_shortfall_"):
                 m.upper[indexes[0]] = min(m.upper[indexes[0]], values[indexes[0]] + 1e-6)
@@ -97,5 +99,5 @@ class SolarCapture:
                 m.upper[index] = min(m.upper[index], values[index])
                 if t < first:
                     m.lower[index] = values[index]
-        m.row(list(model.economic.items()), upper=model.value(model.economic, values) + 1e-6)
+        m.row(list(model.economic.items()), upper=model.value(model.economic, values) + economic_allowance)
         return model

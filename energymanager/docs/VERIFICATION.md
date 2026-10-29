@@ -1,5 +1,30 @@
 # EnergyManager 4 verification
 
+## 4.4.15 — Continuity across active charging limits (29 October 2026)
+
+573 Python tests pass in 115.19s; 66 frontend cases, Ruff, mypy (43 modules), asset syntax,
+CLI and 4.4.15 sdist/wheel pass. New deterministic tests cover 50/65/80/90/authorised100%
+model ceilings, required65/90/100% targets, already-satisfied/absent named targets, held
+charging, time-varying ceilings, valid-candidate retention on timeout and repeated cost
+references. Full-planner tests deliberately return fragmented economic candidates under
+multiple configured limits and verify inherited normal/proven-exceptional authority.
+An irregular first charging interval verifies exact selected quantity and safe smoothing.
+
+Private supplied exports remain unmodified and uncommitted. Digests, original-model
+rows/bounds/integers, independent physical/source/permission and rolling audits pass.
+The supplied four-session decision replays as one 13:51–16:00 Brussels session with the
+same 3.266051kWh at the original120s budget (99.57s elapsed). Both earlier solar decisions
+also retain their first-day7.262/7.524kWh and reach about80%, now in one session each
+(101.24/99.91s). No global optimality or realised-savings claim. A12s stress replay remains
+valid within11.34s but can retain fragmentation when the bounded smoothing search times
+out; constraints are never relaxed to force a continuous result.
+
+Configured routed fake E2E passes 2023 intervals, two journeys, six fake route queries and
+four local service calls. Acceptance 65.84s, max control tick 3.32ms,
+cloned saved-plan recovery 58.23ms. All endpoints/notifications/actuators are fake;
+no live HA/database/provider/Google/credential/hardware/phone or installation deployment.
+Ignored evidence: artifacts/v4415-optional-continuity/release-final/ and release-state.txt.
+
 ## 4.4.14 — Consistent energy direction arrows (29 October 2026)
 
 66 frontend tests and15 focused native-dashboard/release tests pass (10.31s). The existing

@@ -1,5 +1,15 @@
 # Run, configure, review and roll back
 
+## Charging continuity (4.4.15)
+
+Update/reload the add-on; no settings migration is needed. Optional and required work now
+use the continuous-session fallback with their actual model limits, even when named
+targets are already satisfied or absent. Solar passes reserve smoothing time. The normal
+ceiling, authorised higher limits and required targets retain their original authority.
+Availability, minimum current, phase/hold, source, health and permission constraints can
+still require gaps. Smoothing uses one carried economic allowance and original-snapshot
+checks; live control remains independent. A local Optimal stage is not global proof.
+
 ## Energy direction arrows (4.4.14)
 
 Update/reload the add-on for consistent summary markers: → means grid import/ESS charge;

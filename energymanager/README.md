@@ -1,8 +1,14 @@
 # EnergyManager 4
 
-Version **4.4.14**, the main Energy Manager application. One joint seven-day EV/ESS MILP
+Version **4.4.15**, the main Energy Manager application. One joint seven-day EV/ESS MILP
 feeds independent responsive control. The application includes configured input/actuator
 boundaries, persisted goals/approvals/decisions and Overview/Planning/EV pages.
+
+## Charging continuity
+
+Required and optional charging share the continuous-session fallback, using their active
+goals and charging ceilings. Solar refinement reserves time for smoothing even when named
+targets are already satisfied. Necessary pauses and existing limits remain; no new setting.
 
 ## Solar capture
 

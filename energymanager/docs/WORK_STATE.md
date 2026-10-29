@@ -1,6 +1,46 @@
 # EnergyManager work state
 
-## Current checkpoint — consistent direction arrows (4.4.14, 29 October 2026)
+## Current checkpoint — continuity across charging limits (4.4.15, 29 October 2026)
+
+AUTHORIZED: implement the optional continuous-session fallback across all active limits,
+not just80%. Required skill/current docs checked. Base4.4.14 at
+758b16c80ff516277a8cb8c65fc7ccee01f2d5ab; CI40877360277/image40877358386 succeeded.
+Main's unrelated DEFERRED_WORK.md remains pending; preserve all its raw bytes. No live
+service/database/provider/credential/hardware/notification or installation operation.
+
+IMPLEMENTED: selected charging work activates the candidate, including already-satisfied
+or absent targets. Inherit model interval ceilings, required-target/exceptional authority,
+source/permission/availability/current/phase/hold constraints without a fixed percentage.
+Preserve selected boundary quantity; unnamed work uses its local day; candidates are
+bounded to24h. The unrestricted main search retains freedom. Bounded solar cleanup keeps
+future ESS stocks/dispatch/import upper bounds, selected quantity exactly and partial-slot
+amperes; optional incidental SoC prefixes may move, named deadlines/margins remain hard.
+Try unchanged economic/cash comparison, then the same carried allowance, without stacking.
+Up to11s initial/9s reserved final solar work includes up to3s/30% continuity inside the
+unchanged global deadline, preserving the previous fast solar allocation opportunity.
+Skip the narrow search for an already-continuous single-phase profile. All replacement
+rows/bounds/integers and independent/rolling audits checked; live control unchanged.
+Progress label/version15/architecture/decisions/runbook/verification/changelog synchronized.
+
+VERIFIED: 573 Python cases115.19s, 66frontend, Ruff, mypy43modules, syntax, CLI and sdist/
+wheel pass. 21 dedicated cases include three full-planner configured-limit regressions.
+An initial synthetic fixture split the15s preparation interval incorrectly; corrected
+actual-duration profiles. An initial complete replay still timed out despite helper
+success; exact quantity/partial amperes and bounded optional-prefix handling resolve it.
+Final complete latest replay at120s: one13:51–16:00Brussels session,3.266051kWh unchanged,
+99.57s elapsed, all model/independent/rolling checks pass. Prior solar replays retain
+7.262/7.524kWh first-day capture, about80% horizon charge and one first-day session each
+(101.24/99.91s). At12s the latest result is valid but may retain fragmented fallback;
+no guarantee of continuity after budget exhaustion or global optimum. Original evidence
+stays private/unmodified; release-final reports under artifacts/v4415-optional-continuity/.
+Configured routed fake E2E passes2023intervals/2journeys/6fake routes/4local calls;
+65.84s acceptance,max control tick3.32ms;cloned recovery58.23ms.
+
+NEXT: final diff/commit/main fast-forward and push, preserving unrelated backlog bytes.
+Verify exact-commit CI and image; put remote results only in ignored release-state/final
+reply. No optional success-only docs commit or installation deployment.
+
+## Earlier checkpoint — consistent direction arrows (4.4.14, 29 October 2026)
 
 AUTHORIZED: user requested → import/charge and ← export/discharge for grid/ESS summary
 markers. Required skill and living docs checked; isolated worktree clean at4.4.13

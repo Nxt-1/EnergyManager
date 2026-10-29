@@ -792,9 +792,10 @@ uses the remaining global wall budget less2s reserved for validation (only when 
 than2s remain), retaining
 the checked warm start if available. No infeasibility claim, new permission, reduced
 horizon or relaxed constraint follows from timeout. From4.4.13 solar refinement runs
-before the normal optional search and reserves up to6s (10% of remaining time) for a final
-pass before required timing/source certification. The initial pass uses up to8s, with a
-bounded minimum opportunity under short budgets; all construction/audits/solves remain
+before the normal optional search. From4.4.15 it reserves up to9s (12% of remaining time)
+for a final pass before required timing/source certification, and the initial pass uses
+up to11s so continuity need not consume the earlier fast allocation allowance. A bounded
+minimum opportunity remains under short budgets; all construction/audits/solves remain
 inside the existing global deadline. Exceptional100% diagnostics use the unreserved
 remainder. Reserved work is skipped if no feasible reference or insufficient time exists.
 
@@ -810,9 +811,14 @@ From4.3.20 the main economic stages are two-objective joint searches:80% of its 
 establishes an economic reference, and20% chooses charger continuity in the same full
 EV/ESS model. ESS dispatch and solar/source allocation remain decisions; an arbitrary
 ESS incumbent cannot force EV gaps. Achieved required readiness and terminal EV quantity
-are preserved. A fixed-phase, single-session candidate is tried for the next required
-window, including solar allocation and already-held three-phase charging. The unrestricted
-joint search can vary current or retain necessary pauses/phase changes. No new publication
+are preserved. From4.4.15 a fixed-phase, single-session candidate follows the next
+selected charging work, required or optional. Named targets need not exceed initial EV
+charge; absent targets use the installation-local day, and the candidate span is bounded
+to24h. Preserve the selected quantity at its boundary. The original model supplies every
+active interval ceiling, required-target exception, availability, current/phase/hold,
+source and permission restriction; no SoC percentage activates the fallback. It includes
+solar routing and already-held three-phase charging. The unrestricted joint search can
+vary current or retain necessary pauses/phase changes. No new publication
 repair is added. The older fixed-ESS EV-only refinement and leftover local-day polish are
 replaced by this joint objective selection.
 
@@ -827,7 +833,18 @@ low variation; it does not require the held current to persist for the entire ta
 setting persists through off intervals; stopping three-phase charging is not itself a
 selector change. The initial selector and power are included, so switching away from the
 current setting is priced from the first interval. These are internal search priorities,
-not monetary wear charges. Selector auxiliary rows are added to operational searches and
+not monetary wear charges. From4.4.15 each bounded solar pass reserves up to3s (30% of
+its allowance) for a narrow single-session check before returning. Preserve future ESS
+stocks/dispatch, interval import upper bounds and selected EV service; first try unchanged
+economics/cash, then the original allowance only if no such candidate is returned and
+time remains. Repeated continuity calls retain the carried reference rather than rebasing
+it on an already smoothed schedule. Every replacement passes original/narrow model rows,
+bounds/integers and independent/rolling audits. A bounded cleanup keeps the selected
+quantity exactly and retains partial-interval amperes as an additional candidate restriction
+to avoid needless integer ambiguity. Optional intermediate SoC points may move; named
+deadlines/margins and actual interval ceilings remain hard. The unrestricted main search
+retains its freedom. Local optimality is not global proof.
+Selector auxiliary rows are added to operational searches and
 source certificates; the pure economic reference omits this unpriced bookkeeping.
 From4.4.9 a bounded earlier-required-charging preference resolves timing indifference
 before the final grid certificate fixes quarter envelopes. It minimizes the energy-weighted
