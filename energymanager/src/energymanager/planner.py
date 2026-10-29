@@ -13,6 +13,7 @@ from copy import deepcopy
 from .domain import PeakPermission, Snapshot, json_data, instant
 from .charging_timing import ChargingTiming
 from .incumbent import seed
+from .solar_capture import SolarCapture
 from .optimization import JointModel
 from .validation import TOL, accounting, rolling_comparison_errors, validate
 from .reservations import reservations
@@ -26,10 +27,11 @@ class Planner:
         self.stages: list[dict[str, Any]] = []
         self.progress = progress
         self.validation_seconds = 0.0
+        self.solar_reserve = 0.0
         self.reference_flows: dict[str, list[float]] | None = None
 
     def remaining(self) -> float:
-        return max(0.0, self.deadline - monotonic() - 0.25 - self.validation_seconds * 1.25)
+        return max(0.0, self.deadline - monotonic() - 0.25 - self.validation_seconds * 1.25 - self.solar_reserve)
 
     def validate_candidate(self, snapshot: Snapshot, flows: dict[str, list[float]],
                            service: dict[str, float] | None = None) -> list[str]:
@@ -74,6 +76,20 @@ class Planner:
         self.stages.append(
             {"name": name, **{k: v for k, v in result.items() if k not in ("flows", "values")}}
         )
+        # A bounded solve may fail to return its valid warm start, or return a worse one.
+        # Keep the raw solver evidence in stages and retain only a fully checked candidate.
+        if warm is not None:
+            values = model.canonical_values(warm)
+            objective = kwargs.get("objective", model.economic)
+            timed_out = not result["feasible"] and result["status"] == "Time limit reached"
+            better_start = (result["feasible"] and model.value(objective, values)
+                            < model.value(objective, result["values"]) - 1e-6)
+            if model.linear.accepts(values) and (timed_out or better_start):
+                self.stages[-1]["retained_starting_candidate"] = True
+                result = {**result, "feasible": True, "values": values, "retained_starting_candidate": True,
+                          "canonical_objective": model.value(objective, values),
+                          "flows": {name: [values[index] for index in indexes]
+                                    for name, indexes in model.linear.variables.items()}}
         if economic_search and result["feasible"]:
             remaining = min(self.remaining(), allowance - (monotonic() - started))
             result = self.prefer_continuity(name, model, result, remaining)
@@ -198,6 +214,44 @@ class Planner:
         chosen["economic_baseline"], chosen["cash_baseline"] = reference, cash_reference
         return preferred
 
+    def prefer_solar(self, model: JointModel, result: dict[str, Any], allowance: float) -> dict[str, Any]:
+        """Retain checked solar alternatives before the full search and before certification."""
+        if allowance < .3:
+            return result
+        deadline = monotonic() + min(allowance, self.remaining())
+
+        def consider(values: list[float]) -> None:
+            nonlocal result
+            if not model.linear.accepts(values):
+                return
+            flows = {name: [values[index] for index in indexes]
+                     for name, indexes in model.linear.variables.items()}
+            if self.continuity_errors(model, flows):
+                return
+            candidate = {"status": result["status"], "feasible": True, "values": values, "flows": flows}
+            if self.prefer_result(result, model, candidate, model):
+                result = candidate
+
+        capture = SolarCapture(model, result["flows"])
+        consider(capture.export_seed())
+        windows = capture.windows()
+        for number, (first, last) in enumerate(windows):
+            remaining = min(deadline - monotonic(), self.remaining())
+            if remaining < .3:
+                break
+            local = SolarCapture(model, result["flows"]).neighborhood(first, last)
+            remaining = min(deadline - monotonic(), self.remaining())
+            if remaining < .1:
+                break
+            # Do not split a tiny budget into searches shorter than presolve. The
+            # immediate window gets first priority; farther windows use what remains.
+            share = remaining * .65 if number == 0 else remaining / (len(windows) - number)
+            trial = self.run_model(f"solar_capture:{first}", local, min(remaining, max(.75, share)),
+                                   local.warm_from(result["flows"]), objective=local.economic)
+            if trial["feasible"] and local.linear.accepts(local.warm_from(trial["flows"])):
+                consider(model.warm_from(trial["flows"]))
+        return result
+
     def prefer_earlier(self, model: JointModel, result: dict[str, Any], allowance: float) -> dict[str, Any]:
         """Resolve equal-benefit required timings on this snapshot before grid certification."""
         if allowance < .3 or not any(value > TOL for value in result["flows"]["grid_ev"]):
@@ -229,6 +283,7 @@ class Planner:
         self.started = monotonic()
         self.deadline = self.started + snapshot.policy.planning_budget_seconds
         self.validation_seconds = 0.0
+        self.solar_reserve = 0.0
         self.reference_flows = None
         self.stages = []
         s = snapshot
@@ -462,7 +517,16 @@ class Planner:
                 grid_ess=required_support,
             )
             normal_model.add_optional_peak_limits(reference_flows)
-            normal_seed = self.starting_point(normal_model) or normal_model.warm_from(reference["flows"])
+            # Preserve time for one final solar pass before optional probes consume the budget.
+            self.solar_reserve = min(6.0, self.remaining() * .10)
+            solar_start = {**selected, "values": normal_model.warm_from(selected["flows"])}
+            solar_start = self.prefer_solar(normal_model, solar_start,
+                                            min(8.0, max(2.5, self.remaining() * .15)))
+            if self.prefer_result(selected, selected_model, solar_start, normal_model):
+                selected, selected_model = solar_start, normal_model
+                reasons.append({"kind": "joint_capture", "text":
+                                "Checked bounded solar allocation retained before the full joint search."})
+            normal_seed = self.starting_point(normal_model) or normal_model.warm_from(selected["flows"])
             seed_result: dict[str, Any] = {
                 "status": "Feasible incumbent",
                 "feasible": True,
@@ -472,11 +536,12 @@ class Planner:
                     for name, indexes in normal_model.linear.variables.items()
                 },
             }
-            if not self.validate_candidate(s, seed_result["flows"], service) and not rolling_comparison_errors(
-                s, reference_flows, seed_result["flows"]
-            ):
+            if (normal_model.linear.accepts(normal_seed)
+                    and not self.validate_candidate(s, seed_result["flows"], service)
+                    and not rolling_comparison_errors(s, reference_flows, seed_result["flows"])):
                 if self.prefer_result(selected, selected_model, seed_result, normal_model):
                     selected, selected_model = seed_result, normal_model
+            normal_seed = normal_model.warm_from(selected["flows"])
             normal = self.run_model(
                 "normal_ceiling_joint",
                 normal_model,
@@ -724,6 +789,14 @@ class Planner:
                                     "text": "A smaller peak during this specific precharge avoids a larger forecast household peak within 24 hours. The automatic portion continues while approval is pending.",
                                 }
                             )
+        reserved = self.solar_reserve
+        self.solar_reserve = 0.0
+        if selected_model.optional:
+            before_solar = selected
+            selected = self.prefer_solar(selected_model, selected, min(reserved, self.remaining() * .75))
+            if selected is not before_solar:
+                reasons.append({"kind": "solar_allocation", "text":
+                                "Checked bounded solar allocation improved the plan before source certification."})
         selected = self.prefer_earlier(selected_model, selected, min(8.0, self.remaining() * .35))
         economic_status = selected["status"]
         polish_reference_summary = accounting(s, selected["flows"])

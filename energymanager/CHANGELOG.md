@@ -1,3 +1,14 @@
+## 4.4.13 — Reliable solar-allocation candidates
+
+- Try bounded EV/solar/ESS allocation candidates before the full optional search, and
+  reserve part of the existing budget for refinement before source certification.
+- Route otherwise unused DC solar through spare inverter capacity. Consider optional
+  EV capture and later ESS filling while preserving future supply and achieved readiness.
+- Retain checked starting candidates when a timed solve returns none or a worse result;
+  preserve raw solver status and mark retained candidates in diagnostic stages.
+- Keep the existing economic/continuity selection, health ceilings, source/permission
+  rules and live control. Stored ESS energy still cannot be exported to the grid.
+
 ## 4.4.12 — ESS display direction
 
 - Show ESS AC charging above zero and discharge below zero in live cards and actual,

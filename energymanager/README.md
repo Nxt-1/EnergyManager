@@ -1,8 +1,15 @@
 # EnergyManager 4
 
-Version **4.4.12**, the main Energy Manager application. One joint seven-day EV/ESS MILP
+Version **4.4.13**, the main Energy Manager application. One joint seven-day EV/ESS MILP
 feeds independent responsive control. The application includes configured input/actuator
 boundaries, persisted goals/approvals/decisions and Overview/Planning/EV pages.
+
+## Solar capture
+
+The planner keeps checked solar-allocation alternatives when a timed search cannot improve
+its starting schedule. Bounded 24h candidates across the full forecast consider EV capture
+within the existing health ceiling, direct solar export and later ESS filling. Future
+supply and normal source/permission guards remain. No new setting is required.
 
 ## ESS display sign
 

@@ -1,5 +1,38 @@
 # EnergyManager 4 verification
 
+## 4.4.13 — Reliable solar allocation (29 October 2026)
+
+552 Python tests pass in102.39s;66frontend cases, Ruff, mypy43modules and asset syntax
+pass. New deterministic cases cover DC export under converter limits and idle direction
+flags, AC charging exclusion, later DC capture replacing early AC filling, unavailable
+EV, normal health ceiling, future ESS/earlier EV preservation, a later capture window,
+no useful EV-value assumption, invalid solver output and no-incumbent/global timeouts.
+Legacy timeout cases explicitly remove warm candidates when testing recovery; a separate
+case verifies that a valid starting schedule survives the deadline with no extra solve.
+Raw solver failure/optimality evidence is not rewritten to claim a stronger result.
+
+Configured routed fake E2E passes2023intervals/2journeys/6fake route queries/4local service
+calls;66.44s acceptance/max control tick2.91ms;cloned archive recovery72.35ms. All services,
+notifications and actuator endpoints are local fakes. No live HA/database/Google/provider,
+credential, hardware, phone or installation deployment access.
+
+Both private supplied exports have verified input/result digests and are replayed offline
+at12s and120s budgets. Public automated tests use synthetic inputs; installation telemetry
+is not committed. At12s the earlier case delivers7.262kWh to the EV on its first day and
+reaches79.97% over the horizon; the later case retains7.524kWh/79.99%. Durations11.64/11.80s;
+original model rows/integers, independent physical/source/permission and rolling checks
+pass. The improved first-window allocation corrects an initial experiment that split the
+small budget too thinly across days. At120s both pass in102.26/101.32s:7.262/7.524kWh EV
+charging on the first day,79.98/79.99% maximum EV SoC, and essentially zero unused DC
+across the seven days. Combined economic comparisons improve7.926→-3.946EUR and
+6.546→1.050EUR against the supplied original schedules, under the existing assumed stored
+energy values; these are forecast comparisons, not realized savings. All physical/source/
+permission/rolling and original model checks pass. CLI/sdist/wheel4.4.13 pass;15 affected
+solar/recovery cases pass again after final readability review. Private evidence and
+exact-commit remote results:artifacts/v4413-solar-capture/.
+The narrow solar/source stages' Optimal statuses do not prove global economic optimality.
+
+
 ## 4.4.12 — ESS display direction (29 October2026)
 
 43 focused native dashboard/polling/history/settings/release tests pass13.38s;66frontend

@@ -1,6 +1,45 @@
 # EnergyManager work state
 
-## Current checkpoint — ESS display sign (4.4.12,29 October2026)
+## Current checkpoint — reliable solar capture (4.4.13, 29 October 2026)
+
+AUTHORIZED: user said implement stronger starting candidates, reserved solar refinement,
+checked timeout retention and regression checks on both supplied decisions. Keep existing
+economics, health/source/permission/continuity rules, snapshot planning and live control.
+No stored ESS export, arbitrary full-SoC penalty, live services/hardware or deployment.
+Required skill/docs rechecked. Base4.4.12 cd459b7a9181a6eab6b0cbf0c486effa615fdeac;
+CI40866509400/image40866509412 succeeded. Main has unrelated DEFERRED_WORK.md edits;
+original bytes saved privately under artifacts/v4413-solar-capture/ for preservation.
+
+IMPLEMENTED: SolarCapture makes an unused-DC export candidate, releasing only idle
+converter/grid direction flags. Restricted24h EV/solar/ESS candidates cover the full
+horizon, preserving earlier EV delivery/readiness, future ESS stocks/dispatch and each
+interval's import upper bounds. Later grid EV may shrink when captured solar replaces
+required imports. Original rows/bounds/integers and independent/rolling audits check each
+replacement; existing economic/continuity selection stays. Normal joint search remains
+unrestricted. Initial refinement prioritizes the immediate window; up to6s reserved from
+the existing global budget for a final pass before required timing/source certification.
+Valid warm candidates survive a no-incumbent timeout/worse result. Raw solver stages
+retain status/bounds/gaps and flag retained_starting_candidate separately. Planning
+activity recognizes the stage; version, architecture, decisions/runbook/verification sync.
+
+VERIFIED:552Python tests102.39s;66frontend,Ruff,mypy43modules,asset syntax,CLI and4.4.13
+sdist/wheel pass. Final15 affected cases pass1.58s. Initial full run547pass/2legacytimeout
+failures corrected by explicitly excluding warm candidates in no-candidate recovery tests;
+new deadline regression confirms safe candidate retention without an extra solve.
+Configured routed fake E2E passes2023intervals/2journeys/6fake routes/4local calls;66.44s
+acceptance,max control tick2.91ms;cloned saved-plan recovery72.35ms. All endpoints fake.
+Both private frozen exports verify and pass original-model/independent/rolling checks.
+12s runs finish11.64/11.80s: earlier first-day EV7.262kWh versus original0, reaching79.97%;
+later retains7.524kWh/79.99%. At120s finish102.26/101.32s, reach79.98/79.99%, essentially
+zero unusedDC across the horizon. Assumed combined comparisons improve7.926→-3.946EUR
+and6.546→1.050EUR; no realized savings/global optimum claim. Final reports/results under
+artifacts/v4413-solar-capture/final/; original exports remain unchanged/private.
+
+NEXT: final diff/commit, main fast-forward/push preserving unrelated backlog raw bytes,
+verify exact-commit CI and image publication. Record remote success only in ignored
+release-state/final reply; no optional success-only commit or installation deployment.
+
+## Earlier checkpoint — ESS display sign (4.4.12,29 October2026)
 
 AUTHORIZED: user explicitly requested the visual ESS sign change while preparing separate
 prompts for the remaining solar/full-battery issues. Required code-writer and current

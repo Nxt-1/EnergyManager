@@ -604,6 +604,19 @@ There is no monetary wear charge or cycle quota.
 One finite planning process obtains required service, jointly optimizes zero-to-maximum
 optional EV/ESS quantities, checks each extra charging origin over the following24h
 (including both residual inventories), and uses a finite constraint repair if necessary.
+From4.4.13 normal optional planning first compares checked solar-allocation candidates.
+A deterministic candidate routes otherwise unused DC via spare AC inverter capacity,
+without altering batteries or other delivery. Idle converter/grid direction flags may be
+released when no actual charge/import commits them. Bounded 24h neighborhoods cover the
+full horizon, prioritizing the immediate window when time is short. They free solar/ESS
+routing and normal EV capture within the window while preserving earlier EV delivery,
+achieved readiness, future ESS stocks/dispatch and each interval's import upper bounds.
+Later required grid EV delivery may shrink when captured solar makes it unnecessary.
+These restrictions define additional candidates only; the normal joint search stays free.
+Every replacement must pass original model rows/bounds/integers and independent physical,
+source, permission and rolling checks, then the existing economic/continuity selector.
+There is no hard EV-first override, full-ESS duration penalty or stored-energy export.
+
 Normal optional EV ceiling is80%; a100% probe executes only if matching the opportunity
 later in the full horizon is proven infeasible with physical availability, losses,
 inventories and no additional imports. Later diagnostic100% headroom grants no execution
@@ -763,7 +776,11 @@ are never automatically retried by the browser.
 One120s default wall budget
 covers construction, reference/diagnostic/opportunity solves, polish and audits. Optional
 refinements are skipped when unvalidated. Checked lower-peak warm starts are feasible
-incumbents, not substitute published schedules. Raw status, bounds and gaps are retained.
+candidate schedules. From4.4.13 a warm candidate that passes all current model rows,
+bounds and integrality is retained if a timed solve returns none or a worse objective;
+normal final independent audits still gate publication. Raw solver status/bounds/gaps
+remain in stages, with retained_starting_candidate identifying this fallback separately.
+Its feasibility does not establish global optimality.
 From4.3.11 seed grid allowances reset by installation-local billing month, matching
 the model: current-month incurred peak is never permission in a later month. Every
 seed still passes row/bound checks before HiGHS and every published trajectory passes
@@ -772,7 +789,12 @@ limit without a feasible candidate, one recovery solve on the same model/objecti
 uses the remaining global wall budget less2s reserved for validation (only when more
 than2s remain), retaining
 the checked warm start if available. No infeasibility claim, new permission, reduced
-horizon or relaxed constraint follows from timeout. Refinements use only leftover time.
+horizon or relaxed constraint follows from timeout. From4.4.13 solar refinement runs
+before the normal optional search and reserves up to6s (10% of remaining time) for a final
+pass before required timing/source certification. The initial pass uses up to8s, with a
+bounded minimum opportunity under short budgets; all construction/audits/solves remain
+inside the existing global deadline. Exceptional100% diagnostics use the unreserved
+remainder. Reserved work is skipped if no feasible reference or insufficient time exists.
 
 Decision history lists status/reason/elapsed time for rejected attempts independently
 of the last accepted plan's evidence. Its detail includes validity, all stages and
@@ -782,7 +804,7 @@ Download server JSON directly to preserve float representation/checksums; native
 uses its discovered ingress base. Frozen CLI replay validates the exported top-level
 digest as well as legacy result.input_digest. No full snapshot is added to state polls
 or decision-list responses; opening/exporting a decision performs no hardware action.
-From4.3.20 every economic stage is a two-objective joint search:80% of its allowance
+From4.3.20 the main economic stages are two-objective joint searches:80% of its allowance
 establishes an economic reference, and20% chooses charger continuity in the same full
 EV/ESS model. ESS dispatch and solar/source allocation remain decisions; an arbitrary
 ESS incumbent cannot force EV gaps. Achieved required readiness and terminal EV quantity

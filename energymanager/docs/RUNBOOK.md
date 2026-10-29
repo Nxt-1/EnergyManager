@@ -1,5 +1,16 @@
 # Run, configure, review and roll back
 
+## Reliable solar capture (4.4.13)
+
+Update/reload the add-on; no setting or sensor migration is required. The planner now
+tries checked solar allocation candidates before its full optional search and reserves
+refinement time before certification. Export means incoming solar, not stored ESS energy.
+The existing forecast horizon, normal80% ceiling, exceptional health proof, periodic
+recalculation and live control remain. Time limit reached can accompany a valid checked
+candidate; retained_starting_candidate in the raw stage diagnostics explains fallback.
+Optimal on a restricted solar/source stage does not prove global economic optimality.
+All final publication checks remain on the original snapshot.
+
 ## ESS display direction (4.4.12)
 
 Update/reload the add-on for positive charging and negative discharge on dashboard ESS

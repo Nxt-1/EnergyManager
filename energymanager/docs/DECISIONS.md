@@ -651,3 +651,16 @@ the frontend boundary only. Input mappings, source math, raw evidence and live c
 retain positive AC discharge. Do not invert SoC or energy totals. AC converter exchange
 still excludes direct DC solar charging and may include DC passthrough; do not imply a
 net battery measurement or implement the separate solar optimizer/accounting changes.
+
+
+## 29 October 2026 — Reliable optional solar capture (4.4.13)
+
+After comparing two supplied decisions, the user authorized stronger starting candidates,
+reserved solar refinement time and retaining the best checked candidate through solver
+timeouts. Use bounded neighborhoods across the unchanged full horizon and the same frozen
+snapshot; preserve future supply, existing economics, 80%/exceptional health checks and
+source/permission/continuity rules. Prioritize the immediate opportunity under short
+budgets before exceptional100% investigations. Existing required-grid timing remains.
+Do not add a runtime economic recheck, arbitrary maximum time at full ESS or stored
+ESS-to-grid export. Both private supplied exports are offline regression evidence;
+public automated tests use synthetic scenarios, without publishing installation telemetry.

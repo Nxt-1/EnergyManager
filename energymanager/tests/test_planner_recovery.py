@@ -48,6 +48,7 @@ def test_reference_timeout_uses_remaining_budget_and_returns_a_valid_plan(monkey
         return original(self, seconds, **kwargs)
 
     monkeypatch.setattr(JointModel, "run", timed_out_once)
+    monkeypatch.setattr(Planner, "starting_point", lambda self, model: None)
     result = Planner().plan(snapshot)
     assert result["valid"], result
     assert [stage["name"] for stage in result["stages"][:2]] == ["required_reference", "required_reference_recovery"]
@@ -67,9 +68,31 @@ def test_no_reference_retry_after_the_global_deadline(monkeypatch):
         return {"status": "Time limit reached", "feasible": False, "seconds": 5}
 
     monkeypatch.setattr(JointModel, "run", exhausted)
+    monkeypatch.setattr(Planner, "starting_point", lambda self, model: None)
     result = Planner().plan(snapshot)
     assert not result["valid"]
     assert result["status"] == "Time limit reached"
     assert len(result["stages"]) == 1
     assert result.get("permission_proposals", []) == []
     assert result["seconds"] == pytest.approx(5)
+
+
+def test_valid_starting_schedule_survives_global_timeout_without_another_solve(monkeypatch):
+    clock = [0.0]
+    calls = []
+    monkeypatch.setattr("energymanager.planner.monotonic", lambda: clock[0])
+    snapshot = tiny(planning_budget_seconds=5)
+
+    def exhausted(self, seconds, **kwargs):
+        calls.append(seconds)
+        clock[0] = 5.0
+        return {"status": "Time limit reached", "feasible": False, "seconds": 5}
+
+    monkeypatch.setattr(JointModel, "run", exhausted)
+    result = Planner().plan(snapshot)
+    assert result["valid"] and not validate(snapshot, result["flows"])
+    assert len(calls) == len(result["stages"]) == 1
+    assert result["stages"][0]["feasible"] is False
+    assert result["stages"][0]["retained_starting_candidate"] is True
+    assert result["status"] == "Time limit reached"
+    assert result.get("permission_proposals", []) == []

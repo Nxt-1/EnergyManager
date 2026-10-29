@@ -17,6 +17,7 @@ test('planning activity reports real stages and elapsed time without a fabricate
   assert.equal(model.label, 'Smoothing charging');
   assert.equal(model.elapsed, '1:14');
   assert.equal(planningActivityModel({state: 'calculating', stage: 'normal_ceiling_joint'}).label, 'Optimizing energy');
+  assert.equal(planningActivityModel({state: 'calculating', stage: 'solar_capture:288'}).label, 'Optimizing energy');
   assert.equal(planningActivityModel({state: 'restarting'}).label, 'Restarting');
   assert.equal(planningActivityModel({state: 'waiting'}).label, 'Waiting for inputs');
   assert.equal(planningActivityModel({state: 'error'}).visible, true);

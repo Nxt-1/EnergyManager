@@ -4,7 +4,7 @@ function stageLabel(stage = '') {
   if (/continuity|steady_grid|operational_polish/.test(stage)) return 'Smoothing charging';
   if (/minimum_necessary/.test(stage)) return 'Checking energy';
   if (/exceptional|replacement|health_constrained/.test(stage)) return 'Checking solar';
-  if (/normal_ceiling|peak_precharge/.test(stage)) return 'Optimizing energy';
+  if (/normal_ceiling|peak_precharge|solar_capture/.test(stage)) return 'Optimizing energy';
   if (/required|permission/.test(stage)) return 'Finding a plan';
   if (/rolling_window/.test(stage)) return 'Refining plan';
   return 'Preparing';
