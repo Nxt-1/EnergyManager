@@ -1,14 +1,17 @@
 # Run, configure, review and roll back
 
-## Charging continuity (4.4.15)
+## Charging continuity (4.4.16)
 
-Update/reload the add-on; no settings migration is needed. Optional and required work now
-use the continuous-session fallback with their actual model limits, even when named
-targets are already satisfied or absent. Solar passes reserve smoothing time. The normal
-ceiling, authorised higher limits and required targets retain their original authority.
-Availability, minimum current, phase/hold, source, health and permission constraints can
-still require gaps. Smoothing uses one carried economic allowance and original-snapshot
-checks; live control remains independent. A local Optimal stage is not global proof.
+No settings migration is needed. Every forecast day gets the same bounded continuity
+procedure for required/optional work at its actual limit. The decision download's
+`continuity_review` accounts for every interval, including empty/unavailable windows,
+with before/after/final sessions and raw attempt status. `not_checked_budget`,
+`unresolved_timeout` and `candidate_rejected` mean unfinished work; `candidate_infeasible`
+describes only a constrained fixed-phase alternative. None proves gaps unavoidable.
+`complete` means bounded coverage, not global optimality. Valid schedules remain usable
+when review is unfinished. One carried0.02EUR cash/comparison allowance covers all windows
+inside the existing time budget. Goals, future supply, limits/permissions and legitimate
+pauses remain protected through certification. Live control/rescheduling are unchanged.
 
 ## Energy direction arrows (4.4.14)
 

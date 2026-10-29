@@ -1,5 +1,36 @@
 # EnergyManager 4 verification
 
+## 4.4.16 — Full-horizon charging continuity (29 October 2026)
+
+590 Python tests pass131.33s;66 frontend tests, Ruff, mypy44 modules, CLI and4.4.16
+sdist/wheel checks pass.66 source/assets/defaults match; isolated wheel import passes.
+Deterministic fixtures move equivalent opportunities across all seven forecast days,
+varied50/65/70/80/85/90/100% limits and grid/solar work. Cover complete interval accounting,
+multiple-window preservation, no stacked allowance, overnight/availability, partial
+trip tails, early solar bursts, saved-time reuse, required-versus-surplus readiness,
+fixed-EV dispatch quality, timeout/zero-budget fallback and certification guards.
+
+| Frozen case | Seconds | EV sessions | Comparison EUR | Independent/rolling audits |
+| --- | ---: | ---: | ---: | --- |
+| November, final goal guard | 111.03 | 4 (original21) | -4.733197 (original6.021312) | Pass |
+| Earlier solar | 102.66 | 4; one today | -4.941330 | Pass |
+| Later solar | 99.20 | 5; one today | -2.514645 | Pass |
+
+November1/2 charging is one session each (nine each originally). Every2023interval
+has a review outcome; final source certification preserves reviewed counts. Imports
+fall40.112->3.037kWh in that frozen forecast. Earlier/later comparison improves on saved
+4.4.15 benchmarks-3.925916/-0.448130EUR; the latter baseline was also reproduced from
+exact4.4.15 Git sources. This is bounded planning evidence, not realized savings or
+proof of global economic/operational optimality. Raw stage status remains separate.
+
+Local routed fake E2E passes:71.49s acceptance,2023intervals,2journeys/6fake routes/
+4fake calls, max control4.19ms and saved-instruction recovery56.64ms. The two earlier
+solar replays and local E2E preceded the final surplus-bound relaxation; final590 tests
+and November replay include it. Exact-head CI must repeat both application fixtures.
+No live provider/HA/database/credential/hardware/phone or installation deployment used.
+Private evidence: artifacts/v4416-horizon-continuity/. Remote results belong in the
+ignored release checkpoint and final reply, without a success-only documentation commit.
+
 ## 4.4.15 — Continuity across active charging limits (29 October 2026)
 
 573 Python tests pass in 115.19s; 66 frontend cases, Ruff, mypy (43 modules), asset syntax,

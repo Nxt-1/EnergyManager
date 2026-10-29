@@ -1,5 +1,16 @@
 # Current requirements and decisions
 
+- 29October2026,4.4.16: user authorized a general full-horizon continuity procedure
+  after repeated first-window fixes failed to cover1November. Account for every
+  interval/window, test equivalent opportunities on all seven forecast days, preserve
+  improvements through certification and archive unfinished bounded searches honestly.
+  Keep original snapshot/constraints/global time budget and one shared0.02EUR envelope;
+  no runtime economic recheck or reschedule change. A fixed-phase candidate can fail
+  without proving pauses necessary. Preserve required readiness up to its target,
+  allowing surplus to move; refine sources/ESS with the EV profile fixed before
+  boundary preservation, inside the original model and authority.
+
+
 Maintained 25 October 2026 for 4.3.2. This records confirmed product preferences and
 implementation outcomes from the V4 implementation chat. It supplements the complete
 original [architecture decisions](architecture/Architecture_Decisions.md); the

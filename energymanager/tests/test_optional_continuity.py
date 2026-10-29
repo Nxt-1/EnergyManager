@@ -98,7 +98,7 @@ def test_smoothing_does_not_remove_an_inherited_time_varying_ceiling():
     assert model.linear.accepts(model.warm_from(result["flows"]))
     assert not validate(s, result["flows"])
     assert max(result["flows"]["ev_energy"][:14]) <= s.observation.ev_kwh + .621 + 1e-6
-    assert starts(result["flows"]) > 1
+    assert 1 <= starts(result["flows"]) < starts(original["flows"])
 
 
 def test_continuity_timeout_retains_the_checked_original_candidate(monkeypatch):
@@ -179,6 +179,9 @@ def test_full_planner_retains_continuity_when_economic_search_returns_fragmented
     result = Planner().plan(s)
     assert result["valid"], result
     assert not validate(s, result["flows"])
+    coverage = result["continuity_review"]["windows"]
+    assert [t for w in coverage for t in range(w["first"], w["last"])] == list(range(len(s.intervals)))
+    assert all(w["sessions_final"] <= w["sessions_after"] for w in coverage)
     assert starts(result["flows"]) == 1
     assert result["flows"]["ev_energy"][-1] >= 60 * limit / 100 - 1e-6
     # A proven scarce-solar window can legitimately authorise the higher ceiling.

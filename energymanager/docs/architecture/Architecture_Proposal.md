@@ -792,12 +792,17 @@ uses the remaining global wall budget less2s reserved for validation (only when 
 than2s remain), retaining
 the checked warm start if available. No infeasibility claim, new permission, reduced
 horizon or relaxed constraint follows from timeout. From4.4.13 solar refinement runs
-before the normal optional search. From4.4.15 it reserves up to9s (12% of remaining time)
-for a final pass before required timing/source certification, and the initial pass uses
-up to11s so continuity need not consume the earlier fast allocation allowance. A bounded
-minimum opportunity remains under short budgets; all construction/audits/solves remain
-inside the existing global deadline. Exceptional100% diagnostics use the unreserved
-remainder. Reserved work is skipped if no feasible reference or insufficient time exists.
+before the normal optional search. From4.4.16 the initial allocation pass uses up to8s,
+with up to6s (10% of remaining time) reserved for final solar allocation. After a feasible
+required reference exists, reserve up to6s (6% of remaining time) for final continuity;
+use up to24s/85% of what remains at that stage, after solar allocation/required timing
+and before source certification. This keeps the main economic search's opportunity.
+Share time across pending fragmented windows, then revisit unfinished work once with
+time saved by easier windows. Keep the original partition and accepted bounds across
+both sweeps. Construction/audits count against
+the existing global deadline. No reserve takes priority over finding the first feasible
+required schedule. Exceptional100% probes use the unreserved remainder. A short budget
+retains valid work and records unfinished review, without claiming unavoidable gaps.
 
 Decision history lists status/reason/elapsed time for rejected attempts independently
 of the last accepted plan's evidence. Its detail includes validity, all stages and
@@ -811,16 +816,46 @@ From4.3.20 the main economic stages are two-objective joint searches:80% of its 
 establishes an economic reference, and20% chooses charger continuity in the same full
 EV/ESS model. ESS dispatch and solar/source allocation remain decisions; an arbitrary
 ESS incumbent cannot force EV gaps. Achieved required readiness and terminal EV quantity
-are preserved. From4.4.15 a fixed-phase, single-session candidate follows the next
-selected charging work, required or optional. Named targets need not exceed initial EV
-charge; absent targets use the installation-local day, and the candidate span is bounded
-to24h. Preserve the selected quantity at its boundary. The original model supplies every
-active interval ceiling, required-target exception, availability, current/phase/hold,
-source and permission restriction; no SoC percentage activates the fallback. It includes
-solar routing and already-held three-phase charging. The unrestricted joint search can
-vary current or retain necessary pauses/phase changes. No new publication
-repair is added. The older fixed-ESS EV-only refinement and leftover local-day polish are
-replaced by this joint objective selection.
+are preserved. From4.4.16 one general window procedure replaces the next-work-only
+single-session fallback. Partition every interval of the full horizon at local midnight
+and availability changes, including empty/unavailable windows; merge midnight boundaries
+crossed by an existing active session. Apply the same procedure on every forecast day
+and at every inherited limit, including fulfilled/absent named goals. Each fragmented
+window first offers a compact integer-current profile, using at most2s/40% of its share:
+keep irregular slots and group regular-slot ampere-hours from the first charging work.
+Also try consolidation into the existing longest run, so a small earlier solar burst
+need not anchor the whole session. Each compact attempt uses at most2s/40% of its remaining
+window share. Fix its EV profile while the original model solves source/ESS dispatch. It is only a
+checked candidate, never a forced schedule. Then try a fixed-phase one-session alternative
+using65% of the remaining share.
+If that fails, spend the remaining share minimizing transitions with flexible phase and
+session count. Preserve exact selected energy even when an irregular departure interval
+forces a separate tail; failure to reach one session must not prevent reducing many
+avoidable gaps to a few sessions. Original phase/current/hold,
+availability, health ceilings, required/exceptional authority, sources and permissions
+remain hard. The unrestricted joint search remains available for pauses/phase changes.
+
+Before final solar/continuity review, a bounded economic candidate (up to8s/half the
+unreserved remainder) fixes the selected EV modes/current across the full horizon and
+refines sources/ESS in the original joint model. Keep the generic selected model for
+later continuity; do not carry those temporary EV fixes forward. Original/narrow model
+checks and independent/rolling audits gate adoption. This reduced candidate preserves
+EV timing/energy and all source/permission/health rules while avoiding locking a weak
+household/ESS dispatch into window-boundary preservation. Its Optimal status describes
+the fixed-EV subproblem, not the whole planner. A timeout retains the valid selected plan.
+
+Fix physical dispatch outside each candidate window and preserve EV and both ESS stocks
+at its boundaries and beyond. Preserve achieved named deadlines/margins up to each
+required target, including achieved portions of a shortfall. Surplus above a target may
+move; treating optional surplus as required margin energy can itself force false gaps.
+Preserve selected EV
+quantity, monthly peaks and window total imports/direct-grid EV quantity. Grid delivery
+may move inside the window but its energy-weighted timing cannot worsen. Do not cap each
+interval's grid EV flow to its old value: that would preserve artificial required-grid
+gaps. Incidental optional SoC points may move; partial-interval amperes are an extra
+candidate restriction to avoid duration/integer ambiguity. No publication repair or
+runtime economic check is added. A bounded candidate's infeasibility is not proof that
+the unrestricted model needs pauses.
 
 The operational search has one0.02EUR comparison and cash envelope against its economic
 reference; the constant-session and unrestricted passes share it. Selection between later
@@ -833,17 +868,24 @@ low variation; it does not require the held current to persist for the entire ta
 setting persists through off intervals; stopping three-phase charging is not itself a
 selector change. The initial selector and power are included, so switching away from the
 current setting is priced from the first interval. These are internal search priorities,
-not monetary wear charges. From4.4.15 each bounded solar pass reserves up to3s (30% of
-its allowance) for a narrow single-session check before returning. Preserve future ESS
-stocks/dispatch, interval import upper bounds and selected EV service; first try unchanged
-economics/cash, then the original allowance only if no such candidate is returned and
-time remains. Repeated continuity calls retain the carried reference rather than rebasing
-it on an already smoothed schedule. Every replacement passes original/narrow model rows,
-bounds/integers and independent/rolling audits. A bounded cleanup keeps the selected
-quantity exactly and retains partial-interval amperes as an additional candidate restriction
-to avoid needless integer ambiguity. Optional intermediate SoC points may move; named
-deadlines/margins and actual interval ceilings remain hard. The unrestricted main search
-retains its freedom. Local optimality is not global proof.
+not monetary wear charges. Each full-horizon sweep uses one carried0.02EUR comparison/
+cash envelope shared across all windows, not per day. Repeated calls cannot rebase the
+reference upward. Replacements pass narrow/original model rows/bounds/integers and
+independent physical/source/permission/rolling audits. Later window work cannot worsen
+previous window session counts or transition scores. Final source certification preserves
+those per-window bounds and required-grid timing, plus overall score/economics; full
+certificate-model checks precede adoption, so it cannot undo checked improvements.
+
+Archive `continuity_review`: full interval count and ordered non-overlapping window
+bounds/times/availability, before/after/final session counts and outcome. Distinguish
+already continuous, no charging, unavailable, improved, bounded candidate infeasible,
+no improvement found in the bounded model, unresolved timeout, candidate rejected and
+no budget to check. Attempts record phase, kind, raw status and time. `improvement_retained` identifies a checked improvement
+kept even if a subsequent attempt to remove remaining gaps times out. `complete` means
+all windows received a bounded outcome, not proof of globally minimal sessions; timeout/rejection/budget omissions make it false. These
+are planning diagnostics, not warnings or live invalidation conditions. A feasible timed
+candidate may improve a window without proving operational or economic optimality.
+
 Selector auxiliary rows are added to operational searches and
 source certificates; the pure economic reference omits this unpriced bookkeeping.
 From4.4.9 a bounded earlier-required-charging preference resolves timing indifference

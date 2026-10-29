@@ -1,3 +1,18 @@
+## 4.4.16 — Charging continuity across the full forecast
+
+- Apply one bounded continuity procedure to every forecast day and availability window,
+  across inherited charging limits, instead of repeatedly targeting the first work.
+- Offer compact checked charging profiles, a one-session alternative and flexible
+  transition minimization. Preserve selected energy/goals and future supply; a necessary
+  partial-interval tail no longer prevents reducing other avoidable gaps. Preserve
+  required readiness up to its target; allow optional surplus above it to move.
+- Refine sources/ESS for the selected EV schedule before window preservation, preventing
+  a weak dispatch candidate from locking in unnecessary household imports.
+- Protect per-window improvements through final source certification. Share the original
+  time budget and one carried0.02EUR cash/comparison allowance across all windows.
+- Archive full coverage, before/after/final session counts and honest unfinished-search
+  outcomes. Keep valid plans and live control when bounded optimization is incomplete.
+
 ## 4.4.15 — Continuous charging across active limits
 
 - Try a continuous candidate for selected optional and required charging, even when

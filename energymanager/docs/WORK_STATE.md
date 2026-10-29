@@ -1,6 +1,81 @@
 # EnergyManager work state
 
-## Current checkpoint — continuity across charging limits (4.4.15, 29 October 2026)
+## Current checkpoint — full-horizon continuity (4.4.16, 29 October 2026)
+
+AUTHORIZED: user agreed to try the general full-horizon procedure. Base4.4.15 at
+8b90f9e74287e0ab7644cfaab9e31a32234662e0. Required skill/current docs checked. Preserve
+main's unrelated DEFERRED_WORK.md and private Maps/history archives. No live provider,
+HA/database/credentials/hardware/notification or installation operation.
+
+IMPLEMENTED: ChargingContinuity covers every interval/local day/availability break,
+retaining overnight sessions. Compact profiles use first work and longest run anchors;
+one-session/flexible searches and a second sweep reuse time from easy windows. Preserve
+original limits/authority, selected EV boundary quantity, required deadline/margin
+readiness up to the actual target, future stocks, peaks/import totals and no-later grid
+timing. Optional surplus above a goal can move. One carried0.02EUR envelope spans all
+windows/sweeps. Per-window count/score guards survive source certification. Explicit
+coverage/raw attempt/outcome/final-count diagnostics distinguish unfinished search from
+necessity. Reserve only up to6s/6%; final review uses up to24s of the remaining budget.
+
+A bounded fixed-EV economic candidate refines sources/ESS before boundary preservation,
+preventing weak household dispatch from being locked into smoothing. EV fixes stay in
+its copied model. Original/narrow rows plus independent and rolling checks gate every
+replacement; valid timeout fallbacks and live control remain unchanged.
+
+VERIFIED:590 Python tests pass131.33s;66 frontend tests, Ruff/mypy44 modules and package/
+CLI checks.66 source/assets/defaults match wheel/sdist; isolated4.4.16 import passes.
+Synthetic regressions exercise every forecast day and varied limits, grid/solar, multiple
+windows, overnight/availability, partial tails, early solar bursts, saved-time revisits,
+required-versus-surplus readiness, dispatch recovery, no stacking and timeout retention.
+
+Final November replay111.03s validates/certifies:21 original sessions ->4;1Nov9->1 and
+2Nov9->1, every interval reviewed and final certificate preserves improvements. Forecast
+imports40.112->3.037kWh; comparison6.021312->-4.733197EUR. Earlier/later solar replays
+102.66/99.20s validate/certify, retaining one session for today; comparison-4.941330/
+-2.514645EUR (saved4.4.15 benchmarks-3.925916/-0.448130). Those two replays and local fake
+E2E precede the final surplus-bound relaxation; final590 tests/November replay include
+it. Exact-head CI repeats the application fixtures. Local routed E2E71.49s acceptance,
+2023intervals/2journeys/6fake routes/4fake calls, max control4.19ms/recovery56.64ms passes.
+These are frozen/synthetic results, not global optimality or installation evidence.
+
+NEXT: finish final package/static checks and scoped commit, ff-only main preserving its
+pending backlog, push/publish and verify exact-head CI/image. Record remote results only
+in ignored artifacts/v4416-horizon-continuity/release-state.txt and final reply.
+
+## Earlier checkpoint — later-day fragmentation review (29 October 2026)
+
+READ-ONLY request: pinpoint repeated fragmentation around1November in the latest supplied
+export. Base4.4.15 at8b90f9e74287e0ab7644cfaab9e31a32234662e0; isolated tree was clean.
+No application edits, version/release or live operations. Original export preserved at
+artifacts/november-fragmentation-review-2026-10-29/decision.json;SHA256
+14f6fb926b996dc59e40ae4c76d6e46bbd5ad2e1514bddb5c1421a102037bba0.
+Original snapshot/result digest, independent and rolling audits pass.
+
+PINPOINTED: fast single_session_model always chooses charging_slots[0] (30October here),
+limits that candidate to its next checkpoint, and fixes all later EV/source decisions.
+All20 active EV-amperage slots on1November are fixed in that dedicated candidate. The
+bounded solar searches visit multiple days but their continuity check is invoked only
+once afterwards, again for the first upcoming work. Thus the fast fallback never targets
+1November; full-horizon joint smoothing timed out without an improvement. Final grid
+certification fixes non-grid allocations and cannot remove these solar charging gaps.
+The prior all-limit fix changed eligibility, not full-horizon continuity coverage; tests
+and prior frozen replay assertions concentrated on first-day continuity.
+
+PROVEN OFFLINE:9 sessions on1November total3.795kWh. A targeted one-session alternative
+10:00–13:00Brussels delivers the same quantity, preserves every other day's EV flows,
+future EV/ESS stocks and original achieved named-checkpoint/margin energy. Imports/peak/
+end inventories unchanged; comparison difference about1e-6EUR. Original and restricted
+model rows/bounds/integers plus independent physical/source/permission/rolling audits
+pass.10s bounded search returned feasible(Time limit reached); no global optimum claim.
+Private reproduction/report/counterfactual flows: same ignored review folder.
+
+NEXT: explain root cause and evidence. A future authorized fix should target each relevant
+charging window/day across the full horizon, preserve already-checked improvements and
+add multi-day/later-window continuity regressions, rather than only expanding SoC-limit
+eligibility or increasing generic solver time. Await explicit implementation scope; do
+not modify application code or publish for the current investigation-only request.
+
+## Earlier checkpoint — continuity across charging limits (4.4.15, 29 October 2026)
 
 AUTHORIZED: implement the optional continuous-session fallback across all active limits,
 not just80%. Required skill/current docs checked. Base4.4.14 at

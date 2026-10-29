@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import timedelta
-from zoneinfo import ZoneInfo
 from time import monotonic
 from typing import Any
 from uuid import uuid4
@@ -13,6 +12,7 @@ from copy import deepcopy
 
 from .domain import PeakPermission, Snapshot, json_data, instant
 from .charging_timing import ChargingTiming
+from .charging_continuity import ChargingContinuity, ChargingWindow
 from .incumbent import seed
 from .solar_capture import SolarCapture
 from .optimization import JointModel
@@ -29,10 +29,12 @@ class Planner:
         self.progress = progress
         self.validation_seconds = 0.0
         self.solar_reserve = 0.0
+        self.continuity_reserve = 0.0
         self.reference_flows: dict[str, list[float]] | None = None
 
     def remaining(self) -> float:
-        return max(0.0, self.deadline - monotonic() - 0.25 - self.validation_seconds * 1.25 - self.solar_reserve)
+        reserved = self.solar_reserve + self.continuity_reserve + self.validation_seconds * 1.25
+        return max(0.0, self.deadline - monotonic() - 0.25 - reserved)
 
     def validate_candidate(self, snapshot: Snapshot, flows: dict[str, list[float]],
                            service: dict[str, float] | None = None) -> list[str]:
@@ -117,38 +119,12 @@ class Planner:
         guided.linear.lower[ev[-1]] = result["flows"]["ev_energy"][-1] - 1e-6
         tolerance = model.snapshot.policy.polish_tolerance_eur
         bounds = [(guided.economic, economic + tolerance), (guided.cash, cash + tolerance)]
-        steady = self.single_session_model(guided, result, bounded=single_only)
-        if steady is not None:
-            remaining = allowance - (monotonic() - started)
-            if single_only:
-                # Try an equal-cost continuation first; only use the existing allowance
-                # if that candidate cannot be found within its bounded share.
-                strict = deepcopy(steady)
-                trial = self.run_model(name + "_single_session", strict, remaining * .8,
-                                       strict.warm_from(result["flows"]), objective=strict.continuity_objective(),
-                                       bounds=[(strict.economic, economic + 1e-6), (strict.cash, cash + 1e-6)])
-                remaining = allowance - (monotonic() - started)
-                if not trial["feasible"] and remaining >= .3:
-                    trial = self.run_model(name + "_single_session_allowance", steady, remaining,
-                                           steady.warm_from(result["flows"]), objective=steady.continuity_objective(),
-                                           bounds=bounds)
-            else:
-                trial = self.run_model(name + "_single_session", steady, remaining * .35,
-                                       steady.warm_from(result["flows"]), objective=steady.continuity_objective(),
-                                       bounds=bounds)
-            if (trial["feasible"] and steady.linear.accepts(steady.warm_from(trial["flows"]))
-                    and model.linear.accepts(model.warm_from(trial["flows"]))
-                    and not self.continuity_errors(model, trial["flows"])
-                    and steady.value(steady.continuity_objective(), trial["values"])
-                    <= model.value(model.continuity_objective(), result["values"]) + 1e-6):
-                result = {**trial, "status": result["status"],
-                          "values": model.warm_from(trial["flows"])}
-                continuity = guided.continuity_objective()
-                guided.linear.row(list(continuity.items()), upper=model.value(
-                    model.continuity_objective(), result["values"]) + 1e-6)
+        result = self.review_continuity(name, model, result, allowance if single_only else allowance * .35)
         if single_only:
-            result["economic_baseline"], result["cash_baseline"] = economic, cash
             return result
+        continuity = guided.continuity_objective()
+        guided.linear.row(list(continuity.items()), upper=model.value(
+            model.continuity_objective(), result["values"]) + 1e-6)
         refined = self.run_model(name + "_joint_continuity", guided, allowance - (monotonic() - started),
                                  guided.warm_from(result["flows"]), objective=guided.continuity_objective(),
                                  bounds=bounds)
@@ -168,82 +144,110 @@ class Planner:
             errors += rolling_comparison_errors(model.snapshot, self.reference_flows, flows)
         return errors
 
-    def single_session_model(self, model: JointModel, result: dict[str, Any], *,
-                             bounded: bool = False) -> JointModel | None:
-        """Try one fixed-phase session for the next selected charging work.
-
-        Required and optional work use the model's existing goals and interval ceilings;
-        no particular SoC percentage activates this candidate. The unrestricted joint
-        search remains available when pauses or phase changes are necessary.
-        """
-        s, c, o = model.snapshot, model.snapshot.capabilities, model.snapshot.observation
-        charging_slots = [
-            t for t, (one, three) in enumerate(zip(result["flows"]["one"], result["flows"]["three"]))
-            if one + three > .5
-        ]
-        phase = s.hold_phases if s.hold_ev_kw > TOL else min(c.phases)
-        if not charging_slots or phase not in c.phases:
-            return None
-        first = s.intervals[charging_slots[0]]
-        goals = [g for g in s.goals if first.end <= g.deadline <= s.intervals[-1].end]
-        # With no named checkpoint, bound optional work to its installation-local day.
-        day_end = (first.start.astimezone(ZoneInfo(s.policy.timezone)) + timedelta(days=1)).replace(
-            hour=0, minute=0, second=0, microsecond=0)
-        deadline = min(min((g.deadline for g in goals), default=day_end),
-                       first.start + timedelta(hours=24), s.intervals[-1].end)
-        slots = [t for t, i in enumerate(s.intervals) if i.end <= deadline]
-        if not slots:
-            return None
-        if bounded:
-            starts = sum(result["flows"]["start"][t] for t in slots)
-            phases = {3 if result["flows"]["three"][t] > .5 else 1 for t in charging_slots if t <= slots[-1]}
-            if starts <= 1 and len(phases) <= 1:
-                return None
-        if bounded:
-            end = first.start + timedelta(hours=24)
-            last = next((t for t in range(charging_slots[0] + 1, len(s.intervals)) if s.intervals[t].start >= end),
-                        len(s.intervals))
-            steady = SolarCapture(model, result["flows"]).neighborhood(
-                charging_slots[0], last, economic_allowance=s.policy.polish_tolerance_eur,
-                preserve_ev_prefix=False)
-        else:
-            steady = deepcopy(model)
-        v, m = steady.linear.variables, steady.linear
-        continuing = s.hold_ev_kw > TOL and o.ev_power_kw > 0.1
-        windows: list[list[int]] = []
-        for t in slots:
-            if s.intervals[t].available:
-                if t == 0 or not s.intervals[t - 1].available:
-                    windows.append([])
-                windows[-1].append(t)
-        for window in windows:
-            m.row([(v["start"][t], 1) for t in window], upper=0 if continuing and window[0] == 0 else 1)
-        for t in slots:
-            active, inactive = ("three", "one") if phase == 3 else ("one", "three")
-            m.upper[v[inactive][t]] = 0
-            m.upper[v[f"amps_{inactive}"][t]] = 0
-        # Preserve the selected quantity at this boundary and keep later physical
-        # decisions intact. Charging ceilings and all source/permission rows are inherited.
-        boundary = slots[-1] + 1
-        ev = v["ev_energy"][boundary]
-        m.lower[ev] = max(m.lower[ev], result["flows"]["ev_energy"][boundary] - 1e-6)
-        if bounded:
-            # Smoothing preserves quantity. Keep partial-slot amperes as a checked
-            # candidate so tiny duration differences do not create an integer search.
-            m.lower[ev] = m.upper[ev] = result["flows"]["ev_energy"][boundary]
-            for t in slots:
-                if abs(s.intervals[t].hours - 5 / 60) > 1e-9:
-                    for name in ("one", "three", "amps_one", "amps_three"):
-                        index = v[name][t]
-                        m.lower[index] = m.upper[index] = result["flows"][name][t]
-        fixed_later = ("one", "three", "amps_one", "amps_three", "battery_charge", "converter_charge",
-                       "grid_direction", "pv_store_mode", "pv_ev", "pv_house", "pv_store", "export",
-                       "curtail", "grid_ev", "grid_house", "grid_store", "solar_dis_ev",
-                       "solar_dis_house", "grid_dis_house", "dc_store", "dc_invert")
-        for name in fixed_later:
-            for t in range(slots[-1] + 1, len(s.intervals)):
-                m.lower[v[name][t]] = m.upper[v[name][t]] = result["flows"][name][t]
-        return steady
+    def review_continuity(self, name: str, model: JointModel, result: dict[str, Any],
+                          allowance: float) -> dict[str, Any]:
+        """Visit every charging window, retaining valid plans when bounded work is unfinished."""
+        deadline = monotonic() + max(0., min(allowance, self.remaining()))
+        review = ChargingContinuity(model, result["flows"])
+        actual = (model.value(model.economic, result["values"]), model.value(model.cash, result["values"]))
+        economic, cash = min(actual, (result.get("economic_baseline", actual[0]),
+                                     result.get("cash_baseline", actual[1])))
+        tolerance = model.snapshot.policy.polish_tolerance_eur
+        coverage: list[dict[str, Any]] = []
+        # A second sweep reuses time saved by easy windows for unfinished work.
+        # The partition and all accepted window bounds remain unchanged.
+        for sweep in range(2):
+            current = ChargingContinuity(model, result["flows"], review.windows)
+            pending = sum(w.available and (current.sessions(w) > 1 or len(current.phases(w)) > 1)
+                          for w in review.windows)
+            for number, window in enumerate(review.windows):
+                current = ChargingContinuity(model, result["flows"], review.windows)
+                before = current.sessions(window)
+                if sweep == 0:
+                    record: dict[str, Any] = {"first": window.first, "last": window.last, "available": window.available,
+                        "start": model.snapshot.intervals[window.first].start.isoformat(),
+                        "end": model.snapshot.intervals[window.last - 1].end.isoformat(),
+                        "sessions_before": before, "sessions_after": before}
+                    coverage.append(record)
+                else:
+                    record = coverage[number]
+                if not window.available:
+                    if sweep == 0:
+                        record["outcome"] = "unavailable"
+                    continue
+                if not before:
+                    if sweep == 0:
+                        record["outcome"] = "no_charging"
+                    continue
+                if before == 1 and len(current.phases(window)) == 1:
+                    if sweep == 0:
+                        record["outcome"] = "already_continuous"
+                    continue
+                remaining = min(deadline - monotonic(), self.remaining())
+                window_deadline = monotonic() + remaining / max(1, pending)
+                pending -= 1
+                if sweep == 0:
+                    record["outcome"] = "not_checked_budget"
+                if remaining < .3:
+                    continue
+                phase = min(model.snapshot.capabilities.phases)
+                if model.snapshot.hold_ev_kw > TOL and window.first == 0:
+                    phase = model.snapshot.hold_phases
+                record.setdefault("attempts", [])
+                # A single session can be impossible (for example, a partial departure
+                # interval fixes an energy residue). Still minimize the remaining gaps.
+                for kind in ("packed", "consolidated", "single", "flexible"):
+                    if min(window_deadline - monotonic(), self.remaining()) < .3:
+                        break
+                    current = ChargingContinuity(model, result["flows"], review.windows)
+                    chosen_phase: int | None = phase if kind == "single" else None
+                    if kind in ("packed", "consolidated"):
+                        packed = current.packed_candidate(window, longest_run=kind == "consolidated")
+                        if packed is None:
+                            continue
+                        local, chosen_phase = packed
+                    else:
+                        local = current.candidate(window, chosen_phase)
+                    remaining = min(window_deadline - monotonic(), self.remaining())
+                    seconds = (min(2., remaining * .4) if kind in ("packed", "consolidated") else
+                               remaining * .65 if kind == "single" else remaining)
+                    if seconds < .1:
+                        break
+                    trial = self.run_model(f"{name}_window:{window.first}:{kind}", local, seconds,
+                        local.warm_from(result["flows"]), objective=local.continuity_objective(),
+                        bounds=[(local.economic, economic + tolerance), (local.cash, cash + tolerance)])
+                    record["attempts"].append({"kind": kind, "phase": chosen_phase, "status": trial["status"], "seconds": trial["seconds"]})
+                    record["outcome"] = "candidate_infeasible" if trial["status"] == "Infeasible" else "unresolved_timeout"
+                    if not trial["feasible"]:
+                        continue
+                    flows = trial["flows"]
+                    values = model.warm_from(flows)
+                    if (not local.linear.accepts(local.warm_from(flows)) or not model.linear.accepts(values)
+                            or self.continuity_errors(model, flows)):
+                        record["outcome"] = "candidate_rejected"
+                        continue
+                    improved = ChargingContinuity(model, flows)
+                    old_score = model.value(model.continuity_objective(), result["values"])
+                    score = model.value(model.continuity_objective(), values)
+                    if improved.sessions(window) > before:
+                        record["outcome"] = "candidate_rejected"
+                        continue
+                    if score >= old_score - 1e-6:
+                        if record["sessions_after"] == before:
+                            record["outcome"] = ("no_improvement_found" if trial["status"] == "Optimal"
+                                                 else "unresolved_timeout")
+                        continue
+                    result = {**result, "flows": flows, "values": values}
+                    record["sessions_after"] = improved.sessions(window)
+                    record["improvement_retained"] = True
+                    record["outcome"] = "improved"
+                    if improved.sessions(window) == 1 and len(improved.phases(window)) == 1:
+                        break
+        result["economic_baseline"], result["cash_baseline"] = economic, cash
+        result["continuity_review"] = {"intervals": len(model.snapshot.intervals), "windows": coverage,
+            "complete": all(r["outcome"] not in ("not_checked_budget", "unresolved_timeout", "candidate_rejected")
+                            for r in coverage)}
+        return result
 
     @staticmethod
     def prefer_result(current: dict[str, Any], current_model: JointModel,
@@ -274,7 +278,7 @@ class Planner:
         if allowance < .3:
             return result
         deadline = monotonic() + min(allowance, self.remaining())
-        allocation_deadline = deadline - min(3.0, allowance * .3)
+        allocation_deadline = deadline
 
         def consider(values: list[float]) -> None:
             nonlocal result
@@ -306,12 +310,27 @@ class Planner:
                                    local.warm_from(result["flows"]), objective=local.economic)
             if trial["feasible"] and local.linear.accepts(local.warm_from(trial["flows"])):
                 consider(model.warm_from(trial["flows"]))
-        remaining = min(deadline - monotonic(), self.remaining())
-        if remaining >= .3:
-            smoothed = self.prefer_continuity("solar_capture", model, result, remaining, single_only=True)
-            if self.prefer_result(result, model, smoothed, model):
-                result = smoothed
         return result
+
+    def prefer_dispatch(self, model: JointModel, result: dict[str, Any], allowance: float) -> dict[str, Any]:
+        """Refine sources/ESS before continuity fixes each window's boundary stocks."""
+        if allowance < .3:
+            return result
+        started = monotonic()
+        dispatch = deepcopy(model)
+        for name in ("one", "three", "amps_one", "amps_three"):
+            for index, value in zip(dispatch.linear.variables[name], result["flows"][name]):
+                dispatch.linear.lower[index] = dispatch.linear.upper[index] = value
+        trial = self.run_model("selected_ev_dispatch", dispatch, allowance - (monotonic() - started),
+                               dispatch.warm_from(result["flows"]), objective=dispatch.economic)
+        if not trial["feasible"]:
+            return result
+        values = model.warm_from(trial["flows"])
+        if (not dispatch.linear.accepts(dispatch.warm_from(trial["flows"]))
+                or not model.linear.accepts(values) or self.continuity_errors(model, trial["flows"])):
+            return result
+        candidate = {**trial, "values": values, "status": result["status"]}
+        return candidate if self.prefer_result(result, model, candidate, model) else result
 
     def prefer_earlier(self, model: JointModel, result: dict[str, Any], allowance: float) -> dict[str, Any]:
         """Resolve equal-benefit required timings on this snapshot before grid certification."""
@@ -345,6 +364,7 @@ class Planner:
         self.deadline = self.started + snapshot.policy.planning_budget_seconds
         self.validation_seconds = 0.0
         self.solar_reserve = 0.0
+        self.continuity_reserve = 0.0
         self.reference_flows = None
         self.stages = []
         s = snapshot
@@ -560,6 +580,7 @@ class Planner:
         selected, selected_model = reference, reference_model
         reference_flows = reference["flows"]
         self.reference_flows = reference_flows
+        self.continuity_reserve = min(6.0, self.remaining() * .06)
         exceptional_windows: list[tuple[int, int]] = []
         normal_ceilings = [
             max(
@@ -579,10 +600,10 @@ class Planner:
             )
             normal_model.add_optional_peak_limits(reference_flows)
             # Preserve time for one final solar pass before optional probes consume the budget.
-            self.solar_reserve = min(9.0, self.remaining() * .12)
+            self.solar_reserve = min(6.0, self.remaining() * .10)
             solar_start = {**selected, "values": normal_model.warm_from(selected["flows"])}
             solar_start = self.prefer_solar(normal_model, solar_start,
-                                            min(11.0, max(3.0, self.remaining() * .18)))
+                                            min(8.0, max(2.0, self.remaining() * .18)))
             if self.prefer_result(selected, selected_model, solar_start, normal_model):
                 selected, selected_model = solar_start, normal_model
                 reasons.append({"kind": "joint_capture", "text":
@@ -850,6 +871,11 @@ class Planner:
                                     "text": "A smaller peak during this specific precharge avoids a larger forecast household peak within 24 hours. The automatic portion continues while approval is pending.",
                                 }
                             )
+        before_dispatch = selected
+        selected = self.prefer_dispatch(selected_model, selected, min(8.0, self.remaining() * .5))
+        if selected is not before_dispatch:
+            reasons.append({"kind": "joint_dispatch", "text":
+                            "Sources and ESS dispatch refined for the selected EV schedule before continuity review."})
         reserved = self.solar_reserve
         self.solar_reserve = 0.0
         if selected_model.optional:
@@ -859,6 +885,12 @@ class Planner:
                 reasons.append({"kind": "solar_allocation", "text":
                                 "Checked bounded solar allocation improved the plan before source certification."})
         selected = self.prefer_earlier(selected_model, selected, min(8.0, self.remaining() * .35))
+        self.continuity_reserve = 0.0
+        selected = self.review_continuity("final_continuity", selected_model, selected,
+                                           min(24.0, self.remaining() * .85))
+        continuity_review = selected["continuity_review"]
+        protected = ChargingContinuity(selected_model, selected["flows"], [
+            ChargingWindow(r["first"], r["last"], r["available"]) for r in continuity_review["windows"]])
         economic_status = selected["status"]
         polish_reference_summary = accounting(s, selected["flows"])
         before_score = selected.get("economic_baseline", selected_model.value(
@@ -877,6 +909,10 @@ class Planner:
                 grid_ess=any(v > TOL for v in selected["flows"]["grid_store"]),
             )
             source_model.add_continuity_limits()
+            protected.protect(source_model)
+            timing = protected.timing_terms(source_model)
+            source_model.linear.row(list(timing.items()), upper=source_model.value(
+                timing, source_model.warm_from(selected["flows"])) + 1e-6)
             continuity = source_model.continuity_objective()
             source_model.linear.row(list(continuity.items()), upper=source_model.value(
                 continuity, source_model.warm_from(selected["flows"])) + 1e-6)
@@ -936,7 +972,9 @@ class Planner:
                 source_model.warm_from(selected["flows"]),
                 objective={source_model.linear.variables["grid_cumulative"][-1]: 1.0},
             )
-            if source_result["feasible"] and not self.validate_candidate(s, source_result["flows"], service):
+            if (source_result["feasible"]
+                    and source_model.linear.accepts(source_model.warm_from(source_result["flows"]))
+                    and not self.validate_candidate(s, source_result["flows"], service)):
                 if not selected_model.optional or not rolling_comparison_errors(
                     s, reference_flows, source_result["flows"]
                 ):
@@ -947,6 +985,10 @@ class Planner:
         output["minimum_grid_certified"] = source_certificate
         output["permission_proposals"] = permission_proposals
         output["polish_reference_summary"] = polish_reference_summary
+        final_continuity = ChargingContinuity(selected_model, selected["flows"])
+        for window, record in zip(protected.windows, continuity_review["windows"]):
+            record["sessions_final"] = final_continuity.sessions(window)
+        output["continuity_review"] = continuity_review
         return output
 
     def failure(self, s: Snapshot, status: str, reason: str) -> dict[str, Any]:
