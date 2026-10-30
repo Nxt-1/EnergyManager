@@ -733,3 +733,12 @@ recovery and dashboard controls. Appliance scheduling remains a subsequent miles
 this authorization does not expand into ARCH-006 or live installation operation.
 Preserve the main checkout's uncommitted deferred-work notes. Run existing release
 checks and publish via the existing workflow; do not deploy to the live installation.
+
+
+## 30 October2026 — Visual planned power in task details
+
+The user requested visual planned power profiles in task details, including other tasks
+such as EV charging. Implement the accepted EV/ESS interval curves in shared task details
+and the shared EV plan through a saved requirement's deadline. Keep goal sharing explicit
+and distinguish ESS AC/DC boundaries and battery versus AC energy. This authorizes the
+display feature, not new scheduling or live operation. Ready-release permission applies.

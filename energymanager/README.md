@@ -1,8 +1,14 @@
 # EnergyManager 4
 
-Version **4.5.0**, the main Energy Manager application. One joint seven-day EV/ESS MILP
+Version **4.5.1**, the main Energy Manager application. One joint seven-day EV/ESS MILP
 feeds independent responsive control. The application includes configured input/actuator
 boundaries, persisted goals/approvals/decisions and Overview/Planning/EV/Appliances pages.
+
+## Planned power in task details
+
+Open an EV/ESS charging session to see its planned power over time. Requirement details
+show the shared EV charging plan before their deadline. Expand Power levels for the
+exact intervals and W values. These are calculated profiles; live power can differ.
 
 ## Appliance profiles
 

@@ -1807,3 +1807,22 @@ changed. Sensor identities/update cadence and machine thresholds/timeouts need a
 installation configuration. Scheduling suggestions remain a subsequent milestone.
 Release publication is authorized; exact-commit CI/image results are recorded in the
 ignored local release state and final reply, without an extra verification-only commit.
+
+
+## 4.5.1 task-detail power charts — 30 October2026
+
+Display-only change to shared session/goal detail components; no Python planner/control
+behavior changed.76 frontend tests pass, covering clipped interval powers, real zeros,
+missing-data gaps, signed ESS AC/separate DC, shared goal deadline bounds, current and
+restored-plan guards, DST offsets, second-level partial intervals and escaping.
+Five native asset/API tests pass; Ruff/mypy45 modules/all JS syntax checks pass.
+Configured fake E2E:25.470s,2019 intervals,max control3.162ms,five fake-only calls.
+Native browser EV/ESS session charts and shared requirement chart/table, standalone
+requirement details and native light/dark rendering pass with clean browser logs.
+The shown frozen profiles come from synthetic fake-HA data, not installation evidence.
+Wheel/sdist4.5.1 build;all68 runtime source/assets/defaults match current bytes and
+isolated wheel version/session-details asset import passes. Local verification is
+focused on the changed UI and existing fake integration; full Python/routed/container
+release checks run in CI. Screenshot retained privately as v451-ev-power-profile.png.
+No live HA/database/hardware/notification/deployment operation. Subsequent exact-commit
+CI/image results belong in the ignored release state/final reply, without another commit.

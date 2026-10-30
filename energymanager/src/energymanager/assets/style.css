@@ -863,3 +863,12 @@ em-entity-picker > input { padding-right:36px; }
 #profiles-panel .actions { flex-wrap:wrap; }
 #profiles-panel [data-profile-summary] { flex-basis:100%; }
 #profiles-panel svg text { fill:currentColor; }
+
+.task-power-profile { margin-top:20px; min-width:0; }
+.task-power-profile svg { display:block; width:100%; height:auto; overflow:visible; font:11px system-ui; }
+.task-power-profile svg text { fill:currentColor; }
+.task-power-axis { fill:none; stroke:currentColor; opacity:0.25; }
+.task-power-levels { overflow-x:auto; max-height:240px; }
+.task-power-levels th,.task-power-levels td { padding:6px 10px; text-align:left; white-space:nowrap; }
+#detail-dialog:has(.task-power-profile),#goal-dialog:has(.task-power-profile) { width:min(840px,calc(100vw - 30px)); }
+@media(max-width:600px) { .task-power-profile svg { font-size:22px; } }

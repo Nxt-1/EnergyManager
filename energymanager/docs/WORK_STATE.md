@@ -1,6 +1,24 @@
 # EnergyManager work state
 
-## Current checkpoint — appliance-profile integration (4.5.0, 30 October2026)
+## Current checkpoint — planned task power charts (4.5.1,30 October2026)
+
+AUTHORIZED: user requests planned power profiles in task details, including EV. Based
+on released4a356b0(4.5.0) in codex/v4.5-implementation. No actual HA/database/hardware.
+IMPLEMENTED: step curves from accepted EV/ESS interval powers in session details;
+shared EV power before a saved requirement deadline, including routed/edit views.
+Signed AC ESS and separate direct DC solar; partial intervals, zero pauses, unknown gaps,
+revision/expiry/restored-plan guards, local times/offsets and expandable power table.
+Only display code/version/docs changed; no planner/control/source policy changes.
+VERIFIED:76 frontend/5 native-asset tests; Ruff/mypy45/all JS pass. Configured fake
+E2E25.470s/2019 intervals/max3.162ms/five fake calls. Native EV/ESS/requirement charts,
+exact table/light-dark and standalone requirement dialog pass; browser logs clean.
+Wheel/sdist68 runtime files match; isolated4.5.1 import/asset pass. Preview tabs/processes
+stopped. READY: one scoped release commit/push main preserving unrelated backlog, then
+exact-commit full CI/image checks. No live installation or deployment. Remote results
+only in ignored release-state/final reply; no verification-only follow-up commit.
+
+
+## Earlier checkpoint — appliance-profile integration (4.5.0, 30 October2026)
 
 AUTHORIZED: user requested compatibility with the current system, merge and push main.
 Worktree codex/v4.5-implementation rebased by fast-forward/stash replay onto b2aee28

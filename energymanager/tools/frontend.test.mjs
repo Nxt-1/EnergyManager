@@ -1,4 +1,4 @@
-import {sessionContributionMarkup} from '../src/energymanager/assets/session-details.js';
+import {sessionContributionMarkup, sessionPowerProfile, plannedPowerProfileMarkup, goalPowerProfileMarkup} from '../src/energymanager/assets/session-details.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {dailyEnergyRows, goalStatus, connectionIcon, displaySetting, entityState, evFaultText, evIncidentTime, monthlyPeakWatts, notificationStatus, powerText, settingLabel, storedSetting, watts}
@@ -1300,4 +1300,110 @@ test('local profile saves advance matching forms without clearing drafts or bypa
   assert.equal(forms[1].dataset.revision, '3');
   ApplianceProfilesPage.prototype.advanceRevision.call(page, 5, 7);
   assert.equal(forms[0].dataset.revision, 5);
+});
+
+
+function syntheticPowerPlan() {
+  const start = Date.parse('2026-10-25T00:30:00Z');
+  const intervals = Array.from({length: 3}, (_, index) => ({
+    start: new Date(start + index * 1800000).toISOString(), end: new Date(start + (index + 1) * 1800000).toISOString()
+  }));
+  return {now: '2026-10-25T00:30:00Z', revision: 5, ev_plan_valid: true,
+    capabilities: {ac_discharge_efficiency: .9}, policy: {timezone: 'Europe/Brussels'},
+    accepted: {id: 'SYNTHETIC plan', revision: 5, valid: true, intervals,
+      goals: [{id: 'test-goal', revision: 1}],
+      flows: {pv_ev: [1, 0, 2], grid_ev: [2, 0, 0], solar_dis_ev: [.5, 0, 0],
+        pv_store: [1, 0, 0], grid_store: [2, 0, 0], solar_dis_house: [0, 2, 0],
+        grid_dis_house: [0, 1, 0], dc_invert: [0, .5, 0], dc_store: [1, 0, 2]}}};
+}
+
+const syntheticPowerTask = {resource: 'ev', start: '2026-10-25T00:45:00Z', end: '2026-10-25T01:45:00Z'};
+
+test('task power profile uses clipped frozen AC input powers, preserving zero pauses and level changes', () => {
+  const state = syntheticPowerPlan();
+  const rows = sessionPowerProfile(state.accepted, syntheticPowerTask);
+  assert.deepEqual(rows.map(row => row.ac_w), [3500, 0, 2000]);
+  assert.equal(rows[0].start, Date.parse(syntheticPowerTask.start));
+  assert.equal(rows.at(-1).end, Date.parse(syntheticPowerTask.end));
+  const energy = rows.reduce((total, row) => total + row.ac_w * (row.end - row.start) / 3600000000, 0);
+  assert.equal(energy, 1.375); // AC input; no battery-efficiency conversion or session-average reconstruction.
+  const markup = plannedPowerProfileMarkup(state, syntheticPowerTask);
+  assert.match(markup, /3500 W/);
+  assert.match(markup, /0 W/);
+  assert.match(markup, /AC charging input/);
+  assert.match(markup, /GMT\+2/);
+  assert.match(markup, /GMT\+1/); // Repeated local hour is distinguishable across the autumn transition.
+  assert.doesNotMatch(markup, /NaN|Infinity/);
+});
+
+test('ESS profile separates signed AC flow from direct DC solar charging', () => {
+  const state = syntheticPowerPlan();
+  const task = {...syntheticPowerTask, resource: 'ess'};
+  const rows = sessionPowerProfile(state.accepted, task, state.capabilities);
+  assert.deepEqual(rows.map(row => row.ac_w), [2500, -3450, 0]);
+  assert.deepEqual(rows.map(row => row.dc_w), [1000, 0, 2000]);
+  const markup = plannedPowerProfileMarkup(state, task);
+  assert.match(markup, /Direct DC solar charge/);
+  assert.match(markup, /-3450 W/);
+  assert.match(markup, /positive for charging and negative for supply/);
+});
+
+test('missing task powers leave gaps and do not become fabricated zero or session-average values', () => {
+  const state = syntheticPowerPlan();
+  delete state.accepted.flows.grid_ev[1];
+  const rows = sessionPowerProfile(state.accepted, syntheticPowerTask);
+  assert.equal(rows[1].ac_w, null);
+  const markup = plannedPowerProfileMarkup(state, syntheticPowerTask);
+  assert.match(markup, /Unknown/);
+  const paths = [...markup.matchAll(/<path d="([^"]*)"/g)];
+  assert.equal((paths[1][1].match(/M/g) || []).length, 2);
+  delete state.accepted.flows;
+  assert.match(plannedPowerProfileMarkup(state, syntheticPowerTask), /unavailable/);
+});
+
+test('outdated task profiles are withheld while a matching restored plan remains inspectable', () => {
+  const state = syntheticPowerPlan();
+  state.revision++;
+  assert.match(plannedPowerProfileMarkup(state, syntheticPowerTask), /unavailable/);
+  state.plan_recovery = {state: 'restored', plan_id: state.accepted.id, revision: state.revision};
+  assert.match(plannedPowerProfileMarkup(state, syntheticPowerTask), /<svg/);
+  state.ev_plan_valid = false;
+  assert.match(plannedPowerProfileMarkup(state, syntheticPowerTask), /unavailable/);
+  state.ev_plan_valid = true;
+  state.now = '2026-10-25T03:00:00Z';
+  assert.match(plannedPowerProfileMarkup(state, syntheticPowerTask), /unavailable/);
+});
+
+test('goal profile shows shared EV power only through its matching saved deadline', () => {
+  const state = syntheticPowerPlan();
+  const goal = {id: 'test-goal', revision: 1, deadline: '2026-10-25T01:15:00Z'};
+  const markup = goalPowerProfileMarkup(state, goal);
+  assert.match(markup, /Shared EV charging plan/);
+  assert.match(markup, /3500 W/);
+  assert.doesNotMatch(markup, /2000 W/);
+  goal.revision++;
+  assert.match(goalPowerProfileMarkup(state, goal), /No power profile/);
+});
+
+test('profile detail text is escaped, equal levels merge, and missing intervals are never joined', () => {
+  const state = syntheticPowerPlan();
+  state.accepted.flows.pv_ev = [1, 1, 1];
+  state.accepted.flows.grid_ev = [0, 0, 0];
+  state.accepted.flows.solar_dis_ev = [0, 0, 0];
+  const task = {...syntheticPowerTask, start: state.accepted.intervals[0].start, end: state.accepted.intervals.at(-1).end};
+  assert.equal(sessionPowerProfile(state.accepted, task).length, 1);
+  state.accepted.intervals.splice(1, 1);
+  assert.equal(sessionPowerProfile(state.accepted, task).length, 2);
+  const markup = plannedPowerProfileMarkup(state, task, {title: '<img src=x onerror=bad>', note: '<script>bad</script>'});
+  assert.doesNotMatch(markup, /<img|<script>/);
+  assert.match(markup, /&lt;script&gt;/);
+});
+
+
+test('task power levels preserve seconds in partial interval boundaries', () => {
+  const state = syntheticPowerPlan();
+  const task = {resource: 'ev', start: '2026-10-25T00:45:07Z', end: '2026-10-25T00:46:23Z'};
+  const markup = plannedPowerProfileMarkup(state, task);
+  assert.match(markup, /02:45:07 GMT\+2/);
+  assert.match(markup, /02:46:23 GMT\+2/);
 });

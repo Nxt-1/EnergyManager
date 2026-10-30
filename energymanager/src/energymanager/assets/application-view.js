@@ -27,7 +27,7 @@ import {requestError, StatePoller} from './dashboard-client.js';
 import {hasTextSelection, clearTextSelection} from './text-selection.js';
 import {PlanningActivity} from './planning-activity.js';
 import {evMeasuredPower} from './ev-status.js';
-import {sessionContributionMarkup} from './session-details.js';
+import {sessionContributionMarkup, plannedPowerProfileMarkup, goalPowerProfileMarkup} from './session-details.js';
 
 
 export async function mountApplication(root, options = {}) {
@@ -555,6 +555,7 @@ export async function mountApplication(root, options = {}) {
     form.elements.priority.value = goal?.priority ?? 50;
     $('form-title').textContent = goal ? 'Edit EV goal' : 'Add an EV goal';
     $('form-error').textContent = '';
+    $('goal-power-profile').innerHTML = goal?.id ? '<p class="muted">For the currently saved requirement.</p>' + goalPowerProfileMarkup(state, goal) : '';
     toggleKind();
     $('goal-dialog').showModal();
   }
@@ -586,7 +587,7 @@ export async function mountApplication(root, options = {}) {
     const goal = state.goals.find(goal => goal.id === id) || state.schedule_goals.find(goal => goal.id === id);
     if (!goal) return;
     detail(goal.title,
-      `<p>Deadline ${time(goal.deadline)}</p><p>${goal.kind === 'trip' ? `Total journey ${num(goal.distance_km, 0)} km · ${num(journeyEnergyKwh(goal, state.policy))} kWh driving, arrival reserve ${state.policy.arrival_reserve_km} km. ${goal.return_at ? 'Expected return ' + time(goal.return_at) : 'Return unknown; unavailable until reconnection.'}` : 'Timed state-of-charge requirement. No journey or withdrawal is assumed.'}</p>${goal.calendar ? `<p>Calendar: ${esc(goal.calendar.source)}. Provisional 50 km total / four hours from event start.<br>${esc(goal.calendar.location)}</p>` : ''}<p>Priority ${goal.priority}. ${goal.approval_state === 'granted' ? 'Approved task ceiling ' + watts(goal.approved_peak_kw) + ' W' : 'Normal automatic peak policy applies.'}</p><p>Power changes stay within grouped charging sessions.</p>`);
+      `<p>Deadline ${time(goal.deadline)}</p><p>${goal.kind === 'trip' ? `Total journey ${num(goal.distance_km, 0)} km · ${num(journeyEnergyKwh(goal, state.policy))} kWh driving, arrival reserve ${state.policy.arrival_reserve_km} km. ${goal.return_at ? 'Expected return ' + time(goal.return_at) : 'Return unknown; unavailable until reconnection.'}` : 'Timed state-of-charge requirement. No journey or withdrawal is assumed.'}</p>${goal.calendar ? `<p>Calendar: ${esc(goal.calendar.source)}. Provisional 50 km total / four hours from event start.<br>${esc(goal.calendar.location)}</p>` : ''}<p>Priority ${goal.priority}. ${goal.approval_state === 'granted' ? 'Approved task ceiling ' + watts(goal.approved_peak_kw) + ' W' : 'Normal automatic peak policy applies.'}</p>${goalPowerProfileMarkup(state, goal)}`);
   }
 
   async function showFaultHistory() {
@@ -604,7 +605,7 @@ export async function mountApplication(root, options = {}) {
     const session = state.accepted?.sessions.find(session => session.id === id);
     if (!session) return;
     detail(session.title,
-      `<p>${time(session.start)} — ${time(session.end)}</p><p>${num(session.energy_kwh)} kWh to battery</p>${session.resource === 'ev' ? sessionContributionMarkup(session, time) : `<p>${esc(powerText(session.reason))}</p><p>Source-specific reservations preserve required EV and household peak support.</p>`}`);
+      `<p>${time(session.start)} — ${time(session.end)}</p><p>${num(session.energy_kwh)} kWh ${session.resource === 'ess' && session.title === 'ESS supplying loads' ? 'from' : 'to'} battery</p>${session.resource === 'ev' ? sessionContributionMarkup(session, time) : `<p>${esc(powerText(session.reason))}</p><p>Source-specific reservations preserve required EV and household peak support.</p>`}${plannedPowerProfileMarkup(state, session)}`);
   }
   async function refresh(force = false) {
     if (loading) return;

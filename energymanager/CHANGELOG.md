@@ -1,3 +1,15 @@
+## 4.5.1 — Planned power profiles in task details
+
+- Show the calculated step-by-step power profile in EV and ESS session details,
+  including real planned pauses, power changes and partial intervals.
+- Show the shared EV power plan before a requirement's deadline in its details and
+  saved-goal editor; do not invent a separate per-goal power allocation.
+- Display W and installation-local time with UTC offsets, preserving repeated hours.
+  ESS AC is positive charging/negative supply; direct DC solar charging is separate.
+- Keep missing powers as gaps, withhold outdated profiles and support matching restored
+  plans. Provide an expandable table of exact time ranges and planned power levels.
+- This is a display change; scheduling, source accounting and hardware control stay unchanged.
+
 ## 4.5.0 — Appliance power-profile recording
 
 - Add Appliances to the standalone and managed native HA dashboards. Record dishwasher

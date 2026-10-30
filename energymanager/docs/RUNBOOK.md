@@ -1,5 +1,13 @@
 # Run, configure, review and roll back
 
+## Planned task power (4.5.1)
+
+Update the add-on and reload HA; no configuration is needed. Open a scheduled EV/ESS
+session for its calculated power graph. Requirement details show shared EV power before
+the saved deadline. Expand Power levels for exact times/W; offsets distinguish repeated
+local hours. Missing/outdated plans are labelled, and ESS direct DC charging is separate
+from signed AC flow. The graph is planned power, not a measured trace or a new command.
+
 ## Appliance profiles (4.5.0)
 
 Open Appliances, load HA power sensors and map a dedicated W/kW sensor per machine.

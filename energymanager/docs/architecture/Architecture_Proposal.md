@@ -778,6 +778,31 @@ snapshot; preparing a correction alone does not revoke current authority or reta
 accepted plan's forecast identity/permissions. Original forecast costs and readiness remain
 labelled predictions; measured execution and later calculated schedules are separate evidence.
 
+### Planned power in task details (4.5.1)
+
+EV and ESS session dialogs show the frozen accepted interval powers as step curves,
+clipped to the session bounds, including variable levels, valid zero-power pauses and
+partial boundary intervals. EV uses AC input (PV + grid + solar ESS), distinct from
+battery energy after losses. ESS uses the same AC display boundary as Overview:
+AC charging minus AC discharge/inverter supply, positive charge and negative supply.
+Direct DC solar charging is a separate series; it is never silently added to AC power.
+The existing ESS energy label distinguishes energy to/from its battery.
+
+Requirement details and the saved-goal editor show the shared EV power plan from the
+calculation start through that saved deadline (bounded to the available horizon). They
+do not derive a fictitious per-goal power allocation from session energy contributions.
+The editor explicitly labels the saved requirement; unsaved edits have no new plan yet.
+Require matching plan/goal revisions and current EV validity, or the existing matching
+restored-plan identity/revision. Expired/outdated/missing profiles show an unavailable
+message. Missing interval powers remain gaps, never interpolated or replaced with zero
+or session-average power. Real zero-power plan intervals remain visible.
+
+Charts use W and the installation timezone, with UTC offsets for repeated local hours.
+A compact expandable Power levels table exposes exact interval boundaries and W values;
+only equal adjacent complete levels merge. The shared native/standalone module is part
+of the existing versioned session-details asset. No scheduling, control, source accounting
+or appliance-task implementation is introduced by this display feature.
+
 ### Session energy explanations (4.4.6)
 
 EV session details name the goals whose driving energy they supply and give the planned
