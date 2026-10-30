@@ -1,5 +1,49 @@
 # EnergyManager 4 verification
 
+## 4.4.17 — Joint source allocation during charging refinement (30 October 2026)
+
+598 Python cases exercised locally: full run: 596 passed in 187.36 s, followed by corrected
+attempt-name assertions and all 17 horizon cases passing in 23.13 s. Final 67 continuity,
+timing, recovery and source-hint cases pass in 79.12 s. Includes varied AC/DC efficiencies,
+house loads, held prefixes, boundary stocks, quantity/readiness, shared cost bounds,
+timeout history, stale proofs, exhausted-stage fallbacks, and invalid relaxed power
+rejected before a checked integer fallback. 66 frontend cases, Ruff, mypy (44 modules), CLI and
+4.4.17 wheel/sdist/import checks pass; all 66 source/assets/defaults match.
+
+Frozen replays use the original 120 s budgets, checksum-verified inputs and original-model,
+independent physical/source/permission and rolling audits. All listed audits pass.
+
+| Frozen case | Seconds | EV sessions | Comparison EUR | Unresolved windows |
+| --- | ---: | ---: | ---: | ---: |
+| Supplied decision(4) | 108.75 | 4 | -3.451836 | 0 |
+| Supplied decision(5) | 114.90 | 5 | -0.697407 | 0 |
+| Earlier November | 117.70 | 5 | -4.754643 | 1 |
+| Later solar | 102.69 | 5 | -2.514645 | 0 |
+
+Both supplied daily splits become one session with unchanged battery energy:
+30 October, 11:15–13:45 / 3.105 kWh and12:15:19–14:40 / 3.027966 kWh (Brussels). Later solar retains
+one 13:10–16:00 session / 7.524094 kWh and reaches 79.989% SoC. November 1/2 remain one session
+each. The older November case retains a 5 min gap on 30 October (16:00–16:05), 5 sessions
+versus 4 in the previous release's bounded replay; comparison −€4.754643 versus −€4.733197.
+Its incompatible relaxed source point is rejected and integer refinement times out.
+This is unresolved, not proof of a necessary gap or a global optimum. Do not claim
+fragmentation is eliminated throughout every forecast.
+
+Final supplied/November replays include pruning and source warm hints. Solar predates
+only those search-order/start changes. Original constraints, one shared €0.02 cash/
+comparison allowance, live control and rescheduling remain. Restoring LP indicators
+changes no physical power; full integer/model/independent checks gate adoption.
+An invalid relaxed point is only a hint to a free integer solve. Failed shortcuts
+cannot hide broader timeouts. Valid fallback plans remain executable.
+
+Routed fake E2E: 71.05 s acceptance, 2,023 intervals, 2 journeys / 6 fake routes / 4 fake calls;
+maximum control tick 7.73 ms, saved-plan recovery 97.57 ms. Includes infeasible-profile pruning and
+predates only warm hints; exact-head CI repeats both local application fixtures.
+Generated tracked report restored byte-for-byte. No live provider/HA/database/credential/
+hardware/notification or installation deployment. Private evidence/original bytes:
+artifacts/v4417-joint-continuity/ and prior ignored review folders. Remote results go
+only in the ignored release checkpoint/final reply.
+
 ## 4.4.16 — Full-horizon charging continuity (29 October 2026)
 
 590 Python tests pass131.33s;66 frontend tests, Ruff, mypy44 modules, CLI and4.4.16

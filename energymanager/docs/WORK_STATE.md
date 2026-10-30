@@ -1,6 +1,86 @@
 # EnergyManager work state
 
-## Current checkpoint — full-horizon continuity (4.4.16, 29 October 2026)
+## Current checkpoint — joint continuity correction (4.4.17, 30 October 2026)
+
+AUTHORIZED: user approved general correction. Base d41e935(4.4.16), isolated branch
+codex/v4.4-google-maps. No live services/credentials/HA/database/hardware/phone/deployment.
+Original archive and supplied bytes preserved. Main has only unrelated DEFERRED_WORK.md,
+SHA256c2d7fef4eae67817c3726315bf2ba5db7df3b6513604b3b616ffa241033dfd72.
+
+IMPLEMENTED: preserve other EV work/quantity and required readiness; free source/ESS
+allocation across original horizon. Remove incidental ESS stock/future-dispatch,
+incumbent-peak and window-import caps. Keep original authority, physical/health/hold
+rules, rolling checks and one0.02EUR cash/comparison allowance. Derive fixed-EV markers;
+try fast source relaxation, accepting only after complete original integer/model/audit
+checks. Incompatible relaxed points can seed a free integer solve, never publication.
+Infeasible LP skips only its identical integer profile. Original80/20 stages and6s
+final reserve remain; reserve measured overrun/audit time. Exhausted stages retain
+only bound-checked warm points. No live-control or rescheduling changes.
+
+REPORTING: coverage separate from completion; all attempts/revisions/rejections kept.
+Failed shortcuts cannot erase broad timeouts; stale proofs/failures prove no necessity.
+
+VERIFIED:598 cases covered locally; final67 focused pass79.12s after attempt-label
+updates.66frontend, Ruff/mypy44, CLI and66-file wheel/sdist/import checks pass.
+Both supplied daily splits become continuous at original energy within120s; all
+frozen audits pass. See VERIFICATION.md for exact table and fake E2E evidence.
+The older November case still has one 5 min gap; that refinement is unresolved.
+No universal no-gap/global-optimum claim. Private artifacts/v4417-joint-continuity/.
+
+READY FOR RELEASE: sources frozen, docs/version4.4.17 synchronized. Next scoped commit,
+ff-only main preserving backlog, push and verify exact-commit CI/image. No installation
+deployment. Remote results only in ignored release-state and final reply.
+
+## Earlier checkpoint — 30 October split investigation (read-only)
+
+REQUEST: explain today's split in energymanager-decision(4).json. No application-code
+permission for this new report; no application changes/version/release/live operations.
+HEADd41e935 (4.4.16), initially clean. Original bytes preserved privately under
+artifacts/oct30-split-review/decision.json, SHA256
+fc489df718d7a5b80c44a9f726f106a594e9437ab05de3d56abafa8c81a160cd.
+Snapshot/result checksum and independent/rolling audits pass. Accepted snapshot
+30Oct10:23:40Brussels,118.46s. Today's sessions11:15–11:45 +12:00–14:00,3.105kWh.
+
+PINPOINTED: full-horizon coverage exists, but the local continuity candidate fixes ESS
+source inventories/future dispatch and caps window imports to the exact incumbent.
+Packed/consolidated anchors infeasible; wider single/flexible searches timed out.
+The last retry's packed Infeasible overwrites those unresolved timeouts, incorrectly
+leaving continuity_review.complete=true/outcome=candidate_infeasible for today.
+
+PROVEN OFFLINE:11:30–14:00 at6A supplies the same3.105kWh. With frozen future stocks/
+dispatch, allowing only0.000096875kWh (0.096875Wh) extra household import makes this
+profile feasible, costing0.000029601EUR extra—far below the existing0.02EUR envelope.
+With full-horizon source/ESS redispatch instead, the same profile and all other EV
+modes/currents are valid with FEWER imports9.398843vs9.424558kWh and comparison
+-3.453917vs-3.426761EUR (~0.027156EUR improvement). All future EV stocks unchanged;
+original model rows, independent physical/source/permission and rolling checks pass.
+Fixed-profile dispatch solve4.66s Optimal within its scope; no global EV optimum claim.
+Source stock mix at midnight may change; imposing the old exact mix is an extra
+candidate restriction, not an installation requirement. Private probes/reports retained.
+
+ADDITIONAL CONFIRMATION: decision(5), SHA256
+ ef9fafa1eb9cd8988bd11cf686eba990bd9a66b4f70d9bec715233213d117dd9,
+accepted30Oct12:15:19Brussels,119.39s, has three fragments today:12:15–12:20,
+12:30–12:35 and12:45–15:00. The EXACT same packed EV profile rejected by the narrow
+candidate is feasible when sources/ESS can redistribute through the original model:
+continuous from the running12:15 charge until14:40,3.027966kWh, original initial7A hold
+and every other EV session/future EV stock preserved. Direct-grid EV energy and its
+weighted timing are capped to incumbent; peaks/goal/source/permission/rolling checks
+pass. Fixed-profile source solve6.82s Optimal, not global EV optimality. Forecast
+comparison0.752629vs0.751771EUR: +0.000858EUR (~0.086cent), well within the carried
+0.02EUR envelope (last economic incumbent25.75854458, counterfactual25.75940734).
+Same completion bug: broad single search times out, last failed packed retry changes
+outcome to candidate_infeasible and complete=true. Evidence under the same ignored
+review folder's example5/. No application changes for this comparison inquiry.
+
+NEXT: explain avoidable split and overly restrictive candidate/reporting logic. A future
+authorized fix should let sources/ESS redistribute in the original guarded joint model,
+preserve EV requirements/accepted continuity and the shared economic envelope, and
+retain unresolved attempt status rather than overwriting it with shortcut infeasibility.
+Do not add a case-specific anchor or modify/publish application code for this inquiry.
+
+
+## Earlier checkpoint — full-horizon continuity (4.4.16, 29 October 2026)
 
 AUTHORIZED: user agreed to try the general full-horizon procedure. Base4.4.15 at
 8b90f9e74287e0ab7644cfaab9e31a32234662e0. Required skill/current docs checked. Preserve

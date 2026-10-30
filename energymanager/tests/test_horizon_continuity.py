@@ -160,7 +160,7 @@ def test_general_search_reduces_gaps_when_a_partial_departure_tail_prevents_one_
     assert window["sessions_after"] == 2
     assert window["improvement_retained"]
     assert window["outcome"] in ("improved", "unresolved_timeout", "no_improvement_found")
-    assert window["attempts"][0]["kind"] == "packed"
+    assert window["attempts"][0]["kind"] in ("packed_relaxed", "packed")
     assert any(a["kind"] == "flexible" for a in window["attempts"])
     assert result["flows"]["ev_energy"][-1] == pytest.approx(original["flows"]["ev_energy"][-1], abs=1e-7)
 
@@ -189,8 +189,10 @@ def test_small_early_solar_burst_does_not_anchor_and_fragment_the_main_session()
     assert not validate(s, result["flows"])
     window = result["continuity_review"]["windows"][0]
     assert window["sessions_before"] == 2 and window["sessions_after"] == 1
-    assert window["attempts"][0]["kind"] == "packed" and window["attempts"][0]["status"] == "Infeasible"
-    assert window["attempts"][1]["kind"] == "consolidated"
+    assert window["attempts"][0]["kind"] in ("packed_relaxed", "packed")
+    assert window["attempts"][0]["status"] == "Infeasible"
+    assert any(a["kind"] in ("consolidated_relaxed", "consolidated") and a.get("valid")
+               for a in window["attempts"])
     assert result["flows"]["ev_energy"][-1] == pytest.approx(original["flows"]["ev_energy"][-1], abs=1e-7)
 
 

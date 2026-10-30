@@ -1,5 +1,13 @@
 # Current requirements and decisions
 
+- 30October2026,4.4.17: user approved correcting smoothing's feasible region after two
+  supplied decisions demonstrated valid continuous schedules rejected by fixed ESS
+  inventories/per-window import caps. Retain other EV work/quantity and all original
+  requirements/authority; keep sources/ESS joint across the horizon within the shared
+  original cash/comparison envelope and rolling checks. Preserve attempt history and
+  unresolved timeouts independently from coverage. No live-control or replan change.
+
+
 - 29October2026,4.4.16: user authorized a general full-horizon continuity procedure
   after repeated first-window fixes failed to cover1November. Account for every
   interval/window, test equivalent opportunities on all seven forecast days, preserve

@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import timedelta
 from zoneinfo import ZoneInfo
+from typing import Any
 
 from .optimization import JointModel
 
@@ -73,7 +74,7 @@ class ChargingContinuity:
             model.linear.row(terms, upper=sum(values[index] * weight for index, weight in terms) + 1e-6)
 
     def candidate(self, window: ChargingWindow, phase: int | None) -> JointModel:
-        """Rearrange one window without borrowing future energy, imports or authority."""
+        """Refine one EV window while sources and ESS remain joint horizon decisions."""
         model = deepcopy(self.model)
         model.add_continuity_limits()
         self.protect(model)
@@ -81,20 +82,19 @@ class ChargingContinuity:
         v, flows = m.variables, self.flows
         values = model.warm_from(flows)
         first, last = window.first, window.last
-        physical = ("one", "three", "amps_one", "amps_three", "battery_charge", "converter_charge",
-                    "grid_direction", "pv_store_mode", "pv_ev", "pv_house", "pv_store", "export",
-                    "curtail", "grid_ev", "grid_house", "grid_store", "solar_dis_ev",
-                    "solar_dis_house", "grid_dis_house", "dc_store", "dc_invert")
-        for name in physical:
+        # Other EV work and its energy commitments stay fixed. ESS stocks and
+        # source routing are choices in the original model, including across midnight.
+        for name in ("one", "three", "amps_one", "amps_three"):
             for t, index in enumerate(v[name]):
                 if t < first or t >= last:
                     m.lower[index] = m.upper[index] = flows[name][t]
-        for name in ("ev_energy", "ess_solar", "ess_grid"):
-            for t, index in enumerate(v[name]):
-                if t <= first or t >= last:
-                    m.lower[index] = m.upper[index] = flows[name][t]
+        # Fixed surrounding amperes and the original ledger determine the other
+        # EV stocks. Only these boundary values are needed to retain quantity.
+        for t in (first, last):
+            index = v["ev_energy"][t]
+            m.lower[index] = m.upper[index] = flows["ev_energy"][t]
         for name, indexes in v.items():
-            if name.startswith(("margin_shortfall_", "peak_")):
+            if name.startswith("margin_shortfall_"):
                 for index in indexes:
                     m.upper[index] = min(m.upper[index], values[index] + 1e-6)
         for goal in s.goals:
@@ -106,9 +106,6 @@ class ChargingContinuity:
                 if first < k < last and s.ev_known_at(k):
                     required = min(goal.target(s.capabilities, s.policy), flows["ev_energy"][k])
                     m.lower[v["ev_energy"][k]] = max(m.lower[v["ev_energy"][k]], required - 1e-6)
-        for names in (("grid_ev",), ("grid_ev", "grid_house", "grid_store")):
-            terms = [(v[name][t], s.intervals[t].hours) for name in names for t in range(first, last)]
-            m.row(terms, upper=sum(values[index] * weight for index, weight in terms) + 1e-7)
         timing = self.timing_terms(model)
         m.row(list(timing.items()), upper=model.value(timing, values) + 1e-6)
         if phase is not None:
@@ -184,8 +181,67 @@ class ChargingContinuity:
                             value = 0.
                     index = v[name][t]
                     m.lower[index] = m.upper[index] = value
+            # These markers are determined by the fixed EV profile. Leaving them
+            # as search variables adds symmetry without another physical choice.
+            profile = local.warm_from(flows)
+            for name in ("one", "three", "amps_one", "amps_three"):
+                for index in v[name]:
+                    profile[index] = m.lower[index]
+            profile = local.canonical_values(profile)
+            for name in ("start", "phase_setting", "phase_change", "phase_restart", "variation"):
+                for index in v[name]:
+                    m.lower[index] = m.upper[index] = profile[index]
             return local, phase
         return None
+
+    @staticmethod
+    def integer_dispatch(model: JointModel, flows: dict[str, list[float]]) -> dict[str, list[float]]:
+        """Restore unpriced source indicators; callers must check the original integer model.
+
+        Physical powers and energy stocks never change. A relaxed solution with
+        incompatible simultaneous flows is rejected by the original rows, not repaired.
+        """
+        values = model.warm_from(flows)
+        v = model.linear.variables
+        modes = (("battery_charge", ("pv_store", "grid_store", "dc_store")),
+                 ("converter_charge", ("pv_store", "grid_store")),
+                 ("grid_direction", ("grid_ev", "grid_house", "grid_store")),
+                 ("pv_store_mode", ("pv_store",)))
+        for t in range(len(model.snapshot.intervals)):
+            for name, sources in modes:
+                values[v[name][t]] = float(sum(values[v[source][t]] for source in sources) > 1e-8)
+        values = model.canonical_values(values)
+        return {name: [values[index] for index in indexes] for name, indexes in v.items()}
+
+    def summarize(self, window: ChargingWindow, record: dict[str, Any], revision: int) -> None:
+        """Resolve a window from all attempts, keeping unresolved or stale searches visible."""
+        attempts = record.get("attempts", [])
+        record["sessions_after"] = self.sessions(window)
+        record["had_timeouts"] = any(a["status"] == "Time limit reached" for a in attempts)
+        unresolved = False
+        if not window.available:
+            outcome = "unavailable"
+        elif not record["sessions_before"]:
+            outcome = "no_charging"
+        elif self.sessions(window) == 1 and len(self.phases(window)) == 1:
+            outcome = "improved" if record.get("improvement_retained") else "already_continuous"
+        else:
+            completed = any(a["kind"] == "flexible" and a["status"] == "Optimal" and a.get("valid")
+                            and not a.get("rejected") and a.get("result_revision") == revision for a in attempts)
+            if completed:
+                outcome = "no_improvement_found"
+            else:
+                unresolved = True
+                if record["had_timeouts"]:
+                    outcome = "unresolved_timeout"
+                elif any(a.get("rejected") for a in attempts):
+                    outcome = "candidate_rejected"
+                elif attempts and all(a["status"] == "Infeasible" for a in attempts):
+                    outcome = "candidate_infeasible"
+                else:
+                    outcome = "not_checked_budget"
+        record["outcome"] = outcome
+        record["unresolved"] = unresolved
 
     @staticmethod
     def timing_terms(model: JointModel) -> dict[int, float]:

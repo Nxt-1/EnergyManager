@@ -1,3 +1,19 @@
+## 4.4.17 — Joint source allocation during charging refinement
+
+- Let sources and ESS dispatch redistribute across the whole horizon while smoothing
+  one EV window. Preserve the other EV work and required readiness using the original
+  model, permissions, rolling checks and one shared €0.02 cash/comparison envelope.
+- Remove incidental ESS stock targets, frozen future source dispatch and per-window
+  import caps that could exclude valid continuous charging over tiny conversion losses.
+- Preserve per-attempt status and plan revisions. Separate full window coverage from
+  unresolved optimization; failed shortcuts cannot erase broader timeouts.
+- Reserve useful global refinement time inside the existing planning budget, account
+  for measured solver overrun and skip exhausted solver stages with checked fallbacks.
+  Fixed-EV candidates derive operational markers directly. Try fast source relaxation,
+  restoring only indicators, and accept only after full original integer/model/audit
+  checks; keep integer search when relaxed dispatch is incompatible.
+- Keep live control, charging guards, settings and rescheduling behavior unchanged.
+
 ## 4.4.16 — Charging continuity across the full forecast
 
 - Apply one bounded continuity procedure to every forecast day and availability window,

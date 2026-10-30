@@ -30,10 +30,11 @@ class Planner:
         self.validation_seconds = 0.0
         self.solar_reserve = 0.0
         self.continuity_reserve = 0.0
+        self.solver_overrun = 0.0
         self.reference_flows: dict[str, list[float]] | None = None
 
     def remaining(self) -> float:
-        reserved = self.solar_reserve + self.continuity_reserve + self.validation_seconds * 1.25
+        reserved = self.solar_reserve + self.continuity_reserve + (self.validation_seconds + self.solver_overrun) * 1.25
         return max(0.0, self.deadline - monotonic() - 0.25 - reserved)
 
     def validate_candidate(self, snapshot: Snapshot, flows: dict[str, list[float]],
@@ -74,8 +75,21 @@ class Planner:
         if self.progress:
             self.progress(name)
         started = monotonic()
-        allowance = min(allowance, self.remaining())
-        result = model.run(allowance * 0.8 if economic_search else allowance, warm=warm, **kwargs)
+        allowance = max(0., min(allowance, self.remaining()))
+        solver_allowance = allowance * .8 if economic_search else allowance
+        result: dict[str, Any]
+        if solver_allowance < .1:
+            # Even a nominal one-millisecond run can pay seconds of presolve.
+            # Keep any checked warm fallback, including all requested bounds.
+            for terms, upper in kwargs.get("bounds", []):
+                model.linear.row(list(terms.items()), upper=upper)
+            result = {"feasible": False, "status": "Time limit reached", "seconds": 0.,
+                      "columns": len(model.linear.lower), "rows": len(model.linear.row_lower),
+                      "integers": len(model.linear.integer), "objective": None, "bound": None,
+                      "gap": None, "skipped_budget": True}
+        else:
+            result = model.run(solver_allowance, warm=warm, **kwargs)
+            self.solver_overrun = max(self.solver_overrun, monotonic() - started - solver_allowance)
         self.stages.append(
             {"name": name, **{k: v for k, v in result.items() if k not in ("flows", "values")}}
         )
@@ -107,6 +121,8 @@ class Planner:
         result["economic_baseline"], result["cash_baseline"] = economic, cash
         if allowance < 0.3:
             return result
+        if single_only:
+            return self.review_continuity(name, model, result, allowance)
         started = monotonic()
         guided = deepcopy(model)
         guided.add_continuity_limits()
@@ -119,9 +135,7 @@ class Planner:
         guided.linear.lower[ev[-1]] = result["flows"]["ev_energy"][-1] - 1e-6
         tolerance = model.snapshot.policy.polish_tolerance_eur
         bounds = [(guided.economic, economic + tolerance), (guided.cash, cash + tolerance)]
-        result = self.review_continuity(name, model, result, allowance if single_only else allowance * .35)
-        if single_only:
-            return result
+        result = self.review_continuity(name, model, result, allowance * .35)
         continuity = guided.continuity_objective()
         guided.linear.row(list(continuity.items()), upper=model.value(
             model.continuity_objective(), result["values"]) + 1e-6)
@@ -154,6 +168,7 @@ class Planner:
                                      result.get("cash_baseline", actual[1])))
         tolerance = model.snapshot.policy.polish_tolerance_eur
         coverage: list[dict[str, Any]] = []
+        revision = 0
         # A second sweep reuses time saved by easy windows for unfinished work.
         # The partition and all accepted window bounds remain unchanged.
         for sweep in range(2):
@@ -196,57 +211,97 @@ class Planner:
                 record.setdefault("attempts", [])
                 # A single session can be impossible (for example, a partial departure
                 # interval fixes an energy residue). Still minimize the remaining gaps.
-                for kind in ("packed", "consolidated", "single", "flexible"):
+                infeasible_profiles: set[str] = set()
+                relaxed_starts: dict[str, dict[str, list[float]]] = {}
+                for kind in ("packed_relaxed", "packed", "consolidated_relaxed", "consolidated", "single", "flexible"):
+                    if kind in infeasible_profiles:
+                        continue
                     if min(window_deadline - monotonic(), self.remaining()) < .3:
                         break
                     current = ChargingContinuity(model, result["flows"], review.windows)
                     chosen_phase: int | None = phase if kind == "single" else None
-                    if kind in ("packed", "consolidated"):
-                        packed = current.packed_candidate(window, longest_run=kind == "consolidated")
+                    profile_kind = kind.removesuffix("_relaxed")
+                    relaxed = kind.endswith("_relaxed")
+                    if profile_kind in ("packed", "consolidated"):
+                        packed = current.packed_candidate(window, longest_run=profile_kind == "consolidated")
                         if packed is None:
                             continue
                         local, chosen_phase = packed
                     else:
                         local = current.candidate(window, chosen_phase)
+                    integer_model = local
+                    if relaxed:
+                        # Fixed EV currents need no integer search. Try unrestricted
+                        # source dispatch first, then certify it against the integer model.
+                        local = deepcopy(local)
+                        local.linear.integer = []
                     remaining = min(window_deadline - monotonic(), self.remaining())
-                    seconds = (min(2., remaining * .4) if kind in ("packed", "consolidated") else
+                    seconds = (min(2., remaining * .8) if relaxed else
+                               min(6., remaining * .8) if profile_kind in ("packed", "consolidated") else
                                remaining * .65 if kind == "single" else remaining)
                     if seconds < .1:
                         break
+                    objective = local.economic if profile_kind in ("packed", "consolidated") else local.continuity_objective()
+                    warm_flows = relaxed_starts.get(kind, result["flows"])
                     trial = self.run_model(f"{name}_window:{window.first}:{kind}", local, seconds,
-                        local.warm_from(result["flows"]), objective=local.continuity_objective(),
+                        local.warm_from(warm_flows), objective=objective,
                         bounds=[(local.economic, economic + tolerance), (local.cash, cash + tolerance)])
-                    record["attempts"].append({"kind": kind, "phase": chosen_phase, "status": trial["status"], "seconds": trial["seconds"]})
-                    record["outcome"] = "candidate_infeasible" if trial["status"] == "Infeasible" else "unresolved_timeout"
+                    attempt = {"kind": kind, "phase": chosen_phase, "status": trial["status"],
+                               "seconds": trial["seconds"], "basis_revision": revision}
+                    if kind in relaxed_starts:
+                        attempt["warm_from_relaxation"] = True
+                    record["attempts"].append(attempt)
                     if not trial["feasible"]:
+                        if relaxed and trial["status"] == "Infeasible":
+                            # The identical integer profile is a subset of this LP.
+                            # Try a different profile rather than proving it again.
+                            infeasible_profiles.add(profile_kind)
                         continue
-                    flows = trial["flows"]
+                    flows = (current.integer_dispatch(integer_model, trial["flows"])
+                             if relaxed else trial["flows"])
                     values = model.warm_from(flows)
-                    if (not local.linear.accepts(local.warm_from(flows)) or not model.linear.accepts(values)
-                            or self.continuity_errors(model, flows)):
-                        record["outcome"] = "candidate_rejected"
+                    errors = []
+                    if not integer_model.linear.accepts(integer_model.warm_from(flows)):
+                        errors.append("integer_dispatch")
+                    if not local.linear.accepts(local.warm_from(flows)):
+                        errors.append("candidate_model")
+                    if not model.linear.accepts(values):
+                        errors.append("original_model")
+                    errors += self.continuity_errors(model, flows)
+                    if errors:
+                        attempt["rejected"] = True
+                        attempt["rejection_errors"] = errors[:3]
+                        if relaxed:
+                            # An invalid point is only a solver hint. The following
+                            # integer solve remains free to change every source decision.
+                            relaxed_starts[profile_kind] = flows
                         continue
                     improved = ChargingContinuity(model, flows)
                     old_score = model.value(model.continuity_objective(), result["values"])
                     score = model.value(model.continuity_objective(), values)
                     if improved.sessions(window) > before:
-                        record["outcome"] = "candidate_rejected"
+                        attempt["rejected"] = True
+                        attempt["rejection_errors"] = ["session_count"]
                         continue
+                    attempt["valid"] = True
+                    attempt["result_revision"] = revision
                     if score >= old_score - 1e-6:
-                        if record["sessions_after"] == before:
-                            record["outcome"] = ("no_improvement_found" if trial["status"] == "Optimal"
-                                                 else "unresolved_timeout")
                         continue
                     result = {**result, "flows": flows, "values": values}
+                    revision += 1
+                    attempt["result_revision"] = revision
                     record["sessions_after"] = improved.sessions(window)
                     record["improvement_retained"] = True
-                    record["outcome"] = "improved"
                     if improved.sessions(window) == 1 and len(improved.phases(window)) == 1:
                         break
+        final = ChargingContinuity(model, result["flows"], review.windows)
+        for window, record in zip(review.windows, coverage):
+            final.summarize(window, record, revision)
+        unresolved = sum(record["unresolved"] for record in coverage)
         result["economic_baseline"], result["cash_baseline"] = economic, cash
         result["continuity_review"] = {"intervals": len(model.snapshot.intervals), "windows": coverage,
-            "complete": all(r["outcome"] not in ("not_checked_budget", "unresolved_timeout", "candidate_rejected")
-                            for r in coverage)}
+                                     "coverage_complete": True, "unresolved_windows": unresolved,
+                                     "complete": unresolved == 0}
         return result
 
     @staticmethod
@@ -313,7 +368,7 @@ class Planner:
         return result
 
     def prefer_dispatch(self, model: JointModel, result: dict[str, Any], allowance: float) -> dict[str, Any]:
-        """Refine sources/ESS before continuity fixes each window's boundary stocks."""
+        """Refine source/ESS economics for the selected EV schedule before smoothing."""
         if allowance < .3:
             return result
         started = monotonic()
@@ -365,6 +420,7 @@ class Planner:
         self.validation_seconds = 0.0
         self.solar_reserve = 0.0
         self.continuity_reserve = 0.0
+        self.solver_overrun = 0.0
         self.reference_flows = None
         self.stages = []
         s = snapshot

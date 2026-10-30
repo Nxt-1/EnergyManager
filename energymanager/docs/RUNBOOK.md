@@ -1,17 +1,26 @@
 # Run, configure, review and roll back
 
-## Charging continuity (4.4.16)
+## Charging continuity (4.4.17)
 
-No settings migration is needed. Every forecast day gets the same bounded continuity
-procedure for required/optional work at its actual limit. The decision download's
-`continuity_review` accounts for every interval, including empty/unavailable windows,
-with before/after/final sessions and raw attempt status. `not_checked_budget`,
-`unresolved_timeout` and `candidate_rejected` mean unfinished work; `candidate_infeasible`
-describes only a constrained fixed-phase alternative. None proves gaps unavoidable.
-`complete` means bounded coverage, not global optimality. Valid schedules remain usable
-when review is unfinished. One carried0.02EUR cash/comparison allowance covers all windows
-inside the existing time budget. Goals, future supply, limits/permissions and legitimate
-pauses remain protected through certification. Live control/rescheduling are unchanged.
+No settings migration is needed. Fixed-profile `packed_relaxed`/`consolidated_relaxed`
+attempts are fast source candidates; restoring indicators changes no physical powers.
+Only original integer/model and independent audit checks permit adoption.
+`warm_from_relaxation` marks a solver hint, never unchecked adoption. A relaxation
+status alone proves no executable/global optimum; full integer alternatives remain.
+ Smoothing preserves other EV work/selected energy and
+required readiness while allowing source/ESS dispatch to redistribute across all seven
+days. Original limits, source provenance, peak permissions and rolling checks remain;
+one shared0.02EUR cash/comparison allowance spans all windows/retries. Small household
+import differences can be legal. Existing ESS stock values and exact window imports are
+not extra requirements. Live control and rescheduling behavior are unchanged.
+
+Decision downloads include `continuity_review`. `coverage_complete` accounts for every
+interval; `unresolved_windows` and `complete` describe remaining work. A failed shortcut
+cannot overwrite a broader timeout. `had_timeouts`, raw attempt statuses/revisions and
+`improvement_retained` remain available. A valid current broad Optimal result provides
+only bounded completion; a stale result requires rechecking. `candidate_infeasible`
+alone is not proof that gaps are necessary or that review finished. Unfinished smoothing
+keeps the valid schedule usable and sends no new warning or notification.
 
 ## Energy direction arrows (4.4.14)
 
