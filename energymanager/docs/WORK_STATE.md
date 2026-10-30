@@ -1,6 +1,36 @@
 # EnergyManager work state
 
-## Current checkpoint — joint continuity correction (4.4.17, 30 October 2026)
+## Current checkpoint — appliance-profile integration (4.5.0, 30 October2026)
+
+AUTHORIZED: user requested compatibility with the current system, merge and push main.
+Worktree codex/v4.5-implementation rebased by fast-forward/stash replay onto b2aee28
+(4.4.17); original25Oct tracked/untracked work is preserved in the integration stash
+whose SHA is in ignored artifacts/v45-integration-state.json. Current release scope is
+profile management only; no appliance scheduling or live installation operation.
+
+INTEGRATED: backend lifecycle/API/schema and standalone/native Appliances tab, preserving
+all current routing, planning/source allocation, restart recovery and dashboard controls.
+Added upgrade-state preservation and transaction rollback checks; local profile saves
+advance only their matching draft revisions. Optional mappings start empty; existing
+JSON/goals/control state/house forecast remain unchanged. Release identity4.5.0.
+
+VERIFIED: full621 Python187.85s;69 Node; Ruff/mypy45/every JS/CLI4.5.0 pass.
+Configured fake E2E25.589s/2019 intervals/max2.913ms/four fake calls; routed fake
+E2E70.858s/2023/max5.212ms/four fake calls/two imports/six fake route requests.
+Standalone/native browser discovery/review/gap rejection/trim/save/draft preservation,
+sequential Mazak save, existing Overview/EV and clean logs pass. Wheel/sdist68 runtime
+files match; isolated import/asset/version pass. Preview tabs/processes stopped.
+
+READY FOR RELEASE: scoped source/docs/version4.5.0 synchronized. Next one release commit,
+ff-only main preserving unrelated backlog, push and exact-commit CI/image verification.
+No installation deployment. Subsequent remote results only in ignored release state/final.
+
+Main initially b2aee28 with only unrelated DEFERRED_WORK.md modified (SHA256
+c2d7fef4eae67817c3726315bf2ba5db7df3b6513604b3b616ffa241033dfd72). Preserve and
+reapply those notes around ff-only integration; do not include them in the release.
+
+
+## Earlier checkpoint — joint continuity correction (4.4.17, 30 October 2026)
 
 AUTHORIZED: user approved general correction. Base d41e935(4.4.16), isolated branch
 codex/v4.4-google-maps. No live services/credentials/HA/database/hardware/phone/deployment.
@@ -1244,6 +1274,44 @@ Narrow layout327px graph fits; no browser warnings/errors. Wheel/sdist55 code/as
 match; isolated4.3.9 import passes. NEXT: scoped review, commit/push ready release and
 inspect exact-head CI/image; pause completed one-time automation. Preserve unrelated
 backlog edits/paused Maps. No actual HA/database/hardware/notifications/deployment.
+
+## Historical local checkpoint — V4.5 first milestone, 25 October 2026
+
+AUTHORIZED: start application code at 23:30 Europe/Brussels; the scheduled invocation
+started then and its one-time automation is now PAUSED. User confirmed arm-next-cycle,
+review-before-save, configurable idle timeout and profile management before scheduling.
+Dedicated worktree `C:/Users/Arne/.codex/worktrees/v4-5-implementation/EnergyManager`,
+branch `codex/v4.5-implementation`, base released main 4fe2291 (4.3.8). No release yet;
+version metadata remains 4.3.8 until V4.5 is prepared for publication. Preserve separate
+main-worktree backlog edits/paused Maps, and reconcile concurrent main changes later.
+
+IMPLEMENTED LOCALLY: persistent per-machine/program recordings, dedicated configurable
+HA W/kW sensors, idle/start threshold and idle completion timeout; backend sampling
+only after explicit arming; review graph/trim/coverage/energy/mean/peak; explicit selection
+of complete reviewed cycles with previous raw cycles retained; interruption/gap/revision
+protections; demo/configured isolation; editable provisional Mazak 2500/3500/7000 W.
+Standalone/native Appliances page and local synthetic preview fixtures are included.
+No scheduling, background subtraction, automatic machine starts or ARCH-006 added.
+
+VERIFIED: final full 266 Python tests 42.98s; 42 frontend tests; Ruff/mypy36/JS pass.
+Wheel/sdist built; all 57 runtime source/assets match current bytes. Synthetic configured
+E2E 32.070s/2018 intervals/max control 3.930ms/four fake-only calls. Browser standalone
+source discovery/draft preservation/Mazak save/review/gap rejection/trim/save/retention,
+native arm/idle/cancel/reload and light/dark graph contrast pass; logs clean. Screenshot
+is linked in VERIFICATION.md. Scoped diff check passes. Initial test setup failures were
+temp-directory access/missing-parent only; explicit ignored artifacts basetemp resolves.
+Another chat is editing main and using preview 8102; this worktree's 8105/8106 previews
+and temporary browser tabs are stopped/closed at completion. No merge/commit/push or
+publication was performed. Main's unrelated working changes remain untouched.
+
+OPEN: actual sensor IDs and update cadence/standby/quiet-phase calibration; load variants
+and any later aggregation; scheduling/background separation and Mazak timing policies.
+These do not block local profile foundations. No installation measurements or live
+HA/database/hardware/real notification/deployment access occurred.
+
+NEXT: review this local profile-management milestone and supply/configure actual power
+sensors and appropriate idle parameters; then discuss scheduling requirements. Use the maintained architecture/decision/backlog
+and this checkpoint, not a separate V4.5 specification. Do not release unfinished scope.
 
 ## Current work —4.3.8 horizontal mouse panning
 

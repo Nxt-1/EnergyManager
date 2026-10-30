@@ -28,6 +28,7 @@ from .daily_estimates import DailyEstimates
 from .plan_recovery import PlanRecovery
 from .measurements import HousePowerMismatch
 from .replanning import ReplanningEvidence
+from .appliance_profiles import ApplianceProfiles
 
 
 class Application:
@@ -93,6 +94,7 @@ class Application:
         self.daily_estimates = DailyEstimates(self)
         self.house_mismatch_since: datetime | None = None
         self.plan_recovery = PlanRecovery(self)
+        self.appliance_profiles = ApplianceProfiles(self)
 
     def now(self) -> datetime:
         return (
@@ -120,9 +122,11 @@ class Application:
             self.journeys.start()
         if self.ev_faults:
             self.ev_faults.start()
+        self.appliance_profiles.start()
 
     async def close(self) -> None:
         self.shutdown = True
+        await self.appliance_profiles.close()
         await self.daily_estimates.close()
         if self.journeys:
             await self.journeys.close()

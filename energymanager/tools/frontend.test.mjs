@@ -626,7 +626,7 @@ test('managed strategy generates actual HA cards and adopts new release layout w
   const manifest = {version: '4.2.0', demo: false, entities: {ev_soc: 'sensor.car', ess_soc: 'sensor.battery'}};
   const config = {type: 'custom:energymanager'};
   const layout = generateDashboard(config, manifest, {addon: 'synthetic_energy_manager', manifest});
-  assert.deepEqual(layout.views.map(view => view.path), ['overview', 'planning', 'ev', 'settings']);
+  assert.deepEqual(layout.views.map(view => view.path), ['overview', 'planning', 'ev', 'profiles', 'settings']);
   assert.ok(layout.views.every(view => view.sections.every(section => section.cards.every(card => card.type !== 'tile'))));
   assert.ok(layout.views.every(view => view.sections.every(section => section.cards.every(card => card.type !== 'history-graph'))));
   assert.ok(!JSON.stringify(layout).includes('iframe'));
@@ -1266,4 +1266,38 @@ test('a restored schedule is current only with matching backend recovery authori
   state.plan_recovery.plan_id = 'saved-plan';
   state.ev_plan_valid = false;
   assert.equal(evSchedule(state).current, false);
+});
+
+
+import {profileGraph, ApplianceProfilesPage} from '../src/energymanager/assets/appliance-profiles.js';
+
+test('appliance profile graph preserves measured peaks and breaks at invalid readings or polling gaps', () => {
+  const graph = profileGraph([{seconds: 0, power_w: 500}, {seconds: 5, power_w: 2400},
+    {seconds: 10, power_w: null}, {seconds: 15, power_w: 200}, {seconds: 40, power_w: 300}]);
+  assert.match(graph, /2400 W/);
+  assert.match(graph, /missing readings leave gaps/);
+  const measurementPath = [...graph.matchAll(/<path d="([^"]+)"/g)][1][1];
+  assert.equal((measurementPath.match(/M/g) || []).length, 3);
+  assert.equal((measurementPath.match(/H/g) || []).length, 1);
+  assert.doesNotMatch(graph, /NaN|Infinity/);
+  assert.doesNotMatch(profileGraph([]), /NaN|Infinity/);
+});
+
+
+test('saved appliance profile graph explicitly marks its trimmed selection', () => {
+  const graph = profileGraph([{seconds: 0, power_w: 500}, {seconds: 100, power_w: 500}], 15,
+    {start_seconds: 20, end_seconds: 80});
+  assert.match(graph, /<rect x="205" y="15" width="435"/);
+});
+
+
+test('local profile saves advance matching forms without clearing drafts or bypassing a stale revision', () => {
+  const forms = [{dataset: {revision: '4'}, value: 'SYNTHETIC unsaved text'}, {dataset: {revision: '3'}}];
+  const page = {root: {querySelectorAll: () => forms}};
+  ApplianceProfilesPage.prototype.advanceRevision.call(page, 4, 5);
+  assert.equal(forms[0].dataset.revision, 5);
+  assert.equal(forms[0].value, 'SYNTHETIC unsaved text');
+  assert.equal(forms[1].dataset.revision, '3');
+  ApplianceProfilesPage.prototype.advanceRevision.call(page, 5, 7);
+  assert.equal(forms[0].dataset.revision, 5);
 });

@@ -125,7 +125,22 @@ No installation, calibration or implementation is authorized by this backlog ent
 
 ## ARCH-005 — Washing-machine and dishwasher scheduling suggestions
 
-Recorded: 22 October 2026. Status: **deferred beyond the initial release**, explicitly requested by the user.
+Recorded: 22 October 2026. Updated: 30 October 2026. Status: **profile management in4.5.0; scheduling remains deferred**.
+The user authorized implementation to start at 23:30 Europe/Brussels on 25 October,
+with preparation/questions beforehand in a separate worktree/branch. First focus:
+capture and durable storage of per-machine/per-program power profiles. No V4.5
+application code was written before the requested time. The first profile-management
+milestone is implemented for4.5.0, integrated with the4.4.17 baseline, with idle completion,
+review/trim/select, persistent raw cycles and editable Mazak averages. The user confirmed
+profile management first; scheduling suggestions remain the next milestone.
+
+Confirmed modes: dishwasher Eco and possibly Heavy; washing machine whites 60 C,
+darks 40 C, darks 30 C and coloured 40 C. Mazak uses provisional flat average loads:
+Program 2,500 W, Light 3,500 W, Production 7,000 W, to be tuned later. Detailed Mazak
+cycle learning is not requested. Capture uses an explicitly armed program and a
+configurable idle timeout, followed by review. Installation sensor identities and
+calibration, load variants and any future multi-cycle aggregation remain unresolved.
+The maintained architecture records these confirmed requirements and open decisions.
 
 Preserve the earlier appliance-scheduling requirements for a later release:
 
@@ -140,9 +155,10 @@ The user also defers explicitly planned Mazak operation and expects it can be ad
 
 For the initial release, its electricity use remains part of uncontrolled household demand. This deferral concerns planning its operation, not permission to control the machine.
 
-This entry defers scheduling suggestions for these appliances and planned Mazak operation. Automatic recognition of already-running appliances was subsequently deferred separately as ARCH-006.
-
-No implementation is authorized by this backlog entry.
+The original deferral of scheduling suggestions and planned Mazak operation is now
+superseded by the explicit V4.5 authorization above. Automatic recognition of
+already-running appliances remains separately deferred as ARCH-006. This selection
+does not authorize live access, operation or deployment.
 
 ## ARCH-006 — Automatic recognition of running appliances
 

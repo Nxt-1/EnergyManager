@@ -1,5 +1,5 @@
 <header><div><span class="brand">◉</span> <strong>EnergyManager</strong><span class="muted" id="app-version"> 4</span></div>
-<nav aria-label="Main navigation"><button id="overview" aria-selected="true">Overview</button><button id="planning" aria-selected="false">Planning</button><button id="ev" aria-selected="false">EV</button><button id="settings" aria-selected="false">Settings</button></nav>
+<nav aria-label="Main navigation"><button id="overview" aria-selected="true">Overview</button><button id="planning" aria-selected="false">Planning</button><button id="ev" aria-selected="false">EV</button><button id="profiles" aria-selected="false">Appliances</button><button id="settings" aria-selected="false">Settings</button></nav>
 <div id="connection" role="status">Connecting…</div></header>
 <main><section id="connection-error" class="connection-error" role="alert" hidden><span id="connection-error-message"></span><button id="copy-connection-error" type="button">Copy error</button><textarea id="connection-error-copy" aria-label="Error text to copy" readonly hidden></textarea></section><p id="charger-status" class="status-line" role="status" hidden></p><section id="ev-fault-banner" class="notice ev-fault-banner" role="alert" hidden></section>
 <section id="planning-activity" class="planning-activity" role="status" hidden><span class="planning-symbol" aria-hidden="true"></span><strong data-planning-label></strong><div class="planning-track" role="progressbar" aria-label="Planning activity"><i></i></div><span data-planning-time></span></section><div id="dashboard">
@@ -20,7 +20,7 @@
 </aside></div>
 <article class="card"><details id="sessions-detail"><summary>Session details and expected pauses</summary><div id="sessions"></div></details></article>
 <article class="card"><details id="diagnostics"><summary>Decision history & technical evidence</summary><div id="evidence"></div><button id="history">Load decisions</button> <button data-fault-history="true">EV fault history</button><div id="history-list"></div></details></article>
-</div><section id="ev-panel" hidden aria-label="EV schedule"></section><section id="settings-panel" hidden aria-label="EnergyManager settings"></section>
+</div><section id="ev-panel" hidden aria-label="EV schedule"></section><section id="profiles-panel" hidden aria-label="Appliance power profiles"></section><section id="settings-panel" hidden aria-label="EnergyManager settings"></section>
 <section id="native-setup" class="card" hidden><h2>Native Home Assistant dashboard</h2>
 <p>Install the small dashboard loader once. Future layout and card updates come from the installed add-on when you reload Home Assistant.</p>
 <p><a href="./ha-card.js" download="energymanager-card.js">Download dashboard loader</a> · Save it in HA's www folder and register /local/energymanager-card.js as a JavaScript module resource.</p>

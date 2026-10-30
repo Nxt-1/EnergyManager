@@ -1732,3 +1732,78 @@ allowance includes overhead and replans; this is an estimate, not installation g
 Use backups and review actual disk/event rates before unattended commissioning.
 
 No usage-limit interruption, reset credit, paid API switch or recurring automation occurred.
+
+
+## V4.5 / ARCH-005 first milestone — local, 25 October 2026
+
+Implemented on codex/v4.5-implementation, based on released 4.3.8; not published or
+installed. The scheduled start ran at 23:30 Europe/Brussels, and its one-time automation
+was paused. No actual installation measurements, databases, hardware or phone access.
+
+- Final full Python suite: 266 passed in 42.98 s. Twenty-one new deterministic profile
+  cases cover explicit arming, quiet-phase activity resetting idle completion, invalid
+  reads/gaps, integration and trim boundaries, review/revision guards, original-sample
+  retention/reselection, restart while recording or armed, capture limit, source mapping,
+  demo isolation, API origin headers and a real HTTP read from a local fake HA endpoint.
+- Frontend: 42 Node tests pass, including new profile-graph gap/peak/trim-selection
+  checks and the native Appliances tab. Ruff, mypy (36 modules) and JavaScript syntax
+  checks pass. No change to optimization policy or temporal resolution.
+- Existing full-horizon configured synthetic E2E: accepted 2,018 intervals in 32.070 s,
+  maximum measured control tick 3.930 ms, four fake-only service calls. See offline-e2e.json.
+  This is synthetic integration evidence, not a measurement of active appliance capture
+  overhead or installation performance.
+- Actual browser checks on standalone and native HA-contract preview: sensor discovery;
+  drafts retained across polling; editable Mazak save; graph/trim preview; rejection of
+  missing-data selection; explicit save and previous-cycle retention; native arm,
+  backend idle observation, discard/reload; light/dark contrast and clean browser logs.
+  The native harness simulates HA built-in cards/Supervisor messages. No live HA frontend
+  or mobile viewport was commissioned. The shown recordings are explicitly SYNTHETIC.
+- Local wheel and sdist build successfully; all 57 runtime source/assets match current
+  worktree bytes. These retain the base 4.3.8 metadata for local verification and must
+  not be distributed as a release; V4.5 identity/publication is not prepared yet.
+
+Run profile tests with an explicit ignored writable --basetemp under artifacts/ when
+reusing the original checkout's interpreter. The initial test attempts failed before
+fixtures ran because of temporary-directory access/missing-parent setup; reruns passed.
+Separate preview ports 8105/8106 avoid another chat's existing 8102 process. Screenshot:
+`C:/Users/Arne/.codex/visualizations/2026/10/25/01a174ba-43a6-7680-9dff-a5828471be00/v45-native-profile.png`.
+
+Remaining: installation power-sensor IDs/update cadence and threshold/timeout calibration;
+representative load variants and any aggregation policy; later scheduling, background
+separation and Mazak timing/permissions. No live collection or deployment was performed.
+
+
+## 4.5.0 appliance profiles integrated with4.4.17 — 30 October2026
+
+The confirmed profile-management milestone is reconciled onto b2aee28(4.4.17),
+preserving current routing, source/continuity planning, restart recovery, dashboard
+controls and all existing tests. The original25Oct work is retained in a local Git
+stash. No actual HA/database/provider/credential/hardware/phone access or deployment.
+
+- Full merged Python suite:621 passed187.85s. Profile cases:23, including additive
+  database upgrade preserving household state, restart/gap/trim/idle behavior and
+  transactional rollback of failed save/selection, with matching in-memory state.
+- Frontend:69 tests pass, retaining all current graph/EV/routing/recovery cases and
+  adding profile graph/selection and draft-revision coverage. Ruff/mypy45 modules,
+  every packaged JavaScript syntax check and CLI4.5.0 pass.
+- Configured local fake E2E:25.589s,2019 intervals, max control2.913ms, four fake calls.
+  Includes the current manual-cancellation/process replacement and recovery checks.
+- Routed local fake E2E:70.858s,2023 intervals, max control5.212ms, four fake calls,
+  two calendar imports and six fake Google route requests. Both reports passed;
+  docs/offline-e2e.json contains the current routed run, the configured run is retained
+  privately as artifacts/v450-configured-e2e.json. Timing is synthetic integration
+  evidence, not an installation or active-recorder performance benchmark.
+- Browser standalone and native contract harness: Appliances tab/source discovery,
+  graph/gap rejection, reviewed trim/save, earlier-cycle retention, sequential profile
+  and Mazak saves without false conflicts or lost drafts; current Overview/monthly
+  peak/graph controls and EV status/calendar load. No browser errors/warnings.
+  Native preview simulates HA built-ins; actual installation/mobile remains unverified.
+- Wheel/sdist4.5.0 build;68 runtime source/assets/defaults match current source bytes.
+  Isolated wheel imports/version/appliance asset pass. Database upgrade adds tables
+  and mode-specific keys without changing existing household state/configuration.
+
+No planner/solver policy, live-control behavior or forecast background subtraction is
+changed. Sensor identities/update cadence and machine thresholds/timeouts need actual
+installation configuration. Scheduling suggestions remain a subsequent milestone.
+Release publication is authorized; exact-commit CI/image results are recorded in the
+ignored local release state and final reply, without an extra verification-only commit.

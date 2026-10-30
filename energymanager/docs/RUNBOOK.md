@@ -1,5 +1,37 @@
 # Run, configure, review and roll back
 
+## Appliance profiles (4.5.0)
+
+Open Appliances, load HA power sensors and map a dedicated W/kW sensor per machine.
+Set the idle/start threshold above that machine's standby demand, and choose an idle
+timeout longer than its quiet wash/drying phases. Defaults 10 W / 15 min are provisional.
+Select a program, optionally describe load/options and choose Record next cycle. Wait
+until the recorder reports waiting for start, then run the machine normally. Recording
+continues with the dashboard closed. The timer finishes after continuous idle; renewed
+activity and missing reads reset it. Finish now is available for explicit completion.
+Review the graph, trim start/end in seconds, preview the statistics and confirm that
+the selected range is a complete cycle before Save and use profile. Missing coverage
+or interrupted recordings cannot be selected. Keep several runs to compare variability;
+select a previous saved cycle to replace a poor representative without deleting it.
+Mazak averages are editable on the same page. This milestone does not schedule/start
+machines or subtract them from household forecasts. No installation collection was run.
+
+Use clearly labelled synthetic data for offline UI verification. From energymanager/,
+set PYTHONPATH to this worktree's src when reusing another checkout's interpreter:
+`python tools/offline_e2e.py --serve --profiles-fixture --port 8105`, then
+`python tools/native_dashboard_preview.py --backend http://127.0.0.1:8105/ --port 8106`.
+The fixtures expose only fake HA and local endpoints, with one reviewed synthetic cycle
+and one gapped cycle for review. Keep this separate from installation configuration/data.
+
+
+Update the add-on and reload Home Assistant. The existing native dashboard loader adds
+the Appliances tab; no dashboard YAML copying or sensor assumptions are required.
+The database migration is additive. Existing settings/goals/accepted-plan/control state
+are retained, and the new optional sensor mappings start empty. Configure them when
+ready to collect a real cycle. Back up configuration/database before updating as usual;
+an older4.4.x version leaves the additional tables/profile-state keys unused.
+
+
 ## Charging continuity (4.4.17)
 
 No settings migration is needed. Fixed-profile `packed_relaxed`/`consolidated_relaxed`
@@ -264,6 +296,8 @@ measured as a15-minute average. It is not an instantaneous or forecast peak or a
 approval limit. An unavailable source shows no line; a real zero remains valid.
 Update the add-on and reload HA; no new configuration is required. Real phone gesture
 negotiation remains unverified; local touch checks use labelled synthetic pointers.
+
+
 
 Release4.3.8 lets you drag the power or SoC graph left/right with the primary mouse
 button on Overview. Both graphs and session bars move together; release to load older

@@ -851,3 +851,15 @@ em-entity-picker > input { padding-right:36px; }
 .route-requests .route-item {border-top:1px solid var(--border,#dce2ea);padding:12px 0}
 .route-requests .route-item p {margin:6px 0;overflow-wrap:anywhere}
 .route-requests .route-item button {margin:4px 6px 0 0}
+
+.profile-machines { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:16px; }
+.profile-form { display:flex; flex-wrap:wrap; align-items:end; gap:12px; margin:16px 0; }
+.profile-form label { flex:1 1 180px; min-width:0; }
+.profile-form input,.profile-form select { width:100%; min-width:0; box-sizing:border-box; }
+.profile-form .profile-check { display:flex; align-items:center; gap:10px; flex-basis:100%; }
+.profile-check input { width:auto; }
+.profile-recording { padding:12px 0; border-bottom:1px solid var(--line); overflow-wrap:anywhere; }
+#profiles-panel svg { width:100%; height:auto; color:var(--text); font:12px sans-serif; }
+#profiles-panel .actions { flex-wrap:wrap; }
+#profiles-panel [data-profile-summary] { flex-basis:100%; }
+#profiles-panel svg text { fill:currentColor; }

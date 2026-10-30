@@ -257,3 +257,16 @@ used at read time and reset with their reported values. An unchanged zero can sp
 quarters without requiring a new entity timestamp. Weather forecast expiry is unchanged.
 A working HA request proves HA is reachable; correct physical-device outage detection
 still depends on the underlying integrations and must be checked during commissioning.
+
+
+## Appliance-profile settings (4.5.0)
+
+The Appliances page owns dedicated washing-machine/dishwasher power mappings, idle/start
+thresholds, idle completion timeouts and provisional Mazak average loads. These persist
+in the existing database, isolated by demo/configured mode, and apply to the next armed
+recording without restart. They do not modify installation JSON, enable hardware or
+change EV/ESS settings. An active capture snapshots its source/settings and prevents
+remapping until finished/discarded. Defaults 10 W / 15 idle minutes are provisional;
+choose a timeout longer than quiet phases. HA W/kW sensor discovery is read-only;
+unknown/unavailable values produce gaps, never zero. Actual sensor IDs remain to be
+provided/configured. Library revision checks reject concurrent overwrites.

@@ -38,6 +38,12 @@ class Store:
             CREATE INDEX IF NOT EXISTS measurement_time ON events
                 (julianday(json_extract(body,'$.at')), sequence) WHERE kind='measurement';
             CREATE INDEX IF NOT EXISTS event_time ON events (julianday(at), sequence);
+            CREATE TABLE IF NOT EXISTS appliance_recordings (
+                id TEXT PRIMARY KEY, mode TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS appliance_recording_mode ON appliance_recordings(mode,status);
+            CREATE TABLE IF NOT EXISTS appliance_samples (
+                recording_id TEXT NOT NULL, at REAL NOT NULL, power_w REAL, error TEXT,
+                PRIMARY KEY(recording_id,at));
             CREATE TABLE IF NOT EXISTS ev_incidents (
                 id TEXT PRIMARY KEY, detected_at TEXT NOT NULL, body TEXT NOT NULL);
         """)

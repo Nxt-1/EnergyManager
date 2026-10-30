@@ -224,6 +224,49 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         application.ev_faults.acknowledge(request.match_info["id"])
         return web.json_response({"acknowledged": True})
 
+    async def profiles(request: web.Request) -> web.Response:
+        library = application.appliance_profiles
+        action = request.match_info.get("action")
+        if request.method == "GET":
+            result = library.library()
+        else:
+            body = await request.json()
+            if not isinstance(body, dict):
+                raise ValueError("A JSON object is required")
+            if action == "configure":
+                result = library.configure(body)
+            elif action == "arm":
+                result = library.arm(body)
+            else:
+                raise web.HTTPNotFound()
+        return web.json_response(result, headers={"Cache-Control": "no-store"})
+
+    async def recording(request: web.Request) -> web.Response:
+        library = application.appliance_profiles
+        identity = request.match_info["id"]
+        if request.method == "GET":
+            result = library.detail(identity)
+        else:
+            body = await request.json()
+            if not isinstance(body, dict):
+                raise ValueError("A JSON object is required")
+            action = request.match_info["action"]
+            if action == "finish":
+                result = library.finish(identity)
+            elif action == "preview":
+                result = library.preview(identity, body)
+            elif action == "accept":
+                result = {**library.accept(identity, body), "library_revision": library.settings["revision"]}
+            elif action == "select":
+                library.select(identity, body)
+                result = {"selected": True, "library_revision": library.settings["revision"]}
+            elif action == "discard":
+                library.discard(identity)
+                result = {"discarded": True}
+            else:
+                raise web.HTTPNotFound()
+        return web.json_response(result, headers={"Cache-Control": "no-store"})
+
     async def asset(request: web.Request) -> web.Response:
         if "version" in request.match_info and request.match_info["version"] != __version__:
             raise web.HTTPConflict(text="EnergyManager was updated. Reload the dashboard.")
@@ -232,7 +275,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
                         "datetime-picker.js", "ev-schedule.js", "style.css", "ha-card.js",
                         "application-view.js", "view.html", "native-dashboard.js", "native-dashboard.css",
                         "native-live.js", "graph-history.js", "graph-cursor.js", "dashboard-client.js", "planning-activity.js",
-                        "text-selection.js", "ev-status.js", "session-details.js"):
+                        "text-selection.js", "ev-status.js", "session-details.js", "appliance-profiles.js"):
             raise web.HTTPNotFound()
         content_type = {"html": "text/html", "js": "text/javascript", "css": "text/css"}[
             name.rsplit(".", 1)[1]
@@ -251,6 +294,10 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
 
     app.add_routes(
         [
+            web.get("/api/profiles", profiles),
+            web.post("/api/profiles/{action}", profiles),
+            web.get("/api/profile-recordings/{id}", recording),
+            web.post("/api/profile-recordings/{id}/{action}", recording),
             web.get("/api/state", state),
             web.get("/api/daily-energy", energy),
             web.get("/api/history", history),

@@ -1,3 +1,21 @@
+## 4.5.0 — Appliance power-profile recording
+
+- Add Appliances to the standalone and managed native HA dashboards. Record dishwasher
+  Eco/optional Heavy and washing-machine whites 60°C, darks 40°C/30°C and coloured 40°C.
+- Configure each machine's dedicated W/kW sensor, idle/start threshold and idle timeout.
+  Arm the next cycle; the backend records independently of open dashboards and finishes
+  after continuous idle. Renewed activity and missing readings reset the idle timer.
+- Review measured graphs and gaps, trim the cycle, preview duration/energy/mean/peak,
+  and explicitly save/select a complete representative profile. Retain original samples
+  and earlier cycles; protect against interrupted recording and concurrent edits.
+- Provide editable provisional Mazak average loads: Program 2500 W, Light 3500 W,
+  Production 7000 W. No learned Mazak cycle or duration is assumed.
+- Upgrade the existing SQLite store additively and keep demo/configured libraries
+  separate. Failed saves roll back profile selection; local saves preserve other drafts.
+- Integrate with the 4.4.17 planner, source allocation, routing, restart recovery,
+  current dashboard/graph controls and release workflows. Profiles do not yet schedule
+  appliances, start machines, subtract background demand or change EV/ESS authority.
+
 ## 4.4.17 — Joint source allocation during charging refinement
 
 - Let sources and ESS dispatch redistribute across the whole horizon while smoothing

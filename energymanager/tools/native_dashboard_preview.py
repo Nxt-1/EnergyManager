@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import argparse
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -10,12 +11,13 @@ from pathlib import Path
 from aiohttp import ClientSession, web
 
 
-async def preview() -> None:
+async def preview(backend: str = "http://127.0.0.1:8102/", port: int = 8103) -> None:
     fail_requests = False
     ev_scenario = "sampled"
     ev_scenario_at = datetime.now(UTC)
     async with ClientSession() as session:
-        backend = "http://127.0.0.1:8102/"
+        from energymanager.adapters import checked_url
+        backend = checked_url(backend) + "/"
         async with session.get(backend + "api/state") as response:
             state = await response.json()
         if "SYNTHETIC" not in state["provenance"]:
@@ -157,8 +159,8 @@ async def preview() -> None:
         app.router.add_route("*", "/api/hassio_ingress/synthetic-token/{path:.*}", proxy)
         runner = web.AppRunner(app)
         await runner.setup()
-        await web.TCPSite(runner, "127.0.0.1", 8103).start()
-        print("SYNTHETIC HA-contract preview: http://127.0.0.1:8103/native-preview", flush=True)
+        await web.TCPSite(runner, "127.0.0.1", port).start()
+        print(f"SYNTHETIC HA-contract preview: http://127.0.0.1:{port}/native-preview", flush=True)
         try:
             await asyncio.Event().wait()
         finally:
@@ -166,4 +168,8 @@ async def preview() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(preview())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--backend", default="http://127.0.0.1:8102/")
+    parser.add_argument("--port", type=int, default=8103)
+    arguments = parser.parse_args()
+    asyncio.run(preview(arguments.backend, arguments.port))

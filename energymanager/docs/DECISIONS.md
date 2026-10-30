@@ -703,3 +703,33 @@ time inside solar refinement so its economic candidate is not left fragmented me
 because the full search timed out. Preserve selected quantity/future supply, one carried
 economic/cash allowance and existing necessary pauses/live control. The supplied frozen
 decision is private offline evidence; public tests use deterministic synthetic cases.
+
+## 25 October 2026 — V4.5 / ARCH-005 profile preparation
+
+The user selected ARCH-005 for V4.5, requested a separate worktree/branch and authorized
+code writing from 23:30 Europe/Brussels tonight, after discussion of required decisions.
+Initial focus: capture and store per-machine/per-program power profiles. Dishwasher:
+Eco and possibly Heavy. Washing machine: whites 60 C, darks 40 C, darks 30 C, coloured
+40 C. Mazak is intentionally modelled with provisional flat averages: Program 2,500 W,
+Light 3,500 W, Production 7,000 W, with later fine-tuning. Detailed Mazak cycle learning
+is not requested. Recording workflow, available entities, profile variants/aggregation,
+Mazak timing and the first scheduling milestone remain unresolved. No installation
+facts or live access/operation permission is inferred. No application code before 23:30.
+
+The user subsequently confirmed: arm the next cycle and review before saving; implement
+profile management before scheduling suggestions; use a configurable idle timeout for
+automatic completion. The first local implementation retains separate recordings and
+explicitly selects a reviewed representative cycle per program, with configurable
+power sources/thresholds/timeouts and editable Mazak averages. Default thresholds/timeouts
+are provisional UI defaults, not installation facts. No live collection is authorized.
+
+
+## 30 October2026 — Integrate and publish appliance-profile management
+
+The user explicitly requested making the V4.5 build compatible with the current system,
+merging it and pushing main. Release4.5.0 integrates the confirmed profile-management
+milestone onto4.4.17, preserving routing, current planner/source/continuity policies,
+recovery and dashboard controls. Appliance scheduling remains a subsequent milestone;
+this authorization does not expand into ARCH-006 or live installation operation.
+Preserve the main checkout's uncommitted deferred-work notes. Run existing release
+checks and publish via the existing workflow; do not deploy to the live installation.

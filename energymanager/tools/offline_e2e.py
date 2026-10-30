@@ -46,7 +46,8 @@ class VerificationResolver(AbstractResolver):
 
 async def run(*, serve: bool = False, preview_fault: str | None = None,
               history_fixture: bool = False, calendar_fixture: bool = False, routing_fixture: bool = False,
-              ev_fault_fixture: bool = False, planner_failure_fixture: bool = False) -> None:
+              ev_fault_fixture: bool = False, planner_failure_fixture: bool = False,
+              profiles_fixture: bool = False, port: int = 8102) -> None:
     issued = datetime.now(UTC)
     calls = []
     weather_queries = []
@@ -69,6 +70,8 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         "heartbeat": (0, "s"), "charge_allowed": ("on", None),
         "vehicle_charging": ("IN_PROGRESS", None),
     }
+    if profiles_fixture:
+        values.update(synthetic_dishwasher=(0, "W"), synthetic_washing_machine=(0, "W"))
     if calendar_fixture:
         values["ev_soc"] = (90, "%")  # Enough measured energy for both provisional trips and daily readiness.
 
@@ -98,8 +101,11 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
 
     async def states(request: web.Request) -> web.Response:
         assert request.headers.get("Authorization") == "Bearer synthetic-supervisor-credential"
-        return web.json_response([state_row(entity) for group in ("measurements", "actuators", "ev_diagnostics")
-                                  for entity in config[group].values() if entity])
+        entities = [entity for group in ("measurements", "actuators", "ev_diagnostics")
+                    for entity in config[group].values() if entity]
+        if profiles_fixture:
+            entities.extend(["sensor.synthetic_dishwasher", "sensor.synthetic_washing_machine"])
+        return web.json_response([state_row(entity) for entity in entities])
 
     async def services(request: web.Request) -> web.Response:
         return web.json_response([{"domain": "notify", "services": {
@@ -227,7 +233,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
             if routing_fixture:
                 application.journeys = Journeys(application, router=RefereeJourneyRouter(
                     GoogleRoutesClient("synthetic-routing-key", allow_requests=True)))
-            async with TestClient(TestServer(server_app, port=8102 if serve else None)) as client:
+            async with TestClient(TestServer(server_app, port=port if serve else None)) as client:
                 # Cancel an actual full-horizon HiGHS solve through the public button API.
                 async with asyncio.timeout(30):
                     while (application.planning_activity.get("state") != "calculating"
@@ -411,6 +417,25 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                         await application.reject_plan(rejected, rejected["publication_errors"])
                         await application.reject_plan(rejected, rejected["publication_errors"])
                         application.status, application.error = "publication_rejected", rejected["publication_errors"][0]
+                    if profiles_fixture:
+                        profiles = application.appliance_profiles
+                        for machine in ("dishwasher", "washing_machine"):
+                            profiles.configure({"revision": profiles.settings["revision"], "machine": machine,
+                                "entity_id": f"sensor.synthetic_{machine}", "start_threshold_w": 10,
+                                "idle_timeout_minutes": 15})
+                        beginning = application.now() - timedelta(hours=3)
+                        for cycle in range(2):
+                            with patch.object(application, "now", return_value=beginning):
+                                recording = profiles.arm({"machine": "dishwasher", "program": "eco",
+                                    "notes": f"SYNTHETIC reviewed example {cycle + 1}; not installation data"})
+                            for seconds in range(0, 5400, 5):
+                                power = 0 if seconds == 0 or seconds >= 4200 else (
+                                    2100 if seconds < 600 or 2600 < seconds < 3000 else 80)
+                                if cycle == 1 and seconds == 1200:
+                                    power = None
+                                profiles.ingest(recording["id"], beginning + timedelta(seconds=seconds), power)
+                            if cycle == 0:
+                                profiles.accept(recording["id"], {"revision": profiles.settings["revision"], "reviewed": True})
                     if ev_fault_fixture:
                         from energymanager.control import Command
 
@@ -429,13 +454,16 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                                                       detected - timedelta(seconds=90))
                         application.ev_faults.unresolved("SYNTHETIC verification incident; no real device fault")
                     active_fault = preview_fault
-                    print("SYNTHETIC forecast verification preview: http://127.0.0.1:8102/", flush=True)
+                    print(f"SYNTHETIC forecast verification preview: http://127.0.0.1:{port}/", flush=True)
                     await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=8102, help="Local synthetic preview port")
     parser.add_argument("--serve", action="store_true", help="Keep synthetic verification UI on localhost:8102")
+    parser.add_argument("--profiles-fixture", action="store_true",
+                        help="Seed labelled synthetic appliance recordings and fake power sensors; requires --serve")
     parser.add_argument("--history-fixture", action="store_true",
                         help="Seed explicitly SYNTHETIC old graph measurements, including gaps")
     parser.add_argument("--calendar-fixture", action="store_true",
@@ -449,6 +477,8 @@ if __name__ == "__main__":
     parser.add_argument("--input-fault", choices=("quarter", "stale", "unavailable", "read_failure", "charger"),
                         help="Inject old metadata, unavailability or HA read failure after local verification")
     arguments = parser.parse_args()
+    if arguments.profiles_fixture and not arguments.serve:
+        parser.error("--profiles-fixture requires --serve")
     if arguments.input_fault and not arguments.serve:
         parser.error("--input-fault requires --serve")
     if arguments.ev_fault_fixture and not arguments.serve:
@@ -460,4 +490,5 @@ if __name__ == "__main__":
                     calendar_fixture=arguments.calendar_fixture or arguments.routing_fixture,
                     routing_fixture=arguments.routing_fixture,
                     ev_fault_fixture=arguments.ev_fault_fixture,
-                    planner_failure_fixture=arguments.planner_failure_fixture))
+                    planner_failure_fixture=arguments.planner_failure_fixture,
+                    profiles_fixture=arguments.profiles_fixture, port=arguments.port))

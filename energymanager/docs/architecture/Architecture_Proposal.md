@@ -5,7 +5,7 @@ this same file as requirements and implementation evolve across releases and cha
 do not create a new handoff document for each version. The filename is retained from
 the original architecture proposal, but its content now describes the current system.
 The active application is `energymanager/`; its version is recorded in config.yaml and
-the changelog. Last reviewed: 28 October 2026.
+the changelog. Last reviewed: 30 October 2026.
 Accepted changes awaiting implementation are explicitly labelled below; they must not
 be mistaken for behavior already shipped in the application.
 
@@ -38,11 +38,81 @@ loads and production; the schedule is not a rigid instruction to reproduce forec
 Ordinary execution differences do not make its original calculation invalid. See the
 snapshot-planning contract below, implemented in4.4.4.
 
-DHW, washing-machine/dishwasher scheduling, planned Mazak operation, appliance recognition,
-learned driving, advanced forecasting and a standing ESS reserve for unforeseen peaks
-remain deferred. Their uncontrolled consumption still belongs in the household forecast.
-Resources and requirements should remain extensible without implementing those features
-prematurely. ARCH-009 is implemented as a dedicated visual EV schedule page.
+Release4.5.0 implements the first profile-management milestone of ARCH-005, integrated
+with the current4.4.17 system. Scheduling suggestions are a subsequent milestone. These loads remain
+in the existing household forecast until explicit scheduling/background separation is
+implemented and verified. DHW, general appliance recognition (ARCH-006), learned driving,
+advanced forecasting and a standing ESS reserve for unforeseen peaks remain deferred.
+ARCH-009 is implemented as a dedicated visual EV schedule page.
+
+### Appliance profiles (ARCH-005;4.5.0)
+
+The standalone and managed native HA dashboards have an Appliances page. Supported
+program identities are dishwasher Eco and optional Heavy, and washing-machine whites
+60 C, darks 40 C, darks 30 C and coloured 40 C. Heavy remains optional; an empty profile
+is not fabricated. Mazak has editable provisional flat averages: Program 2,500 W,
+Light 3,500 W, Production 7,000 W. There is no learned Mazak cycle or assumed duration.
+
+The user confirmed arming the next cycle, reviewing before saving, configurable idle
+completion and profile management before scheduling suggestions. Each machine maps to
+its own dedicated HA power sensor (W/kW) on the Appliances page. No entity is assumed.
+HA power-entity discovery uses the existing authenticated, read-only settings discovery.
+Sensor mapping, threshold, idle timeout and Mazak averages persist immediately in the
+existing SQLite store, separately from restart-required installation JSON. Saving them
+cannot operate a machine or change EV/ESS authority. Global profile-library revisions
+reject stale edits/selections from another view. Demo/configured libraries are isolated;
+demo cannot collect live profiles.
+
+Record next cycle snapshots the selected machine, program, sensor, settings and optional
+load/options notes. Only explicitly armed machines are polled. The backend records at
+five-second polling cadence after each read, independently of browser lifetime and the
+planner. It first observes idle at/below the threshold, then starts when power rises
+above it. The provisional defaults are 10 W and 15 idle minutes, configurable per
+machine (1–120 idle minutes); actual standby levels and quiet phases need installation
+validation. Renewed activity resets the idle timer. Failed/invalid reads and polling
+gaps over 15 seconds cannot count as idle or continuous coverage. HA's available
+unchanged readings remain valid; report timestamps are not new device-freshness gates.
+The sensor's own resolution/update cadence limits recorded detail; no sub-sample peaks
+are claimed. Finish now is an explicit alternative; there is no automatic machine start.
+
+Idle completion retains the full tail for review and suggests trimming at the beginning
+of the final idle period. Review shows the original power graph with gaps and the
+selected trim range, duration, measured energy, time-weighted mean and interval peak.
+Statistics use left-held measured power only across valid adjacent samples no more than
+15 seconds apart. Partial coverage is labelled and cannot be selected as a reusable
+profile. User confirmation establishes that the chosen range is a complete cycle;
+energy alone cannot establish completion. A 24-hour arm/capture cap bounds sessions.
+Service interruption keeps raw evidence for inspection but disallows selecting the
+interrupted run. An armed restart requires new idle evidence before detecting a start.
+
+The existing database adds indexed appliance_recordings and appliance_samples tables.
+UTC timestamps/raw W, source, program, settings, quality failures and load notes survive
+restart. Review/save stores immutable selected bounds/statistics on that recording;
+selecting a replacement retains earlier cycles. One explicitly selected recorded cycle
+represents each program for now; there is no automatic averaging, timing alignment or
+invented standard duration. Selection and saving its recording are transactional. The
+library lists the latest 100 nondiscarded recordings and separately returns selected
+profiles even if older; raw evidence is not purged. Discard hides unfinished/unselected
+captures without deleting evidence. Saved cycles can be inspected and reselected.
+
+The existing same-origin/ingress boundary protects GET /api/profiles,
+POST /api/profiles/{configure,arm}, GET /api/profile-recordings/{id} and recording
+POST actions finish/preview/accept/select/discard. New frontend assets use the existing
+versioned bundle. Unexpected recorder termination is exposed in profile status.
+Save/select responses return the resulting library revision. The initiating view advances
+only forms matching the successful previous revision; it retains other drafts and never
+uses an ordinary poll to bypass another view's revision conflict. Failed SQLite writes
+cannot update in-memory settings or leave selection ahead of persisted recording evidence.
+
+The original ARCH-005 scheduling direction remains: earliest start/latest completion,
+recommendation plus alternatives, manual appliance start/programming, and fixed
+user-confirmed commitments. Before that milestone, resolve removal from background
+learning, existing mixed history, unplanned runs, load variants/representative profiles,
+peak permissions and Mazak timing/interruptibility/mode transitions. No such scheduling,
+background subtraction, general appliance recognition or hardware control is added by
+this milestone. Installation sensor identities, program status/energy entities and
+appropriate threshold/timeout values are still unverified. No live HA/database access,
+measurements, hardware operation, notifications or deployment occurred.
 
 ## Confirmed installation and GUI requirements
 
