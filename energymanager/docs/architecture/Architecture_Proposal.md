@@ -123,7 +123,18 @@ handles shade their selected interior, synchronize with the numeric seconds on e
 move, support keyboard arrows and cannot cross. Text entry must be valid before updating
 the graph/preview; changing bounds clears the complete-cycle confirmation. Show selection
 and Full recording restore useful windows. Preview responses cannot overwrite newer
-bounds or another recording. Saved evidence remains immutable.
+bounds or another recording. From4.5.4 saved recordings also expose editable trim fields
+and handles.44px labelled HTML Start/End grips sit above the inspection tooltip;
+SVG boundary lines retain wide drag targets and inspection overlays cannot intercept them.
+POST /api/profile-recordings/{id}/revise validates explicit review, complete coverage
+and library revision, then creates a new saved recording with copied original samples,
+revised bounds/statistics, capture_id and trimmed_from provenance. This is one SQLite
+transaction with membership replacement; a failure cannot leave copied evidence or
+selection ahead of committed data. Every previous recording/statistic remains immutable.
+At most one trim revision per physical capture contributes to an average. Selecting an
+older version restores it in place of the current one, rather than duplicating the
+capture's weight. Success opens the new version at its returned library revision so a
+second edit cannot reuse the previous form's revision. No new machine run is started.
 
 The original ARCH-005 scheduling direction remains: earliest start/latest completion,
 recommendation plus alternatives, manual appliance start/programming, and fixed

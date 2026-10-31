@@ -48,16 +48,19 @@ export function profileGraph(points, maximumGap = 15, selection = null, range = 
   }
   const shade = selection ? `<rect data-profile-shade x="${x(selection.start_seconds)}" y="${top}"
     width="${x(selection.end_seconds)-x(selection.start_seconds)}" height="${height-top-bottom}" fill="#007ac2" opacity="0.14"/>` : '';
-  const handles = selection ? ['start','end'].map(boundary => `<g data-trim-handle="${boundary}"
-    transform="translate(${x(selection[boundary+'_seconds'])},0)"
-    ${editable ? 'role="slider" tabindex="0"' : 'aria-hidden="true"'}
+  const boundaries = ['start','end'];
+  const handles = selection ? boundaries.map(boundary => `<g data-trim-boundary="${boundary}"
+    transform="translate(${x(selection[boundary+'_seconds'])},0)" ${editable ? 'data-trim-editable' : ''} aria-hidden="true">
+    <line x1="0" x2="0" y1="${top}" y2="${height-bottom}"/>
+    ${editable ? `<line class="trim-hit" x1="0" x2="0" y1="${top}" y2="${height-bottom}"/>` : ''}
+    </g>`).join('') : '';
+  const grips = selection && editable ? boundaries.map(boundary => `<button type="button"
+    class="profile-trim-handle" data-trim-handle="${boundary}" role="slider"
     aria-label="${boundary === 'start' ? 'Selection start' : 'Selection end'}"
     aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="${duration}"
     aria-valuenow="${selection[boundary+'_seconds']}">
-    <line x1="0" x2="0" y1="${top}" y2="${height-bottom}"/>
-    ${editable ? `<line class="trim-hit" x1="0" x2="0" y1="${top}" y2="${height-bottom}"/>
-    <rect class="trim-grip" x="-6" y="${boundary === 'start' ? 40 : 115}" width="12" height="30" rx="4"/>` : ''}
-    </g>`).join('') : '';
+    <span aria-hidden="true">${boundary === 'start' ? 'Start' : 'End'}</span><span aria-hidden="true">↔</span>
+    </button>`).join('') : '';
   const ticks = Array.from({length:5}, (_, index) => {
     const seconds = start + (end-start) * index / 4;
     const label = end-start < 120 ? seconds.toFixed(1) + ' s' : (seconds/60).toFixed(1) + ' min';
@@ -70,7 +73,7 @@ export function profileGraph(points, maximumGap = 15, selection = null, range = 
     <path d="${path}" fill="none" stroke="#007ac2" stroke-width="1.2"/></g>
     <path d="M${left},${top}V${height-bottom}H${width-right}" fill="none" stroke="currentColor" opacity="0.3"/>
     <text x="3" y="22">${Math.round(peak)} W</text>${ticks}
-    <g data-trim-overlay>${handles}</g><g class="cursor-overlay"></g></svg>`;
+    <g data-trim-overlay>${handles}</g><g class="cursor-overlay"></g></svg>${grips}`;
 }
 
 export class ProfileChart {
@@ -103,6 +106,9 @@ export class ProfileChart {
     for (const type of ['pointerup','pointercancel','lostpointercapture'])
       this.plot.addEventListener(type, event => this.endTrim(event), {capture:true,signal:localSignal});
     this.plot.addEventListener('keydown', event => this.keyTrim(event), {capture:true,signal:localSignal});
+    this.plot.addEventListener('wheel', event => {
+      if (this.drag) { event.preventDefault(); event.stopImmediatePropagation(); }
+    }, {capture:true,passive:false,signal:localSignal});
     root.addEventListener('click', event => {
       const action = event.target.closest('[data-chart-action]')?.dataset.chartAction;
       if (!action) return;
@@ -158,31 +164,55 @@ export class ProfileChart {
     shade?.setAttribute('x',x(this.selection.start_seconds));
     shade?.setAttribute('width',x(this.selection.end_seconds)-x(this.selection.start_seconds));
     for (const boundary of ['start','end']) {
+      const line = this.plot.querySelector('[data-trim-boundary="'+boundary+'"]');
       const handle = this.plot.querySelector('[data-trim-handle="'+boundary+'"]');
       const seconds = this.selection[boundary+'_seconds'], position = x(seconds);
-      handle.style.display = position < left || position > width-right ? 'none' : '';
-      handle.setAttribute('transform','translate('+position+',0)');
+      const outside = position < left-1e-6 || position > width-right+1e-6;
+      line.style.display = outside ? 'none' : '';
+      line.setAttribute('transform','translate('+position+',0)');
+      if (!handle) continue;
+      handle.style.display = outside ? 'none' : '';
+      handle.style.left = (position/width*100)+'%';
       handle.setAttribute('aria-valuenow',seconds);
       handle.setAttribute('aria-valuetext',seconds.toFixed(3)+' seconds');
       handle.setAttribute('aria-valuemin',boundary === 'start' ? 0 : this.selection.start_seconds+.001);
       handle.setAttribute('aria-valuemax',boundary === 'end' ? this.duration : this.selection.end_seconds-.001);
+      handle.title = 'Drag '+boundary+' · '+seconds.toFixed(3)+' seconds';
     }
   }
 
+  trimTarget(target) {
+    const element = target.closest('[data-trim-handle],[data-trim-boundary]');
+    return element?.dataset.trimHandle || element?.dataset.trimBoundary;
+  }
+
   beginTrim(event) {
-    const handle = event.target.closest('[data-trim-handle]');
-    if (!this.editable || !handle || event.button !== 0 || this.drag) return;
+    if (this.drag) { event.preventDefault(); event.stopImmediatePropagation(); return; }
+    const boundary = this.trimTarget(event.target);
+    if (!this.editable || !boundary || event.button !== 0) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     this.cursor.cancelNavigation();
-    this.drag = {boundary:handle.dataset.trimHandle,id:event.pointerId};
+    this.cursor.at = null;
+    this.cursor.pinned = false;
+    this.cursor.draw();
+    this.drag = {boundary,id:event.pointerId};
     this.plot.setPointerCapture(event.pointerId);
-    handle.focus({preventScroll:true});
+    this.plot.querySelector('[data-trim-handle="'+boundary+'"]').focus({preventScroll:true});
     this.moveTrim(event);
   }
 
   moveTrim(event) {
-    if (!this.drag || this.drag.id !== event.pointerId) return;
+    if (!this.drag) {
+      if (this.editable && this.trimTarget(event.target)) {
+        event.stopImmediatePropagation();
+        this.cursor.at = null;
+        this.cursor.pinned = false;
+        this.cursor.draw();
+      }
+      return;
+    }
+    if (this.drag.id !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const box = this.plot.querySelector('svg').getBoundingClientRect();
@@ -216,6 +246,9 @@ export class ProfileChart {
   }
 
   close() {
+    const id = this.drag?.id;
+    this.drag = null;
+    if (id !== undefined && this.plot.hasPointerCapture(id)) this.plot.releasePointerCapture(id);
     this.controller.abort();
     this.parentSignal.removeEventListener('abort',this.parentAbort);
   }

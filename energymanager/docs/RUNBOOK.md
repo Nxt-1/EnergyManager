@@ -1,5 +1,16 @@
 # Run, configure, review and roll back
 
+## Saved recording trims (4.5.4)
+
+Update the add-on and reload HA. Inspect / review works on saved recordings too.
+Drag the labelled Start/End grips, edit the seconds, or use a focused grip's arrow keys.
+The grips are44CSSpx square and remain above the power-inspection tooltip.
+Reconfirm the complete range and choose Save revised trim. The earlier recording and
+its samples remain available; the new version replaces its contribution to the average.
+Use Add to average on an earlier trim to restore it; only one trim per captured cycle
+can contribute. Saving/revising does not run the appliance again.
+
+
 ## Appliance graph review and averages (4.5.3)
 
 Update the add-on and reload HA. Inspect a recording: hover/tap or use arrow keys on the

@@ -1,5 +1,23 @@
 # EnergyManager 4 verification
 
+## 4.5.4 — Saved trim correction (31 October2026)
+
+652 Python tests pass148.33s;82frontend cases, Ruff/mypy47 and dashboard JS syntax pass.
+New regressions cover immutable raw samples/old summaries, one weight per physical
+capture through successive revisions/restoration, stale/unreviewed/invalid trim guards,
+sample-copy rollback, endpoint origin/security and returned revision. The exact saved
+UI state now has an editable revision form; labelled HTML sliders render above the SVG.
+
+Configured fake E2E25.519s/2019intervals,
+max control3.759ms/4fake calls.
+Native browser measured both grips at44x44CSSpx and dragged both saved bounds; two
+successive saves created revisions without increasing contributor count. Restoring the
+original returned the original mean/count2. Standalone saved trimming/keyboard passed;
+browser logs clean. Physical touch and the actual installation remain unverified.
+Wheel/sdist71 runtime files match; isolated4.5.4 imports/new API/assets pass.
+No live HA/database/hardware/provider/notification/deployment. Remote results only in
+ignored artifacts/v454-release-state.json and final reply.
+
 ## 4.5.3 — Appliance chart controls and multi-recording means (31 October2026)
 
 647 Python tests pass147.21s;80frontend cases, Ruff/mypy47 and every dashboard JS

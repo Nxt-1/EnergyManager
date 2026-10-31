@@ -90,13 +90,11 @@ class ApplianceProfiles:
             (self.mode, *parameters, limit))
         return [json.loads(row[0]) for row in rows]
 
-    def _save(self, recording: dict[str, Any], *, select: bool = False) -> None:
+    def _save(self, recording: dict[str, Any], *, select: bool = False, copy_samples_from: str | None = None) -> None:
         settings = None
         if select:
             key = f"{recording['machine']}/{recording['program']}"
-            members = self.members(key)
-            if recording["id"] not in members:
-                members.append(recording["id"])
+            members = self._include_recording(key, recording)
             settings = {**self.settings, "revision": self.settings["revision"] + 1,
                         "selected": {**self.settings["selected"], key: recording["id"]},
                         "members": {**self.settings.get("members", {}), key: members}}
@@ -108,6 +106,11 @@ class ApplianceProfiles:
                 "INSERT INTO appliance_recordings(id,mode,status,body) VALUES (?,?,?,?) "
                 "ON CONFLICT(id) DO UPDATE SET status=excluded.status,body=excluded.body",
                 (recording["id"], self.mode, recording["status"], json.dumps(recording, allow_nan=False)))
+            if copy_samples_from is not None:
+                self.store.connection.execute(
+                    "INSERT INTO appliance_samples(recording_id,at,power_w,error) "
+                    "SELECT ?,at,power_w,error FROM appliance_samples WHERE recording_id=?",
+                    (recording["id"], copy_samples_from))
         if settings is not None:
             self.settings = settings
 
@@ -137,6 +140,23 @@ class ApplianceProfiles:
             identity = self.settings["selected"].get(key)
             return [identity] if identity else []
         return list(values)
+
+    def _include_recording(self, key: str, recording: dict[str, Any]) -> list[str]:
+        """Use one trim revision per physical capture, retaining every prior version."""
+        capture = recording.get("capture_id", recording["id"])
+        members: list[str] = []
+        replaced = False
+        for identity in self.members(key):
+            previous = self.get(identity)
+            if previous.get("capture_id", identity) == capture:
+                if not replaced:
+                    members.append(recording["id"])
+                    replaced = True
+            else:
+                members.append(identity)
+        if not replaced:
+            members.append(recording["id"])
+        return members
 
     def profile_summary(self, key: str, identities: list[str]) -> dict[str, Any]:
         recordings = [self.get(identity) for identity in identities]
@@ -324,22 +344,38 @@ class ApplianceProfiles:
                 "average_w": energy_ws / covered if covered else None,
                 "peak_w": peak}
 
-    def accept(self, identity: str, body: dict[str, Any]) -> dict[str, Any]:
-        recording = self.get(identity)
-        if recording["status"] != "review":
-            raise ValueError("Finish and review this recording before saving it")
+    def _review_summary(self, recording: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
         if body.get("reviewed") is not True:
             raise ValueError("Explicit review confirmation is required")
         if type(body.get("revision")) is not int or body["revision"] != self.settings["revision"]:
             raise ValueError("Profiles changed in another view; reload before saving")
-        summary = self.preview(identity, body)
+        summary = self.preview(recording["id"], body)
         if not summary["complete"]:
             raise ValueError("Recording contains missing measurements; trim to complete coverage or record again")
         if recording["interrupted"]:
             raise ValueError("Recording was interrupted; record a complete cycle before selecting a profile")
+        return summary
+
+    def accept(self, identity: str, body: dict[str, Any]) -> dict[str, Any]:
+        recording = self.get(identity)
+        if recording["status"] != "review":
+            raise ValueError("Finish and review this recording before saving it")
+        summary = self._review_summary(recording, body)
         recording.update(status="saved", summary=summary, saved_at=self.app.now().isoformat())
         self._save(recording, select=True)
         return recording
+
+    def revise(self, identity: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Save revised bounds as new evidence and atomically replace its mean contribution."""
+        original = self.get(identity)
+        if original["status"] != "saved":
+            raise ValueError("Only saved recordings can have a trim revision")
+        summary = self._review_summary(original, body)
+        revised = {**original, "id": uuid4().hex, "summary": summary,
+                   "saved_at": self.app.now().isoformat(), "trimmed_from": identity,
+                   "capture_id": original.get("capture_id", identity)}
+        self._save(revised, select=True, copy_samples_from=identity)
+        return revised
 
     def select(self, identity: str, body: dict[str, Any]) -> None:
         recording = self.get(identity)
@@ -352,8 +388,8 @@ class ApplianceProfiles:
         if type(included) is not bool:
             raise ValueError("Profile inclusion must be true or false")
         members = self.members(key)
-        if included and identity not in members:
-            members.append(identity)
+        if included:
+            members = self._include_recording(key, recording)
         if not included and identity in members:
             members.remove(identity)
         selected = dict(self.settings["selected"])

@@ -265,6 +265,8 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
                 result = library.preview(identity, body)
             elif action == "accept":
                 result = {**library.accept(identity, body), "library_revision": library.settings["revision"]}
+            elif action == "revise":
+                result = {**library.revise(identity, body), "library_revision": library.settings["revision"]}
             elif action == "select":
                 library.select(identity, body)
                 result = {"selected": True, "library_revision": library.settings["revision"]}

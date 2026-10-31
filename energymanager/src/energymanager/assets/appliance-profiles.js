@@ -117,7 +117,7 @@ export class ApplianceProfilesPage {
           'No reviewed recordings included'}</p>`;
       }).join('')).join('');
     this.root.querySelector('[data-profile-recordings]').innerHTML = library.recordings.length ? library.recordings.map(recording => {
-      const status = recording.status === 'armed' ? (recording.idle_seen ? 'Armed · waiting for start' : 'Armed · waiting for idle') : recording.status;
+      const status = recording.status === 'saved' && recording.trimmed_from ? 'saved · trim revision' : recording.status === 'armed' ? (recording.idle_seen ? 'Armed · waiting for start' : 'Armed · waiting for idle') : recording.status;
       return `<section class="profile-recording"><strong>${machineName(recording.machine)} · ${escapeHTML(library.programs[recording.machine][recording.program])}</strong>
         <p>${escapeHTML(status)} · ${escapeHTML(new Date(recording.armed_at).toLocaleString('en-GB', {timeZone: this.timezone || 'Europe/Brussels'}))} · ${recording.sample_count} samples · ${recording.last_power_w === null ? 'Power unavailable' : Math.round(recording.last_power_w) + ' W'}</p>
         <p>${escapeHTML(recording.notes)}${recording.error ? ' · ' + escapeHTML(recording.error) : ''}</p>
@@ -141,13 +141,13 @@ export class ApplianceProfilesPage {
       // Refresh this form's revision; other unsaved forms retain their original conflict guard.
       this.advanceRevision(body.revision, this.library.revision);
       this.message(action === 'mazak' ? 'Provisional Mazak average loads saved.' : 'Saved. Recording settings apply to the next armed cycle.');
-    } else if (action === 'accept') {
+    } else if (action === 'accept' || action === 'revise') {
       const body = {reviewed: values.reviewed === 'on', revision: Number(form.dataset.revision),
         start_seconds: Number(values.start_seconds), end_seconds: Number(values.end_seconds)};
-      const saved = await this.api(`profile-recordings/${form.dataset.id}/accept`, 'POST', body);
+      const saved = await this.api(`profile-recordings/${form.dataset.id}/${action}`, 'POST', body);
       this.advanceRevision(body.revision, saved.library_revision);
-      await this.review(form.dataset.id);
-      this.message('Reviewed cycle saved and added to the program average. Original recordings are retained.');
+      await this.review(saved.id,saved.library_revision);
+      this.message(action === 'revise' ? 'Revised trim saved. The original is retained; this cycle contributes once to the average.' : 'Reviewed cycle saved and added to the program average. Original recordings are retained.');
     }
     await this.refresh();
   }
@@ -236,7 +236,7 @@ export class ApplianceProfilesPage {
     this.chart?.close();
     this.chart = new ProfileChart(this.root.querySelector('[data-profile-graph]'),
       {...recording,timezone:this.timezone},selection,editable,this.signal,(next,finished) => {
-        const form = this.root.querySelector('form[data-profile-form="accept"]');
+        const form = this.root.querySelector('form[data-profile-trim]');
         if (!form) return;
         form.elements.reviewed.checked = false;
         form.elements.start_seconds.value = next.start_seconds;
@@ -271,7 +271,7 @@ export class ApplianceProfilesPage {
     panel.scrollIntoView({block:'start'});
   }
 
-  async review(id) {
+  async review(id, revision = this.library.revision) {
     const recording = await this.api(`profile-recordings/${id}`);
     if (this.signal.aborted) return;
     this.reviewed = recording;
@@ -281,19 +281,21 @@ export class ApplianceProfilesPage {
     const duration = recording.points.at(-1)?.seconds || 0;
     const selection = recording.summary || {start_seconds:0,
       end_seconds:recording.suggested_end_seconds ?? duration};
-    const editable = recording.status === 'review' && duration > 0;
+    const saved = recording.status === 'saved';
+    const editable = (recording.status === 'review' || saved) && duration > 0;
     panel.hidden = false;
     panel.innerHTML = `<h2>Review · ${machineName(recording.machine)} · ${escapeHTML(this.library.programs[recording.machine][recording.program])}</h2>
       <p>${escapeHTML(recording.notes)} · ${escapeHTML(recording.entity_id)} · ${escapeHTML(recording.status)}</p>
+      ${saved ? '<p class="notice">You can adjust this saved trim. Saving keeps the original and uses the revised range once in the average.</p>' : ''}
       <div data-profile-graph></div>
       <p class="muted">Gaps are unknown; short measured peaks remain visible. Trim seconds are relative to the detected start.</p>
       ${recording.interrupted ? '<p class="error">Interrupted recording. Inspect it for diagnosis and record a complete cycle before saving a profile.</p>' : ''}
-      ${editable ? `<form data-profile-form="accept" data-id="${id}" data-revision="${this.library.revision}" class="profile-form">
+      ${editable ? `<form data-profile-trim data-profile-form="${saved ? 'revise' : 'accept'}" data-id="${id}" data-revision="${revision}" class="profile-form">
       <label>Start (seconds)<input name="start_seconds" type="number" min="0" max="${duration}" step="any" value="${selection.start_seconds}" required></label>
       <label>End (seconds)<input name="end_seconds" type="number" min="0" max="${duration}" step="any" value="${selection.end_seconds}" required></label>
       <button type="button" data-profile-command="preview">Preview selection</button><p data-profile-summary></p>
       <label class="profile-check"><input name="reviewed" type="checkbox" required>I reviewed a complete cycle and want to include it in this program's average.</label>
-      <button type="submit">Save and add to average</button></form>` : recording.summary ?
+      <button type="submit">${saved ? 'Save revised trim' : 'Save and add to average'}</button></form>` : recording.summary ?
       `<p>${escapeHTML(this.summaryText(recording.summary))} · Selected ${selection.start_seconds}–${selection.end_seconds} seconds (shaded)</p>` :
       '<p>Finish the recording before saving a profile.</p>'}`;
     this.mountChart(recording,duration > 0 ? selection : null,editable);

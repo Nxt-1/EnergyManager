@@ -1288,10 +1288,10 @@ test('saved appliance profile graph explicitly marks its trimmed selection', () 
   const graph = profileGraph([{seconds: 0, power_w: 500}, {seconds: 100, power_w: 500}], 15,
     {start_seconds: 20, end_seconds: 80});
   assert.match(graph, /data-profile-shade/);
-  assert.match(graph, /data-trim-handle="start"/);
-  assert.match(graph, /data-trim-handle="end"/);
-  assert.match(graph, /aria-valuenow="20"/);
-  assert.match(graph, /aria-valuenow="80"/);
+  assert.match(graph, /data-trim-boundary="start"/);
+  assert.match(graph, /data-trim-boundary="end"/);
+  assert.match(graph, /translate\(203\.2/);
+  assert.match(graph, /translate\(638\.8/);
 });
 
 
@@ -1475,4 +1475,36 @@ test('single appliance plot reuses cursor, wheel and pinch with a one-second zoo
   const pinch = fixture.changes.at(-1).range;
   assert.equal(pinch[1]-pinch[0],40000);
   fixture.emit('pointerup',900,50,{pointerType:'touch',pointerId:2});
+});
+
+test('trim grips are labelled HTML sliders above the SVG, with separate start and end controls', () => {
+  const markup = profileGraph([{seconds:0,power_w:1000},{seconds:10,power_w:1000}],15,
+    {start_seconds:1,end_seconds:9},null,true);
+  const svgEnd = markup.indexOf('</svg>');
+  assert.ok(markup.indexOf('<button type="button"') > svgEnd);
+  assert.equal((markup.match(/class="profile-trim-handle"/g)||[]).length,2);
+  assert.match(markup,/aria-label="Selection start"/);
+  assert.match(markup,/aria-label="Selection end"/);
+  assert.match(markup,/aria-valuenow="1"/);
+  assert.match(markup,/aria-valuenow="9"/);
+});
+
+test('an already saved recording opens editable trim controls and uses the returned save revision', async () => {
+  const recording = {id:'synthetic-saved',machine:'dishwasher',program:'eco',status:'saved',
+    notes:'SYNTHETIC saved cycle',entity_id:'sensor.synthetic',points:[{seconds:0,power_w:1000},{seconds:20,power_w:0}],
+    summary:{start_seconds:2,end_seconds:15}};
+  const panel = {hidden:true,innerHTML:'',querySelector:()=>({}),scrollIntoView:()=>{}};
+  let editable = false;
+  const page = {api:async()=>recording,signal:{aborted:false},previewGeneration:0,
+    library:{revision:12,programs:{dishwasher:{eco:'Eco'}}},root:{querySelector:()=>panel},
+    mountChart:(row,selection,canEdit)=>{editable=canEdit;assert.equal(selection.start_seconds,2);},
+    syncTrim:()=>{}};
+  await ApplianceProfilesPage.prototype.review.call(page,'synthetic-saved',14);
+  assert.equal(editable,true);
+  assert.equal(panel.hidden,false);
+  assert.match(panel.innerHTML,/data-profile-form="revise"/);
+  assert.match(panel.innerHTML,/data-revision="14"/);
+  assert.match(panel.innerHTML,/Save revised trim/);
+  assert.match(panel.innerHTML,/name="start_seconds"/);
+  assert.match(panel.innerHTML,/name="end_seconds"/);
 });

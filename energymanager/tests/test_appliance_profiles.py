@@ -412,3 +412,91 @@ async def test_average_endpoint_asset_and_inclusion_revision_security(profiles):
         response = await client.post(f"/api/profile-recordings/{identity}/select",
             headers={"X-EnergyManager": "1"}, json={"revision": 1, "included": False})
         assert response.status == 400 and profiles.members("dishwasher/eco") == [identity]
+
+
+async def test_saved_trim_revision_preserves_original_samples_and_summary_without_double_weight(profiles):
+    first = short_saved_cycle(profiles, 1000, 10)
+    second = short_saved_cycle(profiles, 2000, 10)
+    original = profiles.detail(first)
+    revised = profiles.revise(first, {"reviewed": True, "revision": profiles.settings["revision"],
+                                     "start_seconds": 1, "end_seconds": 6})
+    assert revised["id"] != first and revised["trimmed_from"] == first
+    assert revised["capture_id"] == first
+    assert revised["summary"]["duration_seconds"] == 5
+    assert profiles.detail(first) == original
+    assert profiles.detail(revised["id"])["points"] == original["points"]
+    assert profiles.members("dishwasher/eco") == [revised["id"], second]
+    average = await profiles.profile_detail("dishwasher", "eco")
+    assert average["recording_count"] == 2
+    assert average["summary"]["energy_kwh"] == pytest.approx(12500 / 3600000)
+
+
+async def test_previous_trim_can_be_restored_and_revisions_of_revisions_keep_one_capture(profiles):
+    original = short_saved_cycle(profiles, 1000, 10)
+    first = profiles.revise(original, {"reviewed": True, "revision": profiles.settings["revision"],
+                                      "start_seconds": 1, "end_seconds": 6})
+    second = profiles.revise(first["id"], {"reviewed": True, "revision": profiles.settings["revision"],
+                                         "start_seconds": 2, "end_seconds": 5})
+    assert second["capture_id"] == original
+    assert second["trimmed_from"] == first["id"]
+    assert profiles.members("dishwasher/eco") == [second["id"]]
+    profiles.select(original, {"revision": profiles.settings["revision"]})
+    assert profiles.members("dishwasher/eco") == [original]
+    restored = ApplianceProfiles(profiles.app)
+    assert (await restored.profile_detail("dishwasher", "eco"))["recording_count"] == 1
+    assert restored.get(first["id"])["summary"]["duration_seconds"] == 5
+    assert restored.get(second["id"])["summary"]["duration_seconds"] == 3
+
+
+def test_saved_retrim_keeps_review_revision_and_complete_coverage_guards(profiles):
+    original = short_saved_cycle(profiles, 1000, 10)
+    before = profiles.detail(original)
+    revision = profiles.settings["revision"]
+    for body, reason in (({"revision": revision}, "review confirmation"),
+                         ({"revision": revision - 1, "reviewed": True}, "another view"),
+                         ({"revision": revision, "reviewed": True, "start_seconds": 8, "end_seconds": 2}, "after")):
+        with pytest.raises(ValueError, match=reason):
+            profiles.revise(original, body)
+    assert profiles.detail(original) == before
+    assert profiles.settings["revision"] == revision
+    assert len(profiles.library()["recordings"]) == 1
+
+
+def test_failed_trim_sample_copy_rolls_back_new_recording_membership_and_memory(profiles):
+    import sqlite3
+    original = short_saved_cycle(profiles, 1000, 10)
+    before = profiles.detail(original)
+    revision = profiles.settings["revision"]
+    profiles.store.connection.executescript("""
+        CREATE TRIGGER synthetic_retrim_failure BEFORE INSERT ON appliance_samples
+        BEGIN SELECT RAISE(FAIL,'SYNTHETIC sample-copy failure'); END;
+    """)
+    with pytest.raises(sqlite3.IntegrityError, match="sample-copy failure"):
+        profiles.revise(original, {"reviewed": True, "revision": revision,
+                                  "start_seconds": 1, "end_seconds": 6})
+    assert profiles.settings["revision"] == revision
+    assert profiles.store.get(profiles.key)["revision"] == revision
+    assert profiles.members("dishwasher/eco") == [original]
+    assert len(profiles.library()["recordings"]) == 1
+    assert profiles.detail(original) == before
+
+
+async def test_saved_trim_revision_api_checks_origin_and_returns_new_identity_and_revision(profiles):
+    identity = short_saved_cycle(profiles, 1000, 10)
+    application = Application(profiles.store, snapshot=tiny())
+    application.appliance_profiles = profiles
+    async def no_lifecycle():
+        pass
+    application.start = application.close = no_lifecycle
+    async with TestClient(TestServer(create_web(application))) as client:
+        url = f"/api/profile-recordings/{identity}/revise"
+        body = {"reviewed": True, "revision": profiles.settings["revision"],
+                "start_seconds": 1, "end_seconds": 5}
+        assert (await client.post(url, json=body)).status == 403
+        response = await client.post(url, json=body, headers={"X-EnergyManager": "1"})
+        assert response.status == 200
+        saved = await response.json()
+        assert saved["id"] != identity
+        assert saved["library_revision"] == body["revision"] + 1
+        assert (await client.post(url, json=body, headers={"X-EnergyManager": "1"})).status == 400
+        assert profiles.members("dishwasher/eco") == [saved["id"]]

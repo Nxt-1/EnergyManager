@@ -1,3 +1,8 @@
+## 4.5.4 — Editable saved recording trims
+
+- Make saved recording ranges editable with larger Start/End grips.
+- Retain trim revisions and count each captured cycle once in the average.
+
 ## 4.5.3 — Appliance recording review and average profiles
 
 - Add power/time cursors, draggable trim handles and zoom/pan to appliance graphs.

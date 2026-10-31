@@ -1,5 +1,13 @@
 # Current requirements and decisions
 
+- 31October2026,4.5.4: user reported that the trim targets were tiny and would not
+  slide, and confirmed this happened on saved recordings.4.5.3 rendered those bounds
+  read-only despite their draggable appearance. Saved ranges now edit directly with
+  large labelled grips; saving creates a retained trim revision, replacing the same
+  physical cycle's contribution. Previous data remain inspectable/restorable, and
+  different trims of one capture cannot acquire multiple weights in its average.
+
+
 - 31October2026,4.5.3: user authorized thinner power plots and appliance review cursors,
   linked draggable trim bounds and seconds, and Overview-style zoom/pan. Confirmed
   multiple recordings should combine into an averaged program profile. Align trimmed

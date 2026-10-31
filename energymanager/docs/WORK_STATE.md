@@ -1,6 +1,26 @@
 # EnergyManager work state
 
-## Current checkpoint — appliance graph controls and multi-cycle profiles (31 October2026)
+## Current checkpoint — saved recording trim correction (4.5.4,31 October2026)
+
+AUTHORIZED: repair the requested draggable recording bounds. User clarified the
+failure is on an already saved recording.4.5.3 rendered those boundaries read-only
+and too similar to editable handles. Basea6ac759/codex/v4.5-implementation.
+IMPLEMENTED: saved trim form,44px HTML grips above tooltips, full-line targets and
+inspector suppression during trim. New immutable revision and copied original samples;
+transactional replacement, one trim per captured cycle and restore of older versions.
+Returned library revision opens the next editable form correctly.
+VERIFIED:652 Python tests148.33s;82frontend; Ruff/mypy47/all JS pass.
+Configured fake E2E25.519s/2019intervals/
+max3.759ms/4fake calls.
+Native: actual44x44CSSpx grips, dragging both saved bounds, two successive saves and
+original restoration/count2 throughout; standalone saved fields/keyboard and clean logs.
+Wheel/sdist71 runtime files match; isolated4.5.4 imports/assets pass.
+NEXT: stop previews/tabs, scoped release commit, ff-only main preserving unrelated
+backlog, push and exact-commit CI/image. No live HA/database/hardware/notification/
+deployment. Remote outcomes only in ignored release-state/final reply.
+
+
+## Earlier checkpoint — appliance graph controls and multi-cycle profiles (31 October2026)
 
 AUTHORIZED: thinner power curves on Overview/Planning/Appliances; power/time inspection
 cursor; draggable start/end handles with selected shading and synchronized seconds;
