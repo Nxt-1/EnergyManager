@@ -1,5 +1,20 @@
 # Settings and hardware control
 
+## P1 grid energy (4.5.2)
+
+Measurements has two new selectors: **P1 cumulative import energy** and **P1 cumulative
+export energy**. Select Cumulative Active Import and Cumulative Active Export (the
+combined registers, not tariff1/2). Wh/kWh are accepted. Save and restart. Existing
+installations keep running with these fields empty, but their daily grid totals show
+unavailable until mapped. Power sensors remain needed for live readings/control.
+
+Today's total is the current counter minus its installation-local midnight reading
+from HA history. HA recorder must include both sensors. Midnight baselines persist
+locally for restarts. A missing/invalid counter or baseline withholds its own total;
+there is no power-integration fallback. Counter decreases/reset changes are labelled
+unavailable for that day. Other energy boxes retain their existing power integrations.
+
+
 ## Google Maps and journey routing (4.4.0)
 
 Settings → Google Maps accepts a masked Routes API key. Save activates routing immediately;

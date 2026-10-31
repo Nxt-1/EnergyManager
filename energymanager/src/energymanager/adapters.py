@@ -66,6 +66,22 @@ class HomeAssistantAdapter:
             response.raise_for_status()
             return await response.json()
 
+    async def entity_history(self, entity: str, start: datetime, end: datetime) -> list[list[dict[str, Any]]]:
+        """Read the recorder's initial state, including unchanged counters at midnight."""
+        if self.session is None:
+            raise RuntimeError("Adapter is not open")
+        async with self.session.get(
+            f"{self.url}/history/period/{quote(start.isoformat(), safe='')}",
+            params={"filter_entity_id": entity, "end_time": end.isoformat(),
+                    "significant_changes_only": "0"},
+            allow_redirects=False,
+        ) as response:
+            response.raise_for_status()
+            result = await response.json()
+            if not isinstance(result, list) or any(not isinstance(group, list) for group in result):
+                raise ValueError("Invalid HA history response")
+            return result
+
     async def service(self, domain: str, service: str, data: dict[str, Any]) -> None:
         if self.session is None:
             raise RuntimeError("Adapter is not open")

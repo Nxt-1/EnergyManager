@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 from .energy import daily_energy, end_of_day_energy
+from .grid_energy import GridEnergy
 
 if TYPE_CHECKING:
     from .service import Application
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
 class DailyEstimates:
     def __init__(self, application: Application) -> None:
         self.application = application
+        self.grid = GridEnergy(application)
         self.task: asyncio.Task[None] | None = None
         self.read_lock = asyncio.Lock()
         self.actual: dict[str, Any] | None = None
@@ -31,7 +33,11 @@ class DailyEstimates:
         return f"daily_estimate:{app.demo}:{app.policy.timezone}:{day}"
 
     def view(self, at: datetime) -> dict[str, Any] | None:
-        return self.application.store.get(self.key(at))
+        estimate = self.application.store.get(self.key(at))
+        # Pre-upgrade fallback estimates contain integrated grid subtotals. Do not reuse those.
+        if estimate and estimate.get("kind") == "first_available" and not estimate.get("grid_source"):
+            estimate = {**estimate, "kwh": {**estimate["kwh"], "import": None, "export": None}}
+        return estimate
 
     def start(self) -> None:
         self.task = asyncio.create_task(self.run())
@@ -48,8 +54,23 @@ class DailyEstimates:
             if self.actual is not None and key == self.actual_key and monotonic() - self.read_at < 30:
                 return dict(self.actual)
             app = self.application
-            result = await asyncio.to_thread(daily_energy, app.store.path, at, app.policy.timezone,
-                                             app.policy.measurement_max_age_seconds, app.demo)
+            try:
+                result = await asyncio.to_thread(daily_energy, app.store.path, at, app.policy.timezone,
+                                                 app.policy.measurement_max_age_seconds, app.demo)
+            except (TimeoutError, sqlite3.OperationalError) as exc:
+                # Meter totals must remain readable if the separate power archive is unavailable.
+                result = {"date": at.astimezone(ZoneInfo(app.policy.timezone)).date().isoformat(),
+                          "timezone": app.policy.timezone, "demo": app.demo, "as_of": at.isoformat(),
+                          "kwh": None, "partial": True, "source": "Power archive unavailable",
+                          "power_error": f"{type(exc).__name__}: {exc}"}
+            channels = await self.grid.refresh(at)
+            if result["kwh"] is not None or any(row["kwh"] is not None for row in channels.values()):
+                result["kwh"] = dict(result["kwh"] or dict.fromkeys(
+                    ("solar", "solar_ac", "solar_dc", "house", "ev", "ess_charge", "ess_discharge")))
+                result["kwh"].update({key: row["kwh"] for key, row in channels.items()})
+            result["channels"] = channels
+            result["power_source"] = result["source"]
+            result["source"] = "P1 cumulative energy counters; other channels: " + result["source"]
             self.actual, self.actual_key, self.read_at = result, key, monotonic()
             return dict(result)
 
@@ -88,13 +109,15 @@ class DailyEstimates:
             return
         record = {"date": local.date().isoformat(), "timezone": timezone, "demo": app.demo,
                   "captured_at": app.now().isoformat(), "basis_at": summary["as_of"], "kind": kind,
-                  "partial": summary["partial"], "plan_id": plan["id"], "revision": revision, "kwh": totals}
+                  "partial": summary["partial"], "plan_id": plan["id"], "revision": revision, "kwh": totals,
+                  "grid_source": "P1 cumulative energy counters"}
         app.store.put(self.key(now), record)
         app.store.event("daily_energy_estimate", record)
 
     async def run(self) -> None:
         while True:
             try:
+                await self.grid.refresh(self.application.now())
                 await self.capture()
                 self.error = None
             except (OSError, sqlite3.Error, TimeoutError, ValueError, KeyError) as exc:

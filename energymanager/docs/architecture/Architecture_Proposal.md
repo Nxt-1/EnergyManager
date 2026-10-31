@@ -5,7 +5,7 @@ this same file as requirements and implementation evolve across releases and cha
 do not create a new handoff document for each version. The filename is retained from
 the original architecture proposal, but its content now describes the current system.
 The active application is `energymanager/`; its version is recorded in config.yaml and
-the changelog. Last reviewed: 30 October 2026.
+the changelog. Last reviewed: 31 October 2026.
 Accepted changes awaiting implementation are explicitly labelled below; they must not
 be mistaken for behavior already shipped in the application.
 
@@ -417,10 +417,29 @@ that pause; source-history actions ignore selection gestures. Once selection is 
 the normal polling cycle resumes rendering. Native release-mismatch detection also
 checks compact query URLs and still requires an explicit dashboard reload.
 
-The five live boxes also show today's estimated energy in kWh: separate grid import/
-export, AC/DC solar, household demand, EV charging and ESS AC charge/discharge. These
-are integrations of the existing validated recorded powers, not HA meter counters or
-battery energy changes. Integration uses the installation-local midnight (including
+The five live boxes also show today's energy in kWh: separate grid import/export,
+AC/DC solar, household demand, EV charging and ESS AC charge/discharge. From4.5.2,
+grid import/export use the selected P1 cumulative energy counters, not power integration.
+Two Settings mappings, measurements.grid_import_kwh/grid_export_kwh, accept Wh/kWh
+and start empty on upgrade. They are required only for the corresponding daily total,
+not for planning/control. Use the combined Cumulative Active Import/Export counters,
+not individual tariff registers or a daily-reset utility meter. Read them independently
+every30s; unchanged available states remain valid. HA recorder's initial state at local
+midnight supplies each baseline through its authenticated read-only history API.
+Persist that baseline and last counter per timezone/date/entity across app restarts.
+Missing midnight history/current readings, invalid units/values, or detected counter
+decreases/reset metadata changes withhold only the affected total, with an explicit
+reason and no power/first-read fallback. Other-direction and power-archive outages do
+not erase a valid counter difference. A detected reset stays unavailable for that day;
+a new local day/mapping has its own baseline. Demo does not read configured counters.
+The meter/HA update resolution bounds midnight accuracy; an unreported reset entirely
+between reads cannot be established from two cumulative values alone.
+First-available day-end estimates use these meter subtotals; unknown channels remain
+unknown independently. Older integrated fallback grid estimates are withheld without
+rewriting their evidence; fixed midnight forecasts remain planned power calculations.
+
+Other boxes remain integrations of existing validated recorded powers, not battery
+energy changes. Integration uses the installation-local midnight (including
 23/25-hour days), holds each power only until the next read or its input-read watchdog,
 deduplicates cached snapshots and excludes missing/invalid or other-mode data. Missing
 coverage is labelled partial; no coverage is unavailable. Summaries refresh every30s.

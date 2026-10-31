@@ -55,6 +55,8 @@ class Reading:
                     raise ValueError("percentage must be between 0 and 100")
                 if unit == "kW" and actual_unit == "W":
                     value /= 1000
+                elif unit == "kWh" and actual_unit == "Wh":
+                    value /= 1000
                 elif actual_unit != unit:
                     value = None
                     raise ValueError(f"requires declared {unit} units (received {actual_unit!r})")

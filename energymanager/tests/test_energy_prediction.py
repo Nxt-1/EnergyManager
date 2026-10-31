@@ -182,7 +182,7 @@ async def test_slow_daily_archive_reads_coalesce_without_blocking_live_state(tmp
         calls += 1
         entered.set()
         assert release.wait(3)
-        return {"date": "2026-10-23", "kwh": None}
+        return {"date": "2026-10-23", "kwh": None, "source": "SYNTHETIC power integration"}
 
     monkeypatch.setattr(daily_estimates, "daily_energy", slow_archive)
     store = Store(tmp_path / "synthetic.sqlite")

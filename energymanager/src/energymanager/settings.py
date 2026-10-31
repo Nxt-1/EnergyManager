@@ -56,6 +56,8 @@ def setting_fields() -> tuple[SettingField, ...]:
         ("connected", "EV connected", ()),
         ("grid_import_kw", "Grid import power", ("W", "kW")),
         ("grid_export_kw", "Grid export power", ("W", "kW")),
+        ("grid_import_kwh", "P1 cumulative import energy", ("Wh", "kWh")),
+        ("grid_export_kwh", "P1 cumulative export energy", ("Wh", "kWh")),
         ("pv_ac_kw", "AC solar power", ("W", "kW")),
         ("pv_dc_kw", "DC solar power", ("W", "kW")),
         ("ev_kw", "EV charging power", ("W", "kW")),
@@ -68,7 +70,8 @@ def setting_fields() -> tuple[SettingField, ...]:
         if key == "connected":
             domains = ("binary_sensor", "sensor", "input_boolean", "switch")
         result.append(SettingField(f"measurements.{key}", label, "Measurements", "entity",
-                                   domains=domains, units=units))
+                                   domains=domains, units=units,
+                                   required=key not in ("grid_import_kwh", "grid_export_kwh")))
     for key, label, domain in (
         ("force", "Charger stop / charge selector", "select"),
         ("phase", "Charger phase selector", "select"),

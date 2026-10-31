@@ -1,6 +1,27 @@
 # EnergyManager work state
 
-## Current checkpoint — planned task power charts (4.5.1,30 October2026)
+## Current checkpoint — P1 grid energy (4.5.2,31 October2026)
+
+AUTHORIZED: replace daily grid power integrators with P1 import/export sensors; add
+two Settings fields and replace consumers. Screenshot establishes cumulative pair.
+Base704744f on codex/v4.5-implementation; main's unrelated DEFERRED_WORK.md untouched.
+IMPLEMENTED: optional unit-filtered mappings, independent cumulative reads, HA-history
+midnight baselines persisted by local date/timezone/entity, per-direction availability
+and tooltip reasons. No grid power integration/fallback; other integrators retained.
+First-available predictions preserve unknown subtotals and exclude legacy integrated
+grid evidence. No live services/database/hardware/notification/deployment.
+VERIFIED: full639 Python tests147.80s; final62 focused4.54s include two later-added
+reset/mapping cases (641 cases covered locally).77frontend, Ruff/mypy46/all JS pass.
+Configured fake E2E25.488s/2019intervals/max2.926ms/
+4fake calls passes, including synthetic P1 midnight counters. Native selectors,
+independent grid coverage/source and standalone graph/history pass; browser logs clean.
+Wheel/sdist69 runtime files byte-match; isolated4.5.2 import/assets pass.
+READY: scoped release commit, ff-only main preserving unrelated backlog, push and
+exact-commit CI/image checks. No installation deployment. Remote results belong only
+in ignored release-state/final reply, without a verification-only commit.
+
+
+## Earlier checkpoint — planned task power charts (4.5.1,30 October2026)
 
 AUTHORIZED: user requests planned power profiles in task details, including EV. Based
 on released4a356b0(4.5.0) in codex/v4.5-implementation. No actual HA/database/hardware.

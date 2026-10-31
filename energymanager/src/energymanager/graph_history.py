@@ -21,7 +21,8 @@ def graph_values(sample: dict[str, Any], ev_capacity: float, ess_capacity: float
         return values
     powers = power_components(sample)
     if powers is not None:
-        values.update(grid=(powers["import"] - powers["export"]) * 1000,
+        grid_kw = powers["house"] + powers["ev"] - float(sample["pv_ac_kw"]) - float(sample["ess_power_kw"])
+        values.update(grid=grid_kw * 1000,
                       ess=float(sample["ess_power_kw"]) * 1000, solar=powers["solar"] * 1000,
                       house=powers["house"] * 1000, ev=powers["ev"] * 1000)
     for name, fallback in (("ev", ev_capacity), ("ess", ess_capacity)):

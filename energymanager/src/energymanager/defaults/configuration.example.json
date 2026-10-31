@@ -64,7 +64,9 @@
     "quarter_import_kwh": "sensor.p1_dongle_current_quarter_average_demand",
     "monthly_peak_kw": "sensor.replace_monthly_peak_kw",
     "grid_import_kw": "sensor.p1_dongle_momentary_active_import",
-    "grid_export_kw": "sensor.p1_dongle_momentary_active_export"
+    "grid_export_kw": "sensor.p1_dongle_momentary_active_export",
+    "grid_import_kwh": "",
+    "grid_export_kwh": ""
   },
   "actuators": {
     "ev_reboot": "",

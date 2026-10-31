@@ -1,5 +1,16 @@
 # Run, configure, review and roll back
 
+## P1 daily grid totals (4.5.2)
+
+After updating, open Settings → Measurements, select P1 cumulative import energy and
+P1 cumulative export energy, Save and restart. Use the two combined Cumulative Active
+Import/Export sensors. Reload HA. Confirm the Overview grid totals and their source
+tooltips. The selected sensors must have HA recorder history at local midnight.
+Missing history is explicit; it is never replaced by a first post-start reading or a
+power integral. A saved baseline survives app restart; a new day gets its own baseline.
+No sensor IDs are assumed and no live installation verification has been performed.
+
+
 ## Planned task power (4.5.1)
 
 Update the add-on and reload HA; no configuration is needed. Open a scheduled EV/ESS

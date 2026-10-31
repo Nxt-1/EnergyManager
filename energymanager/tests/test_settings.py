@@ -294,3 +294,26 @@ def test_optional_vehicle_charging_sensor_round_trips_and_reaches_configured_sam
         assert app.actuator.charger.entities["vehicle_charging"] == "sensor.synthetic_ford_charging"
     finally:
         store.close()
+
+
+def test_p1_energy_mapping_save_restart_and_old_configuration_upgrade(tmp_path):
+    editor = configuration_file(tmp_path)
+    document = json.loads(editor.path.read_bytes())
+    for direction in ("import", "export"):
+        document["measurements"].pop(f"grid_{direction}_kwh", None)
+    editor.path.write_text(json.dumps(document), encoding="utf-8")
+    loaded = editor.read()
+    editor.validate(document)  # Missing daily counters do not disable existing control.
+    saved = editor.save(loaded["revision"], {
+        "measurements.grid_import_kwh": "sensor.synthetic_cumulative_import",
+        "measurements.grid_export_kwh": "sensor.synthetic_cumulative_export"})
+    assert saved["restart_required"]
+    assert (editor.path.parent / saved["backup"]).is_file()
+    store = Store(tmp_path / "restart.sqlite")
+    try:
+        app = configured_application(editor.path, store)
+        assert app.ha.entities["grid_import_kwh"] == "sensor.synthetic_cumulative_import"
+        assert app.ha.entities["grid_export_kwh"] == "sensor.synthetic_cumulative_export"
+        assert not app.actuator.enabled
+    finally:
+        store.close()

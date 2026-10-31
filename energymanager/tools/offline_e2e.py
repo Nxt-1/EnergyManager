@@ -58,6 +58,8 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         "connected": ("on", None),
         "grid_import_kw": (0, "W"),
         "grid_export_kw": (600, "W"),
+        "grid_import_kwh": (10025.5, "kWh"),
+        "grid_export_kwh": (513.75, "kWh"),
         "pv_ac_kw": (1, "kW"),
         "pv_dc_kw": (1, "kW"),
         "ev_kw": (0, "kW"),
@@ -118,6 +120,14 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
             return web.json_response({"attributes": {"latitude": 50, "longitude": 4}})
         return web.json_response(state_row(request.match_info["key"]))
 
+    async def meter_history(request: web.Request) -> web.Response:
+        assert request.headers.get("Authorization") == "Bearer synthetic-supervisor-credential"
+        entity = request.query["filter_entity_id"]
+        row = state_row(entity)
+        row["state"] = str(float(row["state"]) - (2.5 if "import" in entity else .75))
+        row["last_changed"] = request.match_info["start"]
+        return web.json_response([[row]])
+
     async def weather(request: web.Request) -> web.Response:
         weather_queries.append(dict(request.query))
         beginning = issued.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -170,6 +180,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
     fake.add_routes(
         [
             web.get("/core/api/states/{key}", state),
+            web.get("/core/api/history/period/{start}", meter_history),
             web.get("/core/api/states", states),
             web.get("/core/api/services", services),
             web.get("/weather", weather),
@@ -188,6 +199,8 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
             if field.kind == "entity" and field.required:
                 group, key = field.path.split(".")
                 config[group][key] = f"{field.domains[0]}.{key}"
+        config["measurements"].update(grid_import_kwh="sensor.grid_import_kwh",
+                                      grid_export_kwh="sensor.grid_export_kwh")
         config["token_environment"] = "UNUSED_LEGACY_TOKEN"
         config["allow_remote"] = False
         config["ev_diagnostics"] = {key: f"sensor.{key}" for key in
@@ -254,6 +267,10 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                             or application.journeys.needs_attention)):
                     await asyncio.sleep(0.2)
                 assert application.accepted is not None, (application.status, application.error)
+                energy = await (await client.get("/api/daily-energy")).json()
+                assert abs(energy["kwh"]["import"] - 2.5) < 1e-9
+                assert abs(energy["kwh"]["export"] - .75) < 1e-9
+                assert not energy["channels"]["import"]["partial"]
                 response = await client.get("/api/state")
                 current = await response.json()
                 assert current["planning_activity"]["request_id"] == replacement
@@ -382,6 +399,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                         "built-in Open-Meteo pipeline with four original planes and correction tables",
                         "persisted measured household baseline; no prepared forecast endpoint",
                         "separate P1 powers, kW quarter demand and go-e selector readback",
+                        "daily import/export use synthetic cumulative P1 counters and midnight HA history",
                         "all HA states carry three-hour-old report metadata; validated input reads still drive forecasting/control",
                         "go-e numeric states, advancing seconds heartbeat and current/force/phase readbacks on fake HA",
                         "configured optional vehicle status and bounded attributes from fake HA; vehicle measurement age remains unknown",

@@ -1,5 +1,27 @@
 # EnergyManager 4 verification
 
+## 4.5.2 — P1 daily grid energy (31 October2026)
+
+Full639 Python tests pass147.80s; final62 focused pass4.54s, including two subsequent
+reset-metadata/mapping cases (641 cases exercised locally).77frontend cases, Ruff,
+mypy46modules and every dashboard JS syntax check pass. Tests cover cumulative Wh/kWh,
+no power/archive dependency, independent missing directions, invalid/nonfinite/negative
+values and power units, unavailable/late midnight history, no first-read fallback,
+recovery, counter decreases/reset metadata, durable reopened SQLite baselines, mapping/
+demo isolation, local-midnight rollover and both DST transitions, coalesced reads and
+HTTP failures, archive timeout, settings-save/restart/upgrade and missing forecast
+subtotals. Existing history-power graphs and control inputs retain their behavior.
+
+Configured fake HA E2E25.488s, 2019intervals,
+max control2.926ms, 4fake calls,
+saved-plan recovery79.693ms.
+It explicitly supplies invented cumulative counters and local fake HA history.
+Native Settings selectors and P1 source/coverage plus standalone Overview/history
+were browser-verified with clean logs. Wheel/sdist69 runtime files byte-match;
+isolated4.5.2 import/assets pass. No live HA/database/credential/hardware/provider/
+notification or installation deployment. Remote CI/image results are recorded only
+in ignored artifacts/v452-release-state.json and the final reply.
+
 ## 4.4.17 — Joint source allocation during charging refinement (30 October 2026)
 
 598 Python cases exercised locally: full run: 596 passed in 187.36 s, followed by corrected

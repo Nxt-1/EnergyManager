@@ -1,5 +1,13 @@
 # Current requirements and decisions
 
+- 31October2026,4.5.2: user authorized replacing the Overview grid import/export
+  energy integrators with two P1 energy mappings and using the sensor-derived totals
+  wherever those recorded subtotals are consumed. The supplied P1 screenshot shows
+  matching Cumulative Active Import/Export registers and import-only Today; use the
+  combined cumulative pair with local-midnight baselines. Retain non-grid integrators
+  and instantaneous P1 power for planning/control. Sensor entity IDs remain user-selected.
+
+
 - 30October2026,4.4.17: user approved correcting smoothing's feasible region after two
   supplied decisions demonstrated valid continuous schedules rejected by fixed ESS
   inventories/per-window import caps. Retain other EV work/quantity and all original

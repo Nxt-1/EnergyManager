@@ -44,8 +44,10 @@ export function dailyEnergyRows(summary, key, state) {
   const number = value => Number.isFinite(value) ? value.toFixed(2) : '—';
   return definitions[key].map(([symbol, name, label]) => ({symbol, label,
     actual: number(current ? summary.kwh?.[name] : null), predicted: number(prediction?.[name]),
-    partial: current && !!summary.partial, capture,
-    recordedAt: current ? summary.as_of : null}));
+    partial: current && !!(summary.channels?.[name]?.partial ?? summary.partial), capture,
+    source: current ? summary.channels?.[name]?.source ?? summary.power_source ?? summary.source : '',
+    error: current ? summary.channels?.[name]?.error ?? (key === 'grid' ? '' : summary.power_error ?? '') : '',
+    recordedAt: current ? summary.channels?.[name]?.as_of ?? summary.as_of : null}));
 }
 
 export function connectionIcon(connected) {

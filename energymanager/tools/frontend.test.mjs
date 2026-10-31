@@ -1407,3 +1407,18 @@ test('task power levels preserve seconds in partial interval boundaries', () => 
   assert.match(markup, /02:45:07 GMT\+2/);
   assert.match(markup, /02:46:23 GMT\+2/);
 });
+
+test('P1 energy rows keep independent meter availability, provenance and coverage', () => {
+  const state = {now:'2026-10-31T12:00:00Z', demo:false, policy:{timezone:'Europe/Brussels'}};
+  const summary = {date:'2026-10-31', timezone:'Europe/Brussels', demo:false,
+    as_of:state.now, partial:true, source:'Recorded power integration',
+    kwh:{import:2.5, export:null, house:.5},
+    channels:{import:{partial:false,source:'P1 cumulative energy counter',as_of:state.now},
+      export:{partial:false,source:'P1 cumulative energy counter',error:'Missing midnight reading',as_of:state.now}}};
+  const rows = dailyEnergyRows(summary,'grid',state);
+  assert.deepEqual(rows.map(row => [row.actual,row.partial]), [['2.50',false],['—',false]]);
+  assert.equal(rows[0].source,'P1 cumulative energy counter');
+  assert.equal(rows[1].error,'Missing midnight reading');
+  assert.equal(rows[0].recordedAt,state.now);
+  assert.equal(dailyEnergyRows(summary,'house',state)[0].partial,true);
+});

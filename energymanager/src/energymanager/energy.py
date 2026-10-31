@@ -62,8 +62,7 @@ def power_components(sample: dict[str, Any]) -> dict[str, float] | None:
     house, ac, dc, ev, ess = values
     if min(house, ac, dc) < 0:
         return None
-    grid = house + ev - ac - ess
-    return {"import": max(0, grid), "export": max(0, -grid), "solar": ac + dc,
+    return {"solar": ac + dc,
             "solar_ac": ac, "solar_dc": dc, "house": house, "ev": ev,
             "ess_charge": max(0, -ess), "ess_discharge": max(0, ess)}
 
@@ -74,7 +73,7 @@ def daily_energy(path: Path, now: datetime, timezone: str, max_age_seconds: floa
     now = instant(now)
     local = now.astimezone(ZoneInfo(timezone))
     start = local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
-    totals = dict.fromkeys(("import", "export", "solar", "solar_ac", "solar_dc", "house", "ev",
+    totals = dict.fromkeys(("solar", "solar_ac", "solar_dc", "house", "ev",
                             "ess_charge", "ess_discharge"), 0.0)
     covered = 0.0
     previous: dict[str, Any] | None = None
@@ -102,14 +101,14 @@ def daily_energy(path: Path, now: datetime, timezone: str, max_age_seconds: floa
         integrate(previous, now)
     elapsed = (now - start).total_seconds()
     return {"date": local.date().isoformat(), "timezone": timezone, "demo": demo, "as_of": now.isoformat(),
-            "kwh": totals if covered > 0 else None, "covered_seconds": covered,
+            "kwh": {**totals, "import": None, "export": None} if covered > 0 else None, "covered_seconds": covered,
             "elapsed_seconds": elapsed, "partial": elapsed - covered > 1,
             "source": "SYNTHETIC power integration" if demo else "Recorded power integration"}
 
 
 def end_of_day_energy(summary: dict[str, Any], plan: dict[str, Any] | None,
                       revision: int, forecast_max_age: float,
-                      discharge_efficiency: float) -> dict[str, float] | None:
+                      discharge_efficiency: float) -> dict[str, float | None] | None:
     """Add the current plan's remaining AC flows to the recorded daily subtotal."""
     if summary["kwh"] is None or not plan or not plan.get("valid") or plan.get("revision") != revision:
         return None
@@ -141,7 +140,9 @@ def end_of_day_energy(summary: dict[str, Any], plan: dict[str, Any] | None,
         if any(not math.isfinite(value) or value < -1e-6 for value in powers.values()):
             return None
         for key, power in powers.items():
-            totals[key] += max(0, power) * hours
+            subtotal = totals.get(key)
+            if subtotal is not None:
+                totals[key] = subtotal + max(0, power) * hours
         cursor = right
         if cursor == end:
             return totals

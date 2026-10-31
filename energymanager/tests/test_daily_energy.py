@@ -33,14 +33,15 @@ def test_daily_energy_uses_legacy_archive_and_survives_restart(tmp_path):
     result = daily_energy(path, start + timedelta(seconds=60), "Europe/Brussels", 30, False)
     assert not result["partial"]
     assert result["covered_seconds"] == 60
-    assert result["kwh"]["import"] == pytest.approx(5 / 60)
+    assert result["kwh"]["import"] is None
     assert result["kwh"]["solar"] == pytest.approx(1.5 / 60)
     assert result["kwh"]["ess_charge"] == pytest.approx(1 / 60)
     assert result["kwh"]["ev"] == pytest.approx(3 / 60)
-    assert result["kwh"]["export"] == result["kwh"]["ess_discharge"] == 0
+    assert result["kwh"]["export"] is None
+    assert result["kwh"]["ess_discharge"] == 0
 
 
-def test_signed_ev_measurement_keeps_full_energy_coverage_and_net_meter_balance(tmp_path):
+def test_signed_ev_measurement_keeps_other_energy_coverage_without_grid_integration(tmp_path):
     store = Store(tmp_path / "synthetic.sqlite")
     start = datetime(2026, 10, 27, tzinfo=UTC)
     for seconds, power in ((0, -.035), (5, 1.38), (10, 1.38)):
@@ -50,7 +51,7 @@ def test_signed_ev_measurement_keeps_full_energy_coverage_and_net_meter_balance(
     assert result["covered_seconds"] == 10 and not result["partial"]
     assert result["kwh"]["ev"] == pytest.approx((-.035 + 1.38) * 5 / 3600)
     assert result["kwh"]["house"] == pytest.approx(.4 * 10 / 3600)
-    assert result["kwh"]["import"] == pytest.approx((.4 * 10 + (-.035 + 1.38) * 5) / 3600)
+    assert result["kwh"]["import"] is None
     store.close()
 
 
@@ -64,7 +65,7 @@ def test_daily_energy_leaves_out_gaps_invalid_and_synthetic_measurements(tmp_pat
     result = daily_energy(store.path, start + timedelta(seconds=100), "UTC", 30, False)
     assert result["partial"]
     assert result["covered_seconds"] == 40
-    assert result["kwh"]["export"] == pytest.approx(2.5 * 40 / 3600)
+    assert result["kwh"]["export"] is None
     assert result["kwh"]["ess_discharge"] == pytest.approx(40 / 3600)
     demo = daily_energy(store.path, start + timedelta(seconds=100), "UTC", 30, True)
     assert demo["covered_seconds"] == 10
@@ -93,7 +94,8 @@ async def test_daily_energy_endpoint_is_read_only_and_protected(tmp_path):
         assert response.status == 200
         assert response.headers["Cache-Control"] == "no-store"
         result = await response.json()
-        assert result["source"] == "SYNTHETIC power integration"
+        assert result["source"] == "P1 cumulative energy counters; other channels: SYNTHETIC power integration"
+        assert result["kwh"]["import"] is None and result["kwh"]["export"] is None
         assert result["kwh"]["house"] >= 0
         response = await client.get("/api/daily-energy", headers={"Host": "outside.test"})
         assert response.status == 403

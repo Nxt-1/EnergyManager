@@ -1,3 +1,8 @@
+## 4.5.2 — P1 grid energy counters
+
+- Use P1 cumulative import/export energy sensors for today's grid totals.
+- Add both energy-sensor mappings to Settings.
+
 ## 4.5.1 — Planned power profiles in task details
 
 - Added planned power profiles to EV and ESS session details and EV goal details.
