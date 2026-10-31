@@ -4,7 +4,7 @@ export const plotInsets = {left: 58, right: 16, top: 12, bottom: 32};
 export const timeZoomLimits = {minimum: 15 * 60000, maximum: 7 * 24 * 3600000};
 
 // Follow the displayed line, with no extrapolation or interpolation across a gap.
-export function valueAt(points, at) {
+export function valueAt(points, at, held = false) {
   let low = 0, high = points.length;
   while (low < high) {
     const middle = Math.floor((low + high) / 2);
@@ -16,7 +16,7 @@ export function valueAt(points, at) {
   if (before[0] === at) return {value: before[1], approximate: !!before[2]};
   if (!after || after[1] === null || after[0] <= before[0]) return null;
   const fraction = (at - before[0]) / (after[0] - before[0]);
-  return {value: before[1] + (after[1] - before[1]) * fraction, approximate: true};
+  return {value: held ? before[1] : before[1] + (after[1] - before[1]) * fraction, approximate: true};
 }
 
 export function clipSeries(points, start, end) {
@@ -30,8 +30,9 @@ export function clipSeries(points, start, end) {
 }
 
 export class GraphCursor {
-  constructor(root, formatTime, colors, signal, pan = null) {
+  constructor(root, formatTime, colors, signal, pan = null, names = ['power', 'soc']) {
     this.root = root;
+    this.names = names;
     this.formatTime = formatTime;
     this.colors = colors;
     this.models = {};
@@ -47,11 +48,11 @@ export class GraphCursor {
     this.touches = new Map();
     this.touchGesture = null;
     this.touchSuppressed = false;
-    for (const name of ['power', 'soc']) {
+    for (const name of this.names) {
       const plot = root.querySelector(`#${name}`);
       plot.tabIndex = 0;
       plot.setAttribute('role', 'group');
-      plot.setAttribute('aria-label', `${name === 'power' ? 'Power' : 'Battery state of charge'} graph. Use left/right arrows to inspect values; Escape clears the cursor.`);
+      plot.setAttribute('aria-label', `${name === 'soc' ? 'Battery state of charge' : 'Power'} graph. Use left/right arrows to inspect values; Escape clears the cursor.`);
       plot.addEventListener('pointermove', event => {
         if (this.moveTouch(event)) return;
         if (this.movePan(event)) return;
@@ -142,7 +143,8 @@ export class GraphCursor {
     const fraction = Number.isFinite(event.clientX) ?
       Math.max(0, Math.min(1, (event.clientX - geometry.left) / geometry.width)) : 0.5;
     const anchor = start + fraction * (end - start);
-    const duration = Math.max(timeZoomLimits.minimum, Math.min(timeZoomLimits.maximum,
+    const limits = this.pan?.limits?.() || timeZoomLimits;
+    const duration = Math.max(limits.minimum, Math.min(limits.maximum,
       (end - start) * Math.exp(Math.max(-1, Math.min(1, pixels * 0.002)))));
     // Keep the time beneath the mouse fixed while changing only the time scale.
     this.wheelRange = [anchor - fraction * duration, anchor + (1 - fraction) * duration];
@@ -195,7 +197,8 @@ export class GraphCursor {
     const distance = Math.max(8, Math.hypot(second.x - first.x, second.y - first.y));
     const center = (first.x + second.x) / 2;
     if (!this.pendingRange && Math.abs(center - gesture.center) < 4 && Math.abs(distance - gesture.distance) < 4) return true;
-    const duration = Math.max(timeZoomLimits.minimum, Math.min(timeZoomLimits.maximum,
+    const limits = this.pan?.limits?.() || timeZoomLimits;
+    const duration = Math.max(limits.minimum, Math.min(limits.maximum,
       (gesture.end - gesture.start) * gesture.distance / distance));
     const start = gesture.anchor - (center - gesture.left) / gesture.width * duration;
     this.queueRange([start, start + duration]);
@@ -295,12 +298,12 @@ export class GraphCursor {
 
   update(models) {
     this.models = models;
-    for (const name of ['power', 'soc']) {
+    for (const name of this.names) {
       const plot = this.root.querySelector(`#${name}`), enabled = !!this.pan?.enabled();
       plot.classList.toggle('graph-pannable', enabled);
-      plot.setAttribute('aria-label', `${name === 'power' ? 'Power' : 'Battery state of charge'} graph. ${enabled ? 'Drag to scroll through time; wheel or pinch to zoom; use two fingers to pan. ' : ''}Use left/right arrows to inspect values; Escape clears the cursor.`);
+      plot.setAttribute('aria-label', `${name === 'soc' ? 'Battery state of charge' : 'Power'} graph. ${enabled ? 'Drag to scroll through time; wheel or pinch to zoom; use two fingers to pan. ' : ''}Use left/right arrows to inspect values; Escape clears the cursor.`);
     }
-    const model = models.power;
+    const model = models[this.names[0]];
     if (this.at !== null && (this.at < model.start || this.at > model.end)) {
       this.at = null;
       this.pinned = false;
@@ -329,7 +332,8 @@ export class GraphCursor {
       svg('line', {x1: x, x2: x, y1: top, y2: model.height - bottom, class: 'cursor-line'});
       const table = document.createElement('table');
       const heading = table.createTHead().insertRow();
-      for (const label of ['', 'Actual', 'Planned']) {
+      const columns = model.columns || [['observed', 'Actual'], ['planned', 'Planned']];
+      for (const label of ['', ...columns.map(column => column[1])]) {
         const cell = document.createElement('th'); cell.textContent = label; heading.append(cell);
       }
       for (const series of model.series) {
@@ -338,8 +342,8 @@ export class GraphCursor {
         label.textContent = series.name === 'ev' || series.name === 'ess' ? series.name.toUpperCase() :
           series.name[0].toUpperCase() + series.name.slice(1);
         label.style.color = this.colors[series.name];
-        for (const kind of ['observed', 'planned']) {
-          const reading = valueAt(series[kind], this.at);
+        for (const [kind] of columns) {
+          const reading = valueAt(series[kind], this.at, series.step);
           row.insertCell().textContent = reading ? `${reading.approximate ? '≈' : ''}${
             reading.value.toFixed(name === 'soc' ? 1 : 0)} ${name === 'soc' ? '%' : 'W'}` : '—';
           if (reading) svg('circle', {cx: x, cy: y(reading.value), r: 3.5,
@@ -348,13 +352,15 @@ export class GraphCursor {
         }
       }
       tooltip.replaceChildren();
-      tooltip.title = 'Values follow the plotted lines. ≈ indicates interpolation; — means no value in this period.';
+      tooltip.title = 'Values follow the plotted lines. ≈ indicates a value between recorded timestamps; — means no value in this period.';
       const time = document.createElement('strong');
       time.textContent = this.formatTime(this.at);
       tooltip.append(time, table);
       tooltip.setAttribute('aria-live', announce ? 'polite' : 'off');
-      tooltip.style.left = `${Math.max(0, Math.min(model.width - tooltip.offsetWidth,
-        x > model.width / 2 ? x - tooltip.offsetWidth - 12 : x + 12))}px`;
+      const scale = plot.querySelector('svg').getBoundingClientRect().width / model.width;
+      const pixelX = x * scale, pixelWidth = model.width * scale;
+      tooltip.style.left = `${Math.max(0, Math.min(pixelWidth - tooltip.offsetWidth,
+        pixelX > pixelWidth / 2 ? pixelX - tooltip.offsetWidth - 12 : pixelX + 12))}px`;
     }
   }
 }

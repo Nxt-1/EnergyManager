@@ -1,5 +1,13 @@
 # Current requirements and decisions
 
+- 31October2026,4.5.3: user authorized thinner power plots and appliance review cursors,
+  linked draggable trim bounds and seconds, and Overview-style zoom/pan. Confirmed
+  multiple recordings should combine into an averaged program profile. Align trimmed
+  starts in real elapsed time; completed cycles contribute zero after their selected
+  end. Do not stretch heating phases. Inclusion is explicit and original cycles remain
+  available; existing one-cycle selections upgrade without adding other saved runs.
+
+
 - 31October2026,4.5.2: user authorized replacing the Overview grid import/export
   energy integrators with two P1 energy mappings and using the sensor-derived totals
   wherever those recorded subtotals are consumed. The supplied P1 screenshot shows

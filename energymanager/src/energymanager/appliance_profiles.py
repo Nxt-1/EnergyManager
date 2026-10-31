@@ -13,6 +13,7 @@ from uuid import uuid4
 import aiohttp
 
 from .domain import instant
+from .appliance_average import average_recordings
 
 if TYPE_CHECKING:
     from .service import Application
@@ -93,8 +94,12 @@ class ApplianceProfiles:
         settings = None
         if select:
             key = f"{recording['machine']}/{recording['program']}"
+            members = self.members(key)
+            if recording["id"] not in members:
+                members.append(recording["id"])
             settings = {**self.settings, "revision": self.settings["revision"] + 1,
-                        "selected": {**self.settings["selected"], key: recording["id"]}}
+                        "selected": {**self.settings["selected"], key: recording["id"]},
+                        "members": {**self.settings.get("members", {}), key: members}}
         with self.store.connection:
             if settings is not None:
                 self.store.connection.execute("INSERT OR REPLACE INTO state VALUES (?,?)",
@@ -112,14 +117,53 @@ class ApplianceProfiles:
         self.settings = settings
 
     def library(self) -> dict[str, Any]:
-        selected = {key: self.get(identity) for key, identity in self.settings["selected"].items()}
+        membership = {key: self.members(key) for key in self.settings["selected"]}
+        selected = {key: self.profile_summary(key, identities) for key, identities in membership.items()}
+        included = {identity for identities in membership.values() for identity in identities}
         sampler_error = None
         if self.task and self.task.done() and not self.task.cancelled() and self.task.exception():
             sampler_error = f"Recorder stopped: {self.task.exception()}"
         return {"mode": self.mode, "programs": PROGRAMS, **self.settings, "profiles": selected,
                 "sampler_error": sampler_error,
-                "recordings": self._rows("status != 'discarded'", limit=100),
+                "members": membership,
+                "recordings": [{**row, "included": row["id"] in included}
+                               for row in self._rows("status != 'discarded'", limit=100)],
                 "sample_seconds": SAMPLE_SECONDS, "maximum_gap_seconds": MAX_GAP_SECONDS}
+
+    def members(self, key: str) -> list[str]:
+        """An older single selection remains its sole contributor until explicitly changed."""
+        values = self.settings.get("members", {}).get(key)
+        if values is None:
+            identity = self.settings["selected"].get(key)
+            return [identity] if identity else []
+        return list(values)
+
+    def profile_summary(self, key: str, identities: list[str]) -> dict[str, Any]:
+        recordings = [self.get(identity) for identity in identities]
+        summaries = [row["summary"] for row in recordings]
+        duration = max(row["duration_seconds"] for row in summaries)
+        energy = math.fsum(row["energy_kwh"] for row in summaries) / len(summaries)
+        machine, program = key.split("/")
+        return {"id": self.settings["selected"][key], "machine": machine, "program": program,
+                "averaged": True, "recording_ids": identities, "recording_count": len(identities),
+                "summary": {"start_seconds": 0, "end_seconds": duration, "duration_seconds": duration,
+                            "mean_duration_seconds": math.fsum(row["duration_seconds"] for row in summaries) / len(summaries),
+                            "energy_kwh": energy, "average_w": energy * 3600000 / duration,
+                            "complete": True, "peak_w": None}}
+
+    async def profile_detail(self, machine: str, program: str) -> dict[str, Any]:
+        key = f"{machine}/{program}"
+        identities = self.members(key)
+        if not identities:
+            raise ValueError("No reviewed recordings are included in this profile")
+        revision = self.settings["revision"]
+        # The read-only worker has its own SQLite connection; large curves cannot block control.
+        detail = await asyncio.to_thread(average_recordings, self.store.path, self.mode,
+                                         machine, program, identities)
+        if revision != self.settings["revision"]:
+            raise ValueError("Profiles changed while loading; inspect the profile again")
+        return {**self.profile_summary(key, identities), **detail, "revision": revision,
+                "maximum_gap_seconds": MAX_CAPTURE_SECONDS}
 
     def configure(self, body: dict[str, Any]) -> dict[str, Any]:
         if type(body.get("revision")) is not int or body["revision"] != self.settings["revision"]:
@@ -304,7 +348,21 @@ class ApplianceProfiles:
         if type(body.get("revision")) is not int or body["revision"] != self.settings["revision"]:
             raise ValueError("Profiles changed in another view; reload before selecting")
         key = f"{recording['machine']}/{recording['program']}"
-        settings = {**self.settings, "selected": {**self.settings["selected"], key: identity}}
+        included = body.get("included", True)
+        if type(included) is not bool:
+            raise ValueError("Profile inclusion must be true or false")
+        members = self.members(key)
+        if included and identity not in members:
+            members.append(identity)
+        if not included and identity in members:
+            members.remove(identity)
+        selected = dict(self.settings["selected"])
+        if members:
+            selected[key] = identity if included else members[-1]
+        else:
+            selected.pop(key, None)
+        settings = {**self.settings, "selected": selected,
+                    "members": {**self.settings.get("members", {}), key: members}}
         self._persist_settings(settings)
 
     async def _sample(self, recording: dict[str, Any]) -> None:

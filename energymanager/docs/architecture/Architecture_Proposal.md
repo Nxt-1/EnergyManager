@@ -87,12 +87,23 @@ interrupted run. An armed restart requires new idle evidence before detecting a 
 
 The existing database adds indexed appliance_recordings and appliance_samples tables.
 UTC timestamps/raw W, source, program, settings, quality failures and load notes survive
-restart. Review/save stores immutable selected bounds/statistics on that recording;
-selecting a replacement retains earlier cycles. One explicitly selected recorded cycle
-represents each program for now; there is no automatic averaging, timing alignment or
-invented standard duration. Selection and saving its recording are transactional. The
-library lists the latest 100 nondiscarded recordings and separately returns selected
-profiles even if older; raw evidence is not purged. Discard hides unfinished/unselected
+restart. Review/save stores immutable selected bounds/statistics on that recording.
+From4.5.3 each program has an explicit included set of complete reviewed recordings.
+Saving a new cycle adds it to that set; add/remove actions retain all original evidence.
+An old selected recording upgrades as the sole contributor; older unselected recordings
+are not silently included. The legacy selected ID remains a compatibility marker;
+members are the averaging contract. Selection and saving its recording are transactional.
+Equal-weight means align each trimmed start to elapsed zero, retain real durations and
+count zero only after a confirmed complete cycle ends. No phases are stretched or
+averaged across missing data. Mean energy equals the arithmetic mean of measured
+cycle energies. The graph extends to the longest cycle; show mean cycle duration
+separately. Build sparse sample-held curves in a ten-second bounded read-only SQLite
+worker, outside control, and reject a result if its library revision changed.
+GET /api/profiles/{machine}/{program} returns the derived curve and statistics; library
+polls return lightweight membership/energy/duration summaries without loading raw samples.
+The library lists the latest 100 nondiscarded recordings and separately returns included
+profiles even if older; their contributor controls remain available when inspecting the
+average. Raw evidence is not purged. Discard hides unfinished/unselected
 captures without deleting evidence. Saved cycles can be inspected and reselected.
 
 The existing same-origin/ingress boundary protects GET /api/profiles,
@@ -103,6 +114,16 @@ Save/select responses return the resulting library revision. The initiating view
 only forms matching the successful previous revision; it retains other drafts and never
 uses an ordinary poll to bypass another view's revision conflict. Failed SQLite writes
 cannot update in-memory settings or leave selection ahead of persisted recording evidence.
+
+From4.5.3 power curves are thinner on Overview, Planning, task details and Appliances;
+SoC widths are unchanged. Recording reviews reuse the shared timestamp/W cursor and
+mouse drag, wheel zoom, two-finger pan and pinch navigation. Profile windows are bounded
+to their capture, with a one-second minimum or the whole shorter capture. Start/end
+handles shade their selected interior, synchronize with the numeric seconds on every
+move, support keyboard arrows and cannot cross. Text entry must be valid before updating
+the graph/preview; changing bounds clears the complete-cycle confirmation. Show selection
+and Full recording restore useful windows. Preview responses cannot overwrite newer
+bounds or another recording. Saved evidence remains immutable.
 
 The original ARCH-005 scheduling direction remains: earliest start/latest completion,
 recommendation plus alternatives, manual appliance start/programming, and fixed

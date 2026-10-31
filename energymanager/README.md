@@ -1,6 +1,6 @@
 # EnergyManager 4
 
-Version **4.5.2**, the main Energy Manager application. One joint seven-day EV/ESS MILP
+Version **4.5.3**, the main Energy Manager application. One joint seven-day EV/ESS MILP
 feeds independent responsive control. The application includes configured input/actuator
 boundaries, persisted goals/approvals/decisions and Overview/Planning/EV/Appliances pages.
 
@@ -16,6 +16,8 @@ Appliances records the next explicitly selected washing-machine/dishwasher progr
 from a dedicated HA W/kW power sensor. Configure the idle threshold and finish timeout,
 arm the cycle, then review/trim and explicitly save the measured profile. Original
 recordings survive restart; incomplete/interrupted runs cannot become selected profiles.
+Reviewed cycles can contribute to an equal-weight program average, aligned in real time.
+Recording graphs have power/time inspection, linked trim handles and zoom/pan controls.
 Mazak has editable provisional Program/Light/Production averages of 2500/3500/7000 W.
 Profiles are preparation for later scheduling; this release does not start or schedule
 machines or change their accounting in the household forecast. Existing installation

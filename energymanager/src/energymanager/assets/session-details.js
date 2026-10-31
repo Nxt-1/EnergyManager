@@ -101,7 +101,7 @@ export function plannedPowerProfileMarkup(state, task, options = {}) {
       path += `${contiguous ? 'L' : 'M'}${x(row.start).toFixed(2)},${y(value).toFixed(2)}H${x(row.end).toFixed(2)}`;
       previous = row;
     }
-    return `<path d="${path}" fill="none" stroke="${item.color}" stroke-width="2.5"/>`;
+    return `<path d="${path}" fill="none" stroke="${item.color}" stroke-width="1.5"/>`;
   }).join('');
   const ticks = [0, .25, .5, .75, 1].map(fraction => {
     const at = start + fraction * (end - start);

@@ -1,3 +1,9 @@
+## 4.5.3 — Appliance recording review and average profiles
+
+- Add power/time cursors, draggable trim handles and zoom/pan to appliance graphs.
+- Combine reviewed recordings into explicit per-program averages.
+- Make power graph lines thinner across the dashboards.
+
 ## 4.5.2 — P1 grid energy counters
 
 - Use P1 cumulative import/export energy sensors for today's grid totals.

@@ -294,3 +294,121 @@ def test_failed_profile_save_rolls_back_selection_and_memory(profiles):
     assert profiles.store.get(profiles.key)["selected"] == {}
     assert profiles.get(identity)["status"] == "review"
     assert len(profiles.detail(identity)["points"]) == 15
+
+
+def short_saved_cycle(profiles, watts, seconds, trim=None):
+    identity = arm(profiles)
+    ingest(profiles, identity, 0, 0)
+    for at in range(5, seconds + 6, 5):
+        ingest(profiles, identity, at, watts)
+    profiles.finish(identity)
+    profiles.accept(identity, {"reviewed": True, "revision": profiles.settings["revision"], **(trim or {})})
+    return identity
+
+
+async def test_average_preserves_mean_energy_real_time_and_completed_zero_tail(profiles):
+    first = short_saved_cycle(profiles, 1000, 5)
+    second = short_saved_cycle(profiles, 2000, 10)
+    average = await profiles.profile_detail("dishwasher", "eco")
+    assert average["recording_ids"] == [first, second]
+    assert average["recording_count"] == 2
+    assert average["summary"]["mean_duration_seconds"] == 7.5
+    assert average["summary"]["duration_seconds"] == 10
+    assert average["summary"]["peak_w"] == 1500
+    assert average["points"] == [{"seconds": 0, "power_w": 1500},
+                                  {"seconds": 5, "power_w": 1000},
+                                  {"seconds": 10, "power_w": 0}]
+    energy = sum((right["seconds"] - left["seconds"]) * left["power_w"] / 3600000
+                 for left, right in zip(average["points"], average["points"][1:]))
+    expected = (profiles.get(first)["summary"]["energy_kwh"] + profiles.get(second)["summary"]["energy_kwh"]) / 2
+    assert energy == pytest.approx(expected)
+    assert average["summary"]["energy_kwh"] == pytest.approx(expected)
+
+
+async def test_trimmed_cycles_are_aligned_to_each_selected_start_without_stretching(profiles):
+    short_saved_cycle(profiles, 1000, 10, {"start_seconds": 1.25, "end_seconds": 4.25})
+    short_saved_cycle(profiles, 2000, 10, {"start_seconds": 2.5, "end_seconds": 8})
+    average = await profiles.profile_detail("dishwasher", "eco")
+    assert average["summary"]["duration_seconds"] == 5.5
+    assert average["summary"]["mean_duration_seconds"] == 4.25
+    assert average["summary"]["energy_kwh"] == pytest.approx(7000 / 3600000)
+    assert average["points"] == [{"seconds": 0, "power_w": 1500},
+                                  {"seconds": 3, "power_w": 1000},
+                                  {"seconds": 5.5, "power_w": 0}]
+
+
+async def test_average_membership_is_explicit_deduplicated_durable_and_reversible(profiles):
+    first = short_saved_cycle(profiles, 1000, 5)
+    second = short_saved_cycle(profiles, 2000, 10)
+    profiles.select(first, {"revision": profiles.settings["revision"]})
+    assert profiles.members("dishwasher/eco") == [first, second]
+    profiles.select(first, {"revision": profiles.settings["revision"], "included": False})
+    assert profiles.members("dishwasher/eco") == [second]
+    restored = ApplianceProfiles(profiles.app)
+    assert restored.members("dishwasher/eco") == [second]
+    assert len(restored.detail(first)["points"]) == 2
+    restored.select(second, {"revision": restored.settings["revision"], "included": False})
+    assert restored.library()["profiles"] == {}
+    with pytest.raises(ValueError, match="No reviewed"):
+        await restored.profile_detail("dishwasher", "eco")
+    restored.select(first, {"revision": restored.settings["revision"], "included": True})
+    assert (await restored.profile_detail("dishwasher", "eco"))["recording_count"] == 1
+
+
+async def test_legacy_selection_migrates_as_one_contributor_without_adding_old_evidence(profiles):
+    first = short_saved_cycle(profiles, 1000, 5)
+    second = short_saved_cycle(profiles, 2000, 10)
+    settings = {**profiles.settings, "selected": {"dishwasher/eco": first}}
+    settings.pop("members")
+    profiles.store.put(profiles.key, settings)
+    restored = ApplianceProfiles(profiles.app)
+    assert restored.members("dishwasher/eco") == [first]
+    assert (await restored.profile_detail("dishwasher", "eco"))["summary"]["peak_w"] == 1000
+    assert restored.get(second)["status"] == "saved"
+    restored.select(second, {"revision": restored.settings["revision"]})
+    assert restored.members("dishwasher/eco") == [first, second]
+
+
+async def test_average_rejects_changed_revision_and_corrupt_contributor(profiles, monkeypatch):
+    import asyncio
+    import threading
+    from energymanager import appliance_profiles
+    from energymanager.appliance_average import average_recordings
+    identity = short_saved_cycle(profiles, 1000, 5)
+    entered, release = threading.Event(), threading.Event()
+    def delayed(*args):
+        entered.set()
+        assert release.wait(3)
+        return average_recordings(*args)
+    monkeypatch.setattr(appliance_profiles, "average_recordings", delayed)
+    pending = asyncio.create_task(profiles.profile_detail("dishwasher", "eco"))
+    assert await asyncio.to_thread(entered.wait, 2)
+    profiles.select(identity, {"revision": profiles.settings["revision"], "included": False})
+    release.set()
+    with pytest.raises(ValueError, match="changed while loading"):
+        await pending
+    # Raw evidence is not made valid by averaging if it was subsequently corrupted.
+    recording = profiles.get(identity)
+    recording["interrupted"] = True
+    profiles._save(recording)
+    with pytest.raises(ValueError, match="complete reviewed"):
+        average_recordings(profiles.store.path, profiles.mode, "dishwasher", "eco", [identity])
+
+
+async def test_average_endpoint_asset_and_inclusion_revision_security(profiles):
+    identity = short_saved_cycle(profiles, 1000, 5)
+    application = Application(profiles.store, snapshot=tiny())
+    application.appliance_profiles = profiles
+    async def no_lifecycle():
+        pass
+    application.start = application.close = no_lifecycle
+    async with TestClient(TestServer(create_web(application))) as client:
+        response = await client.get("/api/profiles/dishwasher/eco")
+        assert response.status == 200
+        assert response.headers["Cache-Control"] == "no-store"
+        assert (await response.json())["recording_count"] == 1
+        assert (await client.get("/api/profiles/dishwasher/eco", headers={"Host": "outside.test"})).status == 403
+        assert (await client.get("/profile-chart.js")).status == 200
+        response = await client.post(f"/api/profile-recordings/{identity}/select",
+            headers={"X-EnergyManager": "1"}, json={"revision": 1, "included": False})
+        assert response.status == 400 and profiles.members("dishwasher/eco") == [identity]

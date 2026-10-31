@@ -872,3 +872,21 @@ em-entity-picker > input { padding-right:36px; }
 .task-power-levels th,.task-power-levels td { padding:6px 10px; text-align:left; white-space:nowrap; }
 #detail-dialog:has(.task-power-profile),#goal-dialog:has(.task-power-profile) { width:min(840px,calc(100vw - 30px)); }
 @media(max-width:600px) { .task-power-profile svg { font-size:22px; } }
+
+.profile-chart-actions { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.profile-plot { position:relative; touch-action:pan-y; }
+.profile-plot .cursor-values { max-width:270px; }
+.profile-plot [data-trim-handle] { color:#0e7490; outline:none; cursor:ew-resize; touch-action:none; }
+.profile-plot [data-trim-handle="end"] { color:#7c3aed; }
+.profile-plot [data-trim-handle] line { stroke:currentColor; stroke-width:1.2; }
+.profile-plot [data-trim-handle] .trim-hit { stroke:transparent; stroke-width:32;
+  vector-effect:non-scaling-stroke; pointer-events:stroke; }
+.profile-plot .trim-grip { fill:currentColor; stroke:var(--surface); stroke-width:1; }
+.profile-plot [data-trim-handle]:focus .trim-grip { stroke:var(--text); stroke-width:2; }
+.profile-contributors { display:flex; gap:12px; }
+.profile-contributors > span { padding:8px; border:1px solid var(--line); border-radius:8px; }
+
+@media(max-width:620px) {
+  #profiles-panel .profile-plot svg { font-size:22px; }
+  .profile-plot .cursor-values { max-width:210px; }
+}

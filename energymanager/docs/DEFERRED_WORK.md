@@ -139,7 +139,10 @@ darks 40 C, darks 30 C and coloured 40 C. Mazak uses provisional flat average lo
 Program 2,500 W, Light 3,500 W, Production 7,000 W, to be tuned later. Detailed Mazak
 cycle learning is not requested. Capture uses an explicitly armed program and a
 configurable idle timeout, followed by review. Installation sensor identities and
-calibration, load variants and any future multi-cycle aggregation remain unresolved.
+calibration and load variants remain unresolved. From4.5.3, explicitly included reviewed
+cycles are averaged with starts aligned in real time and zero after each selected end.
+Raw recordings are retained, and review graphs support linked trim handles and zoom/pan.
+Appliance scheduling remains deferred.
 The maintained architecture records these confirmed requirements and open decisions.
 
 Preserve the earlier appliance-scheduling requirements for a later release:

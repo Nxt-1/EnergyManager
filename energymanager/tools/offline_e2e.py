@@ -442,17 +442,17 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                                 "entity_id": f"sensor.synthetic_{machine}", "start_threshold_w": 10,
                                 "idle_timeout_minutes": 15})
                         beginning = application.now() - timedelta(hours=3)
-                        for cycle in range(2):
+                        for cycle in range(4):
                             with patch.object(application, "now", return_value=beginning):
                                 recording = profiles.arm({"machine": "dishwasher", "program": "eco",
                                     "notes": f"SYNTHETIC reviewed example {cycle + 1}; not installation data"})
                             for seconds in range(0, 5400, 5):
-                                power = 0 if seconds == 0 or seconds >= 4200 else (
+                                power = 0 if seconds == 0 or seconds >= (3900 if cycle == 1 else 4200) else (
                                     2100 if seconds < 600 or 2600 < seconds < 3000 else 80)
-                                if cycle == 1 and seconds == 1200:
+                                if cycle == 3 and seconds == 1200:
                                     power = None
                                 profiles.ingest(recording["id"], beginning + timedelta(seconds=seconds), power)
-                            if cycle == 0:
+                            if cycle < 2:
                                 profiles.accept(recording["id"], {"revision": profiles.settings["revision"], "reviewed": True})
                     if ev_fault_fixture:
                         from energymanager.control import Command

@@ -267,8 +267,9 @@ export async function mountApplication(root, options = {}) {
           d += `${penLifted ? 'M' : 'L'}${num(x(point[0]),1)},${num(y(point[1]),1)} `;
           penLifted = false;
         }
+        const lineWidth = soc ? (kind === 'observed' ? 2.8 : 1.8) : (kind === 'observed' ? 1.6 : 1.2);
         svg +=
-          `<path d="${d}" fill="none" stroke="${colors[s.name]}" stroke-width="${kind==='observed'?2.8:1.8}" ${kind==='planned'?'stroke-dasharray="6 4" opacity=".85"':''}><title>${esc(s.name)} · ${kind}</title></path>`;
+          `<path d="${d}" fill="none" stroke="${colors[s.name]}" stroke-width="${lineWidth}" ${kind==='planned'?'stroke-dasharray="6 4" opacity=".85"':''}><title>${esc(s.name)} · ${kind}</title></path>`;
       }
     const now = Date.parse(state.now);
     if (now >= start && now <= end) svg +=

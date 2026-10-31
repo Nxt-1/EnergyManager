@@ -241,6 +241,14 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
                 raise web.HTTPNotFound()
         return web.json_response(result, headers={"Cache-Control": "no-store"})
 
+    async def averaged_profile(request: web.Request) -> web.Response:
+        try:
+            result = await application.appliance_profiles.profile_detail(
+                request.match_info["machine"], request.match_info["program"])
+        except (TimeoutError, sqlite3.OperationalError) as exc:
+            return web.json_response({"error": f"Profile unavailable: {exc}"}, status=503)
+        return web.json_response(result, headers={"Cache-Control": "no-store"})
+
     async def recording(request: web.Request) -> web.Response:
         library = application.appliance_profiles
         identity = request.match_info["id"]
@@ -275,7 +283,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
                         "datetime-picker.js", "ev-schedule.js", "style.css", "ha-card.js",
                         "application-view.js", "view.html", "native-dashboard.js", "native-dashboard.css",
                         "native-live.js", "graph-history.js", "graph-cursor.js", "dashboard-client.js", "planning-activity.js",
-                        "text-selection.js", "ev-status.js", "session-details.js", "appliance-profiles.js"):
+                        "text-selection.js", "ev-status.js", "session-details.js", "appliance-profiles.js", "profile-chart.js"):
             raise web.HTTPNotFound()
         content_type = {"html": "text/html", "js": "text/javascript", "css": "text/css"}[
             name.rsplit(".", 1)[1]
@@ -295,6 +303,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
     app.add_routes(
         [
             web.get("/api/profiles", profiles),
+            web.get("/api/profiles/{machine}/{program}", averaged_profile),
             web.post("/api/profiles/{action}", profiles),
             web.get("/api/profile-recordings/{id}", recording),
             web.post("/api/profile-recordings/{id}/{action}", recording),

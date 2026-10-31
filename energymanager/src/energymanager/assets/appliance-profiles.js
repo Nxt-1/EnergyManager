@@ -1,30 +1,10 @@
+import {ProfileChart} from './profile-chart.js';
+export {profileGraph} from './profile-chart.js';
+
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, character =>
   ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character]));
 const machineName = machine => ({dishwasher: 'Dishwasher', washing_machine: 'Washing machine'}[machine]);
 const decimal = (value, digits = 2) => value === null || value === undefined ? '—' : Number(value).toFixed(digits);
-
-export function profileGraph(points, maximumGap = 15, selection = null) {
-  const width = 800, height = 230, left = 60, bottom = 195;
-  const duration = Math.max(1, points.at(-1)?.seconds || 1);
-  const peak = Math.max(1, ...points.map(point => point.power_w || 0));
-  let path = '', previous = null;
-  for (const point of points) {
-    if (point.power_w === null) { previous = null; continue; }
-    const x = left + point.seconds / duration * (width - left - 15);
-    const y = bottom - point.power_w / peak * (bottom - 15);
-    if (!previous || point.seconds - previous.seconds > maximumGap) path += `M${x.toFixed(2)},${y.toFixed(2)}`;
-    else path += `H${x.toFixed(2)}V${y.toFixed(2)}`;
-    previous = point;
-  }
-  const selectionStart = selection ? left + selection.start_seconds / duration * (width - left - 15) : left;
-  const selectionWidth = selection ? (selection.end_seconds - selection.start_seconds) / duration * (width - left - 15) : 0;
-  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Recorded power in watts against elapsed minutes; missing readings leave gaps">
-    ${selection ? `<rect x="${selectionStart}" y="15" width="${selectionWidth}" height="180" fill="#007ac2" opacity="0.12"/>` : ''}
-    <path d="M${left},15V${bottom}H785" fill="none" stroke="currentColor" opacity="0.3"/>
-    <path d="${path}" fill="none" stroke="#007ac2" stroke-width="2"/>
-    <text x="3" y="22">${Math.round(peak)} W</text><text x="${left}" y="220">0 min</text>
-    <text x="690" y="220">${decimal(duration / 60, 1)} min</text></svg>`;
-}
 
 export class ApplianceProfilesPage {
   constructor(root, api, signal) {
@@ -34,6 +14,14 @@ export class ApplianceProfilesPage {
     this.visible = false;
     this.loading = false;
     this.library = null;
+    this.previewGeneration = 0;
+    root.addEventListener('input', event => {
+      if (['start_seconds','end_seconds'].includes(event.target.name)) this.syncTrim(event.target.form);
+    }, {signal});
+    signal.addEventListener('abort', () => {
+      clearTimeout(this.previewTimer);
+      this.chart?.close();
+    }, {once:true});
     root.addEventListener('submit', event => {
       event.preventDefault();
       this.perform(() => this.submit(event.target));
@@ -110,7 +98,7 @@ export class ApplianceProfilesPage {
       <article class="card"><h2>Mazak · provisional average loads</h2><form data-profile-form="mazak" data-revision="${library.revision}" class="profile-form">
       ${Object.entries(library.mazak).map(([mode, power]) => `<label>${mode[0].toUpperCase() + mode.slice(1)} (W)<input name="${mode}" type="number" min="0" max="100000" step="1" required value="${power}"></label>`).join('')}
       <button type="submit">Save Mazak averages</button></form><p class="muted">Flat average loads for later planning; no cycle duration is assumed.</p></article>
-      <article class="card"><h2>Selected profiles</h2><div data-profile-selected></div></article>
+      <article class="card"><h2>Averaged profiles</h2><div data-profile-selected></div></article>
       <article class="card"><h2>Recordings</h2><div data-profile-recordings></div><p class="muted">Latest 100 recordings shown. Original samples and earlier saved cycles are retained.</p></article>
       <article class="card" data-profile-review hidden></article>
       <p class="muted">Profiles are stored in EnergyManager. This first milestone does not schedule or start appliances.</p>`;
@@ -121,7 +109,12 @@ export class ApplianceProfilesPage {
     this.root.querySelector('[data-profile-selected]').innerHTML = Object.entries(library.programs).map(([machine, programs]) =>
       Object.entries(programs).map(([program, label]) => {
         const profile = library.profiles[`${machine}/${program}`];
-        return `<p>${machineName(machine)} · ${escapeHTML(label)}: ${profile ? `${decimal(profile.summary.duration_seconds / 60, 1)} min · ${decimal(profile.summary.energy_kwh, 3)} kWh · ${Math.round(profile.summary.peak_w)} W peak <button data-profile-command="review" data-id="${profile.id}">Inspect</button>` : 'No reviewed profile'}</p>`;
+        return `<p>${machineName(machine)} · ${escapeHTML(label)}: ${profile ?
+          `${profile.recording_count} recording${profile.recording_count === 1 ? '' : 's'} ·
+          ${decimal(profile.summary.mean_duration_seconds / 60, 1)} min mean cycle ·
+          ${decimal(profile.summary.energy_kwh, 3)} kWh mean
+          <button data-profile-command="average" data-machine="${machine}" data-program="${program}">Inspect average</button>` :
+          'No reviewed recordings included'}</p>`;
       }).join('')).join('');
     this.root.querySelector('[data-profile-recordings]').innerHTML = library.recordings.length ? library.recordings.map(recording => {
       const status = recording.status === 'armed' ? (recording.idle_seen ? 'Armed · waiting for start' : 'Armed · waiting for idle') : recording.status;
@@ -130,7 +123,7 @@ export class ApplianceProfilesPage {
         <p>${escapeHTML(recording.notes)}${recording.error ? ' · ' + escapeHTML(recording.error) : ''}</p>
         <div class="actions"><button data-profile-command="review" data-id="${recording.id}">Inspect / review</button>
         ${recording.status === 'recording' ? `<button data-profile-command="finish" data-id="${recording.id}">Finish now</button>` : ''}
-        ${recording.status === 'saved' ? `<button data-profile-command="select" data-id="${recording.id}">Use this profile</button>` : `<button data-profile-command="discard" data-id="${recording.id}">Discard recording</button>`}</div></section>`;
+        ${recording.status === 'saved' ? `<button data-profile-command="select" data-id="${recording.id}" data-included="${!recording.included}">${recording.included ? 'Remove from average' : 'Add to average'}</button>` : `<button data-profile-command="discard" data-id="${recording.id}">Discard recording</button>`}</div></section>`;
     }).join('') : '<p class="muted">No cycles recorded yet.</p>';
   }
 
@@ -154,7 +147,7 @@ export class ApplianceProfilesPage {
       const saved = await this.api(`profile-recordings/${form.dataset.id}/accept`, 'POST', body);
       this.advanceRevision(body.revision, saved.library_revision);
       await this.review(form.dataset.id);
-      this.message('Reviewed cycle saved and selected. Earlier recordings are retained.');
+      this.message('Reviewed cycle saved and added to the program average. Original recordings are retained.');
     }
     await this.refresh();
   }
@@ -177,43 +170,134 @@ export class ApplianceProfilesPage {
       return;
     }
     if (command === 'review') return this.review(id);
-    if (command === 'preview') {
-      const form = button.closest('form');
-      const values = new FormData(form);
-      const summary = await this.api(`profile-recordings/${form.dataset.id}/preview`, 'POST', {start_seconds: Number(values.get('start_seconds')), end_seconds: Number(values.get('end_seconds'))});
-      form.querySelector('[data-profile-summary]').textContent = this.summaryText(summary);
-      this.root.querySelector('[data-profile-graph]').innerHTML = profileGraph(this.reviewed.points, 15, summary);
-      return;
-    }
+    if (command === 'average') return this.reviewAverage(button.dataset.machine,button.dataset.program);
+    if (command === 'preview') return this.previewSelection(button.closest('form'));
     const revision = this.library.revision;
-    const result = await this.api(`profile-recordings/${id}/${command}`, 'POST', {revision});
+    const result = await this.api(`profile-recordings/${id}/${command}`, 'POST', {revision,...(command === 'select' ? {included:button.dataset.included !== 'false'} : {})});
     if (command === 'select') this.advanceRevision(revision, result.library_revision);
     if (command === 'finish') await this.review(id);
-    if (command === 'discard') this.root.querySelector('[data-profile-review]').hidden = true;
+    if (command === 'discard') {
+      this.chart?.close();
+      this.root.querySelector('[data-profile-review]').hidden = true;
+    }
     await this.refresh();
+    if (command === 'select' && this.reviewed?.averaged) {
+      const key = this.reviewed.machine + '/' + this.reviewed.program;
+      if (this.library.profiles[key]) await this.reviewAverage(this.reviewed.machine,this.reviewed.program);
+      else { this.chart?.close(); this.root.querySelector('[data-profile-review]').hidden = true; }
+    }
   }
 
   summaryText(summary) {
     return `${decimal(summary.duration_seconds / 60, 1)} min · ${decimal(summary.energy_kwh, 3)} kWh${summary.complete ? '' : ' measured portion only · MISSING DATA'} · ${decimal(summary.average_w, 0)} W average · ${decimal(summary.peak_w, 0)} W peak`;
   }
 
+  trimValues(form) {
+    const start = form.elements.start_seconds, end = form.elements.end_seconds;
+    end.setCustomValidity('');
+    const selection = {start_seconds:start.valueAsNumber,end_seconds:end.valueAsNumber};
+    const maximum = this.reviewed.points.at(-1)?.seconds || 0;
+    if (!Number.isFinite(selection.start_seconds) || !Number.isFinite(selection.end_seconds) ||
+        selection.start_seconds < 0 || selection.end_seconds > maximum ||
+        selection.end_seconds <= selection.start_seconds) {
+      end.setCustomValidity('Choose an end after the start, within this recording.');
+      return null;
+    }
+    return selection;
+  }
+
+  syncTrim(form) {
+    clearTimeout(this.previewTimer);
+    const selection = this.trimValues(form);
+    if (!selection) return;
+    this.chart.setSelection(selection);
+    form.elements.reviewed.checked = false;
+    form.querySelector('[data-profile-summary]').textContent = 'Updating selection…';
+    this.previewTimer = setTimeout(() => {
+      this.previewSelection(form).catch(error => this.message(error.message,true));
+    },250);
+  }
+
+  async previewSelection(form) {
+    const selection = this.trimValues(form);
+    if (!selection) { form.reportValidity(); return; }
+    const generation = ++this.previewGeneration;
+    const identity = this.reviewed.id;
+    const summary = await this.api(`profile-recordings/${identity}/preview`,'POST',selection);
+    if (this.signal.aborted || generation !== this.previewGeneration || !form.isConnected ||
+        this.reviewed.id !== identity) return;
+    const current = this.trimValues(form);
+    if (!current || current.start_seconds !== selection.start_seconds ||
+        current.end_seconds !== selection.end_seconds) return;
+    form.querySelector('[data-profile-summary]').textContent = this.summaryText(summary);
+  }
+
+  mountChart(recording, selection, editable) {
+    this.chart?.close();
+    this.chart = new ProfileChart(this.root.querySelector('[data-profile-graph]'),
+      {...recording,timezone:this.timezone},selection,editable,this.signal,(next,finished) => {
+        const form = this.root.querySelector('form[data-profile-form="accept"]');
+        if (!form) return;
+        form.elements.reviewed.checked = false;
+        form.elements.start_seconds.value = next.start_seconds;
+        form.elements.end_seconds.value = next.end_seconds;
+        form.elements.end_seconds.setCustomValidity('');
+        form.querySelector('[data-profile-summary]').textContent = 'Updating selection…';
+        if (finished) this.syncTrim(form);
+      });
+  }
+
+  async reviewAverage(machine,program) {
+    const profile = await this.api(`profiles/${machine}/${program}`);
+    if (this.signal.aborted) return;
+    this.reviewed = profile;
+    clearTimeout(this.previewTimer);
+    this.previewGeneration++;
+    const panel = this.root.querySelector('[data-profile-review]');
+    panel.hidden = false;
+    panel.innerHTML = `<h2>Average · ${machineName(machine)} · ${escapeHTML(this.library.programs[machine][program])}</h2>
+      <p>${profile.recording_count} reviewed recording${profile.recording_count === 1 ? '' : 's'} ·
+      ${escapeHTML(this.summaryText(profile.summary))}</p>
+      <p class="muted">Starts are aligned without stretching time. Each complete cycle contributes zero after its selected end.
+      Mean cycle duration: ${decimal(profile.summary.mean_duration_seconds/60,1)} min;
+      graph extends to the longest cycle: ${decimal(profile.summary.duration_seconds/60,1)} min.</p>
+      <div data-profile-graph></div>
+      <h3>Included recordings</h3><div class="actions profile-contributors">
+      ${profile.recording_ids.map((identity,index) => `<span>Recording ${index+1}
+      <button data-profile-command="review" data-id="${identity}">Inspect</button>
+      <button data-profile-command="select" data-id="${identity}" data-included="false">Remove from average</button></span>`).join('')}
+      </div>`;
+    this.mountChart(profile,null,false);
+    panel.scrollIntoView({block:'start'});
+  }
+
   async review(id) {
     const recording = await this.api(`profile-recordings/${id}`);
     if (this.signal.aborted) return;
     this.reviewed = recording;
+    clearTimeout(this.previewTimer);
+    this.previewGeneration++;
     const panel = this.root.querySelector('[data-profile-review]');
     const duration = recording.points.at(-1)?.seconds || 0;
-    const selection = recording.summary;
+    const selection = recording.summary || {start_seconds:0,
+      end_seconds:recording.suggested_end_seconds ?? duration};
+    const editable = recording.status === 'review' && duration > 0;
     panel.hidden = false;
     panel.innerHTML = `<h2>Review · ${machineName(recording.machine)} · ${escapeHTML(this.library.programs[recording.machine][recording.program])}</h2>
       <p>${escapeHTML(recording.notes)} · ${escapeHTML(recording.entity_id)} · ${escapeHTML(recording.status)}</p>
-      <div data-profile-graph>${profileGraph(recording.points, 15, selection)}</div><p class="muted">Elapsed time from detected start. Gaps are unknown; short peaks remain visible. Trim seconds are relative to the start.</p>
+      <div data-profile-graph></div>
+      <p class="muted">Gaps are unknown; short measured peaks remain visible. Trim seconds are relative to the detected start.</p>
       ${recording.interrupted ? '<p class="error">Interrupted recording. Inspect it for diagnosis and record a complete cycle before saving a profile.</p>' : ''}
-      ${recording.status === 'review' ? `<form data-profile-form="accept" data-id="${id}" data-revision="${this.library.revision}" class="profile-form">
-      <label>Start (seconds)<input name="start_seconds" type="number" min="0" max="${duration}" step="any" value="0" required></label>
-      <label>End (seconds)<input name="end_seconds" type="number" min="0" max="${duration}" step="any" value="${recording.suggested_end_seconds ?? duration}" required></label>
+      ${editable ? `<form data-profile-form="accept" data-id="${id}" data-revision="${this.library.revision}" class="profile-form">
+      <label>Start (seconds)<input name="start_seconds" type="number" min="0" max="${duration}" step="any" value="${selection.start_seconds}" required></label>
+      <label>End (seconds)<input name="end_seconds" type="number" min="0" max="${duration}" step="any" value="${selection.end_seconds}" required></label>
       <button type="button" data-profile-command="preview">Preview selection</button><p data-profile-summary></p>
-      <label class="profile-check"><input name="reviewed" type="checkbox" required>I reviewed a complete cycle and want to use it as this program's profile.</label>
-      <button type="submit">Save and use profile</button></form>` : selection ? `<p>${escapeHTML(this.summaryText(selection))} · Selected ${selection.start_seconds}–${selection.end_seconds} seconds (shaded)</p>` : '<p>Finish the recording before saving a profile.</p>'}`;
+      <label class="profile-check"><input name="reviewed" type="checkbox" required>I reviewed a complete cycle and want to include it in this program's average.</label>
+      <button type="submit">Save and add to average</button></form>` : recording.summary ?
+      `<p>${escapeHTML(this.summaryText(recording.summary))} · Selected ${selection.start_seconds}–${selection.end_seconds} seconds (shaded)</p>` :
+      '<p>Finish the recording before saving a profile.</p>'}`;
+    this.mountChart(recording,duration > 0 ? selection : null,editable);
+    if (editable) this.syncTrim(panel.querySelector('form'));
+    panel.scrollIntoView({block:'start'});
   }
 }

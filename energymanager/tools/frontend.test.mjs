@@ -783,7 +783,7 @@ test('graph cursor follows displayed lines and preserves gaps and planned step b
   assert.deepEqual(valueAt([[0,100],[10,100],[10,200],[20,200]],10), {value:200,approximate:false});
 });
 
-function syntheticGraphPointer(t) {
+function syntheticGraphPointer(t, names = ['power','soc']) {
   const frames = new Map(), changes = [], controller = new AbortController();
   const originalRequest = globalThis.requestAnimationFrame, originalCancel = globalThis.cancelAnimationFrame;
   let frameID = 0, enabled = true;
@@ -803,20 +803,20 @@ function syntheticGraphPointer(t) {
     hasPointerCapture(id) {return this.captures.has(id);}
     releasePointerCapture(id) {this.captures.delete(id); this.capture = [...this.captures].at(-1) ?? null;}
   }
-  const plots = {power: new Plot(), soc: new Plot()};
+  const plots = Object.fromEntries(names.map(name => [name,new Plot()]));
   const root = {ownerDocument: {getSelection: () => null}, querySelector: selector => {
     const plot = plots[selector.slice(1).split(' ')[0]];
     return selector.endsWith(' svg') ? plot.querySelector('svg') : plot;
   }};
   const cursor = new GraphCursor(root, String, {}, controller.signal,
-    {enabled: () => enabled, changed: (range, finished) => changes.push({range,finished})});
+    {enabled: () => enabled, changed: (range, finished) => changes.push({range,finished})}, names);
   const model = {start:0,end:21600000,width:1000,now:7200000};
-  cursor.update({power:model,soc:{...model}});
+  cursor.update(Object.fromEntries(names.map(name => [name,{...model}])));
   const emit = (type, x, y = 50, extra = {}) => {
     const event = new Event(type, {cancelable:true});
     Object.assign(event, {pointerId:1,pointerType:'mouse',button:0,buttons:type === 'pointerup' ? 0 : 1,
       clientX:x,clientY:y,...extra});
-    plots.power.dispatchEvent(event);
+    plots[names[0]].dispatchEvent(event);
     return event;
   };
   return {cursor,changes,plots,controller,emit,disable: () => {enabled=false;},
@@ -1276,7 +1276,7 @@ test('appliance profile graph preserves measured peaks and breaks at invalid rea
     {seconds: 10, power_w: null}, {seconds: 15, power_w: 200}, {seconds: 40, power_w: 300}]);
   assert.match(graph, /2400 W/);
   assert.match(graph, /missing readings leave gaps/);
-  const measurementPath = [...graph.matchAll(/<path d="([^"]+)"/g)][1][1];
+  const measurementPath = graph.match(/<path d="([^"]+)" fill="none" stroke="#007ac2"/)[1];
   assert.equal((measurementPath.match(/M/g) || []).length, 3);
   assert.equal((measurementPath.match(/H/g) || []).length, 1);
   assert.doesNotMatch(graph, /NaN|Infinity/);
@@ -1287,7 +1287,11 @@ test('appliance profile graph preserves measured peaks and breaks at invalid rea
 test('saved appliance profile graph explicitly marks its trimmed selection', () => {
   const graph = profileGraph([{seconds: 0, power_w: 500}, {seconds: 100, power_w: 500}], 15,
     {start_seconds: 20, end_seconds: 80});
-  assert.match(graph, /<rect x="205" y="15" width="435"/);
+  assert.match(graph, /data-profile-shade/);
+  assert.match(graph, /data-trim-handle="start"/);
+  assert.match(graph, /data-trim-handle="end"/);
+  assert.match(graph, /aria-valuenow="20"/);
+  assert.match(graph, /aria-valuenow="80"/);
 });
 
 
@@ -1421,4 +1425,54 @@ test('P1 energy rows keep independent meter availability, provenance and coverag
   assert.equal(rows[1].error,'Missing midnight reading');
   assert.equal(rows[0].recordedAt,state.now);
   assert.equal(dailyEnergyRows(summary,'house',state)[0].partial,true);
+});
+
+import {profileSeries, profileRange, trimBoundary} from '../src/energymanager/assets/profile-chart.js';
+
+test('recording cursor uses sample holds, exact changes and explicit gaps', () => {
+  const points = profileSeries([{seconds:0,power_w:1000},{seconds:5,power_w:2000},
+    {seconds:10,power_w:null},{seconds:15,power_w:500},{seconds:40,power_w:100}]);
+  assert.deepEqual(valueAt(points,2500,true),{value:1000,approximate:true});
+  assert.deepEqual(valueAt(points,5000,true),{value:2000,approximate:false});
+  assert.equal(valueAt(points,7500,true),null);
+  assert.equal(valueAt(points,20000,true),null);
+  assert.equal(valueAt(points,41000,true),null);
+});
+
+test('recording zoom stays within capture bounds and trim handles cannot cross', () => {
+  assert.deepEqual(profileRange([-10,50],100),[0,60]);
+  assert.deepEqual(profileRange([70,130],100),[40,100]);
+  assert.deepEqual(profileRange([10,1000],100),[0,100]);
+  assert.deepEqual(profileRange([50,50.01],100),[50,51]);
+  assert.deepEqual(profileRange([0,.1],.3),[0,.3]);
+  const selection = {start_seconds:20,end_seconds:80};
+  assert.equal(trimBoundary(selection,'start',-10,100).start_seconds,0);
+  assert.equal(trimBoundary(selection,'start',99,100).start_seconds,79.999);
+  assert.equal(trimBoundary(selection,'end',5,100).end_seconds,20.001);
+  assert.equal(trimBoundary(selection,'end',200,100).end_seconds,100);
+  const markup = profileGraph([{seconds:0,power_w:10},{seconds:100,power_w:10}],15,selection,[10,90],true);
+  assert.equal((markup.match(/role="slider"/g)||[]).length,2);
+  assert.match(markup,/stroke-width="1.2"/);
+});
+
+test('single appliance plot reuses cursor, wheel and pinch with a one-second zoom limit', t => {
+  const fixture = syntheticGraphPointer(t,['profile-power']);
+  fixture.cursor.pan.limits = () => ({minimum:1000,maximum:60000});
+  fixture.cursor.update({'profile-power':{start:0,end:60000,width:1000,now:0}});
+  fixture.emit('wheel',500,50,{deltaX:0,deltaY:-900,deltaMode:0});
+  fixture.flush();
+  const range = fixture.changes.at(-1).range;
+  assert.ok(range[1]-range[0] >= 1000 && range[1]-range[0] < 60000);
+  fixture.cursor.finishWheel();
+  fixture.plots['profile-power'].dispatchEvent(Object.assign(new Event('keydown',{cancelable:true}),
+    {key:'ArrowRight'}));
+  assert.equal(fixture.cursor.active,'profile-power');
+  assert.ok(fixture.cursor.at > 0);
+  fixture.emit('pointerdown',300,50,{pointerType:'touch',pointerId:1});
+  fixture.emit('pointerdown',700,50,{pointerType:'touch',pointerId:2});
+  fixture.emit('pointermove',900,50,{pointerType:'touch',pointerId:2});
+  fixture.flush();
+  const pinch = fixture.changes.at(-1).range;
+  assert.equal(pinch[1]-pinch[0],40000);
+  fixture.emit('pointerup',900,50,{pointerType:'touch',pointerId:2});
 });

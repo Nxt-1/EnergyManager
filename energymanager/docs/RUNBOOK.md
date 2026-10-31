@@ -1,5 +1,24 @@
 # Run, configure, review and roll back
 
+## Appliance graph review and averages (4.5.3)
+
+Update the add-on and reload HA. Inspect a recording: hover/tap or use arrow keys on the
+graph for timestamp, elapsed seconds and W. Drag the coloured start/end handles to trim;
+their fields update continuously. Editing valid seconds moves the handles. Reconfirm
+the complete cycle after changing bounds, then Save and add to average. Unknown gaps
+remain visible and still prevent accepting incomplete coverage.
+
+Drag the graph to pan, wheel/pinch to zoom, or use two fingers to pan. The recording
+window stays within the captured data. Full recording and Show selection restore useful
+views. Keyboard arrows move a focused handle (Shift:10seconds). Averaged profiles →
+Inspect average shows the equal-weight curve and included recordings. Add/remove saved
+recordings without deleting their raw samples. Mean duration and longest graph duration
+are distinct; completed cycles contribute zero to the shared tail.
+
+The labelled --profiles-fixture preview now includes two accepted cycles, one complete
+review and one gapped review. No installation data or appliance operation is involved.
+
+
 ## P1 daily grid totals (4.5.2)
 
 After updating, open Settings → Measurements, select P1 cumulative import energy and
@@ -29,9 +48,9 @@ until the recorder reports waiting for start, then run the machine normally. Rec
 continues with the dashboard closed. The timer finishes after continuous idle; renewed
 activity and missing reads reset it. Finish now is available for explicit completion.
 Review the graph, trim start/end in seconds, preview the statistics and confirm that
-the selected range is a complete cycle before Save and use profile. Missing coverage
+the selected range is a complete cycle before Save and add to average. Missing coverage
 or interrupted recordings cannot be selected. Keep several runs to compare variability;
-select a previous saved cycle to replace a poor representative without deleting it.
+add or remove reviewed cycles from the average without deleting the originals.
 Mazak averages are editable on the same page. This milestone does not schedule/start
 machines or subtract them from household forecasts. No installation collection was run.
 
@@ -39,8 +58,8 @@ Use clearly labelled synthetic data for offline UI verification. From energymana
 set PYTHONPATH to this worktree's src when reusing another checkout's interpreter:
 `python tools/offline_e2e.py --serve --profiles-fixture --port 8105`, then
 `python tools/native_dashboard_preview.py --backend http://127.0.0.1:8105/ --port 8106`.
-The fixtures expose only fake HA and local endpoints, with one reviewed synthetic cycle
-and one gapped cycle for review. Keep this separate from installation configuration/data.
+The fixtures expose only fake HA and local endpoints, with two saved cycles,
+one complete review and one gapped review. Keep this separate from installation configuration/data.
 
 
 Update the add-on and reload Home Assistant. The existing native dashboard loader adds

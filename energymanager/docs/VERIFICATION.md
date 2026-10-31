@@ -1,5 +1,26 @@
 # EnergyManager 4 verification
 
+## 4.5.3 — Appliance chart controls and multi-recording means (31 October2026)
+
+647 Python tests pass147.21s;80frontend cases, Ruff/mypy47 and every dashboard JS
+syntax check pass. Regressions cover start-aligned equal-weight means, unequal duration/
+zero completed tails, fractional trims/mean energy, membership deduplication/removal/
+restore, legacy single selection without implicit inclusion, original sample retention,
+revisions during worker reads, invalid evidence and endpoint/asset/security behavior.
+Shared cursor tests retain existing Overview navigation and add a single appliance plot,
+sample holds/gaps, one-second zoom, wheel/pinch, bounded windows and noncrossing handles.
+
+Configured local fake E2E25.464s/2019intervals,
+max control4.205ms/4fake calls.
+Synthetic recording fixture:two accepted cycles, complete review and gapped review.
+Native browser verifies thinner Overview/Planning curves; mouse/keyboard trim↔seconds,
+timestamp/W cursor, wheel zoom, pan, selected window, save/add/remove2→3→2 average while
+retaining raw evidence, and light/dark. Standalone zoom/gap reporting passes; logs clean.
+Pinch/two-finger behavior has synthetic gesture coverage, not a physical touch-device test.
+Wheel/sdist71 runtime files match source, isolated4.5.3 imports/new asset pass.
+No live HA/database/hardware/provider/notification/deployment. Remote release results
+belong only in ignored artifacts/v453-release-state.json and the final reply.
+
 ## 4.5.2 — P1 daily grid energy (31 October2026)
 
 Full639 Python tests pass147.80s; final62 focused pass4.54s, including two subsequent

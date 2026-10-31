@@ -1,6 +1,31 @@
 # EnergyManager work state
 
-## Current checkpoint — P1 grid energy (4.5.2,31 October2026)
+## Current checkpoint — appliance graph controls and multi-cycle profiles (31 October2026)
+
+AUTHORIZED: thinner power curves on Overview/Planning/Appliances; power/time inspection
+cursor; draggable start/end handles with selected shading and synchronized seconds;
+main-graph zoom/pan; multiple recordings combined into an averaged program profile.
+Basee855c13 on codex/v4.5-implementation; main's unrelated backlog must stay intact.
+CONFIRMED: equal-weight start-aligned real elapsed time with zero after each reviewed
+cycle ends; no stretching, mean measured energy preserved. Explicit included members.
+IMPLEMENTED: new profile-chart.js uses shared GraphCursor navigation; pointer/keyboard
+trim handles and numeric seconds synchronize; hover/tap/keyboard cursor has timestamp/W.
+Sparse step mean assembled in a read-only SQLite worker, guarded by library revision;
+legacy one-selection upgrade, add/remove members, raw evidence retained.
+VERIFIED:647 Python tests147.21s;80frontend; Ruff/mypy47/all JS pass.
+Configured fake E2E25.464s/2019 intervals/
+max4.205ms/4 fake calls passes.
+Native/standalone mouse trim, keyboard, numeric↔handles, power/time cursor, wheel/pan,
+explicit gaps and average2→3→2 inclusion round trip pass; light/dark and clean logs.
+Pinch/touch navigation covered by synthetic gesture tests; physical touch unverified.
+Wheel/sdist71 runtime files match; isolated4.5.3 imports/new asset pass.
+Preview tabs/processes stopped. READY: one scoped release commit and ff-only main. Preserve main's
+unrelated backlog bytes except the authorized ARCH-005 status update, then push and
+verify exact-commit CI/image. No live HA/database/hardware/provider/notification or
+installation deployment. Remote results only in ignored release-state/final reply.
+
+
+## Earlier checkpoint — P1 grid energy (4.5.2,31 October2026)
 
 AUTHORIZED: replace daily grid power integrators with P1 import/export sensors; add
 two Settings fields and replace consumers. Screenshot establishes cumulative pair.
