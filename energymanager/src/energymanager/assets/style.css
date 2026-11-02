@@ -898,3 +898,22 @@ em-entity-picker > input { padding-right:36px; }
   #profiles-panel .profile-plot svg { font-size:22px; }
   .profile-plot .cursor-values { max-width:210px; }
 }
+
+/* Shared standalone/native appliance cards; expanded content stays in its original card. */
+.appliance-card { min-width:0; align-self:start; cursor:pointer; overflow-wrap:anywhere; }
+.appliance-card.expanded { grid-column:1 / -1; cursor:default; }
+.appliance-heading { display:flex; align-items:center; gap:12px; }
+.appliance-heading h2 { flex:1; margin:0; }
+.appliance-heading button { min-width:88px; }
+.appliance-icon { font-size:36px; color:var(--accent); line-height:1; }
+.appliance-card [data-appliance-detail] { margin-top:20px; cursor:default; }
+.appliance-card [data-bosch-status] { margin-top:16px; line-height:1.6; overflow-wrap:anywhere; }
+.appliance-program { align-items:end; }
+.appliance-card details { margin:16px 0; }
+.appliance-card summary { cursor:pointer; padding:8px 0; }
+.profile-delete { flex-basis:100%; }
+.profile-delete p { max-width:600px; }
+.appliance-card [data-profile-review] { border-top:1px solid var(--line); padding-top:20px; }
+[hidden] { display:none !important; }
+.appliance-card button:not(.profile-trim-handle):hover { background:color-mix(in srgb,var(--surface),var(--accent) 8%); }
+.appliance-card button:disabled { cursor:not-allowed; opacity:.5; }

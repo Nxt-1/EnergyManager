@@ -1,5 +1,224 @@
 # EnergyManager work state
 
+## Release coordination
+
+Workflow agreed in Setup V2 on 1 November 2026; see the root [AGENTS.md](../../AGENTS.md)
+for chat responsibilities, communication authority and release ordering. This setup
+chat is `01a1968e-1b06-7db1-98d8-a0c3e26d071a`; it has not been assigned a release role.
+V4.5 is the first registered release stream, with the chat pair below. Existing release
+checkpoints remain preserved evidence, not new implementation authorization or a fresh
+status audit. Setup began on main at `90a023d` (Release 4.5.4); remote results were not checked.
+
+Maintain one compact section per active release stream using the following fields.
+Architecture maintains agreed scope/criteria and decision links; implementation
+maintains progress, verification and integration results. Both record questions and
+their resolutions. Chat identities must be verified before messaging; do not infer a
+target from an ambiguous title. Read the relevant release/task section and linked
+requirements rather than replaying every historical checkpoint.
+
+### V4.5 — workflow adopted for the remainder of the cycle
+
+- **Architecture chat:** V4.5 architecture, created at the user's request on
+  1 November 2026, local chat ID `01a196b9-af23-73a2-9c57-71d4a4d9e32e` (host `local`).
+  Setup V2 remains the setup chat.
+- **Implementation chat:** V4.5 implementation, verified local chat ID
+  `01a174ba-43a6-7680-9dff-a5828471be00` (host `local`).
+- **Code branch/worktree:** `codex/v4.5-implementation`, existing checkout
+  `C:/Users/Arne/.codex/worktrees/v4-5-implementation/EnergyManager`; main and that
+  branch were both at `90a023d` (4.5.4) when registered. The chat's reported working
+  directory is the primary checkout, so explicitly select its implementation worktree
+  when resuming code work. Registration does not switch or modify that checkout.
+- **Shared requirements:** [ARCHITECTURE.md](ARCHITECTURE.md),
+  [DECISIONS.md](DECISIONS.md) and [BACKLOG.md](BACKLOG.md). The file renames and
+  workflow updates currently exist in the primary checkout; they must be incorporated
+  before another checkout can use them as local files. Historical checkpoints retain
+  old document paths as evidence. No code scope is added by this migration.
+- **Tasks:** no new application task is authorized by workflow adoption. Reconcile
+  any previously authorized unfinished work against actual code and the user's
+  instructions before resuming; do not treat old NEXT statements as current orders.
+  **V45-A001 — user-managed appliance library:** direction agreed by the user in
+  V4.5 architecture on 1 November 2026; implementation is not authorized. Replace
+  fixed appliance/program identities with a user-managed library and base planning
+  support on operating behavior. Initial scheduling behavior: manually started,
+  uninterrupted program cycles; other equipment needs its own supported behavior.
+  Agreed configuration: appliance name/predefined behavior; program name/multiple
+  recordings without variants; planned run selects a program and behavior-dependent
+  options. Define needed options before UI/UX; direct-control support is unresolved.
+  Preserve existing data. See the pending V45-A001 section in ARCHITECTURE.md and
+  the 1 November decision in DECISIONS.md. Detailed scope and completion criteria
+  remain to be agreed before implementation.
+  Shared UI direction agreed 2 November: most/potentially all appliances on one page,
+  initially shown as relatively large icon cards with relevant information/controls;
+  clicking a card opens full appliance information. Card content/detail form pending.
+  **V45-A002 — dedicated Bosch dishwasher integration:** on 2 November 2026 the
+  user supplied the HA capability handoff and selected this design direction.
+  Home Connect is connected; power-on from off is user-confirmed; exposed program/
+  delay controls are assumed usable, with delayed execution/precision untested.
+  Next stated focus: reviewed program power profiles. See the Bosch handoff section
+  in ARCHITECTURE.md. Eco (~90%) and Intensive are the main profile targets. Modifier
+  controls remain available without modifier-specific energy adjustment; the user
+  may add combination profiles later. Refoss dishwasher measurement is user-confirmed,
+  HA entity mapping pending. Automatic capture of Bosch runs is agreed, retaining
+  review before average inclusion. Core scheduling/control choices are recorded below;
+  remaining planner/accounting requirements and implementation scope need discussion.
+  That design handoff did not authorize implementation; M1 authorization is recorded below.
+  **V45-A002-M1 / M2 — delivery split agreed 2 November:** M1 is the shared card
+  view, Bosch program/status feedback, automatic Refoss recordings and review/delete;
+  M2 is Ready/deadlines, joint EV/ESS optimization and managed execution with correct
+  background accounting. M1 scope/completion criteria and M2 dependencies are in
+  ARCHITECTURE.md under Agreed Bosch delivery milestones. The user accepted manual
+  program/modifier controls and Start now and record in M1; no scheduled starts in M1.
+  M1 was subsequently explicitly authorized in this implementation chat; M2 remains pending.
+- **V45-A002-M1 implementation — 2 November 2026:** explicitly authorized in this
+  registered implementation chat; implemented as4.5.5 in the dedicated worktree from
+  `90a023d`. Reconciled the primary checkout's shared-document migration/decisions before
+  coding, preserving its staged/unstaged content. Cards/in-place expansion, Bosch feedback,
+  automatic dedicated-meter captures, review/permanent deletion and explicit manual
+  program/modifier/power-on/start controls are implemented. M2 scheduling and full generic
+  library management remain pending. No installation entities guessed or live access used.
+  **Verification:**681Python tests147.30s,86frontend cases, Ruff/mypy48 and JS syntax;
+  fake configured E2E25.540s/2019intervals, max control4.287ms/four fake calls.
+  Browser verified standalone and native cards, exclusive expansion, separate selection/start,
+  a complete60second fake Bosch run, capture/review/trim/save into its exact program average,
+  retained legacy profiles and persistent deletion confirmation. Unapplied program choice survives page reload without sending a command. No browser warnings/errors.
+  Wheel/sdist72runtime files matched with isolated4.5.5 import. Source checks are complete;
+  next reconcile any new primary edits, commit/integrate in version order and run publication.
+  Remote results go in ignored artifacts/v455-release-state.json and the final reply.
+  Physical hardware, touch and the live installation remain unverified; no deployment.
+- **Setup progress (historical):** local main contains the 4.5.4 release commit; existing verification
+  checkpoints remain below. Remote CI/publication has not been independently checked
+  during this setup. All 36 affected local documentation links resolve; diff whitespace
+  checks pass, and the renamed backlog retains its original SHA256 and pending edits.
+- **Questions:** V45-Q001 — resolved by the user in Setup V2: use a separate V4.5
+  architecture chat and keep Setup V2 for workflow setup. The pair is registered above;
+  architecture initialization completed and it is ready for the user's topic.
+  No implementation wakeup was requested.
+  V45-Q002 — resolved in V4.5 architecture: generic library entries are compatible
+  with behavior-specific scheduling; initially support manual uninterrupted cycles.
+  V45-Q003 — resolved for V45-A001: the user chose permanent recording deletion
+  after confirmation, including samples and any contribution to the program average;
+  removal from an average remains a separate action that retains the recording.
+  V45-Q004 — open: effect of removing programs/appliances on their recordings;
+  remaining editing fields and lifecycle rules remain under discussion.
+  V45-Q005 — open: predefined operating behaviors and the configuration/run options
+  each requires, including readiness and any eventual direct-control support.
+  Program variants are explicitly excluded; different cycles can be separate programs.
+  Next: define the behavior options before UI/UX or preparing an implementation task.
+  V45-Q006 — user requested public research into Miele WSD663 WCS TwinDos and Bosch
+  SMS6ZCW08E integration. Both have official HA cloud integration paths; the Bosch
+  model documents remote control/start, and unofficial MieleRESTServer specifically
+  reports WSD663 local remote start. Miele connectivity cause and actual HA entity/
+  command availability remain unverified. Sources and fallback timer limits are in
+  ARCHITECTURE.md under Appliance connectivity investigation. Next: clarify where
+  Miele connectivity fails and establish available HA capabilities before choosing
+  direct-control versus user-set delay behavior. No live access/operation performed.
+  At the user's request, created two supporting local chats in the EnergyManager
+  project: Bosch Home Connect integration (`01a1990b-2493-7eb2-867f-a1085cabb99f`)
+  and Miele connectivity diagnosis (`01a1990b-676b-7b12-a9ff-ef60e75dccd0`). They
+  carry the model details, source findings and boundaries; the user continues setup/
+  diagnosis there. They are not new release implementation chats. Their verified
+  capability results should inform the unresolved operating options above.
+  Update 2 November: Bosch capabilities are now supplied by the user; see V45-A002.
+  This resolves the integration-availability question for Bosch; actual delayed
+  execution/precision remain untested. Miele remains unresolved in this chat.
+  V45-Q007 — partially resolved for V45-A002: Eco/Intensive are the normal programs;
+  modifiers stay controllable but do not adjust planning profiles. Refoss measures
+  dishwasher power; actual HA entity mapping remains open. The user chose automatic
+  capture using Bosch program/status, without per-cycle arming. Review before average
+  inclusion remains; handling modified recordings still needs definition.
+  V45-Q008 — handoff resolved for V45-A002: load, select the program, set a latest
+  end date/time and confirm ready. The manager may start immediately or later at
+  its discretion; no additional earliest-start restriction. The user permits
+  pre-start replanning without confirmation; retain the program/deadline and run
+  uninterrupted after starting. Impossible-deadline handling is also resolved:
+  warn during deadline entry with earliest expected finish and start-as-soon-as-
+  possible behavior. Confirming Ready with the unchanged deadline authorizes the
+  fallback; no extra countdown/confirmation.
+  V45-Q009 — resolved: reopening the door while waiting retains the queued run and
+  blocks starting; closing it with remote-start permission available automatically
+  resumes planned management without another Ready action. Explicit cancellation
+  remains available. Running-cycle interruption is a separate unresolved case.
+  V45-Q010 — resolved: EnergyManager holds the planned start and sends Start at
+  the chosen time; no native delay timer for managed runs. The user accepts waiting
+  during controller unavailability. Reconcile actual state on recovery before commands.
+  V45-Q011 — resolved: adopt panel/app program changes while queued and recalculate
+  the start against the same deadline without another Ready action. The user regards
+  this as unlikely and accepts the suggested default.
+  V45-Q012 — resolved: learn per-program actual durations from recordings; no extra
+  scheduling safety margin. The user considers exact timing generally noncritical.
+  Plan estimated completion by the requested deadline without artificial padding.
+  V45-Q013 — resolved: for a program without a usable reviewed profile, offer Start
+  now and record. Enable optimized scheduling once the first complete usable recording
+  is reviewed/included; no provisional manual duration/consumption estimate is required.
+  Pre-existing device delays still need reconciliation. Main user-facing Bosch behavior
+  is specified; remaining planner/background-accounting and implementation scope must
+  still be resolved before authorized scheduling implementation.
+  V45-Q014 — shared UI direction agreed: appliance card overview plus full appliance
+  detail on click. The user clarified that the original card enlarges in place on
+  the same page; no new page or popup dialog. Bosch program selection is on the card,
+  defaulting to Eco for a new run; retain explicit choices/actual queued or running
+  programs. The user agreed to at most one expanded card; opening another collapses
+  the previous one. Remaining card content and expanded layout/collapse interaction
+  are still open.
+  The user liked the initial interactive preview and requested Bosch finish choices:
+  Tomorrow 12:00 (noon), Tomorrow 18:00, or a custom date/time icon opening a small
+  popup. These select the latest finish using installation-local calendar dates;
+  Ready remains a separate action. No default finish preset has been selected.
+  The user requested simplifying the custom popup to a calendar with selectable
+  dates up to seven days ahead and an adjacent time-picker wheel; replace the earlier
+  separate date/time fields in the design preview. This remains UI design work.
+  Clarification: display only the rolling selectable dates, not a full month with
+  disabled dates. The time wheel is accepted to remain despite differing from the
+  user's initial idea. Compact rolling date tiles replace the month grid in the draft.
+  The user approved that corrected picker preview and then approved the two delivery
+  milestones above. M1's manual-command scope is now agreed; the user starts the
+  implementation chat when authorizing the agreed task. Design approval alone does
+  not authorize application implementation.
+  Updated preview checked offline: seven-day date bounds, wheel scrolling/keyboard
+  selection, applying the custom deadline and 320px layout pass in headless Edge.
+  Example dates/data only; no application changes or installation operation.
+  V45-Q015 — resolved: the user accepted manually initiated Bosch program/modifier
+  controls and Start now and record in M1. Milestone scope and criteria are prepared.
+  Update: the user explicitly authorized M1 in the registered implementation chat, which
+  reconciled the primary documents and implemented/verified4.5.5 as recorded above.
+  Continue M2 architecture separately without silently expanding M1.
+- **Integration:** subsequent 4.5.x releases precede higher numbered release streams
+  on main. Preserve the separate implementation branch and incorporate shared updates
+  deliberately before final verification/publication.
+
+### Release section template (not an active or authorized task)
+
+- **Release stream:** version family and dependencies on earlier releases.
+- **Chat pair:** architecture and implementation titles plus verified chat IDs/links.
+- **Code branch/worktree:** location and base commit; shared documents are maintained
+  on main and must be consulted explicitly when branch copies differ.
+- **Tasks:** give each task a stable identity within this release, its current state
+  (being discussed / agreed / authorized for implementation / completed), concise
+  scope and exclusions, relevant requirement/decision links, and completion criteria.
+  For authorized tasks, record the user's authorization and the agreed scope at that
+  point. Later architecture decisions do not silently amend an in-progress task.
+- **Progress and evidence:** implemented changes, actual verification outcomes,
+  remaining work and next concrete action; distinguish local verification,
+  integration, publication and live-unverified behavior.
+- **Questions and resolutions:** stable question identity, originating task, pending
+  decision, architecture response and any required user decision. Message the paired
+  chat with a pointer to the record; keep the durable answer here or link its decision.
+- **Integration:** earlier releases incorporated from main, combined verification and
+  remaining release dependencies. Publication follows the agreed version order.
+
+### Setup checkpoint — 1 November 2026
+
+Recorded the agreed workflow in AGENTS.md and DECISIONS.md and added the coordination
+structure above. Adopted it for the rest of V4.5 and registered its existing implementation
+chat/worktree. Renamed the architecture and backlog documents; the backlog's existing
+bytes, including unrelated edits, are preserved. Updated active navigation while leaving
+historical path evidence intact. All 36 affected local links and diff whitespace
+checks pass; the backlog SHA256 is unchanged. The user chose a separate architecture
+chat, now created, registered and initialized. NEXT: review/commit the shared documentation
+updates before incorporating them into the V4.5 implementation branch; discuss the
+next V4.5 task in the architecture chat and start implementation only when authorized.
+No application task, commit or publication is implied by this setup record.
+
 ## Current checkpoint — saved recording trim correction (4.5.4,31 October2026)
 
 AUTHORIZED: repair the requested draggable recording bounds. User clarified the
@@ -1567,7 +1786,7 @@ Native source/history choices remain available. Planner/controller authority unc
 LOCAL COMPLETE:170 Python43.45s/20 Node tests, Ruff/mypy31/JS syntax/CLI4.2.3 pass.
 Native/standalone synthetic browser checks pass, including compact rows across midnight,
 numeric cursors/gaps/window edges, source chooser and390px geometry. Graph/session
-endpoints within0.02px desktop/exact phone;360px power plot. No browser warnings/errors.
+endpoints within0.02px desktop/exact phone;360px power plot. Unapplied program choice survives page reload without sending a command. No browser warnings/errors.
 Configured fake E2E26.912s/2,018 intervals/max tick2.866ms/five fake-only calls passes.
 Wheel/sdist built;48 packaged code/assets match, isolated4.2.3 import passes. Relevant
 architecture/decisions/runbook/guide/changelog/verification updated. No live deployment.

@@ -1,5 +1,45 @@
 # Run, configure, review and roll back
 
+## Bosch cards and profile collection (4.5.5 / V45-A002-M1)
+
+Reload the dashboard after updating. Appliances shows Bosch dishwasher, washing machine
+and Mazak cards; Expand opens that card in place and collapses the previous one. The
+expanded card contains settings, profiles and recordings. Existing stored data is retained.
+
+In the dishwasher card load HA entities, map its dedicated Refoss W/kW sensor under
+Recording settings, then map Bosch HA entities. Selected program and Active program
+must be different select entities: selection alone does not start; active-program
+selection does. Supply operation feedback for automatic capture. Remote permissions,
+door, appliance power and native-delay mappings are needed for the corresponding manual
+actions. No installation entity IDs are prefilled. These settings persist immediately.
+
+Automatic recording works with hardware control off and the browser closed, including
+panel/app starts. It starts from actual run feedback and finishes from finished feedback,
+not low power. First-seen-running, missing operation, restarted or interrupted captures
+are labelled incomplete. Review/trim and confirm a complete measured cycle before adding
+it to that exact HA program's average. Check modifier information during review. Legacy
+Eco/Heavy evidence remains separate; do not assume Heavy is Intensive.
+
+Manual Bosch commands require enabled hardware control and fresh appliance guards.
+Use Power on if needed, choose Select program and await feedback, then Start now and
+record. Start requires idle/on, a closed door, both remote permissions, usable meter and
+zero native delay in seconds. Clear an existing native delay yourself; M1 does not manage
+it. Submitted is not Running: the card reports pending, confirmed or unconfirmed/failed
+feedback. There is no automatic command retry or scheduled start. Modifiers are explicit
+idle-state actions and do not adjust a planning curve. Ending collection does not stop
+the physical dishwasher. Ready/deadlines and managed optimization belong to M2.
+
+Delete recording… opens the irreversible deletion warning; Confirm permanent deletion
+removes exactly that recording, all its samples and its contribution. Remove from average
+retains data. Other trim revisions keep their independent samples. Back up the database
+before an installation upgrade or intentional deletion as appropriate. No live installation
+access, hardware operation or deployment was performed for this release.
+
+The local --profiles-fixture preview includes labelled legacy recordings, two synthetic
+HA program identities, automatic Bosch examples and fake manual actions. A fake Start
+runs a60second synthetic trace and finishes through feedback; no real hardware is involved.
+Use the existing offline/native preview commands with an unused localhost port.
+
 ## Saved recording trims (4.5.4)
 
 Update the add-on and reload HA. Inspect / review works on saved recordings too.
@@ -201,7 +241,7 @@ recalculation and structural/safety/input-recovery handling remain. forecast_upd
 and forecast_bias events record queued inputs; they are not extra-solve requests.
 The4.4.1 publication repair is removed. Original forecast readiness and costs remain
 predictions; actual execution and later schedules are separate evidence. See the
-[maintained architecture](architecture/Architecture_Proposal.md#snapshot-planning-and-live-execution--accepted-28-october-2026).
+[maintained architecture](ARCHITECTURE.md#snapshot-planning-and-live-execution--accepted-28-october-2026).
 
 ## Google Maps release and offline verification (4.4.0)
 

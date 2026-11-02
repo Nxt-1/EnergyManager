@@ -1,5 +1,133 @@
 # Current requirements and decisions
 
+- 2 November 2026, V45-A002-M1 implementation: the user explicitly authorized cards,
+  automatic recordings, review/permanent deletion and manual Bosch controls in the
+  registered implementation chat, after reconciling primary-checkout requirements.
+  Implemented as4.5.5 with fake/local verification. M2 scheduling and full V45-A001
+  library management remain pending. Capture uses exact HA program identities; legacy
+  Heavy is not treated as Intensive. Manual Start now does not alter native delay:
+  require confirmed zero seconds and idle/door/remote/hardware guards; reconciliation
+  of an existing appliance delay remains M2 work. No live installation operation or
+  deployment is authorized by implementing these controls.
+
+- 2 November 2026, Bosch delivery milestones: the user approved two stages for
+  V45-A002. M1 provides the shared appliance cards, Bosch program/status feedback,
+  automatic Refoss recordings and recording review/delete. M2 adds Ready/deadlines,
+  joint optimization with EV/ESS and managed execution, including background-demand
+  separation. Collect useful Eco/Intensive profiles through the first milestone while
+  developing scheduling. Generic-library work is not withdrawn. The split is agreed;
+  implementation has not been authorized. The user accepted including manual program/
+  modifier controls and Start now and record in M1, completing the initial measured-
+  profile workflow without scheduling. M1 scope/criteria are in ARCHITECTURE.md;
+  application implementation starts only on the user's authorization.
+
+- 2 November 2026, shared Appliances page: the user wants most, potentially all,
+  appliances on the same page with two stages. The initial view consists of relatively
+  large per-appliance cards with an icon and the most relevant information/controls.
+  Clicking a card enlarges that original card in place to show the extra information;
+  it does not navigate to another page or open a popup dialog. At most one card is
+  expanded; opening another collapses the previous one. The Bosch card displays the
+  program as a selector, defaulting to Eco for a new run while preserving an existing
+  explicit choice/actual run. The user liked the initial interactive design preview.
+  Bosch finish choices are Tomorrow 12:00 (noon), Tomorrow 18:00 and a custom date/time
+  icon with a small popup. Presets use the next installation-local calendar date;
+  they select latest finish and do not submit Ready. The custom popup uses a directly
+  selectable calendar, limited to today through seven days ahead, with a time-picker
+  wheel alongside it. The user clarified that only the rolling date window should
+  be shown, not a full month with disabled dates; the limit exists to keep the picker
+  simple. The user approved the corrected compact rolling-date picker with the
+  current time wheel retained. No default deadline is chosen.
+  Remaining card content and expanded layout remain to be agreed. This is design
+  direction, not implementation
+  authorization.
+
+- 2 November 2026, Bosch dishwasher direction (pending V45-A002): following a
+  user-supplied HA capability handoff, use a dedicated Bosch SMS6ZCW08E integration
+  direction rather than assuming manual delayed start for this appliance. Official
+  Home Connect is connected and power-on from off is user-confirmed. Program/delay
+  controls are exposed and assumed usable; delayed execution and timing precision
+  remain untested. The next stated focus is reviewed power recordings for the
+  available programs. Eco is used roughly 90% of the time, otherwise most likely
+  Intensive. Keep Extra dry/Half load/Vario speed+ controls available but do not
+  adjust the planning profile for modifiers; the user may add combination-specific
+  profiles later. A Refoss measures the dishwasher; its HA power entity is not yet
+  identified here. The HA power switch is not a consumption sensor. The user chose
+  automatic run capture using Bosch feedback and Refoss measurements, including
+  panel/app-started runs, without per-cycle arming. Review before average inclusion
+  and completeness/coverage requirements remain. Scheduling handoff: load, select
+  the program and set a latest end date/time; from confirmation the manager may
+  start immediately or later at its discretion. No additional earliest-start field
+  is required. The user permits start-time changes while waiting without further
+  confirmation, respecting the selected program/deadline. Once started, the cycle
+  runs uninterrupted. For an impossible finish deadline, warn when the deadline is
+  entered with earliest expected finish and start-as-soon-as-possible behavior.
+  The user confirmed that proceeding with Ready and the unchanged deadline authorizes
+  that fallback, without an extra countdown or confirmation. Opening the door while
+  waiting keeps the queued run but blocks starting; closing it with remote-start
+  permission available automatically resumes management without another Ready action.
+  Explicit cancellation remains available. This does not select a policy for a
+  running cycle interrupted by opening the door. The user selected EnergyManager-held
+  timing and a Start command at the chosen moment, without programming a native delay.
+  Waiting through a controller outage is acceptable; outage-independent starting is
+  not required. Manual program changes while queued are adopted and replanned against
+  the same deadline without another Ready confirmation; the user considers the case
+  unlikely but accepts this default. Learn actual per-program cycle duration from
+  recordings and use that estimate without extra scheduling margin; timing is
+  generally not critical enough to justify padding. Continue planning estimated
+  completion by the deadline. Until a program has a usable reviewed profile, offer
+  Start now and record; enable optimized scheduling after review/inclusion of that
+  first usable recording. No provisional manual estimates are required. Pre-existing
+  device delays remain unresolved;
+  generic library work has not been withdrawn. This is not code or live-operation
+  authorization. Full capability evidence is in ARCHITECTURE.md.
+
+- 1 November 2026, V4.5 appliance library (V45-A001): the user agreed to a
+  user-managed appliance/program library with planning support based on operating
+  behavior. Initially support manually started, uninterrupted program cycles:
+  reviewed power profiles, earliest start/latest finish, manual or user-set delayed
+  start and fixed confirmed commitments. Appliance names do not determine support.
+  Other equipment may have recorded profiles before its scheduling behavior is
+  supported; Mazak, thermal loads and modulated charging need their own treatment.
+  Preserve existing library data. Recording removal and program management are
+  identified gaps. The user subsequently chose permanent recording deletion after
+  confirmation, including stored samples, separate from removal from an average.
+  Deleting an included recording removes its average contribution. Program/appliance
+  removal and dependent-data handling remain open. This is design agreement, not
+  implementation authorization.
+
+- 1 November 2026, V45-A001 configuration before UI/UX: appliance name and a
+  predefined operating behavior; program name and multiple recorded profiles.
+  No program variants: materially different cycles can be separate programs.
+  Each planned run selects a program and supplies behavior-dependent options such
+  as readiness times. Directly controlled appliances may need fewer user inputs,
+  but their requirements/support and the predefined behavior choices remain open.
+  Define the needed options before UI/UX. No direct-control implementation is
+  authorized by this design discussion.
+
+- 1 November 2026, workflow adoption and document names: apply the paired-chat
+  workflow to the remainder of V4.5 and subsequent release streams. Reuse the existing
+  V4.5 implementation chat; architecture assignment is recorded in WORK_STATE.md.
+  Rename architecture/Architecture_Proposal.md to ARCHITECTURE.md and DEFERRED_WORK.md
+  to BACKLOG.md, retaining the maintained content and updating navigation. DECISIONS.md,
+  WORK_STATE.md and the supporting document names remain unchanged. Historical paths
+  in prior checkpoint evidence and pinned Git-history links retain their original names.
+
+- 1 November 2026, development workflow (Setup V2): one architecture chat and one
+  implementation chat per release stream, retained through its patch releases;
+  multiple release streams may develop concurrently. The user creates and starts
+  implementation chats. Shared project documents carry requirements and results.
+  Architecture continues during implementation, while each authorized task retains
+  its scope until the user authorizes an amendment or follow-up. Design agreement
+  alone is not implementation permission. Paired chats may directly message and
+  trigger each other's questions/replies; architecture may clarify existing decisions,
+  but new behavior, requirement changes and expanded scope return to the user.
+  Application releases reach main in version order. The newer implementation chat
+  incorporates earlier releases, resolves conflicts and verifies the combined result.
+  Approved documentation may reach main before code, with pending behavior labelled.
+  Use release sections in WORK_STATE.md for coordination rather than duplicate
+  architecture specifications or per-release handoff documents. Operational rules
+  live in the root AGENTS.md. This workflow does not authorize a new application task.
+
 - 31October2026,4.5.4: user reported that the trim targets were tiny and would not
   slide, and confirmed this happened on saved recordings.4.5.3 rendered those bounds
   read-only despite their draggable appearance. Saved ranges now edit directly with
@@ -46,7 +174,7 @@
 Maintained 25 October 2026 for 4.3.2. This records confirmed product preferences and
 implementation outcomes from the V4 implementation chat. It supplements the complete
 original [architecture decisions](architecture/Architecture_Decisions.md); the
-[maintained architecture](architecture/Architecture_Proposal.md) describes the resulting implementation.
+[maintained architecture](ARCHITECTURE.md) describes the resulting implementation.
 New explicit user instructions take precedence. Deferred ideas are not authorization.
 
 ## Architecture and EV behavior retained
@@ -94,7 +222,7 @@ New explicit user instructions take precedence. Deferred ideas are not authoriza
 - Keep the original required/optional energy, source, cost, peak permission and
   continuity policies. Their complete original context is preserved in
   [the handoff](architecture/Implementation_Handoff.md) and
-  [maintained architecture](architecture/Architecture_Proposal.md). Its current
+  [maintained architecture](ARCHITECTURE.md). Its current
   specification resolves the original mathematical proposals; historical pending-work
   statements are not a request to rebuild the application.
 - The morning target is a timed minimum, initially 50% at 07:00 local. It is not a
@@ -190,7 +318,7 @@ New explicit user instructions take precedence. Deferred ideas are not authoriza
   morning/manual targets and accepted charging sessions. The existing scheduler and
   permissions remain authoritative; unknown returns and outdated plan results are explicit.
 - Continue across chats and versions using the same maintained
-  [architecture document](architecture/Architecture_Proposal.md). The user explicitly
+  [architecture document](ARCHITECTURE.md). The user explicitly
   prefers updating it in place over creating version-specific handoffs. Backlog entries
   require separate authorization; a new chat does not authorize their implementation.
 

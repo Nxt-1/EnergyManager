@@ -3,7 +3,11 @@ export {profileGraph} from './profile-chart.js';
 
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, character =>
   ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character]));
-const machineName = machine => ({dishwasher: 'Dishwasher', washing_machine: 'Washing machine'}[machine]);
+const machineName = machine => ({dishwasher: 'Dishwasher', washing_machine: 'Washing machine', mazak:'Mazak'}[machine]);
+const programLabel = value => {
+  const text = String(value ?? '').replace(/^dishcare_dishwasher_program_/,'').replaceAll('_',' ').replace(/([a-z])(\d+)/ig,'$1 $2');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+};
 const decimal = (value, digits = 2) => value === null || value === undefined ? '—' : Number(value).toFixed(digits);
 
 export class ApplianceProfilesPage {
@@ -22,13 +26,22 @@ export class ApplianceProfilesPage {
       clearTimeout(this.previewTimer);
       this.chart?.close();
     }, {once:true});
+    root.addEventListener('change', event => {
+      if (event.target.matches('[data-bosch-program]')) { this.rememberProgram(event.target.value); this.renderBosch(); }
+    }, {signal});
     root.addEventListener('submit', event => {
       event.preventDefault();
       this.perform(() => this.submit(event.target));
     }, {signal});
     root.addEventListener('click', event => {
       const button = event.target.closest('[data-profile-command]');
-      if (button) this.perform(() => this.command(button));
+      if (button) { this.perform(() => this.command(button)); return; }
+      const toggle = event.target.closest('[data-appliance-toggle]');
+      if (toggle) { this.expand(toggle.dataset.applianceToggle); return; }
+      if (event.target.closest('button,input,select,label,form,a,summary,details,[data-appliance-detail]')) return;
+      const card = event.target.closest('[data-appliance-card]');
+      if (card) this.expand(card.dataset.applianceCard);
+
     }, {signal});
     this.timer = setInterval(() => { if (this.visible) this.refresh(); }, 5000);
     signal.addEventListener('abort', () => clearInterval(this.timer), {once: true});
@@ -43,8 +56,8 @@ export class ApplianceProfilesPage {
   async perform(action) {
     if (this.busy) return;
     this.busy = true;
-    const buttons = [...this.root.querySelectorAll('button')];
-    buttons.forEach(button => { button.disabled = true; });
+    const buttons = new Map([...this.root.querySelectorAll('button')].map(button=>[button,button.disabled]));
+    buttons.forEach((disabled,button) => { button.disabled = true; });
     try {
       this.message('');
       await action();
@@ -52,7 +65,8 @@ export class ApplianceProfilesPage {
       if (!this.signal.aborted) this.message(error.message, true);
     } finally {
       this.busy = false;
-      buttons.forEach(button => { button.disabled = false; });
+      buttons.forEach((disabled,button) => { if (button.isConnected) button.disabled = disabled; });
+      if (this.mounted) this.renderBosch();
     }
   }
 
@@ -70,6 +84,7 @@ export class ApplianceProfilesPage {
       this.library = library;
       if (!this.mounted) { this.mount(); this.mounted = true; }
       this.renderRecordings();
+      this.renderBosch();
       if (library.sampler_error) this.message(library.sampler_error, true);
     } catch (error) {
       if (!this.root.querySelector('[data-profile-message]')) this.root.innerHTML = '<p data-profile-message role="alert"></p>';
@@ -79,58 +94,198 @@ export class ApplianceProfilesPage {
 
   mount() {
     const library = this.library;
-    const machineForms = Object.entries(library.machines).map(([machine, settings]) => `<article class="card">
-      <h2>${machineName(machine)}</h2><form data-profile-form="configure" data-machine="${machine}" data-revision="${library.revision}" class="profile-form">
+    const machineForms = Object.entries(library.machines).map(([machine, settings]) => {
+      const bosch = machine === 'dishwasher';
+      return `<article class="card appliance-card" data-appliance-card="${machine}">
+      <div class="appliance-heading"><span class="appliance-icon" aria-hidden="true">${bosch ? '▤' : '◉'}</span>
+      <h2>${bosch ? 'Bosch dishwasher' : machineName(machine)}</h2>
+      <button type="button" data-appliance-toggle="${machine}" aria-expanded="false">Expand</button></div>
+      ${bosch ? `<div data-bosch-status aria-live="polite"></div>
+      <form data-profile-form="bosch-select" class="profile-form appliance-program">
+      <label>Dishwasher program<select name="program" data-bosch-program></select></label>
+      <button type="submit">Select program</button><button type="button" data-profile-command="bosch-start">Start now and record</button>
+      <button type="button" data-profile-command="bosch-power">Power on</button></form>
+      <p data-bosch-command role="status"></p>` : '<p>Manually started cycles · recorded with a dedicated power sensor.</p>'}
+      <div data-appliance-detail="${machine}" hidden>
+      ${bosch ? `<p class="notice">Automatic capture uses actual Bosch execution and the dedicated Refoss meter, including panel/app starts. Every cycle needs review before averaging. Start now sends a command immediately; scheduling is not available yet.</p>
+      <p class="muted" data-bosch-details></p><div class="actions" data-bosch-modifiers></div>
+      <details><summary>Bosch HA mappings</summary>
+      <p>Selected program only selects; active program starts a cycle. Map different entities. Leave unavailable optional readings blank.</p>
+      <form data-profile-form="bosch-configure" data-revision="${library.revision}" class="profile-form">
+      ${Object.entries(library.bosch.fields).map(([key,field]) => `<label>${escapeHTML(field.label)}
+      <input name="${key}" list="profile-ha-entities" value="${escapeHTML(library.bosch.config[key] || '')}" placeholder="${field.domains.join(' / ')}.…" autocomplete="off"></label>`).join('')}
+      <button type="submit">Save Bosch mappings</button></form></details>` : ''}
+      <details><summary>Recording settings</summary>
+      <form data-profile-form="configure" data-machine="${machine}" data-revision="${library.revision}" class="profile-form">
       <label>Dedicated power sensor<input name="entity_id" list="profile-power-entities" value="${escapeHTML(settings.entity_id)}" placeholder="sensor.…" autocomplete="off"></label>
       <label>Idle / start threshold (W)<input name="start_threshold_w" type="number" min="0.1" max="100000" step="0.1" required value="${settings.start_threshold_w}"></label>
       <label>Finish after idle (minutes)<input name="idle_timeout_minutes" type="number" min="1" max="120" step="0.1" required value="${settings.idle_timeout_minutes}"></label>
       <button type="submit">Save recording settings</button></form>
-      <form data-profile-form="arm" data-machine="${machine}" class="profile-form">
-      <label>Program<select name="program">${Object.entries(library.programs[machine]).map(([id, label]) => `<option value="${id}">${escapeHTML(label)}</option>`).join('')}</select></label>
+      <p class="muted">Idle settings apply to manually armed captures. Bosch automatic captures finish from operation feedback.</p></details>
+      <form data-profile-form="arm" data-machine="${machine}" class="profile-form" ${bosch ? 'data-dishwasher-arm' : ''}>
+      <label>Program<select name="program">${Object.entries(library.programs[machine]).map(([id, label]) => `<option value="${escapeHTML(id)}">${escapeHTML(label)}</option>`).join('')}</select></label>
       <label>Load / options / notes<input name="notes" maxlength="500" placeholder="e.g. full load, extra rinse"></label>
-      <button type="submit">Record next cycle</button></form></article>`).join('');
-    this.root.innerHTML = `<div class="page-heading"><div><h1>Appliance profiles</h1>
-      <p class="muted">Arm a program, run the machine normally, then review the recording before saving it.</p></div>
-      <button type="button" data-profile-command="entities">Load HA power sensors</button></div>
+      <button type="submit">Record next cycle</button></form>
+      <h3>Averaged profiles</h3><div data-profile-selected="${machine}"></div>
+      <h3>Recordings</h3><div data-profile-recordings="${machine}"></div>
+      <p class="muted">Latest 100 recordings across machines. Inspect averages for older contributors.</p>
+      </div></article>`;
+    }).join('');
+    this.root.innerHTML = `<div class="page-heading"><div><h1>Appliances</h1>
+      <p class="muted">Choose an appliance to inspect its recordings, profiles and settings.</p></div>
+      <button type="button" data-profile-command="entities">Load HA entities</button></div>
       <p data-profile-message role="status"></p>
-      <p class="notice">${library.mode === 'demo' ? 'Demo library · live recording is disabled. ' : ''}Recording waits for idle, then power above the threshold. A continuous idle period finishes the cycle; renewed activity resets the timer. Use a timeout longer than quiet phases in your program. Initial 10 W / 15 min settings are provisional.</p>
-      <datalist id="profile-power-entities"></datalist><div class="profile-machines">${machineForms}</div>
-      <article class="card"><h2>Mazak · provisional average loads</h2><form data-profile-form="mazak" data-revision="${library.revision}" class="profile-form">
+      ${library.mode === 'demo' ? '<p class="notice">Demo library · no live appliance recording or commands.</p>' : ''}
+      <datalist id="profile-power-entities"></datalist><datalist id="profile-ha-entities"></datalist>
+      <div class="profile-machines">${machineForms}
+      <article class="card appliance-card" data-appliance-card="mazak">
+      <div class="appliance-heading"><span class="appliance-icon" aria-hidden="true">⚙</span><h2>Mazak</h2>
+      <button type="button" data-appliance-toggle="mazak" aria-expanded="false">Expand</button></div>
+      <p>Provisional flat average loads</p><p>${Object.entries(library.mazak).map(([key,value])=>`${escapeHTML(key)} · ${decimal(value,0)} W`).join(' / ')}</p>
+      <div data-appliance-detail="mazak" hidden><form data-profile-form="mazak" data-revision="${library.revision}" class="profile-form">
       ${Object.entries(library.mazak).map(([mode, power]) => `<label>${mode[0].toUpperCase() + mode.slice(1)} (W)<input name="${mode}" type="number" min="0" max="100000" step="1" required value="${power}"></label>`).join('')}
-      <button type="submit">Save Mazak averages</button></form><p class="muted">Flat average loads for later planning; no cycle duration is assumed.</p></article>
-      <article class="card"><h2>Averaged profiles</h2><div data-profile-selected></div></article>
-      <article class="card"><h2>Recordings</h2><div data-profile-recordings></div><p class="muted">Latest 100 recordings shown. Original samples and earlier saved cycles are retained.</p></article>
-      <article class="card" data-profile-review hidden></article>
-      <p class="muted">Profiles are stored in EnergyManager. This first milestone does not schedule or start appliances.</p>`;
+      <button type="submit">Save Mazak averages</button></form><p class="muted">No learned cycle or assumed duration.</p></div></article>
+      </div><section data-profile-review hidden></section>`;
+  }
+
+  expand(machine, force = false) {
+    const next = !force && this.expanded === machine ? null : machine;
+    this.expanded = next;
+    for (const card of this.root.querySelectorAll('[data-appliance-card]')) {
+      const open = card.dataset.applianceCard === next;
+      card.classList.toggle('expanded',open);
+      card.querySelector('[data-appliance-detail]').hidden = !open;
+      const button = card.querySelector('[data-appliance-toggle]');
+      button.setAttribute('aria-expanded',String(open));
+      button.textContent = open ? 'Collapse' : 'Expand';
+    }
+    const review = this.root.querySelector('[data-profile-review]');
+    if (next && this.reviewed?.machine === next) {
+      this.root.querySelector(`[data-appliance-detail="${next}"]`).append(review);
+      review.hidden = false;
+    } else review.hidden = true;
+  }
+
+  programStorageKey() {
+    const entity = this.library.bosch.config?.selected_program;
+    return entity ? JSON.stringify(['energymanager-bosch-choice',this.library.mode,entity]) : null;
+  }
+
+  rememberProgram(program) {
+    const key = this.programStorageKey();
+    if (!key || typeof localStorage === 'undefined') return;
+    try { localStorage.setItem(key,JSON.stringify({program,actual:this.actualProgram})); }
+    catch (error) { if (error.name !== 'SecurityError' && error.name !== 'QuotaExceededError') throw error; }
+  }
+
+  restoreProgram(actual, options) {
+    const key = this.programStorageKey();
+    if (!key || typeof localStorage === 'undefined') return actual;
+    try {
+      const saved = JSON.parse(localStorage.getItem(key) || 'null');
+      return saved?.actual === actual && options.includes(saved.program) ? saved.program : actual;
+    } catch (error) {
+      if (error instanceof SyntaxError || error.name === 'SecurityError') return actual;
+      throw error;
+    }
+  }
+
+  renderBosch() {
+    const bosch = this.library.bosch, readings = bosch.readings;
+    const reading = key => readings[key]?.state ?? 'Unavailable';
+    const state = this.root.querySelector('[data-bosch-status]');
+    const text = `${programLabel(reading('operation'))} · ${readings.meter?.power_w === undefined ? 'Power unavailable' : decimal(readings.meter.power_w,0) + ' W'} · Progress: ${reading('progress')}${readings.progress?.unit || ''} · Finish: ${reading('finish')}`;
+    this.root.querySelector('[data-bosch-details]').textContent = `Door: ${reading('door')} · Remote control/start: ${reading('remote_control')} / ${reading('remote_start')} · Selected: ${reading('selected_program')} · Active: ${reading('active_program')}`;
+    state.textContent = bosch.enabled ? text + (bosch.at ? ' · Last read: ' + new Date(bosch.at).toLocaleString('en-GB',{timeZone:this.timezone || 'Europe/Brussels'}) : ' · Waiting for first read') : 'Map Bosch feedback and the dedicated Refoss power sensor to enable automatic recordings.';
+    if (bosch.capture_error) state.textContent += ' · ' + bosch.capture_error;
+    const feedback = this.root.querySelector('[data-bosch-command]');
+    feedback.textContent = [bosch.control_error,bosch.command?.message].filter(Boolean).join(' · ');
+    const select = this.root.querySelector('[data-bosch-program]');
+    const options = readings.selected_program?.options || [];
+    const actual = reading(reading('operation') === 'run' ? 'active_program' : 'selected_program');
+    const previousChoice = select.value;
+    const signature = JSON.stringify(options);
+    if (signature !== this.programSignature) {
+      select.innerHTML = options.map(option=>`<option value="${escapeHTML(option)}">${escapeHTML(programLabel(option))}</option>`).join('');
+      this.programSignature = signature;
+      select.value = options.includes(previousChoice) ? previousChoice : options.includes(actual) ? actual : options.find(item=>/eco/i.test(item)) || options[0] || '';
+    }
+    // A device-side change is authoritative; ordinary polls retain an unapplied UI choice.
+    if (actual !== this.actualProgram && options.includes(actual)) select.value = actual;
+    if (!this.choiceRestored && options.includes(actual)) {
+      if (reading('operation') !== 'run') select.value = this.restoreProgram(actual,options);
+      this.choiceRestored = true;
+    }
+    if (reading('operation') === 'run' && options.includes(actual)) select.value = actual;
+    this.actualProgram = actual;
+    select.disabled = !options.length || reading('operation') === 'run';
+    const blocked = !!bosch.control_error || this.busy || bosch.command?.outcome === 'pending';
+    const idle = ['ready','inactive','finished'].includes(reading('operation')) && reading('power') === 'on';
+    const remote = reading('remote_control') === 'on';
+    const canStart = idle && remote && ['off','closed'].includes(reading('door')) && reading('remote_start') === 'on' &&
+      Number(readings.delay?.state ?? -1) === 0 && ['s','seconds'].includes(readings.delay?.unit) &&
+      readings.meter?.power_w !== undefined && select.value === reading('selected_program');
+    this.root.querySelector('[data-profile-form="bosch-select"] button[type="submit"]').disabled = blocked || !idle || !remote || !options.length;
+    this.root.querySelector('[data-profile-command="bosch-start"]').disabled = blocked || !canStart || !options.length;
+    this.root.querySelector('[data-profile-command="bosch-power"]').disabled = blocked || !remote || reading('power') !== 'off';
+    this.root.querySelector('[data-dishwasher-arm]').hidden = bosch.enabled;
+    const modifiers = this.root.querySelector('[data-bosch-modifiers]');
+    const modifierMarkup = ['extra_dry','half_load','vario_speed'].map(key=>
+      `<button type="button" data-profile-command="bosch-modifier" data-modifier="${key}" data-enabled="${reading(key) !== 'on'}" ${blocked || !idle || !remote || !['on','off'].includes(reading(key)) ? 'disabled' : ''}>
+      ${escapeHTML(bosch.fields[key].label)}: ${escapeHTML(reading(key))}</button>`).join('');
+    if (this.modifierMarkup !== modifierMarkup) { modifiers.innerHTML = modifierMarkup; this.modifierMarkup = modifierMarkup; }
   }
 
   renderRecordings() {
     const library = this.library;
-    this.root.querySelector('[data-profile-selected]').innerHTML = Object.entries(library.programs).map(([machine, programs]) =>
-      Object.entries(programs).map(([program, label]) => {
+    this.recordingMarkup ||= {};
+    this.selectedMarkup ||= {};
+    for (const container of this.root.querySelectorAll('[data-profile-selected]')) {
+      const machine = container.dataset.profileSelected;
+      const markup = Object.entries(library.programs[machine]).map(([program,label]) => {
         const profile = library.profiles[`${machine}/${program}`];
-        return `<p>${machineName(machine)} · ${escapeHTML(label)}: ${profile ?
-          `${profile.recording_count} recording${profile.recording_count === 1 ? '' : 's'} ·
-          ${decimal(profile.summary.mean_duration_seconds / 60, 1)} min mean cycle ·
-          ${decimal(profile.summary.energy_kwh, 3)} kWh mean
-          <button data-profile-command="average" data-machine="${machine}" data-program="${program}">Inspect average</button>` :
-          'No reviewed recordings included'}</p>`;
-      }).join('')).join('');
-    this.root.querySelector('[data-profile-recordings]').innerHTML = library.recordings.length ? library.recordings.map(recording => {
-      const status = recording.status === 'saved' && recording.trimmed_from ? 'saved · trim revision' : recording.status === 'armed' ? (recording.idle_seen ? 'Armed · waiting for start' : 'Armed · waiting for idle') : recording.status;
-      return `<section class="profile-recording"><strong>${machineName(recording.machine)} · ${escapeHTML(library.programs[recording.machine][recording.program])}</strong>
-        <p>${escapeHTML(status)} · ${escapeHTML(new Date(recording.armed_at).toLocaleString('en-GB', {timeZone: this.timezone || 'Europe/Brussels'}))} · ${recording.sample_count} samples · ${recording.last_power_w === null ? 'Power unavailable' : Math.round(recording.last_power_w) + ' W'}</p>
-        <p>${escapeHTML(recording.notes)}${recording.error ? ' · ' + escapeHTML(recording.error) : ''}</p>
+        return `<p>${escapeHTML(programLabel(label))}: ${profile ? `${profile.recording_count} recording${profile.recording_count === 1 ? '' : 's'} ·
+          ${decimal(profile.summary.mean_duration_seconds / 60,1)} min mean cycle · ${decimal(profile.summary.energy_kwh,3)} kWh mean
+          <button data-profile-command="average" data-machine="${machine}" data-program="${escapeHTML(program)}">Inspect average</button>` : 'No reviewed recordings included'}</p>`;
+      }).join('');
+      if (this.selectedMarkup[machine] !== markup) { container.innerHTML = markup; this.selectedMarkup[machine] = markup; }
+    }
+    for (const container of this.root.querySelectorAll('[data-profile-recordings]')) {
+      const rows = library.recordings.filter(row=>row.machine === container.dataset.profileRecordings);
+      const markup = rows.length ? rows.map(recording => {
+        const status = recording.status === 'saved' && recording.trimmed_from ? 'saved · trim revision' : recording.status === 'armed' ? (recording.idle_seen ? 'Armed · waiting for start' : 'Armed · waiting for idle') : recording.status;
+        return `<section class="profile-recording"><strong>${escapeHTML(programLabel(library.programs[recording.machine][recording.program] ?? recording.program))}</strong>
+        <p>${escapeHTML(status)}${recording.source === 'bosch' ? ' · automatic Bosch capture' : ''} · ${escapeHTML(new Date(recording.armed_at).toLocaleString('en-GB',{timeZone:this.timezone || 'Europe/Brussels'}))} · ${recording.sample_count} samples · ${recording.last_power_w === null ? 'Power unavailable' : Math.round(recording.last_power_w) + ' W'}</p>
+        <p>${escapeHTML(recording.notes)}${recording.error || recording.interruption_reason ? ' · ' + escapeHTML(recording.error || recording.interruption_reason) : ''}</p>
+        ${recording.modifiers ? `<p>Modifiers at start: ${escapeHTML(Object.entries(recording.modifiers).map(([key,value])=>key + ': ' + (value ?? 'unavailable')).join(', '))}. Review whether this represents the base program.</p>` : ''}
         <div class="actions"><button data-profile-command="review" data-id="${recording.id}">Inspect / review</button>
-        ${recording.status === 'recording' ? `<button data-profile-command="finish" data-id="${recording.id}">Finish now</button>` : ''}
-        ${recording.status === 'saved' ? `<button data-profile-command="select" data-id="${recording.id}" data-included="${!recording.included}">${recording.included ? 'Remove from average' : 'Add to average'}</button>` : `<button data-profile-command="discard" data-id="${recording.id}">Discard recording</button>`}</div></section>`;
-    }).join('') : '<p class="muted">No cycles recorded yet.</p>';
+        ${recording.status === 'recording' ? `<button data-profile-command="finish" data-id="${recording.id}">Finish recording now</button>` : ''}
+        ${recording.status === 'saved' ? `<button data-profile-command="select" data-id="${recording.id}" data-included="${!recording.included}">${recording.included ? 'Remove from average' : 'Add to average'}</button>` : `<button data-profile-command="discard" data-id="${recording.id}">Discard recording</button>`}
+        <details class="profile-delete"><summary>Delete recording…</summary><p>Permanently delete this recording, its samples and its contribution to the average. This cannot be undone.</p>
+        <button data-profile-command="delete" data-id="${recording.id}">Confirm permanent deletion</button></details></div></section>`;
+      }).join('') : '<p class="muted">No cycles recorded yet.</p>';
+      const interacting = container.contains(this.root.getRootNode().activeElement) || container.querySelector('details[open]');
+      const machine = container.dataset.profileRecordings;
+      if (this.recordingMarkup[machine] !== markup && (this.forceRecordings || !interacting)) {
+        container.innerHTML = markup;
+        this.recordingMarkup[machine] = markup;
+      }
+    }
+    this.forceRecordings = false;
   }
 
   async submit(form) {
     const values = Object.fromEntries(new FormData(form));
     const action = form.dataset.profileForm;
-    if (action === 'arm') {
+    if (action === 'bosch-configure') {
+      const revision = Number(form.dataset.revision);
+      this.library = await this.api('profiles/bosch-configure','POST',{revision,entities:values});
+      this.advanceRevision(revision,this.library.revision);
+      this.message('Bosch mappings saved. Automatic collection begins when actual execution is observed.');
+    } else if (action === 'bosch-select') {
+      await this.api('profiles/bosch-command','POST',{command:'select',program:values.program});
+      this.message('Selection submitted; awaiting appliance feedback. No start command was sent.');
+    } else if (action === 'arm') {
       await this.api('profiles/arm', 'POST', {...values, machine: form.dataset.machine});
       this.message('Armed. Start the machine after the recorder has observed idle power.');
     } else if (action === 'configure' || action === 'mazak') {
@@ -161,9 +316,19 @@ export class ApplianceProfilesPage {
 
   async command(button) {
     const command = button.dataset.profileCommand, id = button.dataset.id;
+    if (command.startsWith('bosch-')) {
+      const program = this.root.querySelector('[data-bosch-program]').value;
+      const body = command === 'bosch-start' ? {command:'start',program} : command === 'bosch-power' ? {command:'power_on'} :
+        {command:'modifier',modifier:button.dataset.modifier,enabled:button.dataset.enabled === 'true'};
+      await this.api('profiles/bosch-command','POST',body);
+      await this.refresh();
+      this.message('Command submitted to HA. Actual execution is established by Bosch feedback.');
+      return;
+    }
     if (command === 'entities') {
       const result = await this.api('settings/entities');
       if (this.signal.aborted) return;
+      this.root.querySelector('#profile-ha-entities').innerHTML = result.entities.map(entity=>`<option value="${escapeHTML(entity.entity_id)}">${escapeHTML(entity.name)} · ${escapeHTML(entity.state)}</option>`).join('');
       this.root.querySelector('#profile-power-entities').innerHTML = result.entities.filter(entity => entity.entity_id.startsWith('sensor.') && ['W', 'kW'].includes(entity.unit))
         .map(entity => `<option value="${escapeHTML(entity.entity_id)}">${escapeHTML(entity.name)} · ${escapeHTML(entity.state)} ${escapeHTML(entity.unit)}</option>`).join('');
       this.message('Power sensors loaded. Select a dedicated sensor for each machine.');
@@ -173,15 +338,17 @@ export class ApplianceProfilesPage {
     if (command === 'average') return this.reviewAverage(button.dataset.machine,button.dataset.program);
     if (command === 'preview') return this.previewSelection(button.closest('form'));
     const revision = this.library.revision;
-    const result = await this.api(`profile-recordings/${id}/${command}`, 'POST', {revision,...(command === 'select' ? {included:button.dataset.included !== 'false'} : {})});
-    if (command === 'select') this.advanceRevision(revision, result.library_revision);
+    const result = await this.api(`profile-recordings/${id}/${command}`, 'POST', {revision,...(command === 'delete' ? {confirmed:true} : {}),...(command === 'select' ? {included:button.dataset.included !== 'false'} : {})});
+    if (command === 'select' || command === 'delete') this.advanceRevision(revision, result.library_revision);
     if (command === 'finish') await this.review(id);
-    if (command === 'discard') {
+    if (command === 'discard' || command === 'delete') {
       this.chart?.close();
       this.root.querySelector('[data-profile-review]').hidden = true;
+      if (!this.reviewed?.averaged) this.reviewed = null;
     }
+    this.forceRecordings = true;
     await this.refresh();
-    if (command === 'select' && this.reviewed?.averaged) {
+    if ((command === 'select' || command === 'delete') && this.reviewed?.averaged) {
       const key = this.reviewed.machine + '/' + this.reviewed.program;
       if (this.library.profiles[key]) await this.reviewAverage(this.reviewed.machine,this.reviewed.program);
       else { this.chart?.close(); this.root.querySelector('[data-profile-review]').hidden = true; }
@@ -251,6 +418,7 @@ export class ApplianceProfilesPage {
     const profile = await this.api(`profiles/${machine}/${program}`);
     if (this.signal.aborted) return;
     this.reviewed = profile;
+    this.expand?.(machine,true);
     clearTimeout(this.previewTimer);
     this.previewGeneration++;
     const panel = this.root.querySelector('[data-profile-review]');
@@ -275,6 +443,7 @@ export class ApplianceProfilesPage {
     const recording = await this.api(`profile-recordings/${id}`);
     if (this.signal.aborted) return;
     this.reviewed = recording;
+    this.expand?.(recording.machine,true);
     clearTimeout(this.previewTimer);
     this.previewGeneration++;
     const panel = this.root.querySelector('[data-profile-review]');
@@ -284,8 +453,8 @@ export class ApplianceProfilesPage {
     const saved = recording.status === 'saved';
     const editable = (recording.status === 'review' || saved) && duration > 0;
     panel.hidden = false;
-    panel.innerHTML = `<h2>Review · ${machineName(recording.machine)} · ${escapeHTML(this.library.programs[recording.machine][recording.program])}</h2>
-      <p>${escapeHTML(recording.notes)} · ${escapeHTML(recording.entity_id)} · ${escapeHTML(recording.status)}</p>
+    panel.innerHTML = `<h2>Review · ${machineName(recording.machine)} · ${escapeHTML(programLabel(this.library.programs[recording.machine][recording.program] ?? recording.program))}</h2>
+      <p>${escapeHTML(recording.notes)} · ${escapeHTML(recording.entity_id)} · ${escapeHTML(recording.status)}${recording.interruption_reason ? ' · ' + escapeHTML(recording.interruption_reason) : ''}</p>
       ${saved ? '<p class="notice">You can adjust this saved trim. Saving keeps the original and uses the revised range once in the average.</p>' : ''}
       <div data-profile-graph></div>
       <p class="muted">Gaps are unknown; short measured peaks remain visible. Trim seconds are relative to the detected start.</p>

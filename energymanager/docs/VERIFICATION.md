@@ -1,5 +1,29 @@
 # EnergyManager 4 verification
 
+## 4.5.5 — V45-A002-M1 (2 November2026)
+
+681Python tests pass147.30s;86frontend cases, Ruff, mypy48modules and dashboard JS syntax
+pass. New synthetic regressions cover panel/app runs, quiet phases, waiting/finish/error/
+missing state, first-seen-running/restart evidence, program changes, meter gaps, reviewed
+inclusion and raw HA identities. Manual actions distinguish selected from active program,
+check door/permissions/native delay/meter/mode/hardware generation and never replay after
+restart. Pending/failed/late feedback is explicit. Permanent deletion tests cover confirmation,
+revision/origin guards, transactional rollback, sample/membership removal, independent trim
+survival, restart and in-flight-read suppression. Existing washing-machine/Mazak and all
+planner/control regressions pass.
+
+Configured local fake E2E25.540s/2019intervals, max control4.287ms/four fake calls. Extended
+--profiles-fixture adds explicit synthetic Bosch entities/programs, automatic capture
+examples and a60second fake manual-start trace. Standalone browser verified only one card
+expands; program selection leaves idle feedback and Start produces run feedback/capture.
+Native preview saw finished feedback and review, linked trim keyboard/numeric fields,
+preview energy/duration and explicit save into that HA program's average. Legacy profiles
+remain distinct. Delete confirmation survives ordinary polls; API tests perform deletion.
+Unapplied program choice survives page reload while Start stays disabled until device selection matches. Both browser logs are clean. Wheel/sdist72runtime files match; isolated4.5.5 imports pass.
+All measurements/endpoints are synthetic/local. No live HA/database/hardware/phone/provider
+or installation deployment; physical touch and actual appliance behavior remain unverified.
+Remote CI/publication evidence belongs in ignored artifacts/v455-release-state.json and final reply.
+
 ## 4.5.4 — Saved trim correction (31 October2026)
 
 652 Python tests pass148.33s;82frontend cases, Ruff/mypy47 and dashboard JS syntax pass.
@@ -1190,7 +1214,7 @@ Labelled native HA-contract and standalone browser checks passed for compact ene
 rows, day-end predictions across local midnight, connection symbols, source chooser/
 more-info, pointer/keyboard W/% cursors, gaps and planned window edges. Both graph and
 session-track endpoints align within0.02px on desktop and exactly at390px width;
-power height360px, SoC255px. No browser warnings/errors. Screenshots and geometry are
+power height360px, SoC255px. Unapplied program choice survives page reload without sending a command. No browser warnings/errors. Screenshots and geometry are
 in screenshots/compact-v423-desktop.png, compact-v423-mobile.png and
 compact-dashboard-browser-verification.json. Temporary servers/tabs closed.
 
@@ -1269,7 +1293,7 @@ backend five-second measurement cadence changed. No live HA deployment performed
  native live displays while backend remains45%. EV sensor click emits `hass-more-info`
  with the correct entity. Journey calendar/date picker/create/remove, Settings discovery/
  save/backup/restart message and native view navigation passed.390px layout and the
- standalone fallback/setup download were inspected. No browser warnings/errors.
+ standalone fallback/setup download were inspected. Unapplied program choice survives page reload without sending a command. No browser warnings/errors.
 - This is a labelled HA-contract harness with simulated HA built-in cards, more-info
  dialog and Supervisor WS responses. Versioned custom components, authenticated-style
  session transport, backend/settings API and configured real-solver fixture run locally.
@@ -1339,7 +1363,7 @@ scheduler policy, physical limits, forecast source, device control or stored uni
 Evidence: frontend-verification.json, offline-e2e.json and screenshots/journey-v4010-*.png,
 screenshots/power-v4010-watts.png. These show **synthetic local fixtures**, not actual
 installation readings. Physical devices, HA installation and phone delivery remain
-live-unverified. Current architecture and specification: architecture/Architecture_Proposal.md;
+live-unverified. Current architecture and specification: ARCHITECTURE.md;
 historical design records retain explicit supersession notes.
 
 ## Version 4.0.9 — HA availability and successful-read watchdog

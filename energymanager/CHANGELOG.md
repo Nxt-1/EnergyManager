@@ -1,3 +1,10 @@
+## 4.5.5 — Appliance cards and Bosch profile collection
+
+- Add shared appliance cards with in-place details in both dashboards.
+- Capture mapped Bosch runs automatically and retain review before averaging.
+- Add explicit Bosch program/modifier/start controls and permanent recording deletion.
+- Managed scheduling remains a later milestone.
+
 ## 4.5.4 — Editable saved recording trims
 
 - Make saved recording ranges editable with larger Start/End grips.

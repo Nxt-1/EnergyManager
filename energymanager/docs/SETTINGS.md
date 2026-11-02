@@ -285,3 +285,16 @@ remapping until finished/discarded. Defaults 10 W / 15 idle minutes are provisio
 choose a timeout longer than quiet phases. HA W/kW sensor discovery is read-only;
 unknown/unavailable values produce gaps, never zero. Actual sensor IDs remain to be
 provided/configured. Library revision checks reject concurrent overwrites.
+
+
+## Bosch profile collection mappings (4.5.5)
+
+Appliances → Bosch dishwasher → Expand stores Bosch mappings immediately in the same
+mode-isolated SQLite profile library as its dedicated power sensor; installation JSON
+is unchanged and no restart is required. Use Load HA entities and map the actual selected
+and active program selects separately. Operation plus active program and the dedicated
+Refoss W/kW sensor enable automatic observation. Power, remote permissions, door, native
+start delay (seconds), finish, progress and modifier mappings supply feedback/guards for
+explicit manual controls. Missing mappings are explicit, and missing command guards block
+that action. Configuration/recording never grants hardware authority. See RUNBOOK.md for
+manual-action prerequisites; scheduling settings are reserved for M2.

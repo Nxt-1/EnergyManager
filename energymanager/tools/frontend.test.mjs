@@ -1508,3 +1508,76 @@ test('an already saved recording opens editable trim controls and uses the retur
   assert.match(panel.innerHTML,/name="start_seconds"/);
   assert.match(panel.innerHTML,/name="end_seconds"/);
 });
+
+
+test('appliance cards expand in place, opening another collapses the previous one', () => {
+  const cards = ['dishwasher','washing_machine','mazak'].map(machine => {
+    const detail = {hidden:true}, button = {setAttribute(key,value){this[key]=value;}};
+    return {dataset:{applianceCard:machine},detail,button,
+      classList:{toggle(name,value){this.expanded=value;}},
+      querySelector(selector){return selector === '[data-appliance-detail]' ? detail : button;}};
+  });
+  const review = {hidden:true};
+  const page = {root:{querySelectorAll:()=>cards,querySelector:()=>review}};
+  ApplianceProfilesPage.prototype.expand.call(page,'dishwasher');
+  assert.deepEqual(cards.map(card=>card.detail.hidden),[false,true,true]);
+  assert.equal(cards[0].button['aria-expanded'],'true');
+  ApplianceProfilesPage.prototype.expand.call(page,'washing_machine');
+  assert.deepEqual(cards.map(card=>card.detail.hidden),[true,false,true]);
+  ApplianceProfilesPage.prototype.expand.call(page,'washing_machine');
+  assert.ok(cards.every(card=>card.detail.hidden));
+});
+
+test('Bosch refresh retains an explicit choice, adopts device changes and never sends commands', () => {
+  const elements = new Map();
+  const root = {querySelector(selector) {
+    if (!elements.has(selector)) elements.set(selector,{value:'',innerHTML:'',textContent:'',disabled:false});
+    return elements.get(selector);
+  }};
+  const readings = {operation:{state:'ready'},selected_program:{state:'synthetic_eco_50',
+    options:['synthetic_eco_50','synthetic_intensive_70']},active_program:{state:'synthetic_eco_50'}};
+  const page = {root,library:{bosch:{enabled:true,readings,fields:{extra_dry:{label:'Extra dry'},
+    half_load:{label:'Half load'},vario_speed:{label:'Vario speed+'}}}}};
+  Object.setPrototypeOf(page,ApplianceProfilesPage.prototype);
+  ApplianceProfilesPage.prototype.renderBosch.call(page);
+  const select = root.querySelector('[data-bosch-program]');
+  assert.equal(select.value,'synthetic_eco_50');
+  select.value = 'synthetic_intensive_70';
+  ApplianceProfilesPage.prototype.renderBosch.call(page);
+  assert.equal(select.value,'synthetic_intensive_70');
+  readings.selected_program.state = 'synthetic_intensive_70';
+  select.value = 'synthetic_eco_50';
+  ApplianceProfilesPage.prototype.renderBosch.call(page);
+  assert.equal(select.value,'synthetic_intensive_70');
+  assert.equal(root.querySelector('[data-dishwasher-arm]').hidden,true);
+});
+
+test('Start now is a single explicit Bosch request; it never arms or invents a running capture', async () => {
+  const requests = [];
+  const page = {root:{querySelector:()=>({value:'synthetic_eco_50'})},
+    api:async(...args)=>{requests.push(args);},refresh:async()=>{},message:()=>{}};
+  await ApplianceProfilesPage.prototype.command.call(page,{dataset:{profileCommand:'bosch-start'}});
+  assert.deepEqual(requests,[['profiles/bosch-command','POST',{command:'start',program:'synthetic_eco_50'}]]);
+  assert.equal(page.reviewed,undefined);
+});
+
+
+test('unapplied program choice survives recreation only for the same mapped appliance and unchanged device choice', t => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis,'localStorage');
+  const saved = new Map();
+  Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{
+    getItem:key=>saved.get(key) ?? null,setItem:(key,value)=>saved.set(key,value)}});
+  t.after(()=>{if(previous) Object.defineProperty(globalThis,'localStorage',previous); else delete globalThis.localStorage;});
+  const first = {library:{mode:'configured',bosch:{config:{selected_program:'select.synthetic_a'}}},actualProgram:'eco'};
+  Object.setPrototypeOf(first,ApplianceProfilesPage.prototype);
+  ApplianceProfilesPage.prototype.rememberProgram.call(first,'intensive');
+  const recreated = Object.assign(Object.create(ApplianceProfilesPage.prototype),{library:first.library});
+  assert.equal(ApplianceProfilesPage.prototype.restoreProgram.call(recreated,'eco',['eco','intensive']),'intensive');
+  assert.equal(ApplianceProfilesPage.prototype.restoreProgram.call(recreated,'intensive',['eco','intensive']),'intensive');
+  assert.equal(ApplianceProfilesPage.prototype.restoreProgram.call(recreated,'eco',['eco']),'eco');
+  const other = {library:{mode:'demo',bosch:{config:{selected_program:'select.synthetic_a'}}}};
+  Object.setPrototypeOf(other,ApplianceProfilesPage.prototype);
+  assert.equal(ApplianceProfilesPage.prototype.restoreProgram.call(other,'eco',['eco','intensive']),'eco');
+  other.library.mode = 'configured'; other.library.bosch.config.selected_program = 'select.synthetic_b';
+  assert.equal(ApplianceProfilesPage.prototype.restoreProgram.call(other,'eco',['eco','intensive']),'eco');
+});

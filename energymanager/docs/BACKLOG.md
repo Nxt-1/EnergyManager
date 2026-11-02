@@ -145,6 +145,33 @@ Raw recordings are retained, and review graphs support linked trim handles and z
 Appliance scheduling remains deferred.
 The maintained architecture records these confirmed requirements and open decisions.
 
+On 1 November 2026 the user agreed to a user-managed appliance/program library,
+with scheduling support determined by operating behavior. Initial support is for
+manually started, uninterrupted program cycles; other equipment needs its own
+supported behavior. This is pending V4.5 direction V45-A001, not implementation
+authorization. Saved-recording removal and program management are identified gaps.
+The user chose permanent recording deletion after confirmation; removal from an
+average retains the recording. Program/appliance removal and dependent-data rules
+remain open. See ARCHITECTURE.md and
+the V4.5 coordination record in WORK_STATE.md.
+
+On 2 November 2026 the user supplied an installed Bosch Home Connect capability
+handoff and selected a dedicated dishwasher integration direction (V45-A002),
+with reviewed program recordings as the next focus. This supersedes the manual-only
+assumption for that dishwasher. Generic-library work has not been withdrawn;
+Bosch scheduling/control requirements remain under discussion and implementation
+is not yet authorized. See ARCHITECTURE.md for capability evidence and limits.
+
+The user subsequently approved two delivery milestones: V45-A002-M1 for shared cards,
+Bosch feedback and automatic profile collection/review/delete; V45-A002-M2 for managed
+scheduling alongside EV/ESS, including background-demand separation. These are agreed
+scope stages, not application implementation authorization. The user agreed to include
+manual program/modifier controls and Start now and record in M1; M2's detailed
+planner/accounting criteria remain pending. M1 scope/criteria are in ARCHITECTURE.md. M1 was
+subsequently explicitly authorized and implemented in4.5.5 (cards, automatic Bosch capture,
+review/delete and manual controls), with offline verification. M2 and full V45-A001
+library management remain pending; see the current architecture/work-state records.
+
 Preserve the earlier appliance-scheduling requirements for a later release:
 
 - User-entered earliest start and latest completion, with reusable program durations and electrical power profiles.
@@ -277,6 +304,31 @@ share the same driving-energy estimate. Scheduling and goal semantics are unchan
 
 Any broader layout or interaction change still needs its own scope/authorization.
 
+## ARCH-013 — Preserve unsaved settings in the native HA dashboard
+
+Recorded: 25 October 2026. Target: **V4.3.x implementation**. Status: **deferred**,
+explicitly requested by the user after entering the numeric go-e sensor mappings.
+
+The user reports that the native HA dashboard's EnergyManager Settings tab sometimes
+appears to refresh and clears unsaved edits. The current draft and dirty flag exist
+only in the settings component. Card removal/recreation disposes that component and
+loads saved configuration again; the browser-unload warning does not cover internal
+HA card recreation. This is an identified loss path, but the exact event triggering
+the user's observed refresh has not been reproduced. Ordinary state polling does not
+directly rebuild the settings form. Entering/saving the mappings was subsequently
+successful, but the underlying draft-loss problem remains unresolved.
+
+Future implementation should preserve and restore unsaved field values, including
+entity IDs still being typed, across native card recreation. Prevent delayed settings
+loads or entity-list refreshes from overwriting newer edits. Clear drafts after a
+successful save or an explicit discard; do not silently save/apply configuration.
+Choose draft lifetime, isolation between installations/modes and revision-conflict
+handling when implementing. Verify card detach/reattach, navigation, refresh/reconnect,
+in-flight loads, failed saves and explicit save/discard, retaining useful focus/scroll
+state where practical. Confirm the actual refresh trigger rather than assuming it.
+
+This backlog entry records future work and does not authorize implementation.
+
 ## ARCH-014 — Clickable EV readings and states with history
 
 Recorded: 25 October 2026. Status: **mapped sensor history implemented in4.3.19**,
@@ -300,6 +352,79 @@ phase controls. Missing mappings/demo/standalone explain the lack of an entity a
 Controller requests and internal timestamps explain their source without inventing an
 HA sensor. A separate command/composite history UI remains deferred and is not authorized.
 
+## ARCH-015 — Air compressor detection
+
+Recorded: 25 October 2026. Status: **deferred**, requested by the user.
+
+Detect when the air compressor is running. Available measurement sources, detection
+criteria and how the detected activity should be used remain to be established.
+Relates to ARCH-006 appliance recognition; do not assume remote control or scheduling
+of the compressor is requested.
+
+This backlog entry does not authorize implementation.
+
+## ARCH-016 — Dynamic tariff comparison
+
+Recorded: 25 October 2026. Status: **deferred**, requested by the user.
+
+Compare dynamic electricity tariffs with the current tariff to assess potential
+whole-system cost differences. Comparison period, tariff/data sources and whether
+to compare the same consumption or separately optimized schedules remain to be
+decided. Include applicable import/export charges and capacity costs consistently;
+distinguish estimated savings from measured results.
+
+This item does not authorize changing the active tariff or implementing dynamic-tariff
+scheduling. Implementation requires separate authorization.
+
+## ARCH-017 — Dynamic peak headroom by time and weekday
+
+Recorded: 27 October 2026. Status: **deferred**, requested by the user.
+
+Consider reserving grid-import headroom below the current monthly capacity peak,
+varying with time of day and day of week, to leave room for uncertain household
+loads. Decide whether this should constrain EV charging only or other controllable
+loads as well; the user explicitly left the EV-only scope open.
+
+When revisiting, establish how to size and release the headroom, and how it interacts
+with required EV goals, charging continuity, ESS peak protection and existing peak
+permissions. Keep the recorded 15-minute-average billing peak distinct from the
+chosen planning headroom. No amounts, time bands or weekday rules are selected yet.
+
+This backlog entry does not authorize implementation.
+
+## ARCH-018 — Task energy profile visualization
+
+Recorded: 27 October 2026. Status: **deferred**, requested by the user.
+
+Include a visualization of each task's energy profile. Establish the presentation,
+time resolution and whether it shows planned, measured or both profiles when
+revisiting; keep predictions and observations distinguishable.
+
+This backlog entry does not authorize implementation.
+
+## ARCH-019 — Task main energy source
+
+Recorded: 27 October 2026. Status: **deferred**, requested by the user.
+
+Show the main energy source for each task. Define the source categories and how the
+main source is determined for tasks supplied by multiple sources. Keep planned
+source allocation distinct from measured attribution; do not assume this display
+request changes scheduling or source permissions.
+
+This backlog entry does not authorize implementation.
+
+## ARCH-020 — Adaptive plan-update frequency
+
+Recorded: 28 October 2026. Status: **deferred**, requested by the user.
+
+Adjust plan-update frequency based on generation and load stability: replan less
+often during stable conditions and more often when meaningful changes warrant it.
+Define stability measures, thresholds and minimum/maximum update intervals when
+revisiting. Keep fast control and urgent event handling independent; a longer
+planning interval must not delay peak protection or invalidate required deadlines.
+
+This backlog entry does not authorize implementation.
+
 
 ## ARCH-021 — Uninterrupted charging during application restarts
 
@@ -313,3 +438,35 @@ stop while the application is offline. Do not assume a generic HTTP watchdog exi
 or that the documented energy limit overrides forced charging on installed firmware.
 A full HA/host outage and an explicit control-Off/fault must retain defined behavior.
 No live hardware testing or implementation of offline continuation is authorized here.
+
+## ARCH-022 — Revisit EV trip calendar integration and bidirectional sync
+
+Recorded: 2 November 2026. Status: **deferred**, requested by the user.
+
+Revisit the EV trip calendar integration to address its issues and limitations, and
+consider bidirectional synchronization with the source calendar. The specific issues,
+supported calendar services, synchronization behavior and conflict handling remain to
+be established with the user. This entry does not authorize implementation.
+
+## ARCH-023 — Complete energy and power breakdown
+
+Recorded: 2 November 2026. Status: **deferred**, requested by the user.
+
+Add a complete energy and power breakdown. The scope, categories, presentation and
+distinction between measured and planned values remain to be discussed. This entry
+does not authorize implementation.
+
+## ARCH-024 — ESS minimum SoC line
+
+Recorded: 2 November 2026. Status: **deferred**, requested by the user.
+
+Add an ESS minimum state-of-charge line. Its presentation and placement remain to be
+discussed. This entry does not authorize implementation.
+
+## ARCH-025 — Peak-power line from the actual sensor
+
+Recorded: 2 November 2026. Status: **deferred**, requested by the user.
+
+Update the peak-power line to use the actual sensor instead of a static line. The
+specific sensor and display behavior remain to be confirmed with the user. This entry
+does not authorize implementation.

@@ -237,6 +237,10 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
                 result = library.configure(body)
             elif action == "arm":
                 result = library.arm(body)
+            elif action == "bosch-configure":
+                result = library.configure_bosch(body)
+            elif action == "bosch-command":
+                result = await library.bosch.command(body)
             else:
                 raise web.HTTPNotFound()
         return web.json_response(result, headers={"Cache-Control": "no-store"})
@@ -270,6 +274,9 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
             elif action == "select":
                 library.select(identity, body)
                 result = {"selected": True, "library_revision": library.settings["revision"]}
+            elif action == "delete":
+                library.delete(identity, body)
+                result = {"deleted": True, "library_revision": library.settings["revision"]}
             elif action == "discard":
                 library.discard(identity)
                 result = {"discarded": True}

@@ -1,6 +1,6 @@
 # EnergyManager next — implementation handoff
 
-> Preserved original design reference. Read [the maintained architecture](Architecture_Proposal.md)
+> Preserved original design reference. Read [the maintained architecture](../ARCHITECTURE.md)
 > and [current decisions](../DECISIONS.md) first.
 > Historical pending-work statements and chat restrictions are not current instructions.
 

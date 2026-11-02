@@ -11,11 +11,11 @@ relevant supporting documents and the latest checkpoint for the task. Reuse cont
 already read in this chat, but check for changes when resuming or when another chat
 may have updated the workspace.
 
-- [Architecture](energymanager/docs/architecture/Architecture_Proposal.md) is the
-  single maintained architecture and implementation specification. Despite its
-  original filename, it describes the current system. Update this same document
+- [Architecture](energymanager/docs/ARCHITECTURE.md) is the
+  single maintained architecture and implementation specification. It describes
+  the current system and explicitly labelled pending changes. Update this document
   when agreed requirements, behavior, formulas or component contracts change.
-- [Deferred work](energymanager/docs/DEFERRED_WORK.md) is the ongoing backlog. Add
+- [Backlog](energymanager/docs/BACKLOG.md) is the ongoing backlog. Add
   explicitly deferred ideas there, preserving the user's intent and unresolved
   choices. A backlog entry is not permission to implement it.
 - [Decisions](energymanager/docs/DECISIONS.md) records confirmed choices and rationale.
@@ -52,6 +52,40 @@ precedence; ask about genuine unresolved policy conflicts.
   does not depend on an answer. Do not invent installation facts to avoid a question.
 - Keep meaningful progress updates brief. Distinguish implemented, tested, benchmarked
   and live-unverified results. Report actual outcomes and specific remaining limitations.
+
+## Architecture and implementation chats
+
+- This workflow applies from the remainder of V4.5 onward. The registered release
+  sections in WORK_STATE.md identify each chat pair; do not assume this setup chat
+  has an architecture role or infer a new task from an older release checkpoint.
+- Each release stream has an architecture chat and an implementation chat, covering
+  its patch releases (for example, the 4.5 pair covers 4.5.x). Several streams may
+  develop concurrently. The user creates and starts implementation chats.
+- Architecture chats discuss requirements, record confirmed decisions and prepare
+  implementation scope and completion criteria. Implementation chats build explicitly
+  authorized tasks, choose routine coding details, verify results and record progress.
+- Architecture discussion continues during implementation. Keep each authorized task's
+  scope stable; later decisions become follow-up tasks or explicit user-authorized
+  amendments. Agreement on a design alone does not authorize implementation.
+- Use the release coordination sections in WORK_STATE.md for chat identities, task
+  scope, dependencies, progress and open questions. Keep the single maintained
+  architecture and decision log shared across releases; label pending behavior with
+  its release/task rather than creating separate release architecture/handoff files.
+- The user authorizes registered implementation/architecture pairs to message each
+  other directly and trigger responses for questions and replies within their existing
+  work. Record the question and resolution in the shared release record. Architecture
+  may clarify existing decisions; new behavior, changed requirements or expanded scope
+  require the user. Continue independent work while a decision is pending. This is
+  not permission to create/start implementation chats or launch new implementation work.
+- Application releases reach main in version order. Before a newer release is merged
+  and published, its implementation chat incorporates the earlier releases from main,
+  resolves conflicts and verifies the combined behavior. Parallel work stays on
+  separate branches; a clean Git merge alone does not establish correct integration.
+- Approved architecture and coordination documentation may reach main ahead of code,
+  clearly distinguishing pending behavior from implemented behavior. Branches do not
+  share file updates automatically: consult the latest shared records on main and
+  reconcile relevant updates before acting or integrating; do not overwrite newer
+  decisions or another release's progress with an older branch copy.
 
 ## Required coding skill
 

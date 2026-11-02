@@ -33,10 +33,10 @@ node --test energymanager/tools/frontend.test.mjs
 .\.venv\Scripts\python.exe -m build --no-isolation energymanager
 ```
 
-- [Architecture](energymanager/docs/architecture/Architecture_Proposal.md)
+- [Architecture](energymanager/docs/ARCHITECTURE.md)
 - [Project instructions for chats](AGENTS.md)
 - [Current decisions](energymanager/docs/DECISIONS.md)
-- [Deferred work](energymanager/docs/DEFERRED_WORK.md)
+- [Backlog](energymanager/docs/BACKLOG.md)
 - [Run, configure, migrate and roll back](energymanager/docs/RUNBOOK.md)
 - [Verification and remaining commissioning checks](energymanager/docs/VERIFICATION.md)
 - [Release notes](energymanager/CHANGELOG.md)

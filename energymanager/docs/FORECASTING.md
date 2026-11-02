@@ -130,4 +130,4 @@ Polling, snapshot creation and permission review use the same identity for that 
 strategy. Issued raw data remains unchanged; already-corrected snapshots are never
 corrected twice. Live ESS balancing and EV power modulation continue under the accepted
 plan's existing physical/source/peak/input/charger guards. See
-[Snapshot planning and live execution](architecture/Architecture_Proposal.md#snapshot-planning-and-live-execution--accepted-28-october-2026).
+[Snapshot planning and live execution](ARCHITECTURE.md#snapshot-planning-and-live-execution--accepted-28-october-2026).

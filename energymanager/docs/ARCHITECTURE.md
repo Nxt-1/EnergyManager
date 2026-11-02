@@ -2,20 +2,24 @@
 
 This is the single maintained architecture and implementation specification. Update
 this same file as requirements and implementation evolve across releases and chats;
-do not create a new handoff document for each version. The filename is retained from
-the original architecture proposal, but its content now describes the current system.
+do not create a new handoff document for each version. Renamed from
+`architecture/Architecture_Proposal.md` on 1 November 2026 to reflect its maintained role.
 The active application is `energymanager/`; its version is recorded in config.yaml and
-the changelog. Last reviewed: 31 October 2026.
+the changelog. Technical content last reviewed: 2 November 2026.
 Accepted changes awaiting implementation are explicitly labelled below; they must not
 be mistaken for behavior already shipped in the application.
 
-Repository-wide chat and coding rules live in the root [AGENTS.md](../../../AGENTS.md).
+Repository-wide chat and coding rules live in the root [AGENTS.md](../../AGENTS.md).
 It directs chats to this architecture, the ongoing backlog and the required coding
 skill, and records the user's permission and conversational preferences.
+From the remainder of V4.5, each release stream has paired architecture and
+implementation chats, registered in [WORK_STATE.md](WORK_STATE.md). Architecture
+discussion may continue while authorized implementation tasks proceed. Later decisions
+are labelled pending and do not silently amend a task already in progress.
 
 Confirmed user decisions take precedence over engineering proposals. This document
-records the resulting behavior and technical contracts; [DECISIONS.md](../DECISIONS.md)
-retains the decision context. [DEFERRED_WORK.md](../DEFERRED_WORK.md) records ideas
+records the resulting behavior and technical contracts; [DECISIONS.md](DECISIONS.md)
+retains the decision context. [BACKLOG.md](BACKLOG.md) records ideas
 that require separate implementation authorization. Original draft wording remains
 available in [Git history](https://github.com/Nxt-1/EnergyManager/blob/9d8a6944c20472df5b7b30b04cf14dcabea195c3/energymanager/docs/architecture/Architecture_Proposal.md)
 and the preserved local architecture records.
@@ -103,7 +107,7 @@ GET /api/profiles/{machine}/{program} returns the derived curve and statistics; 
 polls return lightweight membership/energy/duration summaries without loading raw samples.
 The library lists the latest 100 nondiscarded recordings and separately returns included
 profiles even if older; their contributor controls remain available when inspecting the
-average. Raw evidence is not purged. Discard hides unfinished/unselected
+average. From4.5.5 explicit confirmed deletion permanently removes a recording and its samples; otherwise raw evidence is retained. Discard hides unfinished/unselected
 captures without deleting evidence. Saved cycles can be inspected and reselected.
 
 The existing same-origin/ingress boundary protects GET /api/profiles,
@@ -146,6 +150,341 @@ this milestone. Installation sensor identities, program status/energy entities a
 appropriate threshold/timeout values are still unverified. No live HA/database access,
 measurements, hardware operation, notifications or deployment occurred.
 
+### Pending V4.5 direction — user-managed appliance library (V45-A001)
+
+Agreed on 1 November 2026; not implemented or authorized for implementation. Replace
+the fixed appliance/program catalogue with a user-managed library. Support additional
+appliances and their programs without appliance-name-specific code. Operating behavior
+determines planning support: the initial scheduling behavior is a manually started,
+uninterrupted program cycle, using its reviewed power profile and an earliest-start /
+latest-finish window. The user starts a manual appliance directly or sets its delayed
+start; a confirmed manually arranged run becomes a fixed commitment, as in ARCH-005.
+On 2 November the user selected a dedicated Bosch dishwasher integration through HA
+as an additional pending direction. This supersedes the manual-only assumption for
+that dishwasher; its agreed scheduling/commitment policy is recorded under V45-A002
+below.
+
+The agreed configuration model has three levels:
+- Appliance: a user-defined name and an operating behavior chosen from predefined
+  options. The specific behavior options and their required configuration are still
+  to be agreed; manual delayed-start restrictions have not been selected.
+- Program: a name and several recorded profiles, using the existing explicit
+  membership/averaging contract. There is no separate variants model; materially
+  different cycles can be separate programs.
+- Planned run: the selected program plus inputs required by its operating behavior,
+  such as readiness times. Directly controlled appliances may need fewer user inputs;
+  their exact requirements and control support remain to be defined. This direction
+  does not authorize implementing direct control.
+
+Define these options and behavior-dependent requirements before designing the UI/UX.
+
+Adding a library item does not establish remote control or scheduling support for every
+kind of equipment. Recording profiles may serve other equipment before its operating
+behavior is supported. Variable-duration/multi-mode Mazak work, thermal storage and
+modulated/interruptible charging require their own explicit behavior; they must not be
+treated as ordinary uninterrupted cycles merely because they appear in a library.
+
+The existing appliances/programs and recordings must be preserved when introducing
+the editable library. The user chose permanent recording deletion after confirmation,
+including its stored samples; there is no recoverable archive. Deletion is separate
+from removing a recording's contribution to an average, which retains the recording.
+Deleting an included recording also removes its contribution from the program average.
+Remaining editing fields, program/appliance removal and dependent-data handling remain to
+be decided. The user identified missing saved-recording removal and program management
+as current gaps.
+This direction does not resolve the scheduling/background-accounting questions above.
+See [DECISIONS.md](DECISIONS.md) and the V4.5 coordination record in
+[WORK_STATE.md](WORK_STATE.md).
+
+#### Pending Appliances UI direction — agreed 2 November 2026
+
+Keep most, potentially all, appliances on one shared Appliances page. Use two stages:
+- On opening the page, show relatively large cards, one per appliance, with an icon
+  and the most relevant information and controls for that appliance. Keep this view
+  concise and avoid exposing all settings/history on the overview.
+- Clicking an appliance card enlarges that original card in place to reveal its full
+  information and controls on the same Appliances page. The user explicitly chose
+  this instead of navigation to a new page or a popup dialog. Embedded controls must
+  remain usable without unintentionally expanding/collapsing the card. At most one
+  card may be expanded: expanding another collapses the previously expanded card.
+  Exact expanded layout and collapse interaction remain open.
+
+The user selected an on-card program selector for the Bosch dishwasher, using the
+space that would otherwise display the program name. Default to Eco for a new run;
+preserve an explicit program choice and reflect the actual queued/running program.
+An ordinary refresh or reopening the page must not reset that choice to Eco. Other
+card fields/actions and the detailed expanded layout remain under discussion.
+
+The user approved the initial card/expansion design preview and selected three Bosch
+finish-deadline choices on the card: Tomorrow 12:00 (noon), Tomorrow 18:00 and a custom
+time icon opening a small date/time popup. These set the latest finish, not the start.
+Tomorrow means the next installation-local calendar date at the selected wall time,
+not a fixed elapsed-hours offset. Custom values remain visible after choosing them.
+Selecting a deadline does not itself mark the dishwasher Ready. The small date/time
+popup is distinct from appliance details, which still expand in the original card.
+For custom selection, show a directly clickable calendar with dates selectable from
+today through seven days ahead, beside a time-picker wheel. Use installation-local
+calendar dates. Show only those dates in a compact rolling selection; do not display
+a full month with other dates disabled, blank padding cells or month navigation.
+The user clarified that the seven-day limit is intended to simplify the visible
+calendar. The current time-wheel design may remain, although it differs from the
+user's original mental image. Replace the separate date/time entry fields and nested
+native picker flow shown in the earlier preview. Preserve the selected deadline on
+the card. The user approved the corrected compact rolling-date picker preview on
+2 November 2026, with the existing time wheel retained.
+No default finish-deadline preset has been selected by the user.
+
+The shared page/card layout accommodates the appliance's supported behavior,
+including the dedicated Bosch integration. This is agreed UI direction, not an
+implemented redesign or application-code authorization.
+
+#### Appliance connectivity investigation — 1 November 2026 (V45-Q006)
+
+User-reported equipment: Miele WSD 663 WCS TwinDos, whose app connectivity has not
+worked for years; Bosch SMS6ZCW08E Serie 6, connected to its app/internet with fine
+delayed-start options. Neither appliance's HA integration or commands were tested.
+Research establishes potential integration paths, not installation control capability:
+
+- Bosch's [model support page](https://www.bosch-home.co.uk/customer-service/SMS6ZCW08E/36)
+  lists Home Connect remote monitoring/control and Remote Start. HA's official
+  [Home Connect integration](https://www.home-assistant.io/integrations/home_connect/)
+  uses the cloud API and supports program selection/start, relative start-delay options
+  for dishwashers and remote-control/start availability sensors. Actual exposed options,
+  authorization/door behavior and appliance revision remain to be checked.
+- HA's official [Miele integration](https://www.home-assistant.io/integrations/miele/)
+  uses the manufacturer API and requires the appliance connected to the Miele account/
+  CloudService. Start, program and status support depends on model/API capabilities.
+  The [WSD663 Belgian manual](https://media.miele.com/downloads/46/46/01_96106053F20B1EEDBCF8D9EBCEA74646.pdf)
+  documents MobileStart/remote control, app or WPS pairing, network reset, and delayed
+  start from 30 minutes to 24 hours: half-hour steps below 10 hours, hourly above.
+  Its remote/SmartGrid windows can auto-start at the latest start time without an
+  external signal; this needs explicit accounting if that mode is used.
+- Miele's [network requirements](https://www.miele.com/de/com/systemvoraussetzungen-6743.htm)
+  specify 2.4 GHz; its [WPA2 support guidance](https://www.miele.nl/support/customer-assistance/app-848/alle/apparaat_niet_verbonden-93659538699)
+  identifies WPA3/mixed WPA2+WPA3 as a possible connection failure. No cause has been
+  established for this installation. Determine the failure stage/error before changes.
+- The unofficial [MieleRESTServer](https://github.com/akappner/MieleRESTServer)
+  offers local provisioning/control and reports WSD663 basic information and remote
+  start compatibility. It requires working local networking and preparation of the
+  program on the machine; it does not remotely configure programs. This is a possible
+  workaround, community-reported and unverified here, not an adopted dependency.
+
+Potential EnergyManager use through HA still requires agreed requirements and an
+authorized implementation. Public documentation research does not authorize live
+HA access, pairing, appliance/network changes or hardware operation.
+
+#### Bosch HA capability handoff — 2 November 2026 (pending V45-A002)
+
+The user supplied the Bosch support chat's findings and selected a dedicated
+dishwasher implementation direction. This is design discussion, not authorization
+to write application code or operate the dishwasher. The generic library direction
+has not been explicitly withdrawn. Recording reviewed program power profiles is
+the next stated focus; exact recording/control scope remains to be agreed.
+
+- Built-in Home Connect is connected through Bosch's cloud API. The user confirmed
+  HA can turn on the dishwasher from off. Other controls/delayed start are assumed
+  usable for design; actual program start, delayed execution and precision were
+  not verified in the supplied handoff.
+- Selected/active program controls expose Intensive 70 C, Auto 2, Eco 50 C,
+  Pre-rinse, Night wash, Speed 60 C and Machine care. Eco 50 C was selected.
+- `number.kitchen_dishwasher_start_in_relative` exposes 0–86,400 seconds, step 1.
+  This is an entity setting range, not evidence of one-second execution precision.
+- Exposed readings include remote-control/start permissions, door, operation state,
+  finish time and progress. Reported operation options include ready, delayedstart,
+  run, finished and error. At inspection permissions were on, door open, state ready;
+  finish/progress were unavailable. Permissions alone do not establish loaded/ready
+  status or the ability to start with an open door.
+- Extra dry, Half load and Vario speed+ switches are exposed. The user uses Eco
+  roughly 90% of the time, otherwise most likely Intensive, and almost never these
+  modifiers. Keep modifiers available to enable, but do not adjust the planning
+  profile or introduce modifier-dependent profiles for them in this scope. If desired
+  later, the user will add profiles for specific program/modifier combinations.
+  The agreed absence of a separate variants model still applies. Recording inclusion
+  for unusual modified cycles and future combination mapping remain to be defined.
+- HA's appliance power switch is not a consumption measurement. Planning will use
+  reviewed measured power profiles; a dedicated power-measurement source is still
+  required for recordings. The user confirms a Refoss measures the dishwasher among
+  several kitchen appliances. Its dedicated dishwasher HA power entity still needs
+  mapping; no entity ID or measurement cadence/quality has been supplied.
+
+Agreed recording behavior for V45-A002: automatically capture dishwasher runs using
+Bosch program/operation feedback and Refoss power measurements, including runs
+started at the panel or through the Bosch app. Explicit per-cycle arming is not
+required for this integration. Track actual program execution rather than treating
+power-on or delayed-start waiting as the cycle. Retain review before contribution
+to a program average and the existing coverage/completeness requirements; automatic
+capture does not establish that an interrupted or partly observed cycle is usable.
+Exact state-transition/restart handling remains an implementation detail to specify
+within the agreed contract. This uses dedicated appliance feedback and does not
+authorize the separately deferred general load-recognition work in ARCH-006.
+
+Agreed scheduling handoff for V45-A002: the user loads the dishwasher, selects the
+program and sets a latest end date/time, then confirms it ready for management.
+From that handoff the manager may start immediately or choose a later start at its
+discretion to meet the deadline. There is no additional user-entered earliest-start
+restriction for this workflow; the handoff time is the earliest authorized start.
+This specifies future application permission, not agent permission to operate the
+installation. While waiting, the manager may revise the planned start without
+further user confirmation, keeping the selected program and latest finish constraint.
+Once started, the dishwasher runs uninterrupted; scheduling does not pause or move
+the running cycle. This supersedes fixed-start commitments for this automatically
+managed Bosch workflow only.
+
+Opening the door while a managed run is waiting retains the queued run and blocks
+starting. The user confirmed automatic resumption of planned operation when the door
+closes and remote-start permission is available again, without another Ready action.
+The selected program/deadline remain attached to the queued run and the user can
+explicitly cancel it. This concerns a run waiting to start, not automatic resumption
+of a physically interrupted running cycle.
+
+For the unlikely case of a manual program change at the panel or in the Bosch app
+while queued, the user accepted adopting the newly selected program and recalculating
+the start against the existing finish deadline, without another Ready confirmation.
+Do not restore the old program over the user's choice. Modifier controls retain the
+agreed base-profile estimation policy.
+
+For a program without a usable reviewed recording, the user selected Start now and
+record as the initial workflow. Optimized scheduling becomes available once at least
+one complete usable recording has been reviewed and included in that program's
+profile. Do not require provisional manually entered duration/consumption estimates.
+This also applies if a program loses its last usable profile or a manually selected
+program has no usable profile; do not invent a curve or reuse a different program's
+measurements. Automatic capture remains available for normal panel/app-started runs.
+
+The user considers exact dishwasher timing generally noncritical, but wants actual
+per-program duration learned from the recordings. Use a learned duration estimate
+without an added scheduling safety margin; do not add a buffer or choose a longer
+duration solely as uncertainty protection. Keep actual cycle timings as evidence and
+improve estimates as usable recordings accumulate. The entered latest finish still
+constrains planned estimated completion; this is not permission to knowingly plan late
+for a cheaper start when an on-time plan is feasible. Actual completion remains an
+estimate and may vary. The impossible-deadline fallback below remains applicable.
+
+The user selected EnergyManager-held timing: retain the planned start in EnergyManager
+and issue Start through HA at the chosen time. Do not program the dishwasher's native
+delay as the managed-run timer. The user accepts waiting if the controller is unavailable
+at the planned time; starting through a controller outage is not a requirement. On
+recovery, retained work must be reconciled with actual appliance state before any start
+command, under the same readiness and control permissions. Existing user/app-set delays
+still need an explicit reconciliation policy.
+
+For a deadline that cannot be met even with immediate start, show a UI warning when
+the deadline is entered, giving the earliest expected finish and explaining that the
+dishwasher will start as soon as possible. The user confirmed that leaving the deadline
+unchanged and confirming Ready authorizes this fallback; there is no extra countdown
+or confirmation. Do not silently treat the deadline as achievable. This fallback does
+not establish permission to bypass unavailable
+remote start, an open door, appliance faults or existing control/peak permissions.
+
+#### Agreed Bosch delivery milestones — 2 November 2026
+
+The user approved this split for V45-A002. M1 was explicitly authorized in the registered implementation chat on 2 November and is implemented in4.5.5, verified offline only. M2 remains pending and requires separate implementation authorization.
+
+**V45-A002-M1 — appliance cards and profile collection.** Deliver the shared appliance
+card overview/one-card expansion and Bosch program/status feedback, automatic Refoss
+run recordings and review/permanent-deletion controls. The user also agreed to include
+manually initiated program/modifier controls and Start now and record in M1. Preserve
+existing washing-machine
+recording, Mazak settings and stored profiles. The generic appliance/program management
+direction V45-A001 is not withdrawn or automatically added in full to this milestone.
+
+Completion criteria for M1:
+- Both supported dashboards show the shared cards and in-place expansion. Existing
+  programs, notes, sensor settings, recordings and average membership survive migration.
+- Configure/map the Bosch program/status sources and dedicated Refoss power entity;
+  represent absent or unavailable inputs explicitly. Preserve the reported HA program
+  identities instead of assuming legacy Heavy and Intensive are interchangeable.
+- Provide explicit manual program/modifier controls and Start now and record. Program
+  selection uses HA's selected-program control and must not implicitly start a cycle;
+  the active-program control must not be mistaken for a harmless selection. Eco is a
+  new-run UI default, not an instruction to overwrite a device/user choice on load.
+  Rendering, polling and recording alone must not send appliance commands. Explicit
+  command handling respects application mode/authority, appliance state, closed-door
+  and available remote-control/start permissions as relevant. A command response is
+  not proof of a running cycle; use feedback and expose command failures accurately.
+- Capture actual program runs automatically, including panel/app starts; distinguish
+  waiting/off/finished/error and retain incomplete/interrupted evidence without treating
+  it as a complete usable profile. Browser closure does not stop capture.
+- Reviewed complete recordings retain working graph inspection/trim, duration/energy
+  statistics and explicit average membership. Deletion after confirmation removes the
+  selected recording's stored data and contribution without stale average references.
+- Verify with deterministic fake/local HA state and power traces, persistence/restart
+  cases and compact/expanded card interactions. No live installation verification is
+  implied by offline results; follow the existing release/runbook checks when authorized.
+
+M1 does not add a managed start timer, automatic program/modifier commands or joint
+planning/background-forecast changes. Scheduling handoff/deadline controls belong to
+M2; the complete approved UI preview is the target across both milestones, not evidence
+that M1 includes working optimized scheduling. Actual entity IDs must be mapped during
+configuration; do not invent them from the capability labels. The user starts the
+registered implementation chat to authorize the task. Agent live HA access, appliance
+operation and deployment still require their own authorization.
+
+**M1 implementation contract (4.5.5; offline verified, live unverified).** The existing
+Appliances component supplies both dashboards with three cards (Bosch dishwasher,
+washing machine and Mazak). One original card expands in place; embedded controls do
+not toggle it. No Ready/deadline/scheduled-start actions are provided in M1.
+
+The Bosch mapping form stores explicit entity IDs immediately in the mode-isolated
+profile SQLite settings, under the existing library revision guard. No installation
+IDs are supplied by defaults. Map selected-program and active-program selects separately,
+operation sensor and the dedicated dishwasher W/kW meter. Additional mappings cover
+appliance power switch, remote-control/start binary sensors, door binary/sensor,
+read-only native-delay number in seconds, finish/progress sensors and the three modifier
+switches. Optional absent/unavailable feedback remains explicit. Available HA selected
+program options and actual active program identities are persisted as distinct program
+keys alongside the legacy catalogue. Heavy is not remapped to Intensive, and old curves,
+notes, settings and average membership are unchanged. Eco is only an initial UI fallback
+when an actual/explicit choice is absent. An unapplied UI choice is stored locally per mode/mapped selected-program entity and restored only while actual selection is unchanged; running feedback takes priority. Rendering and polling send no appliance writes.
+
+A backend worker reads Bosch feedback and its dedicated meter together at the existing
+nominal five-second cadence. Idle/delayed-start waiting does not start a capture. A
+transition from ready/inactive/finished/delayedstart to run, observed within15seconds,
+starts a candidate complete capture using the reported active program. A run first seen
+already underway, a changed program during execution or a restart creates/retains
+interrupted evidence. Missing operation feedback interrupts usability; missing/invalid
+power is stored as a gap. Quiet measured phases do not trigger idle completion for Bosch.
+Only finished feedback completes its automatic capture; error, pause, inactive or other
+non-run transitions retain interrupted review evidence. The existing24hour cap still
+applies. Restart finalizes an open recording as interrupted and never reconstructs the
+missing cycle. Stopping a Bosch recording manually ends collection, not the appliance,
+and marks it incomplete. Finishing/discarding/deleting collection cannot recapture that
+same continuously observed run. Automatic captures retain modifier feedback at start;
+the user reviews whether a run represents its base program. No modifier energy correction
+or automatic average inclusion is added.
+
+Manual actions perform fresh mapped reads, require configured mode and enabled application
+hardware authority, and recheck its generation/mappings immediately before a single HA
+write. Selection uses select.select_option on selected-program only. Start now and record
+uses that service on active-program only after actual selected-program feedback matches,
+power-on/idle state, a closed door, remote-control/start permissions, an available dedicated
+meter, and confirmed zero native delay in seconds. Running, delayed, unavailable or unknown
+states cannot start. M1 never clears/programs the native delay or powers on implicitly.
+Power on is its own explicit switch.turn_on action from confirmed off with remote-control
+permission. Modifier on/off actions are explicit and require powered-on idle state and
+remote-control permission. Accepted HA requests remain pending until matching feedback;
+a30second lack of confirmation and failed/unknown requests remain visible. There are no
+automatic retries/replays, start timers or automatic program/modifier/power commands.
+
+POST /api/profiles/bosch-configure and /api/profiles/bosch-command use the existing
+same-origin JSON/ingress boundary. POST /api/profile-recordings/{id}/delete requires
+confirmed=true and the current library revision. One SQLite transaction removes exactly
+that row, its samples and its average membership/selected reference; failure leaves both
+persisted and in-memory state unchanged. Other trim revisions have independent copied
+samples and survive deletion, retaining their opaque capture provenance. Removing from
+an average still retains evidence. In-flight reads cannot resurrect deleted samples;
+concurrent average derivations are rejected if the library revision changes. Washing
+machine/manual capture and Mazak settings retain their existing behavior. No planner,
+background-demand accounting or physical installation validation is included.
+
+**V45-A002-M2 — managed scheduling.** Add the agreed Ready/finish-time workflow,
+joint start optimization alongside EV/ESS and execution through HA at the selected
+time. Include correct separation of dishwasher demand from background forecasts and
+existing mixed history, representation of already-running/manual cycles, and the
+agreed timing/replanning/intervention rules. Its detailed planner/source/peak contracts
+and completion criteria require further architecture work. M2 depends on M1's capture/
+profile contract and requires a usable reviewed profile per scheduled program.
+
 ## Confirmed installation and GUI requirements
 
 - Use separate P1 import/export sensors:
@@ -158,7 +497,7 @@ measurements, hardware operation, notifications or deployment occurred.
   mapped powers. Use go-e APIv2 Connect's existing phase-selector readback without an
   additional phase-count sensor or phase-information choice.
 - Preserve the original forecast source, installed PV planes and applicable correction
-  factors. Use [FORECASTING.md](../FORECASTING.md) for their exact recovered values.
+  factors. Use [FORECASTING.md](FORECASTING.md) for their exact recovered values.
   Never invent replacement installation settings.
 - Keep daily readiness with EV settings. Morning minima require charge by a deadline;
   they assume no driving. With these alone, the planned EV SoC stays level or rises.
@@ -197,7 +536,7 @@ exact four-plane installation and original empirical front/rear corrections. The
 retains its physical model without an empirical factor. AC/DC routing matches V3.
 The original35-day median load predictor consumes persisted5min measured background
 samples, with a recent3h median during learning. No prepared forecast endpoint is required.
-See [FORECASTING.md](../FORECASTING.md) for numerical parameters, source provenance and failure behavior.
+See [FORECASTING.md](FORECASTING.md) for numerical parameters, source provenance and failure behavior.
 Weather HTTP runs independently from fresh measurements and fast control; no missing
 weather is replaced by zero, extrapolation or a demonstration forecast. A configured
 startup has no demonstration journeys. Existing user goals are preserved.
@@ -353,7 +692,7 @@ cards. The add-on remains the planner, controller and persistent configuration o
 The sidebar/standalone interface remains available using the same reusable components.
 
 One-time setup installs the small `energymanager-card.js` resource and the strategy
-configuration documented in [the dashboard guide](../../../energymanager-dashboard/README.md).
+configuration documented in [the dashboard guide](../../energymanager-dashboard/README.md).
 The loader discovers the installed add-on through HA's authenticated `supervisor/api`
 WebSocket API, creates/renews the standard ingress session and obtains `/api/dashboard`.
 That read-only manifest contains bootstrap protocol1, the installed release version,
@@ -1366,12 +1705,12 @@ the ESS setpoint. Enabling checks saved/runtime settings, entity availability an
 critical measurements. Restart waits for these checks before resuming a saved on state.
 Incomplete saved settings keep the editor available without planning or command authority.
 HA connections are automatic; phone notifications use selected HA notify entities/actions.
-See [SETTINGS.md](../SETTINGS.md) for upgrade and control-state behavior. Local demo starts also initialize a missing file beside the database.
+See [SETTINGS.md](SETTINGS.md) for upgrade and control-state behavior. Local demo starts also initialize a missing file beside the database.
 The add-on's app configuration mount is writable for initialization and editing. Only
 amd64 packaging is declared. Deferred PV/storage expansion, market pricing, V2G, appliances, automatic
 travel/external charging, learned policy, live deployment and historical retention
 policy are outside this release. Live wiring, values and hardware timings remain
-unverified and require the commissioning procedure in [RUNBOOK.md](../RUNBOOK.md).
+unverified and require the commissioning procedure in [RUNBOOK.md](RUNBOOK.md).
 
 
 ## HA availability and input-read watchdog
@@ -1423,12 +1762,12 @@ Recovery from a brief mismatch resumes the existing plan subject to every normal
 ## Maintaining the architecture and continuing work
 
 Keep this document current when an agreed requirement, formula, component contract or
-implemented behavior changes. Record decision context in [DECISIONS.md](../DECISIONS.md)
-and deferred ideas in [DEFERRED_WORK.md](../DEFERRED_WORK.md). Update the existing
-[runbook](../RUNBOOK.md), [settings contract](../SETTINGS.md) and
-[forecasting reference](../FORECASTING.md) where their details change. Preserve original
-verification evidence; keep new results in [VERIFICATION.md](../VERIFICATION.md) and
-meaningful progress in [WORK_STATE.md](../WORK_STATE.md). Do not maintain a separate
+implemented behavior changes. Record decision context in [DECISIONS.md](DECISIONS.md)
+and deferred ideas in [BACKLOG.md](BACKLOG.md). Update the existing
+[runbook](RUNBOOK.md), [settings contract](SETTINGS.md) and
+[forecasting reference](FORECASTING.md) where their details change. Preserve original
+verification evidence; keep new results in [VERIFICATION.md](VERIFICATION.md) and
+meaningful progress in [WORK_STATE.md](WORK_STATE.md). Do not maintain a separate
 version-specific handoff or another duplicate architecture specification.
 
 A new chat starts by reading this document, the decision log and relevant supporting

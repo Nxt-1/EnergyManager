@@ -1,6 +1,6 @@
 # EnergyManager 4
 
-Version **4.5.4**, the main Energy Manager application. One joint seven-day EV/ESS MILP
+Version **4.5.5**, the main Energy Manager application. One joint seven-day EV/ESS MILP
 feeds independent responsive control. The application includes configured input/actuator
 boundaries, persisted goals/approvals/decisions and Overview/Planning/EV/Appliances pages.
 
@@ -12,16 +12,20 @@ exact intervals and W values. These are calculated profiles; live power can diff
 
 ## Appliance profiles
 
-Appliances records the next explicitly selected washing-machine/dishwasher program
-from a dedicated HA W/kW power sensor. Configure the idle threshold and finish timeout,
-arm the cycle, then review/trim and explicitly save the measured profile. Original
-recordings survive restart; incomplete/interrupted runs cannot become selected profiles.
-Reviewed cycles can contribute to an equal-weight program average, aligned in real time.
-Recording graphs have power/time inspection, linked trim handles and zoom/pan controls.
-Mazak has editable provisional Program/Light/Production averages of 2500/3500/7000 W.
-Profiles are preparation for later scheduling; this release does not start or schedule
-machines or change their accounting in the household forecast. Existing installation
-settings, EV/ESS planning, routing and live-control behavior remain in place.
+Appliances shows expandable Bosch dishwasher, washing-machine and Mazak cards.
+Mapped Bosch operation/program feedback automatically captures actual cycles from a
+dedicated Refoss W/kW sensor, including panel/app starts. Review and trim complete
+recordings before adding them to their exact HA program's average. Explicit Bosch
+program/modifier controls, Power on and Start now and record require enabled hardware
+authority and appliance guards. Submitted commands do not imply a running cycle.
+
+Washing-machine/manual profiles retain arming and configurable idle completion. Existing
+recordings, notes, settings and average memberships are preserved. Graph inspection,
+linked trim handles and zoom/pan remain available. Confirmed permanent deletion removes
+one recording and its samples/contribution; removing from an average retains evidence.
+Mazak retains provisional Program/Light/Production averages of2500/3500/7000W.
+Managed appliance scheduling and household-background separation remain for M2; joint
+EV/ESS planning, routing and accounting are unchanged. Setup/guards are in docs/RUNBOOK.md.
 
 ## Charging continuity
 
@@ -105,7 +109,7 @@ V4 JSON input configuration and creates a disabled starter file if it is missing
 Remote addresses and hardware control are disabled by
 default. Missing critical physical settings prevent enabling configured control.
 
-- [Architecture](docs/architecture/Architecture_Proposal.md)
+- [Architecture](docs/ARCHITECTURE.md)
 - [Runbook, V3 mapping and rollback](docs/RUNBOOK.md)
 - [Verification](docs/VERIFICATION.md)
 - [Current checkpoint](docs/WORK_STATE.md)

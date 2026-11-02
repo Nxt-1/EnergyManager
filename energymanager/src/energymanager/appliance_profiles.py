@@ -1,4 +1,4 @@
-"""Explicitly armed appliance recordings and reviewed, versioned profile selections."""
+"""Manual and Bosch-feedback captures with reviewed, versioned profile averages."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ import aiohttp
 
 from .domain import instant
 from .appliance_average import average_recordings
+from .bosch import BoschDishwasher, FIELDS
 
 if TYPE_CHECKING:
     from .service import Application
@@ -51,7 +52,7 @@ def power_reading(state: dict[str, Any]) -> float:
 
 
 class ApplianceProfiles:
-    """Capture only the machine/program the user arms; never recognize other loads."""
+    """Persist explicit manual captures and mapped Bosch runs; never recognize other loads."""
 
     def __init__(self, application: Application) -> None:
         self.app: Application = application
@@ -72,6 +73,11 @@ class ApplianceProfiles:
             row.update(idle_seen=False, idle_since=None, last_at=None,
                        error="Service restarted while armed; waiting for idle again")
             self._save(row)
+
+        self.bosch = BoschDishwasher(self)
+
+    def programs(self) -> dict[str, dict[str, str]]:
+        return {**PROGRAMS, "dishwasher": {**PROGRAMS["dishwasher"], **self.settings.get("bosch_programs", {})}}
 
     def start(self) -> None:
         self.task = asyncio.create_task(self._loop())
@@ -126,7 +132,7 @@ class ApplianceProfiles:
         sampler_error = None
         if self.task and self.task.done() and not self.task.cancelled() and self.task.exception():
             sampler_error = f"Recorder stopped: {self.task.exception()}"
-        return {"mode": self.mode, "programs": PROGRAMS, **self.settings, "profiles": selected,
+        return {"mode": self.mode, "programs": self.programs(), **self.settings, "profiles": selected, "bosch": self.bosch.state(),
                 "sampler_error": sampler_error,
                 "members": membership,
                 "recordings": [{**row, "included": row["id"] in included}
@@ -163,7 +169,7 @@ class ApplianceProfiles:
         summaries = [row["summary"] for row in recordings]
         duration = max(row["duration_seconds"] for row in summaries)
         energy = math.fsum(row["energy_kwh"] for row in summaries) / len(summaries)
-        machine, program = key.split("/")
+        machine, program = key.split("/", 1)
         return {"id": self.settings["selected"][key], "machine": machine, "program": program,
                 "averaged": True, "recording_ids": identities, "recording_count": len(identities),
                 "summary": {"start_seconds": 0, "end_seconds": duration, "duration_seconds": duration,
@@ -214,6 +220,82 @@ class ApplianceProfiles:
         self._persist_settings(settings)
         return self.library()
 
+    def configure_bosch(self, body: dict[str, Any]) -> dict[str, Any]:
+        if type(body.get("revision")) is not int or body["revision"] != self.settings["revision"]:
+            raise ValueError("Profiles changed in another view; reload before saving")
+        if any(row["machine"] == "dishwasher" for row in self._rows("status IN ('armed','recording')")):
+            raise ValueError("Finish this dishwasher recording before changing Bosch mappings")
+        values = body.get("entities")
+        if not isinstance(values, dict) or set(values) != set(FIELDS):
+            raise ValueError("Supply every Bosch mapping, leaving unavailable optional entities blank")
+        entities: dict[str, str] = {}
+        for key, (_, domains) in FIELDS.items():
+            entity = values[key]
+            if not isinstance(entity, str) or (entity and (not re.fullmatch(r"[a-z_]+\.[a-z0-9_]+", entity)
+                                                          or entity.split(".")[0] not in domains)):
+                raise ValueError(f"Invalid Bosch {key} entity")
+            entities[key] = entity
+        mapped = [entity for entity in entities.values() if entity]
+        if len(mapped) != len(set(mapped)):
+            raise ValueError("Bosch controls/readings must use distinct entities; selected and active program are different controls")
+        self._persist_settings({**self.settings, "bosch": entities})
+        self.bosch.readings, self.bosch.at, self.bosch.previous = {}, None, None
+        self.bosch.seen_run = False
+        return self.library()
+
+    def begin_automatic(self, program: str, observed_start: bool) -> str:
+        recording = self._arm({"machine": "dishwasher", "program": program,
+                               "notes": "Automatic Bosch capture; review modifiers and cycle before inclusion"}, automatic=True)
+        modifiers = {key: self.bosch.value(key) for key in ("extra_dry", "half_load", "vario_speed")}
+        recording.update(status="recording", source="bosch", started_at=self.app.now().isoformat(),
+                         modifiers=modifiers, interrupted=not observed_start,
+                         error=None if observed_start else "Cycle already running when observation began; start not observed")
+        self._save(recording)
+        return recording["id"]
+
+    def interrupt(self, identity: str, reason: str) -> None:
+        rows = self._rows("id=?", (identity,))
+        if rows and rows[0]["status"] == "recording":
+            recording = rows[0]
+            recording.update(interrupted=True, interruption_reason=reason)
+            self._save(recording)
+
+    def end_automatic(self, identity: str, reason: str | None) -> None:
+        rows = self._rows("id=?", (identity,))
+        if not rows or rows[0]["status"] != "recording":
+            return
+        recording = rows[0]
+        recording.update(status="review", finished_at=self.app.now().isoformat())
+        if reason:
+            recording.update(interrupted=True, interruption_reason=reason, error=reason)
+        self._save(recording)
+
+    def delete(self, identity: str, body: dict[str, Any]) -> None:
+        """Permanently remove exactly one recording and its membership, in one transaction."""
+        self.get(identity)
+        if body.get("confirmed") is not True:
+            raise ValueError("Confirm permanent deletion of the recording and all its samples")
+        if type(body.get("revision")) is not int or body["revision"] != self.settings["revision"]:
+            raise ValueError("Profiles changed in another view; reload before deleting")
+        selected = dict(self.settings["selected"])
+        membership = dict(self.settings.get("members", {}))
+        for key in set(selected) | set(membership):
+            members = [item for item in self.members(key) if item != identity]
+            membership[key] = members
+            if selected.get(key) == identity:
+                if members:
+                    selected[key] = members[-1]
+                else:
+                    selected.pop(key)
+        settings = {**self.settings, "revision": self.settings["revision"] + 1,
+                    "selected": selected, "members": membership}
+        with self.store.connection:
+            self.store.connection.execute("DELETE FROM appliance_samples WHERE recording_id=?", (identity,))
+            self.store.connection.execute("DELETE FROM appliance_recordings WHERE id=? AND mode=?", (identity, self.mode))
+            self.store.connection.execute("INSERT OR REPLACE INTO state VALUES (?,?)",
+                                          (self.key, json.dumps(settings, allow_nan=False)))
+        self.settings = settings
+
     def get(self, identity: str) -> dict[str, Any]:
         rows = self._rows("id=?", (identity,))
         if not rows:
@@ -221,11 +303,16 @@ class ApplianceProfiles:
         return rows[0]
 
     def arm(self, body: dict[str, Any]) -> dict[str, Any]:
+        return self._arm(body)
+
+    def _arm(self, body: dict[str, Any], *, automatic: bool = False) -> dict[str, Any]:
         machine, program = body.get("machine"), body.get("program")
-        if machine not in PROGRAMS or program not in PROGRAMS[machine]:
+        if machine not in self.programs() or program not in self.programs()[machine]:
             raise ValueError("Choose a supported appliance program")
         if self.app.demo or self.app.ha is None:
             raise ValueError("Recording requires configured mode and a mapped HA power sensor")
+        if machine == "dishwasher" and self.bosch.enabled and not automatic:
+            raise ValueError("Bosch captures actual runs automatically; no per-cycle arming is needed")
         settings = self.settings["machines"][machine]
         if not settings["entity_id"]:
             raise ValueError("Map this machine's power sensor first")
@@ -247,7 +334,10 @@ class ApplianceProfiles:
 
     def ingest(self, identity: str, at: datetime, power_w: float | None, error: str | None = None) -> None:
         """Persist one read, including explicit failures; repeated HA states remain valid."""
-        recording = self.get(identity)
+        rows = self._rows("id=?", (identity,))
+        if not rows:
+            return  # A deletion during an HA read cannot resurrect samples.
+        recording = rows[0]
         if recording["status"] not in ("armed", "recording"):
             return  # An in-flight read must not resurrect a finished or discarded recording.
         if at.tzinfo is None:
@@ -282,6 +372,9 @@ class ApplianceProfiles:
                 (identity, at.timestamp(), power_w, error))
             recording["sample_count"] += 1
             recording["invalid_samples"] += int(power_w is None)
+            if recording.get("source") == "bosch":
+                self._save(recording)
+                return  # Bosch completion is feedback-driven, including quiet drying phases.
             if power_w is None or power_w > recording["start_threshold_w"]:
                 recording["idle_since"] = None
             else:
@@ -297,6 +390,8 @@ class ApplianceProfiles:
         if recording["status"] != "recording":
             raise ValueError("Only a running recording can be finished")
         recording.update(status="review", finished_at=self.app.now().isoformat())
+        if recording.get("source") == "bosch":
+            recording.update(interrupted=True, interruption_reason="Recording stopped before Bosch finished feedback")
         self._save(recording)
         return self.detail(identity)
 
@@ -413,6 +508,7 @@ class ApplianceProfiles:
 
     async def _loop(self) -> None:
         while True:
-            await asyncio.gather(*(self._sample(recording) for recording in
-                                   self._rows("status IN ('armed','recording')")))
+            await asyncio.gather(self.bosch.poll(), *(self._sample(recording) for recording in
+                                   self._rows("status IN ('armed','recording')")
+                                   if recording.get("source") != "bosch"))
             await asyncio.sleep(SAMPLE_SECONDS)

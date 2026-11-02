@@ -1,6 +1,6 @@
 # Architecture decisions
 
-> Preserved original design reference. Read [the maintained architecture](Architecture_Proposal.md)
+> Preserved original design reference. Read [the maintained architecture](../ARCHITECTURE.md)
 > and [current decisions](../DECISIONS.md) first.
 > Historical pending-work statements and chat restrictions are not current instructions.
 
@@ -188,7 +188,7 @@ The user confirms that tank temperatures and the active hot-water/space-heating 
 
 Installation status clarified by the user: **ESPAltherma is not installed yet; installation is planned.** Treat those readings as planned inputs, not currently available sensors or historical evidence. Architecture design can proceed, while installation-specific telemetry validation and DHW heating-model calibration remain pending.
 
-The user subsequently confirms that **DHW scheduling is not essential for this release** and explicitly requests recording it for the future. It is deferred as [ARCH-004](../DEFERRED_WORK.md#arch-004--dhw-scheduling-and-heating-model-calibration). Earlier DHW requirement discussions remain useful for that extension; they do not require thermal scheduling in the initial release. In the meantime, retain the unit's existing control and represent its consumption as uncontrolled demand in planning.
+The user subsequently confirms that **DHW scheduling is not essential for this release** and explicitly requests recording it for the future. It is deferred as [ARCH-004](../BACKLOG.md#arch-004--dhw-scheduling-and-heating-model-calibration). Earlier DHW requirement discussions remain useful for that extension; they do not require thermal scheduling in the initial release. In the meantime, retain the unit's existing control and represent its consumption as uncontrolled demand in planning.
 
 Sources checked:
 
@@ -205,16 +205,16 @@ Sources checked:
 
 ## 22 October 2026 — Appliance scheduling deferred
 
-- The user confirms that washing-machine and dishwasher scheduling suggestions are deferred beyond this release. Their previously discussed profiles, timing windows and fixed user-confirmed starts are retained in [ARCH-005](../DEFERRED_WORK.md#arch-005--washing-machine-and-dishwasher-scheduling-suggestions).
+- The user confirms that washing-machine and dishwasher scheduling suggestions are deferred beyond this release. Their previously discussed profiles, timing windows and fixed user-confirmed starts are retained in [ARCH-005](../BACKLOG.md#arch-005--washing-machine-and-dishwasher-scheduling-suggestions).
 - Planned Mazak operation is also deferred, grouped with ARCH-005 for potential addition alongside the other appliances. Its particular constraints remain unspecified; do not assume it can be remotely started or interrupted. Its consumption remains part of uncontrolled demand in this release.
 - Continue to account for their consumption in household demand. This scope decision does not remove general task/resource extensibility or authorize implementation.
-- The user subsequently also defers automatic recognition of already-running appliances, recorded as [ARCH-006](../DEFERRED_WORK.md#arch-006--automatic-recognition-of-running-appliances). Include their consumption in the uncontrolled household-demand forecast for this release.
+- The user subsequently also defers automatic recognition of already-running appliances, recorded as [ARCH-006](../BACKLOG.md#arch-006--automatic-recognition-of-running-appliances). Include their consumption in the uncontrolled household-demand forecast for this release.
 - The resulting scheduling scope is EV and ESS, with DHW and other appliances represented as uncontrolled demand. Keep the task/resource architecture extensible for the deferred features.
 
 ## 22 October 2026 — Advanced forecasting deferred
 
 - The user has consulted the ML specialist. The resulting ideas need considerably more stored historical data and exceed the complexity desired for this release.
-- Record them for later work as [ARCH-007](../DEFERRED_WORK.md#arch-007--advanced-forecasting-ideas-from-the-ml-specialist). The user identifies the direction as **foundation models for forecasting**; no specific model or exact data needs have been supplied here.
+- Record them for later work as [ARCH-007](../BACKLOG.md#arch-007--advanced-forecasting-ideas-from-the-ml-specialist). The user identifies the direction as **foundation models for forecasting**; no specific model or exact data needs have been supplied here.
 - Advanced ML forecasting is not a dependency for this release. This decision does not establish that existing forecasts are sufficiently accurate or remove the need for forecast-quality visibility and the previously discussed uncertainty treatment.
 
 ## 22 October 2026 — Timing of peak-limit approval requests
@@ -249,7 +249,7 @@ Sources checked:
 
 ## 22 October 2026 — Future ESS reserve for unplanned peaks
 
-- The user requests considering an ESS reserve for unplanned load peaks as future work, recorded as [ARCH-008](../DEFERRED_WORK.md#arch-008--ess-reserve-for-unplanned-load-peaks).
+- The user requests considering an ESS reserve for unplanned load peaks as future work, recorded as [ARCH-008](../BACKLOG.md#arch-008--ess-reserve-for-unplanned-load-peaks).
 - Keep this separate from current forecast-specific ESS reservations and the actuator's physical minimum SoC. No standing reserve amount, replenishment rule or implementation is agreed for this release.
 
 ## 22 October 2026 — Whole-system comparison accounting under specification

@@ -25,6 +25,7 @@ from energymanager.validation import validate
 from energymanager.settings import ConfigurationFile, SETTING_FIELDS
 from energymanager.notifications import Notifications, NotificationTarget
 from energymanager.store import Store
+from energymanager.bosch import FIELDS
 from energymanager.web import create_web
 from energymanager.journeys import Journeys
 from energymanager.routing import GoogleRoutesClient, RefereeJourneyRouter
@@ -72,13 +73,26 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         "heartbeat": (0, "s"), "charge_allowed": ("on", None),
         "vehicle_charging": ("IN_PROGRESS", None),
     }
+    bosch_entities = {key: domains[0] + ".synthetic_bosch_" + key for key, (_, domains) in FIELDS.items()}
+    synthetic_run_started = None
     if profiles_fixture:
         values.update(synthetic_dishwasher=(0, "W"), synthetic_washing_machine=(0, "W"))
+        values.update({entity.split(".")[1]: ("off", None) for entity in bosch_entities.values()})
+        for key, value in {"selected_program": "synthetic_eco_50", "active_program": "synthetic_eco_50",
+                           "operation": "ready", "power": "on", "remote_control": "on", "remote_start": "on",
+                           "finish": "unavailable", "progress": "0"}.items():
+            values[bosch_entities[key].split(".")[1]] = value, "%" if key == "progress" else None
+        values["synthetic_bosch_delay"] = 0, "s"
     if calendar_fixture:
         values["ev_soc"] = (90, "%")  # Enough measured energy for both provisional trips and daily readiness.
 
     def state_row(entity: str) -> dict:
         key = entity.split(".", 1)[-1]
+        if profiles_fixture and synthetic_run_started is not None:
+            elapsed = monotonic() - synthetic_run_started
+            values["synthetic_bosch_operation"] = ("run" if elapsed < 60 else "finished"), None
+            values["synthetic_dishwasher"] = (1800 if elapsed < 20 else 100 if elapsed < 60 else 0), "W"
+            values["synthetic_bosch_progress"] = min(100, round(elapsed / 60 * 100)), "%"
         value, unit = values[key]
         now = datetime.now(UTC)
         if key == "heartbeat":
@@ -93,6 +107,8 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         elif active_fault == "charger" and key == "charger_status":
             value = "unavailable"
         attributes = {"unit_of_measurement": unit, "friendly_name": key.replace("_", " ")}
+        if profiles_fixture and key in ("synthetic_bosch_selected_program", "synthetic_bosch_active_program"):
+            attributes["options"] = ["synthetic_eco_50", "synthetic_intensive_70"]
         if key == "current":
             attributes.update(min=6, max=16)
         if key == "vehicle_charging":
@@ -106,7 +122,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         entities = [entity for group in ("measurements", "actuators", "ev_diagnostics")
                     for entity in config[group].values() if entity]
         if profiles_fixture:
-            entities.extend(["sensor.synthetic_dishwasher", "sensor.synthetic_washing_machine"])
+            entities.extend(["sensor.synthetic_dishwasher", "sensor.synthetic_washing_machine", *bosch_entities.values()])
         return web.json_response([state_row(entity) for entity in entities])
 
     async def services(request: web.Request) -> web.Response:
@@ -142,7 +158,15 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         }})
 
     async def service(request: web.Request) -> web.Response:
+        nonlocal synthetic_run_started
         body = await request.json()
+        if profiles_fixture and body.get("entity_id") in bosch_entities.values():
+            key = body["entity_id"].split(".")[1]
+            value = body.get("option", "on" if request.match_info["service"] == "turn_on" else "off")
+            values[key] = value, None
+            if body["entity_id"] == bosch_entities["active_program"]:
+                synthetic_run_started = monotonic()
+                values["synthetic_bosch_selected_program"] = value, None
         if body.get("entity_id") == "select.phase":
             values["phase"] = (int(body["option"]), None)
         if body.get("entity_id") == "select.force":
@@ -454,6 +478,18 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                                 profiles.ingest(recording["id"], beginning + timedelta(seconds=seconds), power)
                             if cycle < 2:
                                 profiles.accept(recording["id"], {"revision": profiles.settings["revision"], "reviewed": True})
+                        profiles.configure_bosch({"revision": profiles.settings["revision"], "entities": bosch_entities})
+                        profiles._persist_settings({**profiles.settings, "bosch_programs": {
+                            "synthetic_eco_50": "synthetic_eco_50", "synthetic_intensive_70": "synthetic_intensive_70"}})
+                        for cycle in range(2):
+                            with patch.object(application, "now", return_value=beginning):
+                                identity = profiles.begin_automatic("synthetic_eco_50", observed_start=True)
+                            for seconds in range(0, 65, 5):
+                                profiles.ingest(identity, beginning + timedelta(seconds=seconds), 1800 if seconds < 20 else 100)
+                            with patch.object(application, "now", return_value=beginning + timedelta(seconds=60)):
+                                profiles.end_automatic(identity, None)
+                            if cycle == 0:
+                                profiles.accept(identity, {"revision": profiles.settings["revision"], "reviewed": True})
                     if ev_fault_fixture:
                         from energymanager.control import Command
 
