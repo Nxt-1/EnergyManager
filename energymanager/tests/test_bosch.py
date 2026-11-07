@@ -172,8 +172,9 @@ async def test_selection_is_not_start_and_start_waits_for_actual_run(bosch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("key,value", [("door", "on"), ("remote_start", "off"),
     ("remote_control", "unavailable"), ("operation", "run"), ("operation", "delayedstart"),
-    ("selected_program", INTENSIVE), ("delay", "600"), ("delay", "unavailable")])
+    ("selected_program", INTENSIVE), ("selected_program", "unknown"), ("delay", "600"), ("delay", "unavailable")])
 async def test_start_guards_do_not_write(bosch, key, value):
+    bosch.app.ha.set("active_program", "unknown")
     bosch.app.ha.set(key, value)
     with pytest.raises(ValueError):
         await bosch.command({"command": "start", "program": ECO})
@@ -348,3 +349,59 @@ async def test_unavailable_program_cannot_be_assigned_to_legacy_eco(bosch):
     await tick(bosch, 10, program=INTENSIVE)
     row = bosch.profiles.get(bosch.capture)
     assert row["program"] == INTENSIVE and row["interrupted"]
+
+
+@pytest.mark.asyncio
+async def test_unknown_active_program_preserves_capabilities_without_inventing_execution(bosch):
+    # Actual HA option spelling; every entity/measurement and service is still a local fake.
+    eco = "dishcare_dishwasher_program_eco_50"
+    ha = bosch.app.ha
+    ha.rows[bosch.config["selected_program"]] = {"state": eco, "attributes": {"options": [eco]}}
+    ha.rows[bosch.config["active_program"]] = {"state": "unknown", "attributes": {"options": [eco]}}
+    await bosch.poll()
+    assert bosch.value("active_program") is None
+    assert bosch.readings["active_program"]["options"] == [eco]
+    assert bosch.profiles.library()["recordings"] == []
+    assert ha.calls == []
+    await bosch.command({"command": "start", "program": eco})
+    assert ha.calls == [("select", "select_option", {"entity_id": bosch.config["active_program"], "option": eco})]
+    assert bosch.value("active_program") is None
+    assert bosch.last_command["outcome"] == "pending"
+    assert bosch.profiles.library()["recordings"] == []
+    await tick(bosch, 5, program=eco)
+    assert bosch.last_command["outcome"] == "confirmed"
+    assert bosch.profiles.get(bosch.capture)["program"] == eco
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["unavailable", "failed_read", "malformed_attributes", "malformed_options",
+                                    "mixed_options", "missing_options", "missing_program"])
+async def test_unknown_active_program_does_not_reuse_invalid_or_stale_capabilities(bosch, case):
+    ha = bosch.app.ha
+    await bosch.read()  # A previous successful options read must not authorize a failed new read.
+    active = ha.rows[bosch.config["active_program"]]
+    active["state"] = "unknown"
+    if case == "unavailable":
+        active["state"] = "unavailable"
+    elif case == "failed_read":
+        original = ha.entity_state
+        async def failed_read(entity):
+            if entity == bosch.config["active_program"]:
+                raise TimeoutError("SYNTHETIC failed HA read")
+            return await original(entity)
+        ha.entity_state = failed_read
+    elif case == "malformed_attributes":
+        active["attributes"] = "invalid"
+    elif case == "malformed_options":
+        active["attributes"]["options"] = ECO
+    elif case == "mixed_options":
+        active["attributes"]["options"] = [ECO, None]
+    elif case == "missing_options":
+        active["attributes"] = {}
+    else:
+        active["attributes"]["options"] = [INTENSIVE]
+    with pytest.raises(ValueError, match="active-program start control"):
+        await bosch.command({"command": "start", "program": ECO})
+    assert ha.calls == []
+    assert bosch.value("active_program") is None
+    assert bosch.profiles.library()["recordings"] == []

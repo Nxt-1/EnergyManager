@@ -459,7 +459,7 @@ write. Selection uses select.select_option on selected-program only. Start now a
 uses that service on active-program only after actual selected-program feedback matches,
 power-on/idle state, a closed door, remote-control/start permissions, an available dedicated
 meter, and confirmed zero native delay in seconds. Running, delayed, unavailable or unknown
-states cannot start. M1 never clears/programs the native delay or powers on implicitly.
+operation states cannot start. M1 never clears/programs the native delay or powers on implicitly.
 Power on is its own explicit switch.turn_on action from confirmed off with remote-control
 permission. Modifier on/off actions are explicit and require powered-on idle state and
 remote-control permission. Accepted HA requests remain pending until matching feedback;
@@ -476,6 +476,19 @@ an average still retains evidence. In-flight reads cannot resurrect deleted samp
 concurrent average derivations are rejected if the library revision changes. Washing
 machine/manual capture and Mazak settings retain their existing behavior. No planner,
 background-demand accounting or physical installation validation is included.
+
+V45-Q017 — fixed in4.5.6 (7 November2026; offline verification). A successful HA
+read of active-program state unknown retains a valid bounded list of startable program
+options, independently of the absent current program. State remains null: it is never
+copied from selected-program or treated as execution feedback. Genuinely unavailable
+entities, failed reads and malformed active-program capabilities have no usable options;
+a missing requested option still blocks Start. Selected-program must be known and match
+as before, with the same operation/power, door, remote permissions, zero native delay,
+meter, configured-mode and hardware-generation guards. No automatic retry or live
+installation operation is added. The reported4.5.5 failure was reproduced locally before
+the fix; the user authorized this scoped M1 repair in V4.5 architecture. Source contract:
+[HA Home Connect program select](https://github.com/home-assistant/core/blob/dev/homeassistant/components/home_connect/select.py)
+maintains its options independently of current program value.
 
 **V45-A002-M2 — managed scheduling.** Add the agreed Ready/finish-time workflow,
 joint start optimization alongside EV/ESS and execution through HA at the selected

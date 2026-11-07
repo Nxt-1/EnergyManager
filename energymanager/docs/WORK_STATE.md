@@ -182,6 +182,36 @@ requirements rather than replaying every historical checkpoint.
   Update: the user explicitly authorized M1 in the registered implementation chat, which
   reconciled the primary documents and implemented/verified4.5.5 as recorded above.
   Continue M2 architecture separately without silently expanding M1.
+  V45-Q017 — 7 November, user cannot start Eco 50 in4.5.5. Error is Program is not
+  available on the HA active-program start control. Read-only source inspection finds
+  bosch.py rejects unknown current state before preserving entity options, then start
+  checks the resulting empty active-program options. HA's Home Connect select source
+  maintains options separately from a possibly absent current program. The user
+  confirmed select.kitchen_dishwasher_active_program has state unknown and options
+  including dishcare_dishwasher_program_eco_50. The idle-state parsing defect is
+  confirmed. This error is raised before the HA start write. Panel/app starts can
+  still be observed by the existing automatic recorder when valid feedback is present.
+  The user authorized sending this defect to the registered V4.5 implementation chat
+  for a fix on 7 November, replying yes, do that to the explicit patch handoff request.
+  Authorized patch scope is to preserve valid active-program options independently of
+  an unknown current active program, with genuine unavailable/malformed inputs still
+  blocked and existing selected-program/operation/door/remote/delay/meter/authority
+  checks retained. Verify the reported unknown-with-valid-options case and blocked
+  unavailable/missing-option cases offline. Handoff delivered to the registered
+  V4.5 implementation chat on 7 November and its repair turn is active.
+  No application edit, live read or appliance command performed by this investigation.
+  **V4.5 implementation update:** scoped reader fix implemented in4.5.6 after reconciling
+  this primary-checkout record with the registered worktree at `fc9768e`. Reproduced
+  unknown-with-valid-options loss before changing code. Offline checks pass:72 focused
+  appliance cases;690 full Python tests149.33s;86 frontend cases; Ruff/mypy48modules;
+  wheel/sdist72 runtime files match with isolated4.5.6 import. Configured fake E2E
+  solved2019 intervals in25.534s, max control4.148ms/four fake calls. Positive regression
+  submits exactly one fake start for unknown active state with valid Eco options and
+  waits for actual run feedback; unavailable/failed/malformed/missing-option cases and
+  all existing start guards remain blocked. No live read, appliance operation or deployment.
+  Next: scoped integration/push and existing publication checks. Subsequent remote results
+  belong in ignored artifacts/v456-release-state.json and the final reply. Preserve all
+  unrelated primary EV/M2/backlog edits; those records are not part of this repair release.
 - **Integration:** subsequent 4.5.x releases precede higher numbered release streams
   on main. Preserve the separate implementation branch and incorporate shared updates
   deliberately before final verification/publication.

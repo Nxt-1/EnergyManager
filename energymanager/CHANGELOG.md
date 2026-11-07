@@ -1,3 +1,8 @@
+## 4.5.6 — Bosch idle start capability fix
+
+- Retain available start programs when Home Connect reports no current active program.
+- Keep unavailable/failed/malformed capabilities blocked and preserve all start guards.
+
 ## 4.5.5 — Appliance cards and Bosch profile collection
 
 - Add shared appliance cards with in-place details in both dashboards.

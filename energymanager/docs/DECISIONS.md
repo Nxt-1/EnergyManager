@@ -1,5 +1,13 @@
 # Current requirements and decisions
 
+- 7 November 2026, V45-Q017 Bosch idle start fix. The user confirmed that the mapped
+  active-program entity reports unknown while listing Eco 50 as available. They
+  authorized the V4.5 implementation chat to fix the capability parsing and verify
+  the reported case offline. Preserve valid options separately from the empty current
+  active program and retain the existing command guards. This is a scoped M1 repair.
+  Implemented in4.5.6;
+  unknown current active state retains validated capabilities without inventing execution.
+
 - 2 November 2026, V45-A002-M1 implementation: the user explicitly authorized cards,
   automatic recordings, review/permanent deletion and manual Bosch controls in the
   registered implementation chat, after reconciling primary-checkout requirements.

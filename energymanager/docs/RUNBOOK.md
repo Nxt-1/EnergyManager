@@ -1,5 +1,16 @@
 # Run, configure, review and roll back
 
+## Bosch idle start correction (4.5.6 / V45-Q017)
+
+Update to4.5.6 and reload the dashboard. A successful HA read can report unknown current
+active program while exposing valid startable program options; this now permits the
+explicit Start now and record action when the selected program matches and the normal
+idle/power, door, remote, delay, meter and hardware-authority guards pass. No mapping
+change is required for an already correct setup. Unavailable entities, failed reads,
+malformed capabilities or missing requested programs remain blocked. Current active
+program stays unknown until actual feedback arrives; submission alone does not start
+a recording or confirm execution. This repair was verified only with local fake HA.
+
 ## Bosch cards and profile collection (4.5.5 / V45-A002-M1)
 
 Reload the dashboard after updating. Appliances shows Bosch dishwasher, washing machine

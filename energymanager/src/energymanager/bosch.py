@@ -90,16 +90,22 @@ class BoschDishwasher:
                 if not isinstance(raw, dict):
                     raise ValueError("Invalid HA state")
                 value = str(raw.get("state", ""))
-                if len(value) > 200 or value in UNAVAILABLE:
-                    raise ValueError("Unavailable")
                 attrs = raw.get("attributes") or {}
                 if not isinstance(attrs, dict):
                     raise ValueError("Invalid HA attributes")
                 options = attrs.get("options", [])
-                if not isinstance(options, list):
+                if key == "active_program":
+                    if (not isinstance(options, list) or len(options) > 100
+                            or any(not self.valid_program(option) for option in options)):
+                        raise ValueError("Invalid active-program options")
+                elif not isinstance(options, list):
                     options = []
+                # Home Connect can list startable programs while no program is active.
+                unknown_active = key == "active_program" and value == "unknown"
+                if len(value) > 200 or (value in UNAVAILABLE and not unknown_active):
+                    raise ValueError("Unavailable")
                 power = {"power_w": power_reading(raw)} if key == "meter" else {}
-                return key, {**power, "state": value, "entity_id": entity, "error": None,
+                return key, {**power, "state": None if unknown_active else value, "entity_id": entity, "error": None,
                              "options": [item for item in options[:100] if self.valid_program(item)],
                              "unit": str(attrs.get("unit_of_measurement", ""))[:30]}
             except (aiohttp.ClientError, TimeoutError, ValueError, RuntimeError) as exc:

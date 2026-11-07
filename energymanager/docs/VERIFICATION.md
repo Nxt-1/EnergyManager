@@ -1,5 +1,23 @@
 # EnergyManager 4 verification
 
+## 4.5.6 — V45-Q017 Bosch idle start repair (7 November2026)
+
+Reproduced4.5.5 discarding valid active-program options when current state was unknown.
+The corrected successful read retains validated capabilities with null current state.
+A regression using the reported Eco option spelling and entirely fake entities/endpoints
+submits exactly one explicit start and creates/confirms a recording only after actual
+run/program feedback. Unknown selected program still blocks. Parameterized regressions
+reject unavailable active entities, timed-out reads, malformed attributes/options, mixed
+invalid options, missing options and a missing requested program, including after an
+older valid read. Door/remote/operation/delay/meter/mode/hardware guards remain covered.
+
+72focused appliance cases and690full Python tests pass149.33s;86frontend cases,
+Ruff/mypy48modules pass. Configured local fake E2E25.534s/2019intervals, max control
+4.148ms/four fake service calls. Wheel/sdist72runtime files byte-match source and isolated
+wheel import reports4.5.6. No UI or managed scheduling change; no live HA/database access,
+appliance operation, real notifications or deployment. Actual installation remains
+unverified. Remote results go in ignored artifacts/v456-release-state.json and final reply.
+
 ## 4.5.5 — V45-A002-M1 (2 November2026)
 
 681Python tests pass147.30s;86frontend cases, Ruff, mypy48modules and dashboard JS syntax
