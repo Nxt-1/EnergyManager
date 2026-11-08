@@ -1,3 +1,10 @@
+## 4.5.8 — Compact recording library and in-place trims
+
+- Group compact recording entries under foldable programs, retaining average/count summaries.
+- Expand one recording editor in place with the existing graph handles and linked seconds fields.
+- Save trims on the same recording and consolidate historical copies to the latest saved trim.
+- Preserve raw measurements, inclusion and immutable accepted-plan evidence.
+
 ## 4.5.7 — Bosch managed scheduling
 
 - Add persistent Ready/deadline controls and explicit per-run timing/peak choices.

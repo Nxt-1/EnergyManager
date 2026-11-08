@@ -935,3 +935,21 @@ em-entity-picker > input { padding-right:36px; }
 .appliance-time-wheel label:has(input:checked){color:var(--accent);font-weight:600;background:color-mix(in srgb,var(--surface),var(--accent) 10%)}
 .appliance-time-wheel label:has(input:focus-visible){outline:2px solid var(--accent)}
 @media(max-width:420px){.appliance-picker-body{grid-template-columns:1fr}.appliance-time-wheels{width:110px;justify-self:center}}
+
+
+.profile-program{border-bottom:1px solid var(--line);padding:8px 0}
+.profile-program-heading{display:flex;align-items:center;gap:12px;justify-content:space-between}
+.profile-program-heading>[data-profile-command=program]{flex:1;display:grid;gap:5px;text-align:left;border:0;background:transparent;padding:6px 0;min-width:0}
+.profile-program-heading span{font-size:12px;color:var(--muted);font-weight:400}
+.profile-program-recordings{padding:2px 0 4px 16px}
+.profile-recording{padding:8px 0}
+.profile-recording-row{display:grid;grid-template-columns:minmax(150px,1fr) auto auto auto;align-items:center;gap:12px}
+.profile-recording-open{border:0;background:transparent;text-align:left;padding:4px 0}
+.profile-recording-stats,.profile-recording-included{font-size:12px;white-space:nowrap;color:var(--muted)}
+.profile-recording-details{display:flex;flex-wrap:wrap;align-items:flex-start;gap:4px 16px;font-size:12px;color:var(--muted);margin-top:4px}
+.profile-recording-details details{min-width:0;margin:0;flex:0 1 auto}.profile-recording-details .profile-delete{flex-basis:auto}
+.profile-recording-details details[open]{flex-basis:100%}.profile-recording-details summary{padding:2px 0;white-space:nowrap}
+.profile-recording-details p{margin:6px 0}
+.appliance-card [data-recording-editor] [data-profile-review]{margin-top:12px;padding-top:8px}
+[data-profile-review] h2{font-size:16px}
+@media(max-width:700px){.profile-recording-row{grid-template-columns:1fr auto;gap:6px 10px}.profile-recording-included{grid-column:1}.profile-program-recordings{padding-left:8px}.profile-program-heading{align-items:flex-start;flex-wrap:wrap}}

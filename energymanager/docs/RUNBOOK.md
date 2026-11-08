@@ -1,5 +1,29 @@
 # Run, configure, review and roll back
 
+## Recording library and trims (4.5.8 / ARCH-018)
+
+Expand an appliance, then a program. Folded program headers retain recording count,
+included count and mean duration/energy. Select a dated recording row to open its original
+graph and trim form in that same entry; opening another closes the previous editor.
+Details and Delete recording remain directly accessible in the row. All stored records
+remain browsable, including older contributors. Inspect average lists its contributors.
+
+Drag the original Start/End grips or edit seconds; both stay linked. Arrow keys adjust
+a focused grip. Cursor, zoom/pan, Full recording and Show selection are unchanged. Review
+the complete selection and save. Saving retains the ID and original raw measurements;
+repeated saves do not create entries or versions. A saved excluded recording remains
+excluded until Add to average; initial review still adds the new cycle. Stale edits are
+rejected rather than overwriting another view's selection. Reopen to load current bounds.
+
+First startup consolidates historical trim copies by capture provenance, keeping the latest
+saved trim even if an older copy was included. Each included capture contributes once;
+excluded captures stay excluded. Original capture dates/notes do not identify duplicates.
+Raw readings are retained and old IDs resolve to the surviving recording. The migration
+is atomic/idempotent; contradictory evidence fails without partial consolidation. Follow
+normal database backup/rollback practice before an installation upgrade. Frozen accepted
+plans are not rewritten; queued M2 runs replan after contributor edits. No live installation
+operation or deployment was performed for this release.
+
 ## Bosch managed runs (4.5.7 / V45-A002-M2)
 
 Configure the existing Bosch mappings and collect/review at least one complete program

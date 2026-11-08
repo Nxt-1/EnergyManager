@@ -414,38 +414,35 @@ async def test_average_endpoint_asset_and_inclusion_revision_security(profiles):
         assert response.status == 400 and profiles.members("dishwasher/eco") == [identity]
 
 
-async def test_saved_trim_revision_preserves_original_samples_and_summary_without_double_weight(profiles):
+async def test_saved_trim_updates_identity_statistics_and_average_without_copying_samples(profiles):
     first = short_saved_cycle(profiles, 1000, 10)
     second = short_saved_cycle(profiles, 2000, 10)
     original = profiles.detail(first)
-    revised = profiles.revise(first, {"reviewed": True, "revision": profiles.settings["revision"],
-                                     "start_seconds": 1, "end_seconds": 6})
-    assert revised["id"] != first and revised["trimmed_from"] == first
-    assert revised["capture_id"] == first
-    assert revised["summary"]["duration_seconds"] == 5
-    assert profiles.detail(first) == original
-    assert profiles.detail(revised["id"])["points"] == original["points"]
-    assert profiles.members("dishwasher/eco") == [revised["id"], second]
+    signature = (await profiles.profile_detail("dishwasher", "eco"))["selection_signature"]
+    for start, end in ((1, 6), (2, 5)):
+        revised = profiles.revise(first, {"reviewed": True, "revision": profiles.settings["revision"],
+                                        "start_seconds": start, "end_seconds": end})
+        assert revised["id"] == first
+        assert len(profiles.library()["recordings"]) == 2
+        assert profiles.detail(first)["points"] == original["points"]
+        assert profiles.members("dishwasher/eco") == [first, second]
     average = await profiles.profile_detail("dishwasher", "eco")
-    assert average["recording_count"] == 2
-    assert average["summary"]["energy_kwh"] == pytest.approx(12500 / 3600000)
-
-
-async def test_previous_trim_can_be_restored_and_revisions_of_revisions_keep_one_capture(profiles):
-    original = short_saved_cycle(profiles, 1000, 10)
-    first = profiles.revise(original, {"reviewed": True, "revision": profiles.settings["revision"],
-                                      "start_seconds": 1, "end_seconds": 6})
-    second = profiles.revise(first["id"], {"reviewed": True, "revision": profiles.settings["revision"],
-                                         "start_seconds": 2, "end_seconds": 5})
-    assert second["capture_id"] == original
-    assert second["trimmed_from"] == first["id"]
-    assert profiles.members("dishwasher/eco") == [second["id"]]
-    profiles.select(original, {"revision": profiles.settings["revision"]})
-    assert profiles.members("dishwasher/eco") == [original]
+    assert average["recording_count"] == 2 and average["selection_signature"] != signature
+    assert average["summary"]["energy_kwh"] == pytest.approx(11500 / 3600000)
     restored = ApplianceProfiles(profiles.app)
-    assert (await restored.profile_detail("dishwasher", "eco"))["recording_count"] == 1
-    assert restored.get(first["id"])["summary"]["duration_seconds"] == 5
-    assert restored.get(second["id"])["summary"]["duration_seconds"] == 3
+    assert restored.get(first)["summary"]["duration_seconds"] == 3
+    assert len(restored.library()["recordings"]) == 2
+
+
+async def test_saved_trim_preserves_exclusion_until_an_explicit_include(profiles):
+    identity = short_saved_cycle(profiles, 1000, 10)
+    profiles.select(identity, {"revision": profiles.settings["revision"], "included": False})
+    profiles.revise(identity, {"reviewed": True, "revision": profiles.settings["revision"],
+                              "start_seconds": 2, "end_seconds": 6})
+    assert profiles.members("dishwasher/eco") == []
+    assert profiles.library()["profiles"] == {}
+    profiles.select(identity, {"revision": profiles.settings["revision"], "included": True})
+    assert (await profiles.profile_detail("dishwasher", "eco"))["summary"]["duration_seconds"] == 4
 
 
 def test_saved_retrim_keeps_review_revision_and_complete_coverage_guards(profiles):
@@ -462,16 +459,16 @@ def test_saved_retrim_keeps_review_revision_and_complete_coverage_guards(profile
     assert len(profiles.library()["recordings"]) == 1
 
 
-def test_failed_trim_sample_copy_rolls_back_new_recording_membership_and_memory(profiles):
+def test_failed_trim_update_rolls_back_statistics_revision_and_membership(profiles):
     import sqlite3
     original = short_saved_cycle(profiles, 1000, 10)
     before = profiles.detail(original)
     revision = profiles.settings["revision"]
     profiles.store.connection.executescript("""
-        CREATE TRIGGER synthetic_retrim_failure BEFORE INSERT ON appliance_samples
-        BEGIN SELECT RAISE(FAIL,'SYNTHETIC sample-copy failure'); END;
+        CREATE TRIGGER synthetic_retrim_failure BEFORE UPDATE ON appliance_recordings
+        BEGIN SELECT RAISE(FAIL,'SYNTHETIC selection-write failure'); END;
     """)
-    with pytest.raises(sqlite3.IntegrityError, match="sample-copy failure"):
+    with pytest.raises(sqlite3.IntegrityError, match="selection-write failure"):
         profiles.revise(original, {"reviewed": True, "revision": revision,
                                   "start_seconds": 1, "end_seconds": 6})
     assert profiles.settings["revision"] == revision
@@ -481,7 +478,7 @@ def test_failed_trim_sample_copy_rolls_back_new_recording_membership_and_memory(
     assert profiles.detail(original) == before
 
 
-async def test_saved_trim_revision_api_checks_origin_and_returns_new_identity_and_revision(profiles):
+async def test_saved_trim_api_checks_origin_and_returns_same_identity_and_new_revision(profiles):
     identity = short_saved_cycle(profiles, 1000, 10)
     application = Application(profiles.store, snapshot=tiny())
     application.appliance_profiles = profiles
@@ -496,7 +493,120 @@ async def test_saved_trim_revision_api_checks_origin_and_returns_new_identity_an
         response = await client.post(url, json=body, headers={"X-EnergyManager": "1"})
         assert response.status == 200
         saved = await response.json()
-        assert saved["id"] != identity
+        assert saved["id"] == identity
         assert saved["library_revision"] == body["revision"] + 1
         assert (await client.post(url, json=body, headers={"X-EnergyManager": "1"})).status == 400
         assert profiles.members("dishwasher/eco") == [saved["id"]]
+
+
+
+def legacy_trim_copy(profiles, original, identity, start, end, saved_seconds):
+    """Build a labelled pre-ARCH-018 immutable copy without the new save path."""
+    import json
+    row = profiles.get(original)
+    summary = profiles.preview(original, {"start_seconds": start, "end_seconds": end})
+    copied = {**row, "id": identity, "capture_id": row.get("capture_id", original),
+              "trimmed_from": original, "summary": summary,
+              "saved_at": (AT+timedelta(seconds=saved_seconds)).isoformat()}
+    with profiles.store.connection:
+        profiles.store.connection.execute("INSERT INTO appliance_recordings VALUES (?,?,?,?)",
+            (identity, profiles.mode, "saved", json.dumps(copied)))
+        profiles.store.connection.execute("INSERT INTO appliance_samples SELECT ?,at,power_w,error FROM appliance_samples WHERE recording_id=?",
+            (identity, original))
+    return copied
+
+
+async def test_consolidation_uses_latest_trim_save_time_preserves_raw_inclusion_and_frozen_plans(profiles):
+    original = short_saved_cycle(profiles, 1000, 10)
+    distinct = short_saved_cycle(profiles, 1000, 10)
+    before = profiles.detail(original)
+    legacy_trim_copy(profiles, original, "SYNTHETIC-latest-saved", 2, 6, 300)
+    legacy_trim_copy(profiles, original, "SYNTHETIC-inserted-later-but-older", 1, 9, 100)
+    profiles.store.record(tiny(), {"id": "SYNTHETIC-frozen-plan", "curve": before}, "accepted")
+    frozen = profiles.store.connection.execute("SELECT snapshot,result FROM decisions").fetchone()
+    migrated = ApplianceProfiles(profiles.app)
+    assert len(migrated.library()["recordings"]) == 2  # Equal notes/times do not merge distinct runs.
+    assert migrated.get(original)["summary"]["duration_seconds"] == 4
+    assert migrated.detail(original)["points"] == before["points"]
+    assert migrated.detail("SYNTHETIC-latest-saved")["id"] == original
+    assert migrated.members("dishwasher/eco") == [original, distinct]
+    assert (await migrated.profile_detail("dishwasher", "eco"))["summary"]["energy_kwh"] == pytest.approx(7000/3600000)
+    assert profiles.store.connection.execute("SELECT snapshot,result FROM decisions").fetchone() == frozen
+    revision = migrated.settings["revision"]
+    again = ApplianceProfiles(profiles.app)
+    assert again.settings["revision"] == revision
+    assert len(again.library()["recordings"]) == 2
+
+
+async def test_consolidation_preserves_excluded_capture_and_alias_actions_use_canonical_identity(profiles):
+    original = short_saved_cycle(profiles, 1000, 10)
+    profiles.select(original, {"revision": profiles.settings["revision"], "included": False})
+    legacy_trim_copy(profiles, original, "SYNTHETIC-excluded-trim", 1, 5, 200)
+    migrated = ApplianceProfiles(profiles.app)
+    assert migrated.members("dishwasher/eco") == [] and migrated.library()["profiles"] == {}
+    migrated.select("SYNTHETIC-excluded-trim", {"revision": migrated.settings["revision"]})
+    assert migrated.members("dishwasher/eco") == [original]
+    assert (await migrated.profile_detail("dishwasher", "eco"))["summary"]["duration_seconds"] == 4
+    migrated.delete("SYNTHETIC-excluded-trim", {"revision": migrated.settings["revision"], "confirmed": True})
+    assert migrated.library()["recordings"] == [] and migrated.library()["profiles"] == {}
+    assert migrated.settings["recording_aliases"] == {}
+
+
+def test_failed_consolidation_rolls_back_samples_rows_membership_and_revision(profiles):
+    import sqlite3
+    original = short_saved_cycle(profiles, 1000, 10)
+    legacy_trim_copy(profiles, original, "SYNTHETIC-rollback", 1, 5, 200)
+    before = list(profiles.store.connection.iterdump())
+    profiles.store.connection.executescript("""
+        CREATE TRIGGER synthetic_consolidation_failure BEFORE DELETE ON appliance_recordings
+        BEGIN SELECT RAISE(FAIL,'SYNTHETIC consolidation failure'); END;
+    """)
+    with pytest.raises(sqlite3.IntegrityError, match="consolidation failure"):
+        ApplianceProfiles(profiles.app)
+    profiles.store.connection.execute("DROP TRIGGER synthetic_consolidation_failure")
+    profiles.store.connection.commit()
+    assert list(profiles.store.connection.iterdump()) == before
+    assert profiles.members("dishwasher/eco") == [original]
+    migrated = ApplianceProfiles(profiles.app)
+    assert len(migrated.library()["recordings"]) == 1
+
+
+def test_consolidation_rejects_conflicting_raw_evidence_without_partial_changes(profiles):
+    original = short_saved_cycle(profiles, 1000, 10)
+    legacy_trim_copy(profiles, original, "SYNTHETIC-conflicting-copy", 1, 5, 200)
+    profiles.store.connection.execute("UPDATE appliance_samples SET power_w=77 WHERE recording_id=?",
+                                     ("SYNTHETIC-conflicting-copy",))
+    profiles.store.connection.commit()
+    before = list(profiles.store.connection.iterdump())
+    with pytest.raises(ValueError, match="Conflicting raw"):
+        ApplianceProfiles(profiles.app)
+    assert list(profiles.store.connection.iterdump()) == before
+
+
+def test_consolidation_retains_surviving_raw_evidence_when_the_original_was_deleted(profiles):
+    original = short_saved_cycle(profiles, 1000, 10)
+    first = legacy_trim_copy(profiles, original, "SYNTHETIC-survivor", 1, 8, 100)
+    latest = legacy_trim_copy(profiles, original, "SYNTHETIC-survivor-latest", 2, 6, 300)
+    profiles.select(latest["id"], {"revision": profiles.settings["revision"]})
+    profiles.delete(original, {"revision": profiles.settings["revision"], "confirmed": True})
+    before = profiles.detail(first["id"])["points"]
+    migrated = ApplianceProfiles(profiles.app)
+    assert len(migrated.library()["recordings"]) == 1
+    assert migrated.members("dishwasher/eco") == [first["id"]]
+    assert migrated.detail(latest["id"])["points"] == before
+    assert migrated.get(first["id"])["summary"]["duration_seconds"] == 4
+
+
+def test_recording_library_keeps_older_records_and_does_not_consolidate_equal_dates_or_notes(profiles):
+    import json
+    original = short_saved_cycle(profiles, 1000, 10)
+    row = profiles.get(original)
+    with profiles.store.connection:
+        for index in range(110):
+            identity = f"SYNTHETIC-distinct-capture-{index}"
+            profiles.store.connection.execute("INSERT INTO appliance_recordings VALUES (?,?,?,?)",
+                (identity, profiles.mode, "saved", json.dumps({**row, "id": identity})))
+    migrated = ApplianceProfiles(profiles.app)
+    assert len(migrated.library()["recordings"]) == 111
+    assert original in {r["id"] for r in migrated.library()["recordings"]}
+    assert migrated.members("dishwasher/eco") == [original]

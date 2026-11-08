@@ -177,7 +177,8 @@ class ApplianceRuns:
                 "deadline":run["deadline"],"asap":run["asap"],"approved_peak_kw":run.get("approved_peak_kw"),
                 "started_at":run.get("started_at"),"idle_w":idle["power_w"],"points":deepcopy(profile["points"]),
                 "mean_duration_seconds":summary["mean_duration_seconds"],"curve_seconds":summary["duration_seconds"],
-                "profile_revision":profile["revision"],"recording_ids":profile["recording_ids"],
+                "profile_revision":profile["revision"],"profile_signature":profile.get("selection_signature"),
+                "recording_ids":profile["recording_ids"],
                 "profile_energy_kwh":summary["energy_kwh"]}
 
     async def reconcile(self) -> None:
@@ -236,7 +237,9 @@ class ApplianceRuns:
                     self.changed("dishwasher_program_changed")
                 members = self.app.appliance_profiles.members("dishwasher/"+run["program"])
                 previous_members = run["profile"]["recording_ids"] if run.get("profile") else []
-                if members != previous_members:
+                signature = (self.app.appliance_profiles.profile_summary("dishwasher/"+run["program"], members)["selection_signature"]
+                             if members else None)
+                if members != previous_members or signature != (run.get("profile") or {}).get("selection_signature"):
                     run["profile"] = await self.profile(run["program"])
                     self.saved["revision"] += 1
                     run.update(revision=self.saved["revision"],approved_peak_kw=None,planned_start=None,estimated_finish=None,plan_id=None,conflict=None)

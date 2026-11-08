@@ -1498,7 +1498,7 @@ test('an already saved recording opens editable trim controls and uses the retur
   const page = {api:async()=>recording,signal:{aborted:false},previewGeneration:0,
     library:{revision:12,programs:{dishwasher:{eco:'Eco'}}},root:{querySelector:()=>panel},
     mountChart:(row,selection,canEdit)=>{editable=canEdit;assert.equal(selection.start_seconds,2);},
-    syncTrim:()=>{}};
+    syncTrim:()=>{},renderRecordings:()=>{},closeReview(){this.reviewGeneration=(this.reviewGeneration||0)+1;}};
   await ApplianceProfilesPage.prototype.review.call(page,'synthetic-saved',14);
   assert.equal(editable,true);
   assert.equal(panel.hidden,false);
@@ -1591,4 +1591,25 @@ test('appliance deadline presets use the next local calendar date across DST and
     assert.equal(localDateTime(tomorrowFinish(now,'Europe/Brussels',12),'Europe/Brussels'),dates[1]+'T12:00');
     assert.equal(localDateTime(tomorrowFinish(now,'Europe/Brussels',18),'Europe/Brussels'),dates[1]+'T18:00');
   }
+});
+
+
+
+test('folded program headers retain average/count summaries and recording entries remain compact', () => {
+  const panel={hidden:true},container={dataset:{profileRecordings:'dishwasher'},innerHTML:'',contains:()=>false,querySelector:()=>null};
+  const page={library:{programs:{dishwasher:{eco:'Eco',heavy:'Heavy'}},profiles:{'dishwasher/eco':{
+    recording_count:1,summary:{mean_duration_seconds:3600,energy_kwh:1.2}}},recordings:[{
+      id:'synthetic-one',machine:'dishwasher',program:'eco',status:'saved',included:true,armed_at:'2026-11-08T12:00Z',
+      notes:'SYNTHETIC <script>',entity_id:'sensor.synthetic',sample_count:20,last_power_w:0,
+      summary:{duration_seconds:3600,energy_kwh:1.2}}]},
+    root:{querySelector:()=>panel,querySelectorAll:()=>[container],getRootNode:()=>({activeElement:null}),append:()=>{}}};
+  ApplianceProfilesPage.prototype.renderRecordings.call(page);
+  assert.match(container.innerHTML,/1 recording · 1 included · 60.0 min mean · 1.200 kWh mean/);
+  assert.match(container.innerHTML,/profile-program-recordings" hidden/);
+  assert.equal((container.innerHTML.match(/data-recording="synthetic-one"/g)||[]).length,1);
+  assert.match(container.innerHTML,/data-recording-editor="synthetic-one" hidden/);
+  assert.match(container.innerHTML,/SYNTHETIC &lt;script&gt;/);
+  page.openPrograms.add('dishwasher/eco');
+  ApplianceProfilesPage.prototype.renderRecordings.call(page);
+  assert.match(container.innerHTML,/profile-program-recordings" >/);
 });

@@ -395,7 +395,7 @@ This backlog entry does not authorize implementation.
 ## ARCH-018 — Task energy profile visualization
 
 Recorded: 27 October 2026. Updated: 8 November 2026. Status: **recording-list/trim
-package authorized for implementation**; original task-chart ideas remain deferred.
+package implemented in4.5.8 and verified offline**; original task-chart ideas remain deferred.
 
 Include a visualization of each task's energy profile. Establish the presentation,
 time resolution and whether it shows planned, measured or both profiles when

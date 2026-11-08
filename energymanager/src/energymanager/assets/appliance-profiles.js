@@ -36,6 +36,7 @@ export class ApplianceProfilesPage {
     }, {signal});
     root.addEventListener('click', event => {
       const button = event.target.closest('[data-profile-command]');
+      if (button?.dataset.profileCommand === 'program') { this.toggleProgram(button); return; }
       if (button) { this.perform(() => this.command(button)); return; }
       const toggle = event.target.closest('[data-appliance-toggle]');
       if (toggle) { this.expand(toggle.dataset.applianceToggle); return; }
@@ -129,9 +130,7 @@ export class ApplianceProfilesPage {
       <label>Program<select name="program">${Object.entries(library.programs[machine]).map(([id, label]) => `<option value="${escapeHTML(id)}">${escapeHTML(label)}</option>`).join('')}</select></label>
       <label>Load / options / notes<input name="notes" maxlength="500" placeholder="e.g. full load, extra rinse"></label>
       <button type="submit">Record next cycle</button></form>
-      <h3>Averaged profiles</h3><div data-profile-selected="${machine}"></div>
-      <h3>Recordings</h3><div data-profile-recordings="${machine}"></div>
-      <p class="muted">Latest 100 recordings across machines. Inspect averages for older contributors.</p>
+      <h3>Programs and recordings</h3><div data-profile-recordings="${machine}"></div>
       </div></article>`;
     }).join('');
     this.root.innerHTML = `<div class="page-heading"><div><h1>Appliances</h1>
@@ -167,7 +166,8 @@ export class ApplianceProfilesPage {
     }
     const review = this.root.querySelector('[data-profile-review]');
     if (next && this.reviewed?.machine === next) {
-      this.root.querySelector(`[data-appliance-detail="${next}"]`).append(review);
+      const host = !this.reviewed.averaged && this.root.querySelector(`[data-recording-editor="${this.reviewed.id}"]`);
+      (host || this.root.querySelector(`[data-appliance-detail="${next}"]`)).append(review);
       review.hidden = false;
     } else review.hidden = true;
   }
@@ -283,40 +283,76 @@ export class ApplianceProfilesPage {
 
   managedTime(value){return value?escapeHTML(new Date(value).toLocaleString('en-GB',{timeZone:this.library.timezone || this.timezone || 'Europe/Brussels',timeZoneName:'shortOffset'})):'—';}
 
+  closeReview() {
+    clearTimeout(this.previewTimer);
+    this.previewGeneration++;
+    this.reviewGeneration = (this.reviewGeneration || 0)+1;
+    this.chart?.close();
+    const panel = this.root.querySelector('[data-profile-review]');
+    panel.hidden = true;
+    this.root.append(panel);
+    this.reviewed = null;
+    this.expandedRecording = null;
+  }
+
+  toggleProgram(button) {
+    this.openPrograms ||= new Set();
+    const key = button.dataset.machine+'/'+button.dataset.program;
+    if (this.openPrograms.has(key)) {
+      this.openPrograms.delete(key);
+      if (this.reviewed?.machine+'/'+this.reviewed?.program === key && !this.reviewed?.averaged) this.closeReview();
+    } else this.openPrograms.add(key);
+    this.forceRecordings = true;
+    this.renderRecordings();
+    this.root.querySelector(`[data-profile-command="program"][data-machine="${button.dataset.machine}"][data-program="${CSS.escape(button.dataset.program)}"]`)?.focus();
+  }
+
   renderRecordings() {
     const library = this.library;
     this.recordingMarkup ||= {};
-    this.selectedMarkup ||= {};
-    for (const container of this.root.querySelectorAll('[data-profile-selected]')) {
-      const machine = container.dataset.profileSelected;
-      const markup = Object.entries(library.programs[machine]).map(([program,label]) => {
-        const profile = library.profiles[`${machine}/${program}`];
-        return `<p>${escapeHTML(programLabel(label))}: ${profile ? `${profile.recording_count} recording${profile.recording_count === 1 ? '' : 's'} ·
-          ${decimal(profile.summary.mean_duration_seconds / 60,1)} min mean cycle · ${decimal(profile.summary.energy_kwh,3)} kWh mean
-          <button data-profile-command="average" data-machine="${machine}" data-program="${escapeHTML(program)}">Inspect average</button>` : 'No reviewed recordings included'}</p>`;
-      }).join('');
-      if (this.selectedMarkup[machine] !== markup) { container.innerHTML = markup; this.selectedMarkup[machine] = markup; }
-    }
+    this.openPrograms ||= new Set();
+    const review = this.root.querySelector('[data-profile-review]');
     for (const container of this.root.querySelectorAll('[data-profile-recordings]')) {
-      const rows = library.recordings.filter(row=>row.machine === container.dataset.profileRecordings);
-      const markup = rows.length ? rows.map(recording => {
-        const status = recording.status === 'saved' && recording.trimmed_from ? 'saved · trim revision' : recording.status === 'armed' ? (recording.idle_seen ? 'Armed · waiting for start' : 'Armed · waiting for idle') : recording.status;
-        return `<section class="profile-recording"><strong>${escapeHTML(programLabel(library.programs[recording.machine][recording.program] ?? recording.program))}</strong>
-        <p>${escapeHTML(status)}${recording.source === 'bosch' ? ' · automatic Bosch capture' : ''} · ${escapeHTML(new Date(recording.armed_at).toLocaleString('en-GB',{timeZone:this.timezone || 'Europe/Brussels'}))} · ${recording.sample_count} samples · ${recording.last_power_w === null ? 'Power unavailable' : Math.round(recording.last_power_w) + ' W'}</p>
-        <p>${escapeHTML(recording.notes)}${recording.error || recording.interruption_reason ? ' · ' + escapeHTML(recording.error || recording.interruption_reason) : ''}</p>
-        ${recording.modifiers ? `<p>Modifiers at start: ${escapeHTML(Object.entries(recording.modifiers).map(([key,value])=>key + ': ' + (value ?? 'unavailable')).join(', '))}. Review whether this represents the base program.</p>` : ''}
-        <div class="actions"><button data-profile-command="review" data-id="${recording.id}">Inspect / review</button>
-        ${recording.status === 'recording' ? `<button data-profile-command="finish" data-id="${recording.id}">Finish recording now</button>` : ''}
-        ${recording.status === 'saved' ? `<button data-profile-command="select" data-id="${recording.id}" data-included="${!recording.included}">${recording.included ? 'Remove from average' : 'Add to average'}</button>` : `<button data-profile-command="discard" data-id="${recording.id}">Discard recording</button>`}
-        <details class="profile-delete"><summary>Delete recording…</summary><p>Permanently delete this recording, its samples and its contribution to the average. This cannot be undone.</p>
-        <button data-profile-command="delete" data-id="${recording.id}">Confirm permanent deletion</button></details></div></section>`;
-      }).join('') : '<p class="muted">No cycles recorded yet.</p>';
-      const interacting = container.contains(this.root.getRootNode().activeElement) || container.querySelector('details[open]');
       const machine = container.dataset.profileRecordings;
+      const rows = library.recordings.filter(row=>row.machine === machine);
+      const markup = Object.entries(library.programs[machine]).map(([program,label])=>{
+        const key = machine+'/'+program, profile = library.profiles[key];
+        const recordings = rows.filter(row=>row.program === program), open = this.openPrograms.has(key);
+        const average = profile ? `${profile.recording_count} included · ${decimal(profile.summary.mean_duration_seconds/60,1)} min mean · ${decimal(profile.summary.energy_kwh,3)} kWh mean` : 'No reviewed recordings included';
+        return `<section class="profile-program"><div class="profile-program-heading">
+          <button type="button" data-profile-command="program" data-machine="${machine}" data-program="${escapeHTML(program)}" aria-expanded="${open}">
+          <strong>${open?'▾':'▸'} ${escapeHTML(programLabel(label))}</strong><span>${recordings.length} recording${recordings.length===1?'':'s'} · ${escapeHTML(average)}</span></button>
+          ${profile?`<button type="button" data-profile-command="average" data-machine="${machine}" data-program="${escapeHTML(program)}">Inspect average</button>`:''}</div>
+          <div class="profile-program-recordings" ${open?'':'hidden'}>${recordings.length ? recordings.map(recording=>{
+            const identity=escapeHTML(recording.id), expanded=this.expandedRecording===recording.id;
+            const status=recording.status==='armed'?(recording.idle_seen?'Armed · waiting for start':'Armed · waiting for idle'):recording.status;
+            const date=new Date(recording.armed_at).toLocaleString('en-GB',{timeZone:this.timezone || 'Europe/Brussels'});
+            return `<section class="profile-recording" data-recording="${identity}"><div class="profile-recording-row">
+              <button type="button" class="profile-recording-open" data-profile-command="review" data-id="${identity}" aria-expanded="${expanded}">${expanded?'▾':'▸'} ${escapeHTML(date)}</button>
+              <span class="profile-recording-stats">${recording.summary?`${decimal(recording.summary.duration_seconds/60,1)} min · ${decimal(recording.summary.energy_kwh,3)} kWh`:`${recording.sample_count} samples`}</span>
+              <span class="profile-recording-included">${recording.included?'✓ Included':recording.status==='saved'?'Not included':escapeHTML(programLabel(status))}</span>
+              ${recording.status==='saved'?`<button type="button" data-profile-command="select" data-id="${identity}" data-included="${!recording.included}">${recording.included?'Remove from average':'Add to average'}</button>`:
+                recording.status==='recording'?`<button type="button" data-profile-command="finish" data-id="${identity}">Finish recording now</button>`:`<button type="button" data-profile-command="discard" data-id="${identity}">Discard recording</button>`}
+              </div><div class="profile-recording-details"><details><summary>Details</summary><p>${escapeHTML(recording.notes)}</p>
+              <p>${escapeHTML(status)}${recording.source==='bosch'?' · automatic Bosch capture':''} · ${recording.sample_count} samples · ${escapeHTML(recording.entity_id)} · ${recording.last_power_w===null?'Power unavailable':Math.round(recording.last_power_w)+' W'}</p>
+              ${recording.error || recording.interruption_reason?`<p class="notice">${escapeHTML(recording.error || recording.interruption_reason)}</p>`:''}
+              ${recording.modifiers?`<p>Modifiers at start: ${escapeHTML(Object.entries(recording.modifiers).map(([name,value])=>name+': '+(value??'unavailable')).join(', '))}</p>`:''}</details>
+              <details class="profile-delete"><summary>Delete recording…</summary><p>Permanently delete this physical recording, its samples and its contribution. This cannot be undone.</p>
+              <button type="button" data-profile-command="delete" data-id="${identity}">Confirm permanent deletion</button></details></div>
+              <div data-recording-editor="${identity}" ${expanded?'':'hidden'}></div></section>`;
+          }).join(''):'<p class="muted">No cycles recorded yet.</p>'}</div></section>`;
+      }).join('');
+      const interacting = container.contains(this.root.getRootNode().activeElement) || container.querySelector('details[open]');
       if (this.recordingMarkup[machine] !== markup && (this.forceRecordings || !interacting)) {
+        if (container.contains(review)) this.root.append(review); // Preserve the active form/chart across ordinary polls.
         container.innerHTML = markup;
         this.recordingMarkup[machine] = markup;
       }
+    }
+    if (this.reviewed && !this.reviewed.averaged) {
+      const host = this.root.querySelector(`[data-recording-editor="${CSS.escape(this.reviewed.id)}"]`);
+      if (host) { host.hidden=false;host.append(review); }
+      else this.closeReview();
     }
     this.forceRecordings = false;
   }
@@ -349,7 +385,7 @@ export class ApplianceProfilesPage {
       const saved = await this.api(`profile-recordings/${form.dataset.id}/${action}`, 'POST', body);
       this.advanceRevision(body.revision, saved.library_revision);
       await this.review(saved.id,saved.library_revision);
-      this.message(action === 'revise' ? 'Revised trim saved. The original is retained; this cycle contributes once to the average.' : 'Reviewed cycle saved and added to the program average. Original recordings are retained.');
+      this.message(action === 'revise' ? 'Selection updated for this recording. Original measurements and inclusion are retained.' : 'Reviewed cycle saved and added to the program average. Original recordings are retained.');
     }
     await this.refresh();
   }
@@ -393,18 +429,17 @@ export class ApplianceProfilesPage {
       this.message('Power sensors loaded. Select a dedicated sensor for each machine.');
       return;
     }
-    if (command === 'review') return this.review(id);
+    if (command === 'review') {
+      if (this.expandedRecording===id && !this.reviewed?.averaged) { this.closeReview();this.forceRecordings=true;this.renderRecordings();return; }
+      return this.review(id);
+    }
     if (command === 'average') return this.reviewAverage(button.dataset.machine,button.dataset.program);
     if (command === 'preview') return this.previewSelection(button.closest('form'));
     const revision = this.library.revision;
     const result = await this.api(`profile-recordings/${id}/${command}`, 'POST', {revision,...(command === 'delete' ? {confirmed:true} : {}),...(command === 'select' ? {included:button.dataset.included !== 'false'} : {})});
     if (command === 'select' || command === 'delete') this.advanceRevision(revision, result.library_revision);
     if (command === 'finish') await this.review(id);
-    if (command === 'discard' || command === 'delete') {
-      this.chart?.close();
-      this.root.querySelector('[data-profile-review]').hidden = true;
-      if (!this.reviewed?.averaged) this.reviewed = null;
-    }
+    if ((command === 'discard' || command === 'delete') && this.reviewed?.id===id && !this.reviewed?.averaged) this.closeReview();
     this.forceRecordings = true;
     await this.refresh();
     if ((command === 'select' || command === 'delete') && this.reviewed?.averaged) {
@@ -451,7 +486,7 @@ export class ApplianceProfilesPage {
     const identity = this.reviewed.id;
     const summary = await this.api(`profile-recordings/${identity}/preview`,'POST',selection);
     if (this.signal.aborted || generation !== this.previewGeneration || !form.isConnected ||
-        this.reviewed.id !== identity) return;
+        this.reviewed?.id !== identity) return;
     const current = this.trimValues(form);
     if (!current || current.start_seconds !== selection.start_seconds ||
         current.end_seconds !== selection.end_seconds) return;
@@ -474,12 +509,15 @@ export class ApplianceProfilesPage {
   }
 
   async reviewAverage(machine,program) {
+    this.closeReview();
+    const generation=this.reviewGeneration;
     const profile = await this.api(`profiles/${machine}/${program}`);
-    if (this.signal.aborted) return;
+    if (this.signal.aborted || generation!==this.reviewGeneration) return;
     this.reviewed = profile;
     this.expand?.(machine,true);
     clearTimeout(this.previewTimer);
     this.previewGeneration++;
+    this.forceRecordings=true;this.renderRecordings();
     const panel = this.root.querySelector('[data-profile-review]');
     panel.hidden = false;
     panel.innerHTML = `<h2>Average · ${machineName(machine)} · ${escapeHTML(this.library.programs[machine][program])}</h2>
@@ -499,10 +537,17 @@ export class ApplianceProfilesPage {
   }
 
   async review(id, revision = this.library.revision) {
+    this.closeReview();
+    const generation=this.reviewGeneration;
     const recording = await this.api(`profile-recordings/${id}`);
-    if (this.signal.aborted) return;
+    if (this.signal.aborted || generation!==this.reviewGeneration) return;
+    id=recording.id;
     this.reviewed = recording;
+    this.expandedRecording=id;
+    this.openPrograms ||= new Set();
+    this.openPrograms.add(recording.machine+'/'+recording.program);
     this.expand?.(recording.machine,true);
+    this.forceRecordings=true;this.renderRecordings();
     clearTimeout(this.previewTimer);
     this.previewGeneration++;
     const panel = this.root.querySelector('[data-profile-review]');
@@ -514,7 +559,7 @@ export class ApplianceProfilesPage {
     panel.hidden = false;
     panel.innerHTML = `<h2>Review · ${machineName(recording.machine)} · ${escapeHTML(programLabel(this.library.programs[recording.machine][recording.program] ?? recording.program))}</h2>
       <p>${escapeHTML(recording.notes)} · ${escapeHTML(recording.entity_id)} · ${escapeHTML(recording.status)}${recording.interruption_reason ? ' · ' + escapeHTML(recording.interruption_reason) : ''}</p>
-      ${saved ? '<p class="notice">You can adjust this saved trim. Saving keeps the original and uses the revised range once in the average.</p>' : ''}
+      ${saved ? '<p class="notice">You can adjust this saved trim. Saving updates this recording in place, preserving raw measurements and its inclusion in the average.</p>' : ''}
       <div data-profile-graph></div>
       <p class="muted">Gaps are unknown; short measured peaks remain visible. Trim seconds are relative to the detected start.</p>
       ${recording.interrupted ? '<p class="error">Interrupted recording. Inspect it for diagnosis and record a complete cycle before saving a profile.</p>' : ''}
@@ -522,7 +567,7 @@ export class ApplianceProfilesPage {
       <label>Start (seconds)<input name="start_seconds" type="number" min="0" max="${duration}" step="any" value="${selection.start_seconds}" required></label>
       <label>End (seconds)<input name="end_seconds" type="number" min="0" max="${duration}" step="any" value="${selection.end_seconds}" required></label>
       <button type="button" data-profile-command="preview">Preview selection</button><p data-profile-summary></p>
-      <label class="profile-check"><input name="reviewed" type="checkbox" required>I reviewed a complete cycle and want to include it in this program's average.</label>
+      <label class="profile-check"><input name="reviewed" type="checkbox" required>${saved ? 'I reviewed this selection as a complete cycle.' : 'I reviewed a complete cycle and want to include it in this program’s average.'}</label>
       <button type="submit">${saved ? 'Save revised trim' : 'Save and add to average'}</button></form>` : recording.summary ?
       `<p>${escapeHTML(this.summaryText(recording.summary))} · Selected ${selection.start_seconds}–${selection.end_seconds} seconds (shaded)</p>` :
       '<p>Finish the recording before saving a profile.</p>'}`;

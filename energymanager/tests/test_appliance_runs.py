@@ -241,3 +241,20 @@ async def test_preview_requires_a_real_deadline_with_explicit_offset(managed, de
     with pytest.raises(ValueError, match="timezone"):
         await managed.preview({"program": ECO, "deadline": deadline})
     assert managed.run is None and managed.app.ha.calls == []
+
+
+
+async def test_same_identity_trim_replans_the_queued_run_without_mutating_frozen_evidence(managed):
+    from copy import deepcopy
+    await ready(managed)
+    plan = accept(managed, seconds=60)
+    frozen = deepcopy(plan)
+    profiles = managed.app.appliance_profiles
+    identity = profiles.members("dishwasher/"+ECO)[0]
+    old_revision = managed.run["revision"]
+    profiles.revise(identity, {"revision": profiles.settings["revision"], "reviewed": True,
+                              "start_seconds": 5, "end_seconds": 20})
+    await profiles.bosch.poll()
+    assert managed.run["revision"] > old_revision and managed.run["planned_start"] is None
+    assert managed.run["profile"]["summary"]["mean_duration_seconds"] == 15
+    assert plan == frozen and managed.app.ha.calls == []

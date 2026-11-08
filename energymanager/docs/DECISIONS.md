@@ -1,5 +1,13 @@
 # Current requirements and decisions
 
+- 8 November 2026, ARCH-018 implementation (4.5.8; offline verified). Saved selections
+  update one physical recording in place, preserving raw measurements and inclusion;
+  first review still includes the new cycle. Consolidate historical copies by capture
+  provenance using the latest saved trim and preserve included/excluded state. Historical
+  IDs alias the surviving recording; accepted-plan evidence is immutable. Queued M2
+  profiles detect selection changes even with unchanged recording IDs. Compact foldable
+  program groups and one in-place original trim editor are shared by both dashboards.
+
 - 8 November 2026, ARCH-018 implementation authorization. The user explicitly
   approved handing the completed recording-list/trim package to the registered
   V4.5 implementation chat as separate scope from M2. Includes foldable program groups,

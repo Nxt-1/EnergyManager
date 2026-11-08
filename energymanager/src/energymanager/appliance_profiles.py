@@ -1,4 +1,4 @@
-"""Manual and Bosch-feedback captures with reviewed, versioned profile averages."""
+"""Manual and Bosch-feedback captures with reviewed per-capture profile averages."""
 
 from __future__ import annotations
 
@@ -7,13 +7,15 @@ import math
 import json
 import re
 from datetime import datetime
+from hashlib import sha256
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import aiohttp
 
-from .domain import instant
+from .domain import instant, encode
 from .appliance_average import average_recordings
+from .appliance_migration import consolidate_captures
 from .bosch import BoschDishwasher, FIELDS
 
 if TYPE_CHECKING:
@@ -65,6 +67,7 @@ class ApplianceProfiles:
             "machines": {machine: {"entity_id": "", "start_threshold_w": 10.0, "idle_timeout_minutes": 15.0} for machine in PROGRAMS},
             "mazak": dict(MAZAK), "selected": {},
         })
+        self.settings = consolidate_captures(self.store, self.mode, self.key, self.settings)
         # A stopped service cannot establish what happened in its absence.
         for row in self._rows("status='recording'"):
             row.update(status="review", interrupted=True, error="Service restarted during recording")
@@ -96,7 +99,7 @@ class ApplianceProfiles:
             (self.mode, *parameters, limit))
         return [json.loads(row[0]) for row in rows]
 
-    def _save(self, recording: dict[str, Any], *, select: bool = False, copy_samples_from: str | None = None) -> None:
+    def _save(self, recording: dict[str, Any], *, select: bool = False, edit: bool = False) -> None:
         settings = None
         if select:
             key = f"{recording['machine']}/{recording['program']}"
@@ -104,6 +107,8 @@ class ApplianceProfiles:
             settings = {**self.settings, "revision": self.settings["revision"] + 1,
                         "selected": {**self.settings["selected"], key: recording["id"]},
                         "members": {**self.settings.get("members", {}), key: members}}
+        if edit:
+            settings = {**self.settings, "revision": self.settings["revision"] + 1}
         with self.store.connection:
             if settings is not None:
                 self.store.connection.execute("INSERT OR REPLACE INTO state VALUES (?,?)",
@@ -112,11 +117,6 @@ class ApplianceProfiles:
                 "INSERT INTO appliance_recordings(id,mode,status,body) VALUES (?,?,?,?) "
                 "ON CONFLICT(id) DO UPDATE SET status=excluded.status,body=excluded.body",
                 (recording["id"], self.mode, recording["status"], json.dumps(recording, allow_nan=False)))
-            if copy_samples_from is not None:
-                self.store.connection.execute(
-                    "INSERT INTO appliance_samples(recording_id,at,power_w,error) "
-                    "SELECT ?,at,power_w,error FROM appliance_samples WHERE recording_id=?",
-                    (recording["id"], copy_samples_from))
         if settings is not None:
             self.settings = settings
 
@@ -138,7 +138,7 @@ class ApplianceProfiles:
                 "now": self.app.now().isoformat(), "timezone": getattr(getattr(self.app,"policy",None),"timezone","Europe/Brussels"),
                 "members": membership,
                 "recordings": [{**row, "included": row["id"] in included}
-                               for row in self._rows("status != 'discarded'", limit=100)],
+                               for row in self._rows("status != 'discarded'")],
                 "sample_seconds": SAMPLE_SECONDS, "maximum_gap_seconds": MAX_GAP_SECONDS}
 
     def members(self, key: str) -> list[str]:
@@ -150,7 +150,7 @@ class ApplianceProfiles:
         return list(values)
 
     def _include_recording(self, key: str, recording: dict[str, Any]) -> list[str]:
-        """Use one trim revision per physical capture, retaining every prior version."""
+        """Include each physical capture once."""
         capture = recording.get("capture_id", recording["id"])
         members: list[str] = []
         replaced = False
@@ -174,6 +174,8 @@ class ApplianceProfiles:
         machine, program = key.split("/", 1)
         return {"id": self.settings["selected"][key], "machine": machine, "program": program,
                 "averaged": True, "recording_ids": identities, "recording_count": len(identities),
+                "selection_signature": sha256(encode([(row["id"], row["summary"], row.get("saved_at"))
+                                                    for row in recordings]).encode()).hexdigest(),
                 "summary": {"start_seconds": 0, "end_seconds": duration, "duration_seconds": duration,
                             "mean_duration_seconds": math.fsum(row["duration_seconds"] for row in summaries) / len(summaries),
                             "energy_kwh": energy, "average_w": energy * 3600000 / duration,
@@ -274,7 +276,7 @@ class ApplianceProfiles:
 
     def delete(self, identity: str, body: dict[str, Any]) -> None:
         """Permanently remove exactly one recording and its membership, in one transaction."""
-        self.get(identity)
+        identity = self.get(identity)["id"]
         if body.get("confirmed") is not True:
             raise ValueError("Confirm permanent deletion of the recording and all its samples")
         if type(body.get("revision")) is not int or body["revision"] != self.settings["revision"]:
@@ -290,7 +292,9 @@ class ApplianceProfiles:
                 else:
                     selected.pop(key)
         settings = {**self.settings, "revision": self.settings["revision"] + 1,
-                    "selected": selected, "members": membership}
+                    "selected": selected, "members": membership,
+                    "recording_aliases": {old: target for old, target in self.settings.get("recording_aliases", {}).items()
+                                          if target != identity}}
         with self.store.connection:
             self.store.connection.execute("DELETE FROM appliance_samples WHERE recording_id=?", (identity,))
             self.store.connection.execute("DELETE FROM appliance_recordings WHERE id=? AND mode=?", (identity, self.mode))
@@ -299,6 +303,7 @@ class ApplianceProfiles:
         self.settings = settings
 
     def get(self, identity: str) -> dict[str, Any]:
+        identity = self.settings.get("recording_aliases", {}).get(identity, identity)
         rows = self._rows("id=?", (identity,))
         if not rows:
             raise ValueError("Unknown recording")
@@ -406,6 +411,7 @@ class ApplianceProfiles:
 
     def detail(self, identity: str) -> dict[str, Any]:
         recording = self.get(identity)
+        identity = recording["id"]
         samples = self.store.connection.execute(
             "SELECT at,power_w,error FROM appliance_samples WHERE recording_id=? ORDER BY at", (identity,))
         origin = instant(recording["started_at"]).timestamp() if recording["started_at"] else 0
@@ -463,19 +469,18 @@ class ApplianceProfiles:
         return recording
 
     def revise(self, identity: str, body: dict[str, Any]) -> dict[str, Any]:
-        """Save revised bounds as new evidence and atomically replace its mean contribution."""
-        original = self.get(identity)
-        if original["status"] != "saved":
-            raise ValueError("Only saved recordings can have a trim revision")
-        summary = self._review_summary(original, body)
-        revised = {**original, "id": uuid4().hex, "summary": summary,
-                   "saved_at": self.app.now().isoformat(), "trimmed_from": identity,
-                   "capture_id": original.get("capture_id", identity)}
-        self._save(revised, select=True, copy_samples_from=identity)
-        return revised
+        """Update the reviewed selection atomically, retaining identity, raw samples and inclusion."""
+        recording = self.get(identity)
+        if recording["status"] != "saved":
+            raise ValueError("Only saved recordings can have a revised trim")
+        summary = self._review_summary(recording, body)
+        recording.update(summary=summary, saved_at=self.app.now().isoformat())
+        self._save(recording, edit=True)
+        return recording
 
     def select(self, identity: str, body: dict[str, Any]) -> None:
         recording = self.get(identity)
+        identity = recording["id"]
         if recording["status"] != "saved":
             raise ValueError("Only reviewed saved recordings can be selected")
         if type(body.get("revision")) is not int or body["revision"] != self.settings["revision"]:

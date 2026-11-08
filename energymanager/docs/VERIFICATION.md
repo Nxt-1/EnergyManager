@@ -1,5 +1,29 @@
 # EnergyManager 4 verification
 
+## 4.5.8 — ARCH-018 recording-list/trim cleanup (8 November2026)
+
+721Python tests pass150.18s,88frontend cases and Ruff/mypy52modules. Synthetic migration
+cases cover latest save-time ordering versus insertion/capture date, preserved inclusion/
+exclusion, aliases, absent original, raw conflicts, transactional failure/restart/idempotence,
+unrelated equal-date/notes runs,111-record access and unchanged frozen decisions. Repeated
+same-ID trim saves preserve samples/counts and update averages atomically; stale and invalid
+edits remain blocked. Queued M2 work detects updated selections despite unchanged IDs;
+accepted/running curve evidence remains frozen. Existing scheduling/EV/ESS tests pass.
+
+Both standalone and native browsers show foldable program summaries, compact rows and
+one inline original editor. Verified44px handle drags→fields, fields→handles, keyboard,
+shading, power/time cursor, zoom/pan and Full recording/Show selection. Two repeated saved
+trims keep identity and total6 fixture entries; a native reload sees saved40/3900 bounds,
+then native save keeps the same ID/count. Opening another entry leaves one form/editor.
+Native420px layout has matching panel client/scroll width385px. All traces/endpoints are
+labelled synthetic; no installation data or real hardware/phone/deployment was accessed.
+Physical touch and live upgrade behavior remain unverified. Closed native rows are79px
+with direct Details/Delete access after scoped spacing fixes. Wheel/sdist77runtime files
+match source; isolated4.5.8 import passes. Final configured fake E2E25.727s/2019intervals,
+max control3.811ms/four fake service calls passes. Remote results belong in ignored
+artifacts/v458-release-state.json and the final reply.
+
+
 ## 4.5.7 — V45-A002-M2 (8 November2026)
 
 708Python tests pass151.27s;87 frontend cases. Final lifecycle/estimate reset regression

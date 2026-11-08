@@ -140,9 +140,10 @@ older version restores it in place of the current one, rather than duplicating t
 capture's weight. Success opens the new version at its returned library revision so a
 second edit cannot reuse the previous form's revision. No new machine run is started.
 
-#### Pending recording-list and trim changes (ARCH-018; authorized 8 November 2026)
+#### Recording-list and trim cleanup (ARCH-018;4.5.8)
 
-The user selected foldable program groups for a compact recording list that scales
+Implemented in4.5.8; verified offline, live unverified. The user selected foldable
+program groups for a compact recording list that scales
 to many runs. Program headers retain their summary while collapsed.
 Show one entry per physical recording. Only one recording may be expanded at a time;
 opening another collapses the previous entry. Expanding exposes its graph and trimming
@@ -159,8 +160,10 @@ editor moves into the recording entry.
 
 Saving a trim updates that recording's current selected bounds and statistics in place,
 using the same recording identity. It must not create another recording or trim version.
-This supersedes the version-creation behavior described above for the follow-up; the
-existing behavior remains implemented until this separately authorized package ships.
+This supersedes the historical4.5.4–4.5.7 version-creation behavior described above.
+Library revisions still advance to protect stale edits; saves create no recording/version.
+Revising a saved selection preserves its inclusion/exclusion; the explicit Add/Remove
+actions manage participation. First review still saves and adds the cycle to its average.
 Keep original captured samples available for adjusting the selection. Maintain atomic
 average membership/statistics updates, stale-edit protection and accepted-plan evidence;
 editing a library selection does not rewrite previously frozen planning evidence.
@@ -171,6 +174,23 @@ means trim-save time, not the shared capture timestamp. Preserve the original ra
 and whether that physical capture contributes to the average; if included, use the retained
 latest trim exactly once. Identify related entries by capture provenance, not matching
 dates or notes. Previously frozen planning evidence remains unchanged.
+
+The migration runs transactionally per mode before the recorder starts. Keep the original
+capture ID where it survives, otherwise the first surviving copy; rank saved trims by
+saved_at (insertion order only breaks ties/missing save times), never armed/started_at.
+Retain one raw sample set/union, reject contradictory same-time raw readings and roll back
+on failure. Historical IDs resolve through persisted aliases to the retained recording;
+deleting that capture removes its samples, membership and aliases. Do not touch archived
+planning decisions. Repeating startup is idempotent. There is no100-row truncation of the
+recording library, so older records and included contributors stay accessible. Program
+headers retain summaries while folded, and the single original graph/form is moved into
+the chosen entry without recreating it during ordinary interacting polls. Existing handle
+hit areas, shading, cursor, keyboard, bounds and zoom/pan remain in ProfileChart.
+
+A contributor selection signature covers IDs, saved selection/statistics and save times.
+Queued M2 runs detect in-place changes even when contributor IDs are unchanged and replan
+with the updated profile. Already accepted plan evidence and an executing run's frozen
+curve remain unchanged. No generic appliance/program CRUD or broader chart comparisons.
 
 The user explicitly authorized this separate implementation handoff on 8 November 2026.
 Completion criteria: compact

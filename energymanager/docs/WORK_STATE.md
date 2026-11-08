@@ -107,17 +107,38 @@ requirements rather than replaying every historical checkpoint.
   during execution; logs clean. Final45 focused cases and22 recovery cases pass;
   wheel/sdist76 runtime files match with isolated4.5.7 import. Configured fake E2E
   passes25.501s/2019intervals, max control4.219ms/four fake service calls.
-  NEXT: preserve/reconcile concurrent primary docs, integrate/push4.5.7 and monitor
-  exact-commit CI/publication. Remote results belong in ignored artifacts/v457-release-state.json.
-  No live deployment.
+  Released4.5.7 asf901856d on main; CI42472722372 and publication42472722515 succeeded.
+  Remote evidence is in ignored artifacts/v457-release-state.json. No live deployment.
 - **ARCH-018 recording-list/trim implementation — authorized 8 November 2026:** the
   user approved handing off this separate package to the registered V4.5 implementation
   chat. Use the authorized pending section in ARCHITECTURE.md for scope/completion
   criteria. Deliver after the existing M2 task, preserving its scope and release order.
   Handoff delivered to the registered implementation chat on 8 November; implementation
-  records progress and verification here. Implementation received the handoff on
-  8 November and queued it after M2 verification/integration/release. M2 is in progress
-  in its dedicated worktree; no ARCH-018 application changes have started.
+  records progress and verification here. At handoff on8 November, implementation
+  queued this task after M2 verification/integration/release; no ARCH-018 application
+  changes had started then.
+  **Implementation checkpoint (8 November):** M2 completed on main as4.5.7,
+  f901856d; main CI42472722372 and publication42472722515 succeeded. ARCH-018 is
+  implemented separately from that verified base in the registered worktree for4.5.8.
+  Same-identity trim updates preserve raw samples/inclusion and atomic stale-edit guards.
+  Transactional provenance consolidation ranks saved_at, keeps latest trim/inclusion,
+  aliases historical IDs, preserves raw evidence and frozen decisions and is idempotent.
+  No100-record truncation. Foldable program summaries and one inline original editor
+  are implemented; capture signature changes replan queued M2 work without rewriting
+  accepted/running evidence. No broader chart/CRUD scope.
+  Verification:721full Python tests150.18s;88frontend cases; Ruff/mypy52modules pass.
+  Six migration cases cover save time versus insertion/capture date, exclusion, aliases,
+  original-deleted copies, raw conflicts/rollback, unrelated equal-date runs and old-record
+  access. Both browsers verify original44px grips, drag↔seconds, keyboard/cursor, zoom/pan,
+  selection/full recording, exclusive editors and repeated same-ID saves without row growth.
+  Native420px layout fits without horizontal recording-panel overflow; physical touch
+  remains unverified. Final package77runtime files match; isolated4.5.8 import passes.
+  Configured fake E2E25.727s/2019intervals, max control3.811ms/four fake service calls
+  passes. Native closed rows are79px after scoped spacing fixes. NEXT: preserve concurrent
+  primary edits, integrate/push4.5.8 in order and monitor exact-commit CI/publication.
+  Remote results belong in ignored artifacts/v458-release-state.json. No live access,
+  real phone/hardware/provider operation or installation deployment.
+
 - **Setup progress (historical):** local main contains the 4.5.4 release commit; existing verification
   checkpoints remain below. Remote CI/publication has not been independently checked
   during this setup. All 36 affected local documentation links resolve; diff whitespace

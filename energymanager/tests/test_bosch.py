@@ -312,17 +312,15 @@ async def test_api_commands_and_permanent_delete_keep_same_origin_and_confirmati
 
 
 @pytest.mark.asyncio
-async def test_deleting_an_original_does_not_delete_independent_trim_or_other_average_members(bosch):
+async def test_deleting_a_retrimmed_capture_removes_its_single_physical_recording(bosch):
     identity = await cycle(bosch)
     profiles = bosch.profiles
     profiles.accept(identity, {"revision": profiles.settings["revision"], "reviewed": True})
     revised = profiles.revise(identity, {"reviewed": True, "revision": profiles.settings["revision"],
                                        "start_seconds": 5, "end_seconds": 20})
+    assert revised["id"] == identity and len(profiles.detail(identity)["points"]) == 6
     profiles.delete(identity, {"confirmed": True, "revision": profiles.settings["revision"]})
-    assert len(profiles.detail(revised["id"])["points"]) == 6
-    assert (await profiles.profile_detail("dishwasher", ECO))["recording_count"] == 1
-    profiles.delete(revised["id"], {"confirmed": True, "revision": profiles.settings["revision"]})
-    assert profiles.library()["profiles"] == {}
+    assert profiles.library()["profiles"] == {} and profiles.library()["recordings"] == []
 
 
 @pytest.mark.asyncio
