@@ -1,5 +1,42 @@
 # EnergyManager 4 verification
 
+## 4.6.0 — EV-A002 (8 November2026)
+
+Integrated with main4.5.8 (`9daa786`) before release. Combined checks:726Python
+tests151.64s,89frontend tests, Ruff/mypy53modules and all dashboard JS syntax pass.
+The full suite includes Bosch managed execution, profile migration/same-ID trim saves,
+background accounting, EV/ESS admission and new measured-peak/archive regressions.
+Configured synthetic E2E:2019intervals,25.515s accepted solve,3.333ms maximum control
+response, four fake service calls; real worker cancellation, restored-plan admission
+and the measured household-background path pass. All inputs/endpoints are fake/local.
+All78runtime files match the final wheel/sdist; isolated4.6.0 wheel import passes.
+Remote exact-commit CI/publication results belong in ignored artifacts/v460-release-state.json.
+
+
+Grouped measured-peak notifications and archived peak steps are implemented on
+`codex/ev-a002`; V4.5.8 integration was authorized8 November2026.
+The results below are the initial isolated implementation evidence. Combined
+verification is recorded separately before release.
+
+- Fake phone tests cover initialization, billing floor, sliding15-minute grouping,
+  persistent deduplication/retry, offline rises, month reset and independent input failure.
+- Archive/frontend regressions preserve exact step timestamps, zero/reset values,
+  unavailable readings and bounded coarse buckets. New cases use synthetic data.
+- Full Python suite686 passed in146.05s; focused Python30 passed; frontend87 passed.
+  Ruff/mypy49 and changed JS syntax pass. Two old SyntheticHA fakes were updated
+  to expose the adapter's input-reading interface before the final green suite.
+- Configured fake E2E:2019 intervals,25.715s solve,5.592ms maximum control response,
+  four fake service calls, including real worker cancellation and restored-plan admission.
+- Browser inspected recorded Overview steps and final Current month peak label with
+  a clean console. The archive fixture is explicitly synthetic; no installation evidence.
+- Wheel and source distribution build; all73 runtime files match current source.
+  Isolated wheel import reports4.6.0 and loads the measured-peak module.
+  Windows reported temporary sdist-directory cleanup locks after creating the archive;
+  both final artifacts were produced and their runtime bytes verified.
+
+No live HA/database access, real mobile notification, hardware operation or deployment.
+
+
 ## 4.5.8 — ARCH-018 recording-list/trim cleanup (8 November2026)
 
 721Python tests pass150.18s,88frontend cases and Ruff/mypy52modules. Synthetic migration

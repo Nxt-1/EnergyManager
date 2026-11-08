@@ -33,6 +33,7 @@ def seed_history(store: Store, now: datetime, capabilities: Capabilities, *, day
                 observation = Observation(at, capabilities.ev_capacity_kwh * 0.45,
                     capabilities.ess_capacity_kwh * (0.5 + 0.1 * math.sin(seconds / 86400 * 2 * math.pi)),
                     True, house, solar, solar * 0.5, ess_power_kw=0.2,
+                    monthly_peak_kw=2.5 + (day.day - 1) * 0.1 + (0.03 if seconds >= 10 * 3600 + 300 else 0),
                     ev_state_known=not (15 * 3600 <= seconds < 15 * 3600 + 900))
                 body = {**json_data(observation),
                         "provenance": "SYNTHETIC archived graph fixture; no installation measurements",

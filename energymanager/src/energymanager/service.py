@@ -19,6 +19,7 @@ from .demo_plant import DemoPlant
 from .forecasts import demo_snapshot
 from .store import Store
 from .notifications import Notifications
+from .measured_peaks import MeasuredPeaks
 from .worker import PlanningWorker, WorkerExited
 from .hardware import HardwareControl
 from .calendars import CalendarSync
@@ -87,6 +88,7 @@ class Application:
         self.control_replan_key: tuple[str | None, str] | None = None
         self.replanning = ReplanningEvidence()
         self.notifications = Notifications(store)
+        self.measured_peaks = MeasuredPeaks(self)
         self.hardware: HardwareControl | None = None
         self.configuration_error: str | None = None
         self.journeys: Journeys | None = None
@@ -128,9 +130,11 @@ class Application:
         if self.ev_faults:
             self.ev_faults.start()
         self.appliance_profiles.start()
+        self.measured_peaks.start()
 
     async def close(self) -> None:
         self.shutdown = True
+        await self.measured_peaks.close()
         await self.appliance_profiles.close()
         await self.daily_estimates.close()
         if self.journeys:
@@ -286,7 +290,10 @@ class Application:
         last_forecast = None
         while not self.shutdown:
             try:
-                observation = await self.ha.observe(self.snapshot.capabilities)
+                try:
+                    observation = await self.ha.observe(self.snapshot.capabilities)
+                finally:
+                    self.measured_peaks.sample()
                 initial = self.forecast_data is None or (self.observation.quality == "unknown"
                                                         and self.house_mismatch_since is None)
                 if self.house_mismatch_since is not None:

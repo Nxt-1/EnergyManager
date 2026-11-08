@@ -113,10 +113,13 @@ export function observedPoints(state, archive, name, soc = false) {
   for (const sample of state.observed) {
     const at = Date.parse(sample.at);
     if (!Number.isFinite(at)) continue;
-    const valid = sample.quality === (state.demo ? 'SYNTHETIC' : 'measured');
+    const valid = name === 'monthly_peak' ? !state.demo && (sample.monthly_peak_valid ?? sample.quality === 'measured') :
+      sample.quality === (state.demo ? 'SYNTHETIC' : 'measured');
     if (recent.get(at)?.valid) continue;
     let value = null;
-    if (valid && soc) {
+    if (valid && name === 'monthly_peak') {
+      value = Number.isFinite(sample.monthly_peak_kw) && sample.monthly_peak_kw >= 0 ? sample.monthly_peak_kw * 1000 : null;
+    } else if (valid && soc) {
       const capacity = sample[`${name}_capacity_kwh`] ?? state.capabilities[`${name}_capacity_kwh`];
       const energy = sample[`${name}_kwh`];
       if ((name !== 'ev' || sample.ev_state_known !== false) && Number.isFinite(energy) &&
@@ -145,4 +148,16 @@ export function observedPoints(state, archive, name, soc = false) {
   }
   if (previous !== null && Date.parse(state.now) - previous > maxAge) points.push([previous + maxAge, null]);
   return points;
+}
+
+// Duplicate the old value at each boundary so SVG and clipping preserve held values.
+export function stepPoints(points) {
+  const result = [];
+  let previous = null;
+  for (const [at, value] of points) {
+    if (previous !== null) result.push([at, previous]);
+    result.push([at, value]);
+    previous = value;
+  }
+  return result;
 }

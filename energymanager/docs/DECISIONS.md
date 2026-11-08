@@ -1,5 +1,14 @@
 # Current requirements and decisions
 
+- 8 November 2026, EV-A002 / V4.6: the user authorized release after V4.5 was
+  considered complete enough. V4.6 incorporates4.5.8. Measured monthly-peak alerts
+  fire on the first billable rise above the2.5kW floor; further rises remain silent
+  until15minutes without an increase. No final update is sent. State and failed
+  delivery retries survive restart; advance approval remains separate. Recorded
+  sensor history supplies the Overview peak steps, including zeros and month resets.
+  This implements the6November design and7November implementation authorization.
+  No live installation operation or deployment is authorized.
+
 - 8 November 2026, ARCH-018 implementation (4.5.8; offline verified). Saved selections
   update one physical recording in place, preserving raw measurements and inclusion;
   first review still includes the new cycle. Consolidate historical copies by capture

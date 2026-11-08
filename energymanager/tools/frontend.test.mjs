@@ -1613,3 +1613,25 @@ test('folded program headers retain average/count summaries and recording entrie
   ApplianceProfilesPage.prototype.renderRecordings.call(page);
   assert.match(container.innerHTML,/profile-program-recordings" >/);
 });
+
+
+test('monthly peak history holds exact values through rises and resets, breaking at missing readings', async () => {
+  const {stepPoints} = await import('../src/energymanager/assets/graph-history.js');
+  const start = Date.parse('2026-11-01T00:00Z');
+  const archive = {series:{monthly_peak:[[start-20000,3500],[start-10000,4000]]}};
+  const state = {demo:false, now:new Date(start+30000).toISOString(), capabilities:{},
+    policy:{measurement_max_age_seconds:30}, observed:[
+      {at:new Date(start).toISOString(),quality:'measured',monthly_peak_kw:0},
+      {at:new Date(start+10000).toISOString(),quality:'unknown',monthly_peak_valid:true,monthly_peak_kw:1.2},
+      {at:new Date(start+20000).toISOString(),quality:'unknown',monthly_peak_valid:false},
+      {at:new Date(start+30000).toISOString(),quality:'measured',monthly_peak_kw:2.7}]};
+  const points = stepPoints(observedPoints(state, archive, 'monthly_peak'));
+  assert.equal(valueAt(points,start-15000,true).value,3500);
+  assert.equal(valueAt(points,start-5000,true).value,4000);
+  assert.equal(valueAt(points,start+5000,true).value,0);
+  assert.equal(valueAt(points,start+15000,true).value,1200);
+  assert.equal(valueAt(points,start+25000,true),null);
+  assert.equal(valueAt(points,start+30000,true).value,2700);
+  state.demo=true;
+  assert.ok(observedPoints(state,null,'monthly_peak').every(([,v])=>v===null));
+});

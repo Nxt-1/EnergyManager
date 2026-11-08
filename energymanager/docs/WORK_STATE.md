@@ -364,6 +364,33 @@ updates before incorporating them into the V4.5 implementation branch; discuss t
 next V4.5 task in the architecture chat and start implementation only when authorized.
 No application task, commit or publication is implied by this setup record.
 
+### EV planner — V4.6 / EV-A002
+
+- **Architecture chat:** EV Task optimization achritecture, local ID
+  `01a18e54-5380-7703-b13d-8044baa8a7ac`.
+- **Implementation chat:** EV task optimization implementation, local ID
+  `01a1b64b-a1fe-74d2-a393-afe7ed1aeb39`.
+- **Authorization:** EV-A002 authorized7November2026 and assigned V4.6, initially
+  held on its own branch while V4.5 finished. On8November the user authorized merge
+  and release. Other EV packages are outside this release.
+- **Branch:** `codex/ev-a002`, checkout
+  `C:/Users/Arne/Dropbox/Documents/Github/EnergyManager/energymanager/artifacts/worktrees/ev-a002`.
+- **Scope:** persisted measured-peak alert episodes and retryable mobile delivery,
+  independent sensor sampling, recorded Overview peak steps with gaps/resets and
+  separate current-value label. Existing source/peak control policy is unchanged.
+  See [contract](ARCHITECTURE.md#measured-peak-alerts-and-graph-history-ev-a002-460).
+- **Integration:** incorporates V4.5.8 (`9daa786`), retaining managed Bosch scheduling,
+  measured background accounting, compact recording groups and same-ID trim saves.
+  Combined verification:726Python tests151.64s;89frontend cases; Ruff/mypy53modules
+  and dashboard JS syntax pass. Configured fake E2E25.515s/2019intervals, max
+  control3.333ms/four fake calls passes. Wheel/sdist78runtime files match and an
+  isolated4.6.0 wheel import passes. Source and package checks are complete. See VERIFICATION.md. Preserve unrelated pending
+  architecture edits in the primary working tree; they are excluded from this release.
+- **Next:** merge/push4.6.0 and monitor exact-commit CI/image publication. Subsequent
+  remote results go only in ignored `artifacts/v460-release-state.json` and the final
+  reply. No live installation access, real phone/hardware operation or deployment.
+
+
 ## Current checkpoint — saved recording trim correction (4.5.4,31 October2026)
 
 AUTHORIZED: repair the requested draggable recording bounds. User clarified the

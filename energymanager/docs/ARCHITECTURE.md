@@ -1071,15 +1071,13 @@ Third pointers, navigation and disposal safely end pending work. Navigation arro
 move the selected window's width; Now restores two hours past/four ahead. Updates
 cannot overwrite the range during a gesture. Both graphs/session tracks stay aligned.
 
-ARCH-011 is implemented in4.3.9 on the Overview power graph; from4.3.10 a red long-dashed line and
-Month peak label show the current recorded monthly `monthly_peak_kw` input in watts.
-The graph's scale includes that value. HA source changes refresh it immediately;
-unavailable/invalid readings omit the line and show unavailable, while zero is valid.
-No forecast, permission limit, tariff floor or stale observation substitutes for this
-reading. Demo uses only its own current synthetic observation. Accessible description
-and legend identify the current-month15-minute-average grid-import billing peak,
-distinct from instantaneous power. This release changes presentation only, not peak
-permissions, optimizer policy or controller behavior.
+ARCH-011 was introduced in4.3.9. From4.6.0, EV-A002 replaces the
+horizontal line with red long-dashed recorded monthly-peak history. The Current
+month peak label still identifies today's mapped input, independently of the viewed
+historical range. The scale includes the visible history and current value. Zero
+is valid; missing history stays blank. No forecast, permission limit or billing
+floor substitutes for recorded history. The legend and cursor identify the
+15-minute-average grid-import billing peak separately from instantaneous power.
 
 From4.3.10 the Grid box also shows this recorded peak with a peak-chart icon. In native
 HA its own keyboard-accessible button dispatches standard `hass-more-info` with the
@@ -1310,6 +1308,47 @@ deduplicated informational events; the default destination is local SQLite. An o
 configured HA phone notification destination receives deduplicated notices for an
 adopted deliberate peak-increase strategy. Ordinary successful peak suppression stays
 quiet. No external notice was sent in development.
+
+### Measured peak alerts and graph history (EV-A002, 4.6.0)
+
+Send a mobile alert as soon as the meter reports a new billable monthly peak,
+including when household demand alone caused it. Compare the recorded 15-minute
+monthly peak with the prior billable baseline for the same month, including the
+2.5 kW billing floor. Send one immediate alert for the first increase in an
+episode, including after a billing-month reset. Each further billable increase
+within 15 minutes of the preceding one belongs to the same episode and stays
+silent. After 15 minutes without another increase, the next increase starts a
+new episode. Closing an episode sends no final-value update. Advance approval
+for a planned peak increase remains a separate interaction.
+
+On the Overview power graph, show the history of the mapped monthly peak sensor
+as a step series. Each recorded value applies at its timestamp and until the next
+recorded change. Show rises and billing-month resets in their historical positions.
+Use the recorded sensor value for the series, independently of the 2.5 kW alert
+floor. Leave unavailable history as a gap. Keep the quarter-hour peak labelled
+separately from instantaneous grid power and planned limits.
+
+EV-A002 completion requires fake mobile delivery and archive-backed graph tests.
+Detect the measured increase without waiting for an optimization result. Persist
+the last observed month, peak and episode state so repeated reads and restarts
+retain notification deduplication. Keep failed delivery retryable through the
+existing notification mechanism. Start a new billing month against its own floor.
+Verify increases below the floor, the first billable rise, rapid successive rises,
+a rise after 15 quiet minutes, a month reset and missing historical values. The
+graph uses recorded monthly-peak values from the existing measurement history.
+The first valid observation initializes a new installation's baseline. A restored
+baseline can detect a rise that occurred while the application was offline.
+
+Implemented in4.6.0 after integration with4.5.8 on 8 November2026. The input poll records a sensor-specific partial measurement
+in the existing archive even when another input prevents a complete observation.
+An independent notification task retries persisted pending notices through the
+existing destination/deduplication mechanism. No planner result is required. A
+same-month transient sensor decrease does not lower the billable alert baseline.
+Demo mode cannot generate measured-peak alerts or installation history.
+The bounded graph projection preserves exact peak-change timestamps instead of
+power extrema. If a bucket has too many transitions for its point budget, it is
+blank rather than moving or inventing steps; zooming in recovers finer detail.
+
 
 ## Continuity, control and publication
 

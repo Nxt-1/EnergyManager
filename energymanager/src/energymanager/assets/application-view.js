@@ -21,7 +21,7 @@ import {
 import {
   EVSchedulePage
 } from './ev-schedule.js';
-import {GraphHistory, historyDayRange, observedPoints} from './graph-history.js';
+import {GraphHistory, historyDayRange, observedPoints, stepPoints} from './graph-history.js';
 import {GraphCursor, plotInsets, clipSeries} from './graph-cursor.js';
 import {requestError, StatePoller} from './dashboard-client.js';
 import {hasTextSelection, clearTextSelection} from './text-selection.js';
@@ -61,6 +61,7 @@ export async function mountApplication(root, options = {}) {
   });
   const colors = {
     grid: '#dc2626',
+    monthly_peak: '#b91c1c',
     ess: '#007ac2',
     solar: '#e4ac19',
     house: '#8c65c8',
@@ -222,6 +223,8 @@ export async function mountApplication(root, options = {}) {
       name,
       ...points(name, soc)
     }));
+    if (!soc && page === 'overview') series.push({name: 'monthly_peak', step: true, planned: [],
+      observed: stepPoints(observedPoints(state, graphHistory.data, 'monthly_peak'))});
     for (const item of series) for (const kind of ['observed', 'planned'])
       item[kind] = clipSeries(item[kind], start, end);
     const visible = series.flatMap(s => [...s.planned, ...s.observed]).filter(p => p[0] >= start && p[0] <=
@@ -269,19 +272,18 @@ export async function mountApplication(root, options = {}) {
         }
         const lineWidth = soc ? (kind === 'observed' ? 2.8 : 1.8) : (kind === 'observed' ? 1.6 : 1.2);
         svg +=
-          `<path d="${d}" fill="none" stroke="${colors[s.name]}" stroke-width="${lineWidth}" ${kind==='planned'?'stroke-dasharray="6 4" opacity=".85"':''}><title>${esc(s.name)} · ${kind}</title></path>`;
+          `<path d="${d}" fill="none" stroke="${colors[s.name]}" stroke-width="${lineWidth}" ${s.name==='monthly_peak'?'stroke-dasharray="8 5"':kind==='planned'?'stroke-dasharray="6 4" opacity=".85"':''}><title>${esc(s.name === 'monthly_peak' ? 'Monthly peak · 15-minute average' : s.name)} · ${kind}</title></path>`;
       }
     const now = Date.parse(state.now);
     if (now >= start && now <= end) svg +=
       `<line x1="${x(now)}" x2="${x(now)}" y1="${top}" y2="${height-bottom}" stroke="#718697" stroke-dasharray="3 3"/>`;
     if (!soc && page === 'overview') {
-      const label = peak === null ? 'Monthly peak unavailable' : `Month peak · ${Math.round(peak)} W`;
+      const label = peak === null ? 'Monthly peak unavailable' : `Current month peak · ${Math.round(peak)} W`;
       const month = new Intl.DateTimeFormat('en-GB', {timeZone: state.policy.timezone, month: 'short', year: 'numeric'}).format(new Date(state.now));
       const description = peak === null ? 'Current recorded monthly capacity peak unavailable.' :
         `${state.demo ? 'Synthetic demo: ' : ''}Current recorded ${month} grid-import peak: ${Math.round(peak)} W, a 15-minute average, not instantaneous power, forecast peak or permission limit.`;
       svg += `<desc>${esc(description)}</desc>`;
-      if (peak !== null) svg += `<line class="monthly-peak-line" data-peak-watts="${peak}" x1="${left}" x2="${width-right}" y1="${y(peak)}" y2="${y(peak)}"><title>${esc(description)}</title></line>`;
-      svg += `<text class="monthly-peak-label" x="${width-right-4}" y="${peak === null ? top+15 : Math.max(top+15,y(peak)-7)}" text-anchor="end"><title>${esc(description)}</title>${esc(label)}</text>`;
+      svg += `<text class="monthly-peak-label" x="${width-right-4}" y="${top+15}" text-anchor="end"><title>${esc(description)}</title>${esc(label)}</text>`;
     }
     return svg + '<g class="cursor-overlay" pointer-events="none"></g></svg><div class="cursor-values" role="status" hidden></div>';
   }

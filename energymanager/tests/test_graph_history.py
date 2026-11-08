@@ -125,3 +125,36 @@ async def test_history_api_is_validated_and_worker_does_not_block_state(tmp_path
         assert response.status == 503
         assert "unavailable" in (await response.json())["error"]
     store.close()
+
+
+def test_monthly_peak_keeps_exact_steps_reset_zero_and_independent_missing_values(tmp_path):
+    store = Store(tmp_path / "synthetic.sqlite")
+    at = datetime(2026, 10, 31, 22, 59, tzinfo=UTC)
+    for second, value in ((0, 3.5), (10, 3.5), (17, 4), (21, 4.1), (60, 0), (70, 1.2), (80, None), (90, 2.7)):
+        store.event("measurement", {"at": at + timedelta(seconds=second), "quality": "unknown",
+                    "monthly_peak_valid": value is not None, "monthly_peak_kw": value})
+    result = archive(store, at + timedelta(seconds=5), at + timedelta(seconds=100), points=400)
+    points = dict(result["series"]["monthly_peak"])
+    assert points[(at + timedelta(seconds=5)).timestamp() * 1000] == 3500
+    assert points[(at + timedelta(seconds=17)).timestamp() * 1000] == 4000
+    assert points[(at + timedelta(seconds=21)).timestamp() * 1000] == 4100
+    assert points[(at + timedelta(seconds=60)).timestamp() * 1000] == 0
+    assert points[(at + timedelta(seconds=70)).timestamp() * 1000] == 1200
+    assert points[(at + timedelta(seconds=80)).timestamp() * 1000] is None
+    assert points[(at + timedelta(seconds=90)).timestamp() * 1000] == 2700
+    assert points[(at + timedelta(seconds=100)).timestamp() * 1000] == 2700
+    assert all(value is None for _, value in result["series"]["house"])
+    assert all(value is None for _, value in archive(store, at, at + timedelta(seconds=100), demo=True)["series"]["monthly_peak"])
+    store.close()
+
+
+def test_peak_history_coarse_buckets_never_shift_or_invent_steps_and_gaps(tmp_path):
+    store = Store(tmp_path / "synthetic.sqlite")
+    at = datetime(2026, 11, 7, tzinfo=UTC)
+    for second in range(120):
+        store.event("measurement", {"at": at + timedelta(seconds=second), "quality": "measured",
+                                   "monthly_peak_kw": second / 10})
+    result = archive(store, at, at + timedelta(hours=1))
+    assert len(result["series"]["monthly_peak"]) <= 100
+    assert result["series"]["monthly_peak"][0][1] is None  # Overloaded bucket stays unknown.
+    store.close()

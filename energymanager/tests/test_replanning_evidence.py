@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import timedelta
+from types import SimpleNamespace
 import asyncio
 
 import pytest
@@ -198,6 +199,8 @@ async def test_real_input_loop_queues_correction_without_replanning_or_revoking_
             "provenance": "SYNTHETIC", "intervals": json_data(s.intervals)}
 
     class SyntheticHA:
+        inputs = SimpleNamespace(readings={})
+
         async def observe(self, capabilities):
             return replace(s.observation, at=clock[0], house_kw=1.4)
 
@@ -272,6 +275,8 @@ async def test_new_forecast_is_queued_without_replacing_an_active_plan(tmp_path,
     clock = [s.observation.at]
 
     class SyntheticHA:
+        inputs = SimpleNamespace(readings={})
+
         async def observe(self, capabilities):
             return replace(s.observation, at=clock[0])
 

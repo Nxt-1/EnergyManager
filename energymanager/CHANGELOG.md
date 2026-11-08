@@ -1,3 +1,9 @@
+## 4.6.0 — Measured monthly peak alerts and history
+
+- Alert once per measured billable peak episode, retaining restart deduplication and delivery retries.
+- Show recorded monthly-peak steps, resets and missing history on the Overview graph.
+- Retain V4.5.8 Bosch scheduling and recording behavior.
+
 ## 4.5.8 — Compact recording library and in-place trims
 
 - Group compact recording entries under foldable programs, retaining average/count summaries.

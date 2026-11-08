@@ -1,5 +1,23 @@
 # Run, configure, review and roll back
 
+## Measured peak alerts and history (4.6.0 / EV-A002)
+
+Use the existing mapped monthly-peak sensor and configured phone notification
+destination. The first valid read initializes the baseline. Later billable rises
+above the 2.5 kW floor alert immediately, including household-only peaks. Further
+rises stay silent until there have been 15 minutes without an increase. Restart
+retains the baseline, quiet-period state and pending delivery retries. No final
+summary is sent. Advance peak approval remains a separate interaction. Without a
+phone destination, the existing local-notice behavior applies.
+
+Overview shows recorded monthly-peak steps with red long dashes. The cursor reports
+Monthly peak (15 min); the Current month peak label identifies the current reading.
+History uses the application's existing measurement archive, without importing HA
+Recorder data. Missing data and overfull coarse buckets remain blank; zoom in for
+more detail. Synthetic demo readings cannot send measured-peak alerts.
+
+V4.6 incorporates4.5.8. Release publication does not deploy to the installation.
+
 ## Recording library and trims (4.5.8 / ARCH-018)
 
 Expand an appliance, then a program. Folded program headers retain recording count,

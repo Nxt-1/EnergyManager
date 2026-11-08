@@ -496,8 +496,10 @@ discussed. This entry does not authorize implementation.
 
 ## ARCH-025 — Peak-power line from the actual sensor
 
-Recorded: 2 November 2026. Status: **deferred**, requested by the user.
+Recorded: 2 November 2026. Status: **implemented in4.6.0 (EV-A002)** on 8 November2026.
 
-Update the peak-power line to use the actual sensor instead of a static line. The
-specific sensor and display behavior remain to be confirmed with the user. This entry
-does not authorize implementation.
+Show the mapped monthly-peak sensor's recorded history as Overview graph steps,
+including billable rises, zeros, month resets and missing-history gaps. This shares
+EV-A002 with grouped measured-peak mobile alerts. The2.5kW alert billing floor
+never substitutes for actual plotted sensor values.
+See [ARCHITECTURE.md](ARCHITECTURE.md#measured-peak-alerts-and-graph-history-ev-a002-460).

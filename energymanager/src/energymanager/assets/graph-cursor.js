@@ -339,7 +339,7 @@ export class GraphCursor {
       for (const series of model.series) {
         const row = table.insertRow();
         const label = row.insertCell();
-        label.textContent = series.name === 'ev' || series.name === 'ess' ? series.name.toUpperCase() :
+        label.textContent = series.name === 'monthly_peak' ? 'Monthly peak (15 min)' : series.name === 'ev' || series.name === 'ess' ? series.name.toUpperCase() :
           series.name[0].toUpperCase() + series.name.slice(1);
         label.style.color = this.colors[series.name];
         for (const [kind] of columns) {
