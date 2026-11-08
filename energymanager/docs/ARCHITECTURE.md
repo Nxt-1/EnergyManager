@@ -1352,6 +1352,187 @@ blank rather than moving or inventing steps; zooming in recovers finer detail.
 
 ## Continuity, control and publication
 
+### Live peak protection priority (EV-A004, 4.6.1)
+
+When an unexpected load change threatens the authorized quarter-hour peak, first
+reduce EV charging by the amount needed and pause it if reduction is insufficient.
+If the projected peak still exceeds the limit with EV charging paused, use
+available ESS discharge within physical and safety limits. The current quarter
+takes priority over a later forecast peak, so use energy reserved for that later
+peak as needed. Base these decisions on the projected quarter average, including
+metered energy already imported. Issue the protective actions promptly if both
+are needed.
+
+Project remaining quarter consumption using fresh measured load and actual EV/ESS
+response, the measured P1 prefix and the time left. Account for sustained demand
+above forecast, battery discharge availability and actuator response delay. A
+forecast load decrease or an unconfirmed reduction command cannot by itself fund
+extra charging headroom. These protections apply during recalculation as well.
+Reduce current without a stop when the supported range permits. Pause when the
+necessary reduction is below minimum charging power. Ordinary source, permission,
+freshness, fault and generation guards remain authoritative.
+
+EV-A004 completion requires deterministic offline cases with exact quarter energy
+and fake actuator feedback. Cover sustained unexpected load with empty ESS, usable
+ESS with a future-peak reserve, a spike near quarter end, delayed EV reduction,
+meter-read delays, quarter reset and a legitimate permitted short pulse. Check
+that controlled charging adds no avoidable excess when physical curtailment is
+still possible. Attribute an unavoidable remainder explicitly when the household
+alone exceeds the available grid and battery capacity. Verify 3,500 W automatic
+permission, reuse of an incurred higher peak and approval for a higher proposed
+limit. Link actual measured increases to EV-A002 notifications.
+
+### Running EV sessions and replacement plans (EV-A003, 4.6.1)
+
+Continue an active EV session while authorized charging work remains and live
+source, peak and safety limits permit it. A measured state of charge ahead of
+the forecast trajectory is irrelevant to the decision to interrupt charging.
+Use the active task's authorized target or quantity, source scope and live guards
+to decide when to stop. A later unrelated requirement does not extend that task's
+authority.
+
+A materially better plan may interrupt an active EV session. If a replacement
+would stop an active session and restart it within 15 minutes, check whether
+continued charging, including at a lower permitted current, can achieve the same
+required outcome within the applicable limits. Prefer that continuation when it
+can. Live protection may still pause immediately. Preserve the established
+preference to deliver required grid charging earlier when waiting offers no
+real benefit. Revisit how to express that preference under ARCH-026.
+
+Evaluate continuation alternatives inside the frozen-snapshot planning process.
+Keep the original admission checks and independent live control. The replacement
+comparison uses the same required outcomes, optional benefit, shared financial
+allowance and source/peak constraints. A valid checked continuation remains a
+candidate on timeout. Report an unfinished comparison accurately.
+
+EV-A003 completion requires the reproduced SoC-step case to continue charging
+below its task target, plus stops at the task target, source loss, a genuine peak
+threat and revoked authority. Verify an unchanged command throughout a full
+recalculation, continuation through an equivalent replacement, the 15-minute
+stop/restart alternative and a justified PV-related interruption. Exercise active
+holds and partial slots with fake charger acknowledgements and existing restart
+timers. Archive the stop reason and plan identity so execution gaps can be traced.
+
+### EV planning candidates and deadline safeguard (EV-A005 / ARCH-026, 4.6.1)
+
+For the next required EV deadline, the initial search should consider all usable
+forecast PV windows before that deadline while the EV is expected to be connected.
+Exclude known away or unplugged periods from the EV charging choices. Current
+models already forbid charging in unavailable intervals. Evaluate omitting the
+fixed EV charging choices from model construction while retaining battery energy
+accounting, trip withdrawals and household and ESS decisions for those intervals.
+Useful partial PV charging can justify a split between solar and necessary grid
+charging. Use the full PV forecast for economic planning. Check deadline feasibility
+with a 20% margin on the remaining usable PV. Waiting for solar is permitted while
+enough charging capacity remains under the authorized peak and availability limits
+to meet that cautious requirement. Bring required grid charging forward before
+further waiting would make the cautious requirement infeasible. Use a continuous
+session where feasible. When useful PV is absent, retain early required charging.
+
+For deadline protection, apply the user's chosen 20% margin to the remaining
+usable PV forecast. Credit 80% of the PV opportunity before the deadline while
+the EV is available. Measured energy already delivered receives full credit.
+Identify earlier grid charging justified by this safeguard against the cautious
+feasibility calculation. Forecast economics continue to use the full PV forecast.
+The physical and source audits must retain the distinction between the forecast
+trajectory and the deadline safeguard when checking minimum necessary grid energy.
+
+Produce a feasible fallback certificate for the next known requirement using the
+cautious PV opportunity, supported currents/phases, home availability, held
+commands, quarter import already consumed and authorized peak limits. Retain
+intermediate deadlines and trip withdrawals. Known stored energy receives its
+ordinary source-specific credit. Future PV is credited only when physically usable
+before the deadline, after conversion losses and competing protected allocations.
+Apply the 20% margin to that future usable opportunity. A total daily generation
+estimate alone cannot establish feasibility. Store the fallback's activation and
+required-progress conditions with the accepted task so live control can use them
+within that task's authority. No optimizer is run in the fast loop.
+
+Each nominal and cautious candidate must pass physical and source checks using its
+own forecast context. Extra grid remains bounded by actual required charging in
+that candidate's source ledger. Preserve the existing causal-deficit check against
+the allocated sources. Nominal economics use the full forecast, including the
+allocation of any PV beyond the fallback's needs. Keep the two forecast contexts
+and their evidence inspectable.
+
+If the normal forecast can meet a deadline within the permitted peak but the
+20% cautious case cannot, retain that peak limit and warn that the margin cannot
+be met. Send one mobile notice and show a persistent in-app warning for the
+affected goal/deadline while unresolved. Forecast refreshes and solver IDs do not
+repeat the notice. Clear the warning when the margin is restored or the goal is
+fulfilled or removed. A nominal shortfall retains the existing best-effort and
+peak-approval process. A timeout is an unverified assessment, not an infeasibility
+proof. Preserve any valid fallback already obtained.
+
+Offer coherent charging candidates before the main optional search using the
+planner's newly generated reference. For a grid-only next requirement, first
+offer a feasible early continuous single-phase session where supported. Handle
+held commands, fractional boundary intervals and exact delivered energy. A short
+optional pass may keep that checked session fixed while all source and ESS
+dispatch remains joint. Then allow the wider search and compare all retained
+valid candidates using one shared economic/cash reference. Avoid rebasing the
+allowance between attempts. A restriction that cannot supply a checked candidate
+must release its options within the same global budget. Preserve useful PV splits.
+
+Explore deriving EV energy bounds backward from deadlines, using the maximum
+charge that can still be delivered while available. Also explore tighter current
+and source bounds from physical capabilities, authorized quarter-hour import and
+measured import already used in the first quarter. Bounds used to rule out a
+choice must preserve every feasible outcome under the existing rules. Forecast
+preferences can narrow an initial search and need an explicit widening path.
+
+EV-A005 completion requires fresh snapshot replays covering grid-only
+and mixed PV/grid requirements, trips, an active hold and partial slots. Verify
+that waiting respects the cautious deadline, earlier grid charging has a recorded
+justification, and a wider search retains a checked usable plan on timeout. Compare
+continuity at equal delivered EV energy as well as the value of extra optional PV.
+Use the existing seven-day, five-minute and 120-second limits and the shared cost
+allowance. The implementation selects stage time shares from measured results.
+Retain raw statuses, scope and unresolved search diagnostics. Use paired baselines
+and report energy, cost, peak and starts together. The earlier matched-energy
+comparison and its rejected rolling-cost candidate remain regressions. The
+synthetic deadline-certificate study covers spare and tight post-PV capacity,
+travel, no PV, held partial slots, known stored solar, physical infeasibility and
+a margin-only shortfall. Complete this contract before replacing production stages.
+
+Implementation contracts (4.6.1):
+
+- `LivePeak` retains the greater of the valid P1 prefix and conservative measured
+  integration, sustains measured household demand and credits confirmed ESS response.
+  Unconfirmed EV reductions reserve the measurement-watchdog plus control-period
+  allowance through the next-quarter tail. This is an engineering projection, not
+  measured installation latency. EV cuts precede physical ESS support, including
+  future-peak reserves. Command evidence identifies the task, plan and unavoidable remainder.
+- `FastControl` retains the contiguous task endpoint, source and own deadline when
+  physical response leaves energy undelivered. Later goals cannot extend its quantity.
+  Forecast progress cannot pause it. Frozen replacement review tests a continued
+  supported phase at equal boundary energy within the carried cash/economic allowance.
+- `charging_candidates` offers a bounded phase-one grid reference before unrestricted
+  optional search. Source/ESS choices stay joint; useful PV and travel retain wider
+  choices. Backward stock floors use physical available capacity and withdrawals;
+  relaxed-service diagnostics are excluded. Dense unavailable-slot indexing remains:
+  explicit fixing produced identical presolved counts and no demonstrated gain.
+- `deadline_guard` adds an explicit cautious source context. Separately conserved
+  protected future household stock starts at zero, serves required household service
+  and binding reserves, and cannot supply EV. Remaining future AC/DC PV receives80%
+  credit once before conversion/storage. Initial known stock retains ordinary credit.
+  Independent physical/source/causal audits check each candidate in its own context.
+  Restricted prefix witnesses preserve later required stock and accepted appliance
+  timing; only full joint infeasibility establishes a margin-only shortfall. A feasible
+  alternative needing different accepted appliance timing remains unverified for execution.
+  No-PV cases retain the checked nominal schedule.
+- Bounded latest-start searches retain audited incumbents on timeout. Certificates
+  store activation, progress, scope and reservations. `DeadlineExecution` uses measured
+  progress without optimization or added authority; first activation requests one
+  ordinary replan. Prior certified fallback survives an unverified refresh only with
+  matching goal/capabilities/policy/appliance, fresh forecast and repeated audit.
+- `DeadlineWarnings` persists proved margin failures and deduplicates delivery per
+  goal/deadline/destination across refreshes/restarts, retries failures and clears
+  restored, fulfilled or removed requirements. The shared warning shows the retained
+  limit and notification state without an approval button. Nominal shortfalls retain
+  existing approvals. Active-continuation and cautious-certificate time are reserved
+  within the global120s budget; raw attempts and unresolved scope stay inspectable.
+
 ### Snapshot planning and live execution — accepted 28 October 2026
 
 **Implemented in4.4.4.** This is the current contract. It supersedes the4.4.1

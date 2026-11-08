@@ -137,6 +137,7 @@ class JointModel:
         tight_ceilings: bool = False,
     ) -> None:
         self.snapshot = snapshot
+        self.deadline_bounds: dict[str, int] | None = None
         self.linear = LinearModel()
         self.optional = optional
         self.seed_issue: str | None = None

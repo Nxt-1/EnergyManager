@@ -364,16 +364,16 @@ updates before incorporating them into the V4.5 implementation branch; discuss t
 next V4.5 task in the architecture chat and start implementation only when authorized.
 No application task, commit or publication is implied by this setup record.
 
-### EV planner — V4.6 / EV-A002
+### EV planner — V4.6 / EV-A002–EV-A005
 
 - **Architecture chat:** EV Task optimization achritecture, local ID
   `01a18e54-5380-7703-b13d-8044baa8a7ac`.
 - **Implementation chat:** EV task optimization implementation, local ID
   `01a1b64b-a1fe-74d2-a393-afe7ed1aeb39`.
-- **Authorization:** EV-A002 authorized7November2026 and assigned V4.6, initially
+- **EV-A002 historical authorization:** EV-A002 authorized7November2026 and assigned V4.6, initially
   held on its own branch while V4.5 finished. On8November the user authorized merge
-  and release. Other EV packages are outside this release.
-- **Branch:** `codex/ev-a002`, checkout
+  and release. This describes the historical4.6.0 scope.
+- **EV-A002 branch:** `codex/ev-a002`, checkout
   `C:/Users/Arne/Dropbox/Documents/Github/EnergyManager/energymanager/artifacts/worktrees/ev-a002`.
 - **Scope:** persisted measured-peak alert episodes and retryable mobile delivery,
   independent sensor sampling, recorded Overview peak steps with gaps/resets and
@@ -386,9 +386,48 @@ No application task, commit or publication is implied by this setup record.
   control3.333ms/four fake calls passes. Wheel/sdist78runtime files match and an
   isolated4.6.0 wheel import passes. Source and package checks are complete. See VERIFICATION.md. Preserve unrelated pending
   architecture edits in the primary working tree; they are excluded from this release.
-- **Next:** merge/push4.6.0 and monitor exact-commit CI/image publication. Subsequent
-  remote results go only in ignored `artifacts/v460-release-state.json` and the final
-  reply. No live installation access, real phone/hardware operation or deployment.
+- **EV-A002 outcome:** integrated and published as4.6.0 on main6031411. Exact-commit
+  remote evidence remains in the ignored4.6.0 release checkpoint.
+
+- **EV-A003–EV-A005 authorization:** on8November2026 the user asked the paired
+  architecture chat to schedule all three packages for implementation in80minutes.
+  The one-time start was dispatched to this registered chat and removed. A later
+  continuation confirmed completing acceptance and release readiness under the
+  standing commit/push/publication authorization. No live operations are authorized.
+- **Branch/checkout:** `codex/ev-a003-005`, based on main6031411 (4.6.0, including4.5.8),
+  at `C:/Users/Arne/Dropbox/Documents/Github/EnergyManager/energymanager/artifacts/worktrees/ev-a003-005`.
+  Latest primary shared requirements were read; unrelated pending docs are excluded
+  from this release and will be preserved in the primary checkout.
+- **Implemented for4.6.1:** A003 task-quantity continuity, held/partial/recalculation
+  behavior and frozen15-minute replacement review; A004 measured-prefix, sustained-load
+  and response-aware quarter protection, EV reduction before physical ESS reserve;
+  A005 coherent reference candidates, safe backward physical bounds, explicit cautious
+  AC/DC/ESS source contexts, independently audited certificates, precomputed activation,
+  retained checked fallback on unverified refresh and persistent margin warnings.
+  Native and standalone use the same warning with retained peak and delivery status.
+- **EV-Q020 resolved:** protect required service, hard reserves and binding commitments,
+  not arbitrary optional nominal ESS dispatch. Future PV receives80% credit once
+  through conversion/storage; initial known stock retains ordinary source credit.
+  A restricted witness proves feasibility only; general infeasibility requires the
+  wider joint model. Differing accepted appliance timing is not executable fallback.
+  Physical, source, causal and execution-metadata audits remain independent.
+- **Verified:**755Python tests159.71s;89frontend cases; Ruff/mypy59modules, JS syntax
+  and CLI4.6.1 pass. All nine serial fresh/conditioned seven-day replays pass independent
+  audits within120s; every updated result carries a certified fallback. The equal-energy
+  pair retains11starts at identical cost, so no equal-energy continuity gain is claimed.
+  Raw attempts and unresolved search windows remain in private evidence. Configured
+  fake E2E25.806s/2019intervals/max4.269ms/four fake calls passes. Native/standalone
+  warning and existing measured-peak graph inspected with clean logs. Wheel/sdist
+  84runtime files match; isolated4.6.1 wheel imports/version/assets pass.
+- **Final delivery check:**7focused deadline/planning-attention cases pass4.26s;
+  concurrent adoption/retry delivery is serialized. Ruff/mypy remain green.
+- **Routed integration:**61.117s/2023intervals/max4.068ms/four fake calls, two calendar
+  imports and six local route requests pass. Physical-infeasibility/nominal-shortfall
+  and historical matched-energy retained-plan audits pass. All local release gates
+  are complete; no required package implementation remains.
+- **Next:** commit/merge and push4.6.1, then monitor exact-head CI/image publication. Remote results belong only
+  in ignored `artifacts/ev-a003-005-state.json` and the final reply. No installation
+  deployment, live HA/database, real phone delivery or hardware operation performed.
 
 
 ## Current checkpoint — saved recording trim correction (4.5.4,31 October2026)

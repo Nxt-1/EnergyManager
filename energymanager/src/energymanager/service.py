@@ -20,6 +20,7 @@ from .forecasts import demo_snapshot
 from .store import Store
 from .notifications import Notifications
 from .measured_peaks import MeasuredPeaks
+from .deadline_warnings import DeadlineWarnings, retain_checked_fallback
 from .worker import PlanningWorker, WorkerExited
 from .hardware import HardwareControl
 from .calendars import CalendarSync
@@ -89,6 +90,8 @@ class Application:
         self.replanning = ReplanningEvidence()
         self.notifications = Notifications(store)
         self.measured_peaks = MeasuredPeaks(self)
+        self.deadline_warnings = DeadlineWarnings(self)
+        self.deadline_activation_key: str | None = None
         self.hardware: HardwareControl | None = None
         self.configuration_error: str | None = None
         self.journeys: Journeys | None = None
@@ -131,10 +134,12 @@ class Application:
             self.ev_faults.start()
         self.appliance_profiles.start()
         self.measured_peaks.start()
+        self.deadline_warnings.start()
 
     async def close(self) -> None:
         self.shutdown = True
         await self.measured_peaks.close()
+        await self.deadline_warnings.close()
         await self.appliance_profiles.close()
         await self.daily_estimates.close()
         if self.journeys:
@@ -506,6 +511,7 @@ class Application:
                 else snapshot
             )
             if result.get("valid"):
+                retain_checked_fallback(result, self.accepted, effective)
                 result, errors = admit(effective, result, self.observation, self.now())
             else:
                 errors = [result.get("reason", "No incumbent")]
@@ -534,6 +540,8 @@ class Application:
             self.finish_planning("ready")
             self.resolve_planning_issue(result["id"])
             self.update_issues(result)
+            self.deadline_warnings.update(result)
+            await self.deadline_warnings.deliver()
             await self.notify_permission_issues()
             for reason in result["reasons"]:
                 if reason["kind"] == "peak_precharge":
@@ -672,6 +680,11 @@ class Application:
             except (OSError, RuntimeError) as exc:
                 self.error = f"Actuator unavailable: {type(exc).__name__}: {exc}"
                 self.store.event("actuator_error", {"reason": self.error, "generation": self.revision})
+            activation = self.controller.deadline_execution.activation_key
+            if activation is not None and activation != self.deadline_activation_key:
+                self.deadline_activation_key = activation
+                self.store.event("deadline_fallback_activated", {"scope": activation, "plan_id": command.plan_id, "at": at})
+                self.request_plan("deadline_fallback_activated")
             key = (command.plan_id, command.reason)
             if not command.replan:
                 self.control_replan_key = None
@@ -682,7 +695,7 @@ class Application:
             self.current_command = command
             self.store.event(
                 "command_intent" if getattr(self.actuator, "enabled", False) else "commanded_dry_run",
-                self.last_command,
+                {**self.last_command, "peak_protection": self.controller.peak_evidence},
             )
             self.response_seconds.append(monotonic() - before)
             if len(self.response_seconds) > 10000:
@@ -923,7 +936,7 @@ class Application:
             "accepted": self.accepted,
             "ev_plan_valid": self.ev_valid,
             "plan_recovery": self.plan_recovery.view(),
-            "issues": list(self.store.get("issues", {}).values()) + (
+            "issues": list(self.store.get("issues", {}).values()) + self.deadline_warnings.view() + (
                 [planning_issue] if planning_issue else []),
             "command": self.last_command,
             "observed": self.observed,

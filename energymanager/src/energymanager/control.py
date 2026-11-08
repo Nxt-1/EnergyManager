@@ -10,6 +10,8 @@ from collections.abc import Callable
 import asyncio
 
 from .domain import Capabilities, Observation, Policy, instant
+from .live_peak import LivePeak
+from .deadline_execution import DeadlineExecution, required_energy
 from .goe import GoEReadings, GoEControl, RESUME_DELAY_SECONDS
 
 
@@ -38,6 +40,10 @@ class FastControl:
         self.estimated_quarter_kwh = 0.0
         self.last_import_kw = 0.0
         self.appliance_peak_limit: float | None = None
+        self.peak = LivePeak(capabilities, policy)
+        self.deadline_execution = DeadlineExecution()
+        self.ev_task: dict[str, Any] | None = None
+        self.peak_evidence: dict[str, Any] = {}
 
     def tick(
         self,
@@ -58,6 +64,7 @@ class FastControl:
             "settling",
         )
         if not fresh:
+            self.peak_evidence = {"at": at.isoformat(), "unavailable": "Measurements stale or settling"}
             return Command(
                 generation,
                 None,
@@ -71,6 +78,7 @@ class FastControl:
                  else "Measurements stale; new commands restricted"),
                 True,
             )
+        plan = self.deadline_execution.select(plan, o, at, ev_valid)
         position = (
             next(
                 (t for t, i in enumerate(plan["intervals"]) if instant(i["start"]) <= at < instant(i["end"])),
@@ -85,6 +93,15 @@ class FastControl:
         conditional = False
         dc_reserved = 0.0
         protected_solar = 0.0
+        task_complete = False
+        task_target: float | None = None
+        source_limited = False
+        carried_grid = False
+        execution_key = ((plan or {}).get("id"), self.deadline_execution.active)
+        if self.ev_task and (self.ev_task["execution_key"] != execution_key
+                             or at >= instant(self.ev_task["deadline"])
+                             or o.ev_kwh >= self.ev_task["target"] - 1e-6 or not ev_valid):
+            self.ev_task = None
         if plan and position is not None:
             f = plan["flows"]
             eligible = [
@@ -139,14 +156,50 @@ class FastControl:
                 floor += protected_solar + (after["grid_house_kwh"] if ess_valid else 0)
             conditional = any(r["kind"] == "joint_capture" for r in plan["reasons"])
             dc_reserved = f["dc_store"][position]
-            if o.ev_kwh >= f["ev_energy"][position + 1] + 0.02:
+            if self.ev_task and at >= instant(self.ev_task["scheduled_end"]):
                 planned_ev = 0.0
+            if planned_ev > 1e-6:
+                task_end = position
+                while task_end + 1 < len(plan["intervals"]) and sum(
+                    f[name][task_end + 1] for name in ("pv_ev", "grid_ev", "solar_dis_ev")
+                ) > 1e-5:
+                    task_end += 1
+                target = f["ev_energy"][task_end + 1]
+                end_at = plan["intervals"][task_end]["end"]
+                supporting: list[str] = next((session.get("goal_ids", []) for session in plan.get("sessions", [])
+                                   if session.get("resource") == "ev" and instant(session["start"]) <= at
+                                   < instant(session["end"])), [])
+                deadlines = [g["deadline"] for g in plan["goals"] if g["id"] in supporting]
+                if not deadlines:
+                    deadlines = [g["deadline"] for g in plan["goals"] if instant(g["deadline"]) >= instant(end_at)]
+                    deadlines = [min(deadlines)] if deadlines else []
+                expiry = max(deadlines) if deadlines else end_at
+                if self.deadline_execution.active:
+                    target = min(target, required_energy(plan["deadline_guard"], at))
+                self.ev_task = {"plan_id": plan["id"], "execution_key": execution_key,
+                                "target": target, "deadline": expiry, "scheduled_end": end_at,
+                                "power": planned_ev, "phases": phases, "grid": f["grid_ev"][position] > 1e-5}
+            elif self.ev_task and plan["intervals"][position]["available"]:
+                # Finish this task's remaining quantity after a late physical response.
+                # A later goal never raises this saved endpoint; a replacement is reviewed
+                # in the frozen planner and resets the task identity above.
+                planned_ev = self.ev_task["power"]
+                phases = self.ev_task["phases"]
+                carried_grid = self.ev_task["grid"]
+            if self.ev_task:
+                task_target = self.ev_task["target"]
+                task_complete = o.ev_kwh >= task_target - 1e-6
+                if task_complete:
+                    planned_ev = 0.0
+                else:
+                    planned_ev = min(planned_ev, max(0.0, task_target - o.ev_kwh) / c.ev_efficiency
+                                     / max(p.control_period_seconds, 1) * 3600)
             forecast_fresh = (
                 at - instant(plan.get("forecast_at", at.isoformat()))
             ).total_seconds() <= p.forecast_max_age_seconds
             if (not forecast_fresh or not conditional_valid) and not eligible:
                 planned_ev = 0.0
-            if f["grid_ev"][position] > 1e-5:
+            if f["grid_ev"][position] > 1e-5 or carried_grid:
                 limit = max(
                     [baseline, p.automatic_peak_kw]
                     + [
@@ -169,39 +222,7 @@ class FastControl:
                 limit = min(limit, ess_limit) if f["grid_ev"][position] > 1e-5 else ess_limit
         if self.appliance_peak_limit is not None:
             limit = max(limit,self.appliance_peak_limit)
-        quarter_end = at.replace(minute=at.minute // 15 * 15, second=0, microsecond=0) + timedelta(minutes=15)
         period_h = max(p.control_period_seconds, 1) / 3600
-        quarter_start = quarter_end - timedelta(minutes=15)
-        if self.last_meter_at != o.at:
-            self.estimated_quarter_kwh = o.quarter_import_kwh if o.at >= quarter_start else 0.0
-            self.last_meter_at = o.at
-        elif self.last_tick is not None:
-            elapsed = max(0, (at - max(self.last_tick, quarter_start)).total_seconds()) / 3600
-            if self.last_tick < quarter_start:
-                self.estimated_quarter_kwh = 0.0
-            self.estimated_quarter_kwh += self.last_import_kw * elapsed
-        future_reservation = 0.0
-        if plan and position is not None:
-            after_response = at + timedelta(hours=period_h)
-            for t in range(position, len(plan["intervals"])):
-                interval = plan["intervals"][t]
-                left, right = (
-                    max(after_response, instant(interval["start"])),
-                    min(quarter_end, instant(interval["end"])),
-                )
-                if left >= quarter_end:
-                    break
-                if right > left:
-                    future_import = sum(plan["flows"][name][t] for name in ("grid_house", "grid_store"))
-                    if ev_valid:
-                        future_import += plan["flows"]["grid_ev"][t]
-                    future_reservation += future_import * (right - left).total_seconds() / 3600
-        else:
-            future_reservation = max(0, o.house_kw - o.pv_ac_kw) * max(
-                0, (quarter_end - at).total_seconds() / 3600 - period_h
-            )
-        # Budget energy over the billing quarter; a permitted short pulse is not an instantaneous violation.
-        headroom = max(0, (limit * 0.25 - self.estimated_quarter_kwh - future_reservation) / period_h)
         direct_dc_ac = min(c.ac_discharge_kw, max(0, o.pv_dc_kw - dc_reserved) * c.ac_discharge_efficiency)
         available_discharge = min(
             c.ac_discharge_kw,
@@ -257,6 +278,14 @@ class FastControl:
                         ev, min(residual_pv, (task["target_ev_kwh"] - o.ev_kwh) / c.ev_efficiency / period_h)
                     )
                     conditional = True
+        projection = self.peak.project(o, at, plan, position, limit, ev)
+        headroom = projection.import_kw
+        self.estimated_quarter_kwh = projection.prefix_kwh
+        self.peak_evidence = {"at": at.isoformat(), "prefix_kwh": projection.prefix_kwh,
+                              "deadline_safeguard": self.deadline_execution.evidence,
+                              "task_target_kwh": task_target, "plan_id": plan["id"] if plan else None,
+                              "unavoidable_kwh": projection.unavoidable_kwh,
+                              "ev_limit_kw": projection.ev_kw, "import_limit_kw": projection.import_kw}
         desired_ess = net_house + o.ev_power_kw
         if desired_ess < 0:
             charge_headroom = min(
@@ -282,13 +311,21 @@ class FastControl:
                 max(0, c.battery_charge_kw - min(o.pv_dc_kw, c.dc_charge_kw) * c.dc_efficiency)
                 / c.ac_charge_efficiency,
             )
+        protective_reduction = ev > projection.ev_kw + 1e-6
+        ev = min(ev, projection.ev_kw)
         predicted_import = net_house + ev - ess
-        emergency = predicted_import > headroom + 0.03
+        emergency = protective_reduction or projection.threatened or predicted_import > headroom + 0.03
         if emergency:
             # Protective changes bypass smoothing and may stop immediately.
-            ev = max(0, ev - (predicted_import - headroom))
-            ess = min(max(0, net_house + ev - headroom), available_discharge)
-        elif abs(ev - self.last_ev_kw) > 0.5 and self.last_ev_kw > 0:
+            ev = max(0, ev - max(0, predicted_import - headroom))
+            # Use the physical reserve for residual current-quarter risk, including
+            # observed EV power that has not yet responded to a reduction.
+            emergency_dc = min(c.ac_discharge_kw, o.pv_dc_kw * c.ac_discharge_efficiency)
+            physical_discharge = min(
+                c.ac_discharge_kw, emergency_dc + c.battery_discharge_kw * c.ac_discharge_efficiency,
+                emergency_dc + max(0.0, o.ess_kwh - c.ess_min_kwh) * c.ac_discharge_efficiency / period_h)
+            ess = min(max(0, net_house + max(ev, o.ev_power_kw) - headroom), physical_discharge)
+        elif ev > 0 and abs(ev - self.last_ev_kw) > 0.5 and self.last_ev_kw > 0:
             if self.deviation_since is None:
                 self.deviation_since = at
             if (at - self.deviation_since).total_seconds() < p.sustained_deviation_seconds:
@@ -296,7 +333,7 @@ class FastControl:
         else:
             self.deviation_since = None
         # An optional task cannot purchase direct grid energy during a sustained source loss.
-        if plan and position is not None and plan["flows"]["grid_ev"][position] < 1e-5:
+        if plan and position is not None and plan["flows"]["grid_ev"][position] < 1e-5 and not carried_grid:
             eligible_discharge = min(
                 available_discharge,
                 max(0, o.ess_kwh - c.ess_min_kwh - o.ess_grid_kwh - protected_solar)
@@ -304,8 +341,10 @@ class FastControl:
                 / period_h,
             )
             solar_source = o.pv_ac_kw + direct_dc_ac + eligible_discharge
-            ev = min(ev, max(0, solar_source - (0 if conditional else o.house_kw)))
-        if not o.ev_phase_known:
+            source_limit = max(0, solar_source - (0 if conditional else o.house_kw))
+            source_limited = source_limit < ev - 1e-6
+            ev = min(ev, source_limit)
+        if not o.ev_phase_known or not o.connected or not ev_valid or not o.ev_state_known:
             ev = 0.0
         amps = min(c.maximum_current_a, math.floor((ev + 1e-9) * 1000 / (c.voltage * phases)))
         if amps < c.minimum_current_a:
@@ -314,7 +353,7 @@ class FastControl:
         # Recompute ESS after EV reductions; never intentionally export stored energy.
         if ess > 0:
             ess = min(ess, max(0, net_house + o.ev_power_kw))
-        if not ess_valid:
+        if not ess_valid and not emergency:
             ess = basic_ess
         self.last_ev_kw = ev
         self.last_tick = at
@@ -325,6 +364,9 @@ class FastControl:
             else
             "Quarter-hour peak protection"
             if emergency
+            else "Active EV task target reached" if task_complete
+            else "EV task authority unavailable" if not ev_valid
+            else "EV task source unavailable" if source_limited
             else "Accepted schedule and measured balancing"
             if position is not None
             else "Basic ESS balancing; no EV instruction"

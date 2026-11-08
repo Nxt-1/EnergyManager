@@ -13,6 +13,8 @@ from copy import deepcopy
 
 from .domain import PeakPermission, Snapshot, json_data, instant, encode
 from .charging_timing import ChargingTiming
+from .charging_candidates import fixed_grid_reference, reachable_deadline_bounds
+from .deadline_guard import deadline_certificate
 from .charging_continuity import ChargingContinuity, ChargingWindow
 from .incumbent import seed
 from .appliance_plan import plan_evidence, resolved_power
@@ -35,9 +37,12 @@ class Planner:
         self.continuity_reserve = 0.0
         self.solver_overrun = 0.0
         self.reference_flows: dict[str, list[float]] | None = None
+        self.active_reserve = 0.0
+        self.guard_reserve = 0.0
+        self.coherent_scope: dict[str, Any] = {}
 
     def remaining(self) -> float:
-        reserved = self.solar_reserve + self.continuity_reserve + (self.validation_seconds + self.solver_overrun) * 1.25
+        reserved = self.solar_reserve + self.continuity_reserve + self.active_reserve + self.guard_reserve + (self.validation_seconds + self.solver_overrun) * 1.25
         return max(0.0, self.deadline - monotonic() - 0.25 - reserved)
 
     def validate_candidate(self, snapshot: Snapshot, flows: dict[str, list[float]],
@@ -74,6 +79,8 @@ class Planner:
     def run_model(
         self, name: str, model: JointModel, allowance: float, warm: list[float] | None = None, **kwargs: Any
     ) -> dict[str, Any]:
+        if model.deadline_bounds is None:
+            model.deadline_bounds = reachable_deadline_bounds(model)
         economic_search = "objective" not in kwargs
         if self.progress:
             self.progress(name)
@@ -114,6 +121,55 @@ class Planner:
             remaining = min(self.remaining(), allowance - (monotonic() - started))
             result = self.prefer_continuity(name, model, result, remaining)
         return result
+
+    def review_active_continuation(self, model: JointModel, result: dict[str, Any],
+                                   economic: float, cash: float) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Review a frozen replacement's near-term stop/restart at equal delivered energy."""
+        s, flows = model.snapshot, result["flows"]
+        record: dict[str, Any] = {"state": "not_applicable", "window_minutes": 15}
+        if s.observation.ev_power_kw < .1 or not s.observation.connected:
+            return result, record
+        on = [flows["one"][t] + flows["three"][t] > .5 for t in range(len(s.intervals))]
+        stop = next((t for t, active in enumerate(on) if not active), None)
+        if stop is None:
+            return result, record
+        restart = next((t for t in range(stop + 1, len(on)) if on[t]), None)
+        if restart is None or s.intervals[restart].start - s.intervals[stop].start > timedelta(minutes=15):
+            return result, record
+        end = restart + 1
+        while end < len(on) and on[end]:
+            end += 1
+        record.update(state="unverified", stop=s.intervals[stop].start.isoformat(),
+                      restart=s.intervals[restart].start.isoformat(), same_energy_end=end)
+        if self.remaining() < .3:
+            record["reason"] = "Global planning budget exhausted; checked replacement retained"
+            return result, record
+        review = ChargingContinuity(model, flows)
+        candidate = review.candidate(ChargingWindow(0, end, True), s.observation.ev_phases)
+        phase = "three" if s.observation.ev_phases == 3 else "one"
+        for t in range(end):
+            # The general quick candidate fixes fractional slots. Active continuation
+            # must allow their unused capacity; the original hold rows remain binding.
+            if abs(s.intervals[t].hours - 5 / 60) > 1e-9:
+                for name in ("one", "three", "amps_one", "amps_three"):
+                    index = candidate.linear.variables[name][t]
+                    candidate.linear.lower[index] = model.linear.lower[index]
+                    candidate.linear.upper[index] = model.linear.upper[index]
+            candidate.linear.lower[candidate.linear.variables[phase][t]] = 1.0
+        candidate.linear.row(list(candidate.economic.items()), upper=economic + s.policy.polish_tolerance_eur + TOL)
+        candidate.linear.row(list(candidate.cash.items()), upper=cash + s.policy.polish_tolerance_eur + TOL)
+        proposed = self.run_model("active_continuation", candidate, min(6., self.remaining() - .2),
+                                  objective=candidate.continuity_objective())
+        record["solver_status"] = proposed["status"]
+        if proposed["feasible"]:
+            errors = self.continuity_errors(model, proposed["flows"])
+            record["errors"] = errors
+            if not errors:
+                record["state"] = "continued"
+                proposed["economic_baseline"], proposed["cash_baseline"] = economic, cash
+                return proposed, record
+        record["state"] = "infeasible" if proposed["status"] == "Infeasible" else "unverified"
+        return result, record
 
     def prefer_continuity(self, name: str, model: JointModel, result: dict[str, Any],
                           allowance: float, *, single_only: bool = False) -> dict[str, Any]:
@@ -460,6 +516,9 @@ class Planner:
         self.continuity_reserve = 0.0
         self.solver_overrun = 0.0
         self.reference_flows = None
+        self.guard_reserve = 0.0
+        self.coherent_scope = {}
+        self.active_reserve = min(6., max(0., self.deadline - monotonic()) * .08) if snapshot.observation.ev_power_kw > .1 else 0.
         self.stages = []
         s = snapshot
         service: dict[str, float] = {}
@@ -628,6 +687,7 @@ class Planner:
         errors = self.validate_candidate(s, reference["flows"], service)
         if errors:
             return self.failure(snapshot, "invalid_solution", "; ".join(errors))
+        self.guard_reserve = min(12., self.remaining() * .18)
         for goal in sorted(s.goals, key=lambda g: (-g.priority, g.deadline)):
             achieved_energy = service.get(goal.id, goal.target(s.capabilities, s.policy))
             if not s.ev_known_at(s.checkpoint_index(goal.deadline)):
@@ -694,6 +754,22 @@ class Planner:
                 grid_ess=required_support,
             )
             normal_model.add_optional_peak_limits(reference_flows)
+            coherent_model, coherent_scope = fixed_grid_reference(normal_model, reference_flows)
+            self.coherent_scope = coherent_scope
+            self.coherent_scope["outcome"] = "skipped_budget" if coherent_model is not None else "not_applicable"
+            if coherent_model is not None and self.remaining() > 2:
+                coherent = self.run_model("coherent_grid_reference", coherent_model,
+                                          min(8., self.remaining() * .08),
+                                          coherent_model.warm_from(reference_flows))
+                self.coherent_scope["solver_status"] = coherent["status"]
+                self.coherent_scope["outcome"] = "unverified" if not coherent["feasible"] else "checked"
+                if coherent["feasible"]:
+                    candidate_errors = self.continuity_errors(normal_model, coherent["flows"])
+                    self.coherent_scope["audit_errors"] = candidate_errors
+                    if not candidate_errors and self.prefer_result(selected, selected_model, coherent, normal_model):
+                        selected, selected_model = coherent, normal_model
+                        self.coherent_scope["outcome"] = "retained"
+            # The normal model below has no fixed-prefix restriction, including on timeout.
             # Preserve time for one final solar pass before optional probes consume the budget.
             self.solar_reserve = min(6.0, self.remaining() * .10)
             solar_start = {**selected, "values": normal_model.warm_from(selected["flows"])}
@@ -1075,7 +1151,23 @@ class Planner:
                 ):
                     selected = source_result
                     source_certificate = source_result["status"] == "Optimal"
+        self.active_reserve = 0.0
+        before_active = selected
+        selected, active_review = self.review_active_continuation(selected_model, selected, before_score, before_cash)
+        if selected is not before_active:
+            source_certificate = False
+        guard_budget, self.guard_reserve = self.guard_reserve, 0.0
+        if self.progress:
+            self.progress("cautious_deadline")
+        deadline_guard = deadline_certificate(s, selected["flows"], min(guard_budget, self.remaining() - .1), service)
+        if deadline_guard.get("attempts"):
+            self.stages.append({"name": "cautious_deadline", "status": deadline_guard["status"],
+                                "seconds": deadline_guard.get("seconds", 0), "scope": deadline_guard.get("scope")})
         output = self.output(snapshot, s, selected, reference, service, reasons, exceptional_windows)
+        output["active_continuation_review"] = active_review
+        output["coherent_candidate"] = self.coherent_scope
+        output["deadline_guard"] = deadline_guard
+        output["reference_fingerprint"] = sha256(encode(reference["flows"]).encode()).hexdigest()
         output["status"] = planning_status
         output["minimum_grid_certified"] = source_certificate
         output["permission_proposals"] = permission_proposals

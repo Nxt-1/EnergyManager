@@ -1,5 +1,69 @@
 # EnergyManager 4 verification
 
+## 4.6.1 — EV-A003, EV-A004 and EV-A005 (8 November2026)
+
+Based on released4.6.0/main6031411, incorporating4.5.8. No live HA/database,
+installation hardware, real notifications or deployment was used.
+
+- 755 Python tests pass159.71s, including real spawned-worker recalculation with an
+ unchanged10A command, SoC lead/own-target/source/authority stops, useful PV interruption,
+ held and fractional slots, exact quarter energy with fake EV/meter delays, future ESS
+ reserve/DC release, next-quarter tails, permitted pulses and unavoidable household load.
+ Existing measured-peak alerts, approvals and Bosch scheduling remain covered.
+- Cautious tests cover spare/tight post-PV capacity, travel, no PV, held partial slots,
+ initial known solar, future DC capture with the margin once, margin-only infeasibility,
+ timeout versus proof, accepted appliance timing, tampered source/progress/scope evidence,
+ fallback activation/target limits and persistent fake-phone retry/deduplication/clearing.
+- Final concurrent-delivery regression:7focused deadline/planning-attention cases
+  pass4.26s. A shared async lock prevents adoption and retry from sending one notice
+  simultaneously. Ruff/mypy remain green after this focused correction.
+- 89 frontend cases, Ruff/mypy59modules, all packaged JavaScript syntax and CLI4.6.1 pass.
+ Standalone dark/native light browser checks show the same synthetic margin warning,
+ retained limit and fake delivery state, with no approval buttons or console errors.
+ Existing red measured-peak history remains present. Native HA built-ins are simulated.
+- Configured fake E2E25.806s/2019intervals/max control4.269ms/four fake calls passes,
+ including actual worker cancellation/replacement, persistence and restored admission.
+- Routed-calendar fake E2E61.117s/2023intervals/max control4.068ms/four fake calls,
+  two calendar imports and six local route requests passes.
+- Physical infeasibility remains nominal best effort without a futile peak request,
+  even when a diagnostic raises the ceiling. Both earlier retained equal-energy
+  research results still pass current independent physical/rolling audits; the saved
+  rejected rolling-cost trial remains explicitly rejected historical evidence.
+- Wheel/sdist4.6.1 build;84runtime source/assets/default files match current bytes.
+ Isolated wheel imports/version/new cautious module and warning asset pass.
+
+All nine replays below ran serially from fresh snapshots under seven-day/five-minute/
+120s limits. Final physical/rolling/certificate audits pass, including source/progress/
+activation/reservation metadata. Every updated replay has a certified fallback.
+Archives and raw attempts remain private under ignored `artifacts/ev-acceptance/`.
+EV/grid quantities are battery kWh; costs are whole-horizon EUR. Starts count transitions
+from the observed state, so a held already-running task can have zero starts.
+
+| Replay | Seconds | Terminal EV | Direct-grid EV | Bill | Comparison | Peak kW | Starts |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Grid-only baseline |117.45|37.4078|9.0635|19.19449|10.88962|4.950|17|
+| Grid-only updated |107.35|37.4250|8.3831|19.16363|10.90019|4.950|13|
+| Mixed-PV baseline |118.30|29.1951|1.1720|2.79946|-2.58138|2.783|11|
+| Mixed-PV updated |105.20|28.6268|1.2633|2.89152|-2.36311|2.783|6|
+| PV/travel updated |93.51|37.4117|0.0000|3.57591|-1.09797|5.490|3|
+| Synthetic mixed updated |78.16|28.0040|3.0360|26.23804|23.52060|3.500|1|
+| Synthetic held/partial updated |13.48|21.1728|1.1728|26.06523|25.66704|3.500|0|
+| Equal-energy baseline |118.07|29.1951|1.1720|2.79946|-2.58138|2.783|11|
+| Equal-energy updated |106.76|29.1951|1.1720|2.79946|-2.58138|2.783|11|
+
+Fresh runs have different optional EV quantities; reduced starts alone do not prove a
+continuity improvement at equal benefit. The conditioned pair fixes final EV/direct-grid
+energy, common required reference and shared cash/comparison envelope, and retains the
+same11starts/cost. No equal-energy advantage is claimed. Earlier restricted research's
+rolling-cost rejection remains historical evidence; the independent rolling checker
+is unchanged and all retained results must still pass it. Time-limited searches retain
+unresolved windows and raw statuses; none is labelled a global optimum or installation
+performance guarantee. No unavailable-slot index rewrite was adopted after the research
+found identical presolved counts. Physical stock bounds admit checked references and
+are disabled for relaxed-service diagnostics.
+
+Remote exact-head results are recorded only in the ignored checkpoint/final reply.
+
 ## 4.6.0 — EV-A002 (8 November2026)
 
 Integrated with main4.5.8 (`9daa786`) before release. Combined checks:726Python

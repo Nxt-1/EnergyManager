@@ -503,3 +503,13 @@ including billable rises, zeros, month resets and missing-history gaps. This sha
 EV-A002 with grouped measured-peak mobile alerts. The2.5kW alert billing floor
 never substitutes for actual plotted sensor values.
 See [ARCHITECTURE.md](ARCHITECTURE.md#measured-peak-alerts-and-graph-history-ev-a002-460).
+
+
+## ARCH-026 — Deterministic planning inputs and limits before MILP
+
+Recorded6November2026; scoped into EV-A005 and authorized8November.
+Status: **implemented in4.6.1**. Reference candidates, safe
+backward physical bounds, bounded wider search, cautious80% future-PV certificates,
+execution fallback and margin warnings. Dense unavailable-slot bookkeeping is
+retained after explicit fixing showed no presolve gain. See the maintained
+[architecture](ARCHITECTURE.md#ev-planning-candidates-and-deadline-safeguard-ev-a005--arch-026-461).

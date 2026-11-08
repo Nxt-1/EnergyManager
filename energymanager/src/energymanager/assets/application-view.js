@@ -448,7 +448,8 @@ export async function mountApplication(root, options = {}) {
     $('goals').innerHTML = visibleGoals.map(goalCard).join('') || (page === 'overview' ?
       '<p class="empty">No goals due in the next 24 hours.</p>' : '<p class="empty">Add a journey or timed SoC goal.</p>');
     $('cost-card').hidden = page !== 'planning';
-    $('approvals').innerHTML = state.issues.length ? state.issues.map(i => i.kind === 'planning' ?
+    $('approvals').innerHTML = state.issues.length ? state.issues.map(i => i.kind === 'deadline_margin' ?
+      `<section class="issue"><strong>${esc(i.title)} · PV safety margin</strong><p>${esc(i.text)}</p><p>${time(i.deadline)} · Permitted peak retained</p><p>${esc(notificationStatus(i.notification))}</p></section>` : i.kind === 'planning' ?
       `<section class="issue"><strong>${esc(i.title)}</strong><p>${esc(powerText(i.text))}</p><p>${time(i.first_at)} · ${i.state === 'retrying' ? 'Recalculating' : 'Attention needed'}${i.notification ? ' · ' + esc(notificationStatus(i.notification)) : ''}</p><button data-decision="${esc(i.decision_id)}">Decision evidence</button></section>` :
       `<section class="issue"><strong>${esc(i.title||goals.find(g=>g.id===i.goal_id)?.title||'EV goal')}</strong><p>${esc(powerText(i.text))}</p><p>${i.kind==='ess_peak'?'Specific forecast peak':i.shortfall_kwh===null?'Awaiting measured reconnection':num(i.shortfall_kwh)+' kWh short'} · ${esc(i.state)}</p>${i.notification ? `<p>${esc(notificationStatus(i.notification))}</p>` : ''}${i.proposed_peak_kw && i.state === 'pending'?`<p>Requested ceiling ${watts(i.proposed_peak_kw)} W</p><button data-approve="${esc(i.goal_id)}">Approve</button> <button data-reject="${esc(i.goal_id)}">Reject</button>`:''}</section>`
     ).join('') : '<p class="empty">No pending decisions or planning problems.</p>';

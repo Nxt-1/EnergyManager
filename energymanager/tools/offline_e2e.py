@@ -19,7 +19,7 @@ from aiohttp.abc import AbstractResolver
 from aiohttp.test_utils import TestClient, TestServer
 
 from energymanager.configuration import configured_application
-from energymanager.domain import Snapshot
+from energymanager.domain import Goal, Snapshot
 from energymanager.hardware import HardwareControl
 from energymanager.validation import validate
 from energymanager.settings import ConfigurationFile, SETTING_FIELDS
@@ -49,7 +49,7 @@ class VerificationResolver(AbstractResolver):
 async def run(*, serve: bool = False, preview_fault: str | None = None,
               history_fixture: bool = False, calendar_fixture: bool = False, routing_fixture: bool = False,
               ev_fault_fixture: bool = False, planner_failure_fixture: bool = False,
-              profiles_fixture: bool = False, port: int = 8102) -> None:
+              profiles_fixture: bool = False, deadline_margin_fixture: bool = False, port: int = 8102) -> None:
     issued = datetime.now(UTC)
     calls = []
     weather_queries = []
@@ -449,6 +449,18 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                 Path("docs/offline-e2e.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
                 print(json.dumps(report, indent=2), flush=True)
                 if serve:
+                    if deadline_margin_fixture:
+                        if application.planning:
+                            application.planning.cancel()
+                            await asyncio.gather(application.planning, return_exceptions=True)
+                        goal = Goal("synthetic-margin", "SYNTHETIC PV margin display fixture",
+                                    application.now() + timedelta(days=1), 100)
+                        application.goals = (*application.goals, goal)
+                        application.deadline_warnings.update({"deadline_guard": {
+                            "status": "margin_shortfall", "scope": {
+                                "goal_id": goal.id, "revision": goal.revision, "title": goal.title,
+                                "deadline": goal.deadline.isoformat(),
+                                "target_kwh": goal.target(application.snapshot.capabilities, application.policy)}}})
                     if planner_failure_fixture:
                         # Freeze only the background planner so an accepted refresh
                         # cannot clear this explicitly labelled attention preview.
@@ -541,6 +553,8 @@ if __name__ == "__main__":
                         help="Show a SYNTHETIC unresolved EV incident and five-minute diagnostic trace")
     parser.add_argument("--planner-failure-fixture", action="store_true",
                         help="Record a SYNTHETIC rejected decision for diagnostic/export UI checks")
+    parser.add_argument("--deadline-margin-fixture", action="store_true",
+                        help="Show a SYNTHETIC deadline-margin warning; display evidence only, requires --serve")
     parser.add_argument("--input-fault", choices=("quarter", "stale", "unavailable", "read_failure", "charger"),
                         help="Inject old metadata, unavailability or HA read failure after local verification")
     arguments = parser.parse_args()
@@ -552,10 +566,13 @@ if __name__ == "__main__":
         parser.error("--ev-fault-fixture requires --serve")
     if arguments.planner_failure_fixture and not arguments.serve:
         parser.error("--planner-failure-fixture requires --serve")
+    if arguments.deadline_margin_fixture and not arguments.serve:
+        parser.error("--deadline-margin-fixture requires --serve")
     asyncio.run(run(serve=arguments.serve, preview_fault=arguments.input_fault,
                     history_fixture=arguments.history_fixture,
                     calendar_fixture=arguments.calendar_fixture or arguments.routing_fixture,
                     routing_fixture=arguments.routing_fixture,
                     ev_fault_fixture=arguments.ev_fault_fixture,
                     planner_failure_fixture=arguments.planner_failure_fixture,
-                    profiles_fixture=arguments.profiles_fixture, port=arguments.port))
+                    profiles_fixture=arguments.profiles_fixture, deadline_margin_fixture=arguments.deadline_margin_fixture,
+                    port=arguments.port))

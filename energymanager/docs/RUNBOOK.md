@@ -1,5 +1,57 @@
 # Run, configure, review and roll back
 
+## EV continuity, peak protection and deadline margin (4.6.1)
+
+Reload the dashboard after updating. A running EV task continues to its own energy
+endpoint while source, peak and safety guards permit it; getting ahead of the
+forecast does not pause charging. Recalculation continues using the accepted task.
+A replacement may interrupt for a real benefit; near-term stop/restart alternatives
+are checked within the frozen calculation. Delayed delivery retains the original
+quantity, never a later goal's authority.
+
+Live peak protection retains the measured quarter prefix, sustains measured load
+and allows for unconfirmed actuator response. EV current is cut first; residual
+risk may use ESS energy reserved for a later forecast peak. The existing read
+watchdog supplies a conservative response allowance; actual device and meter
+latencies still require installation verification. A household-only unavoidable
+remainder is labelled in command evidence. EV-A002 measured-peak alerts remain active.
+
+Economic planning uses the full PV forecast. The next known EV deadline also gets
+an independently audited fallback using80% of future usable PV, initial eligible
+stock at full credit, availability and existing peak authority. Its activation and
+progress checks are precomputed; fast control does not optimize. A timeout is
+unverified and preserves an eligible previously checked fallback. Decision evidence
+contains `deadline_guard` with explicit contexts, source ledgers, attempts and scope;
+`deadline_fallback_activated` and command `peak_protection` link actual activation,
+plan identity, task target and quarter projection. No higher peak is purchased by
+this safeguard.
+
+When only the cautious case is proved infeasible, Overview retains a persistent
+PV safety margin warning and the configured phone receives one notice per goal/
+deadline. Failed delivery retries across restart; repeated forecasts do not repeat
+a successful notice. Restored margin, fulfilment or removal clears the warning.
+Nominal shortfalls continue through existing approval controls. Without a phone,
+the warning and local notice remain available.
+
+Offline only, from `energymanager/`:
+
+```powershell
+python tools/offline_e2e.py --serve --deadline-margin-fixture
+python tools/native_dashboard_preview.py
+# Separate terminal, private archived or labelled synthetic snapshot:
+python tools/verify_ev_replay.py PATH_TO_SNAPSHOT --output artifacts/ev-replay.json --budget 120
+```
+
+The warning fixture is explicitly synthetic display evidence, not an infeasibility
+proof. Verify the same warning and delivery state in standalone/native Overview,
+with no Approve/Reject buttons on that warning. The replay tool performs a fresh
+calculation and independent physical/rolling/certificate audits, retains raw stage
+statuses and writes a compact `.report.json`. `--matched BASELINE_OUTPUT` conditions
+both searches on common final EV/direct-grid quantities and a shared reference/
+financial allowance. Run comparisons serially without other solver workers; report
+energy, bill, comparison cost, peak and starts together. These are bounded incumbents,
+not proofs of global optimality. Use fake endpoints and isolated databases only.
+
 ## Measured peak alerts and history (4.6.0 / EV-A002)
 
 Use the existing mapped monthly-peak sensor and configured phone notification

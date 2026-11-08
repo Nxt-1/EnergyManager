@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from .domain import Observation, Snapshot, json_data
+from .deadline_audit import validate_certificate
 from .validation import validate, rolling_comparison_errors
 
 
@@ -15,6 +16,14 @@ def admit(
 ) -> tuple[dict[str, Any], list[str]]:
     """Preserve the calculated schedule; current readings gate authority, not its economics."""
     errors = validate(snapshot, result["flows"], result.get("service"))
+    guard = result.get("deadline_guard", {})
+    if guard.get("status") == "certified":
+        errors.extend(validate_certificate(guard))
+        scope = guard.get("scope", {})
+        matching = next((g for g in snapshot.goals if g.id == scope.get("goal_id")
+                         and g.revision == scope.get("revision") and g.deadline.isoformat() == scope.get("deadline")), None)
+        if matching is None or matching.target(snapshot.capabilities, snapshot.policy) != scope.get("target_kwh"):
+            errors.append("Cautious certificate authority does not match the current goal")
     reference = result.get("reference_flows")
     if reference:
         reference_errors = validate(snapshot, reference, result.get("service"))

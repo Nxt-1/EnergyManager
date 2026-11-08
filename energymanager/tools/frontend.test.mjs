@@ -15,6 +15,8 @@ test('planning activity reports real stages and elapsed time without a fabricate
   const model = planningActivityModel({state: 'calculating', stage: 'ev_continuity', elapsed_seconds: 74});
   assert.equal(model.busy, true);
   assert.equal(model.label, 'Smoothing charging');
+  assert.equal(planningActivityModel({state: 'calculating', stage: 'coherent_grid_reference'}).label, 'Smoothing charging');
+  assert.equal(planningActivityModel({state: 'calculating', stage: 'cautious_deadline'}).label, 'Checking EV deadline');
   assert.equal(model.elapsed, '1:14');
   assert.equal(planningActivityModel({state: 'calculating', stage: 'normal_ceiling_joint'}).label, 'Optimizing energy');
   assert.equal(planningActivityModel({state: 'calculating', stage: 'solar_capture:288'}).label, 'Optimizing energy');

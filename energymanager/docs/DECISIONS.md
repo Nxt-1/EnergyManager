@@ -1,5 +1,44 @@
 # Current requirements and decisions
 
+- 8 November2026, EV-A003–EV-A005: the user authorized scheduled implementation
+  and continuation through acceptance and release readiness. EV-Q020 confirms that
+  protected allocations mean required service, hard reserves and binding commitments;
+  optional nominal ESS dispatch is not immutable. Future AC/DC PV stored before EV
+  use receives the20% margin once; initial known stock retains ordinary credit.
+  Restricted witness failure cannot establish general cautious infeasibility.
+  Preserve full joint alternatives and independent source/causal audits.
+  No live installation action is authorized.
+
+- 7 November 2026, EV deadline protection under PV uncertainty: the user chose
+  a 20% margin. Credit 80% of remaining usable forecast PV before the deadline,
+  with full credit for measured energy already delivered. The user accepted using
+  the full forecast for economics and the cautious forecast to check how long
+  grid charging can be deferred. Bring grid charging forward when further waiting
+  would threaten the cautious deadline within the authorized limits.
+  If only the cautious case needs a higher peak, keep the current limit and warn
+  that the safety margin cannot be met. Send one mobile notice and show a persistent
+  in-app warning for the affected deadline while unresolved. A nominal shortfall
+  continues through the existing approval process.
+
+- 6 November 2026, EV charging sources: the user accepts a split when it allows
+  useful partial PV charging alongside the necessary grid portion. ARCH-026 will
+  explore deterministic limits before the MILP.
+
+- 6 November 2026, EV execution continuity: the user accepts interruption by a
+  materially better plan and wants to limit stops followed by a near-term restart.
+  The user confirmed that getting ahead of the forecast is irrelevant to whether
+  an active session should continue while authorized charging work remains and live
+  limits permit it. The user accepted a 15-minute review window for a replacement
+  plan that proposes a stop and restart. Prefer a feasible continuation, including
+  at a lower current, when it delivers the same required outcome within the limits.
+  Live protective pauses can take effect immediately. Discuss how to retain the existing
+  earlier required grid charging preference when considering the ARCH-026 rules.
+
+- 6 November 2026, live peak protection: the user revised the priority for an
+  unexpected threatened peak. Reduce or pause EV charging first. If that cannot
+  protect the quarter, use available ESS discharge, including energy reserved
+  for a later forecast peak as needed. The current quarter takes priority.
+
 - 8 November 2026, EV-A002 / V4.6: the user authorized release after V4.5 was
   considered complete enough. V4.6 incorporates4.5.8. Measured monthly-peak alerts
   fire on the first billable rise above the2.5kW floor; further rises remain silent

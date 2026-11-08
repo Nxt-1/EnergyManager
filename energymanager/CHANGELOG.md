@@ -1,3 +1,11 @@
+## 4.6.1 — EV continuity and cautious deadline protection
+
+- Continue accepted EV work to its own energy endpoint despite forecast progress leads, and review near-term replacement pauses within the same outcome and cost limits.
+- Protect the measured quarter by reducing EV first, then using physically available ESS reserve; include sustained load, delayed response and quarter boundaries in the projection.
+- Offer coherent charging candidates before the wider joint search and retain independently checked deadline fallbacks using80% of future usable PV, with initial stored energy at normal credit.
+- Show a persistent PV safety-margin warning and deduplicate its mobile notice when only the cautious deadline is infeasible; retain existing peak authority and nominal-shortfall approvals.
+- Preserve measured monthly-peak alerts and graph history from4.6.0. Verified offline with synthetic endpoints and private archived replays; installation deployment is separate.
+
 ## 4.6.0 — Measured monthly peak alerts and history
 
 - Alert once per measured billable peak episode, retaining restart deduplication and delivery retries.
