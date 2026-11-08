@@ -184,4 +184,6 @@ class LiveInputs:
                        if str(connected.value).lower() in ("on", "true", "connected") else "Away / disconnected")
         if issue := connected.issue(at):
             ev["issues"].append(issue)
-        return {"readings": readings, "cards": {"grid": grid, "solar": solar, "house": house, "ess": ess, "ev": ev}}
+        return {"readings": readings, "quarter": {"at": quarter.received_at.isoformat(),
+                "energy_kwh": quarter_kwh, "issue": quarter.issue(at)},
+                "cards": {"grid": grid, "solar": solar, "house": house, "ess": ess, "ev": ev}}

@@ -1411,6 +1411,75 @@ blank rather than moving or inventing steps; zooming in recovers finer detail.
 
 ## Continuity, control and publication
 
+### Peak graph forecast and current-quarter display (EV-A006, 4.6.3)
+
+The user requests a future predicted peak on the Overview power graph as well as
+recorded history, clearer separation from grid power, and a visualization of the
+current quarter-hour demand. This is a follow-up to EV-A002; the user authorized
+implementation and release on 8 November2026. Before4.6.3, the monthly-peak series had recorded points only.
+The planned grid-power series can fall and resembles the red dashed peak series;
+the reported screenshot does not by itself establish a falling measured peak.
+
+Show the monthly peak expected under the accepted plan,
+starting from the actual recorded monthly peak and rising only when a forecast
+quarter-average import exceeds it. Use the measured imported-energy prefix plus
+planned remaining imports for the active quarter, not instantaneous grid power.
+Keep recorded history and prediction distinct. Grid power and the peak retain the
+same red colour. Use a dotted, slightly heavier peak line and lighter normal power
+lines. Retain the existing monthly-peak label rather than moving it onto the line.
+Use the now boundary and observed/forecast styling and readout to distinguish the
+recorded and predicted sections while retaining the dotted peak treatment. A
+permission limit remains a different quantity. Billing-month boundaries,
+missing inputs and absent plans must be explicit rather than inventing history.
+
+Show the current quarter's mapped meter value in the existing Grid number box,
+immediately after the monthly peak on the same bottom row. Preserve the current
+monthly-peak icon/value position; place the new indication to its right, as marked
+in the user's screenshot. Identify it separately from instantaneous grid power and
+the monthly maximum. The user rejected a separate panel beside the graph. The mapped
+meter builds up from zero using the fixed 0.25-hour denominator; it is not an
+elapsed-time average. Shade consecutive quarter-hour intervals in subtly alternating
+background tints, aligned to installation-local clock quarters. Visually distinguish
+the current quarter from those bands. Keep power traces, cursor and labels readable.
+Show a simple marker at the current quarter's end for its projected final average,
+with measured contribution, projection and time remaining available in the graph
+readout. Keep that projection distinct from the measured value in the Grid box.
+These display changes do not change control policy.
+
+EV-A006 is authorized for implementation and release. Completion requires desktop/mobile
+and native/standalone verification of the preserved monthly-peak position, new
+quarter value, line styles, existing label, alternating quarter bands and current-
+quarter marker. Cover valid zero and missing/stale inputs, quarter transitions,
+historical ranges, zoom/pan, month reset, no usable plan and quarter-energy prefix
+plus partial planned intervals. A predicted monthly peak must not follow declining
+instantaneous grid power; measured history remains recorded data. Verify that the
+forecast does not imply approval and that the changes leave execution and peak
+notification policy unchanged.
+
+Implemented4.6.3: `LiveInputs.view` exposes the independently read normalized
+quarter energy and its read time/issue as display metadata. The Grid value is
+`energy_kwh / 0.25 * 1000` watts; a valid zero remains zero. Old-quarter, failed or
+watchdog-expired reads are unavailable, even if an older control observation remains.
+The compact accepted-plan response includes its forecast timestamp for display expiry.
+
+`peak-display.js` integrates gross planned imports (`grid_house + grid_ev + grid_store`)
+from the meter read time to the active quarter end, clipping every partial interval.
+Exports do not subtract from imported energy. It divides the measured-plus-remaining
+energy by0.25h. Full later quarters use their planned import totals. The forecast starts
+at the current recorded monthly value, takes a running maximum within each installation-
+local month and resets its predicted baseline to zero at the next local month boundary.
+Only covered full quarters are predicted; missing inputs, revoked/expired plans or
+coverage gaps do not acquire invented values. The independent historical series stays
+unchanged. This model supplies display only and does not alter fast-control projection,
+permission, notification or optimizer policy.
+
+Recorded and predicted peaks use the same red dotted2.5px line, with faded prediction
+after Now; ordinary power traces are1.2px observed/0.9px planned. The existing label
+and monthly-peak history action stay in place. A clock symbol identifies the adjacent
+quarter meter. Clock-aligned quarter bands and a highlighted active band follow the
+visible range, with a hollow red quarter-end projection marker. The cursor exposes
+measured and planned energy contributions, final average, meter-read time and time left.
+
 ### Live peak protection priority (EV-A004, 4.6.1)
 
 When an unexpected load change threatens the authorized quarter-hour peak, first

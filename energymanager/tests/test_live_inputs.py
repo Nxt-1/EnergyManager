@@ -399,3 +399,17 @@ async def test_negative_derived_balance_settles_without_replan_but_persistent_fa
             task.cancel()
         await asyncio.gather(*app.protective_tasks, return_exceptions=True)
         store.close()
+
+async def test_quarter_display_prefix_is_independent_and_keeps_valid_zero_and_watchdog(inputs):
+    adapter, rows, at = inputs
+    await adapter.observe(Capabilities(), at=at)
+    view = adapter.inputs.view(at, Capabilities())
+    assert view['quarter'] == {'at': at.isoformat(), 'energy_kwh': .2, 'issue': None}
+    rows['ess_soc']['state'] = 'unavailable'
+    rows['quarter_import_kwh']['state'] = '0'
+    with pytest.raises(ValueError):
+        await adapter.observe(Capabilities(), at=at + timedelta(seconds=1))
+    current = adapter.inputs.view(at + timedelta(seconds=1), Capabilities())
+    assert current['quarter']['energy_kwh'] == 0 and current['quarter']['issue'] is None
+    stale = adapter.inputs.view(at + timedelta(seconds=60), Capabilities())
+    assert stale['quarter']['issue']

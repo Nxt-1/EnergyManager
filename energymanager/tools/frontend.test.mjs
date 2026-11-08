@@ -1664,3 +1664,76 @@ test('a profile poll started before a metadata edit cannot replace the newer cat
   await ApplianceProfilesPage.prototype.refresh.call(page);
   assert.equal(page.library,current);assert.equal(page.loading,false);
 });
+
+import {peakDisplay, quarterMeasurement, quarterStart, quarterBands, quarterReadout} from '../src/energymanager/assets/peak-display.js';
+
+function peakFixture(now='2026-11-08T12:07:00Z') {
+  const origin=quarterStart(Date.parse(now),'Europe/Brussels');
+  const intervals=Array.from({length:9},(_,t)=>({start:new Date(origin+t*300000).toISOString(),end:new Date(origin+(t+1)*300000).toISOString()}));
+  return {now,demo:false,policy:{timezone:'Europe/Brussels',measurement_max_age_seconds:30,forecast_max_age_seconds:3600},
+    observation:{at:now,house_kw:12,monthly_peak_kw:2.5},observed:[],ev_plan_valid:true,
+    live_inputs:{readings:{monthly_peak_kw:{value:2.5,issue:null}},quarter:{at:new Date(Date.parse(now)-10000).toISOString(),energy_kwh:.25,issue:null}},
+    accepted:{valid:true,forecast_at:now,intervals,flows:{grid_ev:[3,3,1,6,6,6,1,1,1],grid_house:Array(9).fill(0),grid_store:Array(9).fill(0),export:Array(9).fill(99)}}};
+}
+
+test('peak forecast uses measured prefix plus clipped remaining gross import and never follows falling power',()=>{
+  const state=peakFixture(),frozen=JSON.stringify(state),display=peakDisplay(state);
+  assert.equal(display.quarter.measuredWatts,1000);
+  assert.ok(Math.abs(display.quarter.projectedWatts-1966.6666667)<.001);
+  assert.equal(valueAt(display.predicted,Date.parse('2026-11-08T12:20Z'),true).value,2500);
+  assert.equal(valueAt(display.predicted,Date.parse('2026-11-08T12:35Z'),true).value,6000);
+  assert.equal(display.predicted.at(-1)[1],6000);
+  state.accepted.peak_permissions=[{peak_kw:20}];
+  assert.equal(peakDisplay(state).predicted.at(-1)[1],6000);
+  assert.equal(JSON.stringify({...state,accepted:{...state.accepted,peak_permissions:undefined}}),frozen);
+  const readout=quarterReadout(display.quarter,value=>new Date(value).toISOString());
+  assert.match(readout,/Meter contribution 1000 W.*Projected final average 1967 W.*8m 00s remaining/);
+});
+
+test('zero quarter readings remain zero and missing, stale or previous-quarter inputs are unavailable',()=>{
+  const state=peakFixture();state.live_inputs.quarter.energy_kwh=0;
+  assert.equal(quarterMeasurement(state).measuredWatts,0);
+  for(const override of [{energy_kwh:null},{energy_kwh:NaN},{issue:'failed read'},{at:'2026-11-08T12:06Z'},{at:'2026-11-08T11:59:59Z'}]){
+    const changed=structuredClone(state);Object.assign(changed.live_inputs.quarter,override);
+    assert.equal(quarterMeasurement(changed).measuredWatts,null);
+    assert.equal(peakDisplay(changed).predicted.length,0);
+  }
+  state.now='2026-11-08T12:15:00Z';
+  assert.equal(quarterMeasurement(state).measuredWatts,null);
+  state.live_inputs.quarter={at:state.now,energy_kwh:0,issue:null};
+  assert.equal(quarterMeasurement(state).measuredWatts,0);
+});
+
+test('absent, expired, revoked or incomplete plans cannot invent a peak forecast or quarter projection',()=>{
+  for(const change of [state=>state.accepted=null,state=>state.ev_plan_valid=false,
+    state=>state.accepted.forecast_at='2026-11-08T10:00Z',state=>state.accepted.intervals=state.accepted.intervals.slice(2),
+    state=>state.accepted.flows.grid_ev[1]=null]){
+    const state=peakFixture();change(state);const display=peakDisplay(state);
+    assert.equal(display.quarter.measuredWatts,1000);assert.equal(display.quarter.projectedWatts,null);
+    assert.equal(display.predicted.length,0);assert.ok(display.reason);
+  }
+  const state=peakFixture();state.live_inputs.readings.monthly_peak_kw.value=null;
+  assert.equal(peakDisplay(state).predicted.length,0);
+  assert.ok(peakDisplay(state).quarter.projectedWatts>0);
+});
+
+test('monthly prediction resets at installation-local midnight without inventing recorded history',()=>{
+  const state=peakFixture('2026-11-30T22:55:00Z');state.live_inputs.readings.monthly_peak_kw.value=7;
+  state.accepted.flows.grid_ev=Array(9).fill(1);
+  const display=peakDisplay(state),reset=Date.parse('2026-11-30T23:00:00Z');
+  assert.equal(valueAt(display.predicted,reset-1,true).value,7000);
+  assert.equal(valueAt(display.predicted,reset,true).value,0);
+  assert.equal(valueAt(display.predicted,reset+900000,true).value,1000);
+  assert.deepEqual(state.observed,[]);
+});
+
+test('quarter backgrounds stay clock-aligned and alternate across DST, pan and clipped edges',()=>{
+  const start=Date.parse('2026-10-25T00:50Z'),end=Date.parse('2026-10-25T02:10Z'),now=Date.parse('2026-10-25T01:02Z');
+  const bands=quarterBands(start,end,now,'Europe/Brussels');
+  assert.equal(quarterStart(now,'Europe/Brussels'),Date.parse('2026-10-25T01:00Z'));
+  assert.equal(bands[0].start,start);assert.equal(bands.at(-1).end,end);
+  assert.equal(bands.filter(b=>b.active).length,1);
+  assert.ok(bands.slice(1).every((b,t)=>b.alternate!==bands[t].alternate && b.start===bands[t].end));
+  assert.ok(quarterBands(start-86400000,start-3600000,now,'Europe/Brussels').every(b=>!b.active));
+  assert.deepEqual(clipSeries([[0,7000],[10,0],[20,1000]],5,15,true),[[5,7000,true],[10,0],[15,0,true]]);
+});

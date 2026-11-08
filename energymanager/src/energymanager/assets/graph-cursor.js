@@ -1,4 +1,5 @@
 import {hasTextSelection} from './text-selection.js';
+import {quarterReadout} from './peak-display.js';
 
 export const plotInsets = {left: 58, right: 16, top: 12, bottom: 32};
 export const timeZoomLimits = {minimum: 15 * 60000, maximum: 7 * 24 * 3600000};
@@ -19,11 +20,11 @@ export function valueAt(points, at, held = false) {
   return {value: held ? before[1] : before[1] + (after[1] - before[1]) * fraction, approximate: true};
 }
 
-export function clipSeries(points, start, end) {
+export function clipSeries(points, start, end, held = false) {
   const clipped = points.filter(point => point[0] >= start && point[0] <= end);
   for (const at of [start, end]) {
     if (clipped.some(point => point[0] === at)) continue;
-    const reading = valueAt(points, at);
+    const reading = valueAt(points, at, held);
     if (reading) clipped.push([at, reading.value, reading.approximate]);
   }
   return clipped.sort((a, b) => a[0] - b[0]);
@@ -356,6 +357,12 @@ export class GraphCursor {
       const time = document.createElement('strong');
       time.textContent = this.formatTime(this.at);
       tooltip.append(time, table);
+      if (model.quarter && this.at >= model.quarter.start && this.at <= model.quarter.end) {
+        const context = document.createElement('p');
+        context.className = 'quarter-readout';
+        context.textContent = quarterReadout(model.quarter, this.formatTime);
+        tooltip.append(context);
+      }
       tooltip.setAttribute('aria-live', announce ? 'polite' : 'off');
       const scale = plot.querySelector('svg').getBoundingClientRect().width / model.width;
       const pixelX = x * scale, pixelWidth = model.width * scale;

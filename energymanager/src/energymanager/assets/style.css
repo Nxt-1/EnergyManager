@@ -188,6 +188,17 @@ p {
 button.grid-peak {padding:2px 0;border:0;border-radius:0;background:none;text-align:left}
 .grid-peak svg {width:16px;height:16px;flex-shrink:0;color:#dc2626}
 .grid-peak:focus-visible {outline:2px solid var(--accent);outline-offset:3px}
+.grid-peak-row {display:flex;align-items:baseline;gap:10px;white-space:nowrap}
+.grid-quarter {display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap;color:var(--muted)}
+.grid-quarter>span:first-child {font-size:16px;width:16px;text-align:center}
+.quarter-band {fill:var(--muted);fill-opacity:.025;pointer-events:none}
+.quarter-alternate {fill-opacity:.075}
+.quarter-active {fill:var(--accent);fill-opacity:.12;stroke:var(--accent);stroke-opacity:.3;stroke-width:1}
+.quarter-readout {max-width:280px;white-space:normal;line-height:1.45;margin:6px 0 0;font-size:11px}
+@media(max-width:420px) {
+  .grid-peak-row {gap:6px}
+  .grid-quarter {gap:3px;font-size:11px}
+}
 .ev-fault-banner {border-left:4px solid #dc2626;margin:8px 0 12px}
 .incident-trace {max-height:45vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}
 .calendar-links {display:grid;gap:10px;margin-bottom:10px}
@@ -263,7 +274,6 @@ button.grid-peak {padding:2px 0;border:0;border-radius:0;background:none;text-al
 .plot.graph-panning,.plot.graph-panning > svg {cursor:grabbing}
 .plot:focus-visible {outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
 .cursor-line {stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}
-.monthly-peak-line {stroke:#dc2626;stroke-width:1.5;stroke-dasharray:8 5}
 .monthly-peak-label {fill:var(--muted);font-size:11px;paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round}
 .cursor-values {position:absolute;top:10px;z-index:1;pointer-events:auto;padding:9px 11px;
   border:1px solid var(--line);border-radius:8px;background:var(--surface);

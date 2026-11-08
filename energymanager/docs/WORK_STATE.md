@@ -392,7 +392,7 @@ updates before incorporating them into the V4.5 implementation branch; discuss t
 next V4.5 task in the architecture chat and start implementation only when authorized.
 No application task, commit or publication is implied by this setup record.
 
-### EV planner — V4.6 / EV-A002–EV-A005
+### EV planner — V4.6 / EV-A002–EV-A006
 
 - **Architecture chat:** EV Task optimization achritecture, local ID
   `01a18e54-5380-7703-b13d-8044baa8a7ac`.
@@ -456,6 +456,33 @@ No application task, commit or publication is implied by this setup record.
 - **Next:** commit/merge and push4.6.1, then monitor exact-head CI/image publication. Remote results belong only
   in ignored `artifacts/ev-a003-005-state.json` and the final reply. No installation
   deployment, live HA/database, real phone delivery or hardware operation performed.
+
+
+- **EV-A006 — complete for4.6.3 (8 November2026):** the user explicitly authorized
+  implementation and release in the paired architecture chat: “Push it for
+  implementation and release”. Branch `codex/ev-a006` is based on released main278cf48
+  (4.6.2), preserving EV-A002–EV-A005 and washing-machine program creation/renaming.
+  Isolated checkout: `energymanager/artifacts/worktrees/ev-a006`. Current primary
+  pending requirements were read and scoped into this implementation; unrelated
+  drafts remain preserved outside the release commit.
+  **Implemented:** accepted-plan monthly peak forecast from measured quarter prefix
+  plus clipped remaining gross imports; local month reset, missing/stale/revoked-plan
+  handling; unchanged recorded history and label. Same red/dotted heavier peak,
+  lighter power traces, clock-aligned alternating/active quarters, quarter-end marker
+  and cursor contributions/time. The existing Grid monthly-peak icon/value stays in
+  place; the fixed0.25h quarter meter is immediately to its right on the same row.
+  **Verified:**52focused Python cases3.98s;96frontend tests; Ruff/mypy59modules and
+  all JS syntax pass. Cases include independent valid-zero/failed-sensor/watchdog
+  input display, compact polling, partial-prefix import, missing plans, month reset,
+  DST, historical clipping and unchanged measured-peak alerts. Native/standalone
+  desktop and390px layouts, readable cursor, actual drag/wheel and simulated native
+  pinch/two-finger pan, monthly history action and missing/zero peaks pass; clean logs.
+  Configured fake E2E25.845s/2019intervals/max control2.821ms/four fake calls passes.
+  Wheel/sdist85runtime files match; isolated4.6.3 wheel/version/peak asset passes.
+  **Next:** scoped integration/commit/push4.6.3
+  and inspect exact-head CI/image publication. Remote results go only to ignored
+  `artifacts/ev-a006-state.json` and the final reply. No live HA/database, actual
+  notifications, hardware operation or installation deployment performed.
 
 
 ## Current checkpoint — saved recording trim correction (4.5.4,31 October2026)

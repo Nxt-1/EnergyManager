@@ -103,7 +103,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
                 del result["accepted"]
             elif plan:
                 display_fields = ("id", "revision", "valid", "status", "seconds", "intervals", "flows",
-                                  "goals", "sessions", "summary", "reasons", "stages", "input_digest")
+                                  "goals", "sessions", "summary", "reasons", "stages", "input_digest", "forecast_at")
                 result["accepted"] = {key: plan[key] for key in display_fields if key in plan}
         return web.json_response(result, headers={"Cache-Control": "no-store"})
 
@@ -294,7 +294,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         name = request.match_info.get("name", "index.html")
         if name not in ("index.html", "app.js", "settings.js", "display.js", "date-time.js",
                         "datetime-picker.js", "ev-schedule.js", "style.css", "ha-card.js",
-                        "application-view.js", "view.html", "native-dashboard.js", "native-dashboard.css",
+                        "application-view.js", "peak-display.js", "view.html", "native-dashboard.js", "native-dashboard.css",
                         "native-live.js", "graph-history.js", "graph-cursor.js", "dashboard-client.js", "planning-activity.js",
                         "text-selection.js", "ev-status.js", "session-details.js", "appliance-profiles.js", "profile-chart.js", "appliance-deadline.js"):
             raise web.HTTPNotFound()

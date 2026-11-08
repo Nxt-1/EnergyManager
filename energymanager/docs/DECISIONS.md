@@ -1,5 +1,16 @@
 # Current requirements and decisions
 
+- 8 November2026, EV-A006 peak display: retain the same red colour for grid power
+  and peak, use a slightly heavier dotted peak line and lighter normal power lines,
+  and retain the existing label. Keep the monthly-peak indication in its current
+  Grid-box position and append the current-quarter meter value to its right on
+  the same bottom row, as shown in the user's screenshot. No separate panel beside
+  the graph. Shade clock-aligned quarter hours with subtly alternating tints,
+  distinguish the current quarter and show its projected final average with a
+  simple marker at quarter end. The user subsequently explicitly authorized
+  implementation and release: “Push it for implementation and release”.
+  Implemented in4.6.3 after integrating4.6.2; verified with local synthetic data.
+
 - 8 November2026, V45-A001-P1 implementation in4.6.2. Reconciled released main4.6.1
   before implementation. Washing-machine creation/rename stores stable identities and
   display names only; existing captures/averages and frozen plans remain unchanged.

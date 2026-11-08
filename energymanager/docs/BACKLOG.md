@@ -517,6 +517,16 @@ never substitutes for actual plotted sensor values.
 See [ARCHITECTURE.md](ARCHITECTURE.md#measured-peak-alerts-and-graph-history-ev-a002-460).
 
 
+Peak-graph follow-up to ARCH-025 is scoped as EV-A006 in
+[ARCHITECTURE.md](ARCHITECTURE.md#peak-graph-forecast-and-current-quarter-display-ev-a006-463):
+predicted peak, visual separation from grid power while keeping the same colour,
+and current-quarter visualization. The quarter value belongs in the existing Grid
+box to the right of the monthly peak in its existing bottom-row position; no
+separate panel beside the graph. Dotted/heavier peak, lighter power traces,
+alternating quarter-hour backgrounds, current-quarter emphasis and a simple
+projected-end marker are agreed. Implemented in4.6.3 after the8November authorization;
+verification and release coordination remain in WORK_STATE.md.
+
 ## ARCH-026 — Deterministic planning inputs and limits before MILP
 
 Recorded6November2026; scoped into EV-A005 and authorized8November.

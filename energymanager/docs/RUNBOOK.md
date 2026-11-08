@@ -1,5 +1,33 @@
 # Run, configure, review and roll back
 
+## Monthly peak forecast and quarter meter (4.6.3 / EV-A006)
+
+Reload the dashboard after updating. The Grid box keeps its monthly-peak icon/value
+at the bottom and adds the current-quarter meter immediately to its right, marked
+with a small clock. This is imported energy divided by the full0.25-hour quarter,
+not instantaneous power, an elapsed-time average or the projected final average.
+A stale, failed or previous-quarter read shows unavailable; a valid zero shows0W.
+Native monthly-peak clicks still open the mapped HA sensor's history.
+
+Overview keeps recorded monthly-peak history and extends it with a faded forecast
+after Now. Grid and peak share red; the peak is heavier and dotted. The forecast
+uses the accepted plan's imported energy by quarter, includes the current measured
+prefix and remaining partial intervals, and resets at installation-local month start.
+It is not an approval limit. Missing/expired/revoked plans or missing meter/peak inputs
+are identified in the legend; no missing history is fabricated.
+
+Subtle alternating backgrounds mark clock quarters; the active quarter is highlighted.
+A hollow red mark at its end shows the projected final average. Point at the active
+quarter or focus the graph and use arrow keys to read the meter contribution, planned
+remaining contribution, final average, meter-read time and time remaining. Drag,
+wheel/pinch zoom and two-finger pan preserve those time alignments. Historical ranges
+show only recorded peak values and do not acquire a current-quarter marker.
+
+Offline verification uses `python tools/offline_e2e.py --serve --history-fixture`
+and `python tools/native_dashboard_preview.py`. Both are synthetic/local; actual
+HA Recorder, meter timing, mobile hardware and installation performance remain
+unverified. Control, permission and peak-notification policy is unchanged.
+
 ## Washing-machine program creation and renaming (4.6.2 / V45-A001-P1)
 
 After updating, reload the dashboard and expand Washing machine. Add program opens a

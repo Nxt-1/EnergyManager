@@ -1,5 +1,36 @@
 # EnergyManager 4 verification
 
+## 4.6.3 — EV-A006 peak forecast and quarter display (8 November2026)
+
+Based on main4.6.2 (278cf48); no controller, planner, permission or notification-policy
+code changes. Existing washing-machine/EV features are retained.
+
+- 52 focused Python cases pass3.98s: independent current-quarter read/normalization,
+ zero and failed other sensor, watchdog, mapped monthly history/alerts, compact
+ plan timestamp and versioned native asset delivery.96frontend tests pass, including
+ five source-arithmetic/absence/month-boundary/DST/step-clipping regressions.
+- Ruff/mypy59modules, every packaged JavaScript syntax check and CLI4.6.3 pass.
+- Browser standalone dark/native light on desktop and390px: monthly icon/value stays
+ in the bottom row, new quarter immediately to its right, no row overflow. Same red,
+2.5px dotted peak with faded future; normal1.2/.9px power, old label, alternating
+ bands, active quarter and hollow end marker verified. Keyboard cursor exposes the
+ measured/planned contributions and time;390px tooltip remains readable. Actual
+ standalone drag/wheel and the labelled native pinch/two-finger replay change ranges
+ without losing quarter alignment. The native harness mocks physical touch capture.
+- Historical ranges show no future line or active marker. Native unavailable/zero
+ monthly values remain distinct, with absent forecast on missing baseline; native
+ monthly-peak action still opens the simulated HA history. Both consoles are clean.
+- Final configured fake E2E:25.845s,2019intervals,max control2.821ms,four fake calls;
+ worker cancellation, restored admission, frozen-source audit and API/persistence pass.
+ Only local fake HA/weather endpoints and isolated synthetic archives were used.
+
+Wheel/sdist4.6.3 build and all85runtime source/assets/default files match current
+bytes. Isolated wheel version/new peak module asset import passes.
+
+Full-suite, routed E2E and container checks also run in the existing release workflows.
+Remote exact-commit outcomes belong in the ignored checkpoint/final reply. No live
+HA/database, real phone delivery, hardware operation or installation deployment.
+
 ## 4.6.2 — V45-A001-P1 washing-machine programs (8 November2026)
 
 Based on released main4.6.1/8cf94bf.767Python tests pass162.51s;106focused appliance

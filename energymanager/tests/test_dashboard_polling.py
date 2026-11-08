@@ -12,7 +12,7 @@ from test_first_slice import tiny
 async def test_compact_poll_reuses_plan_without_shipping_decision_evidence(tmp_path):
     store = Store(tmp_path / "synthetic.sqlite")
     app = Application(store, snapshot=tiny())
-    plan = {"id": "synthetic-1", "revision": 1, "valid": True, "status": "Optimal",
+    plan = {"id": "synthetic-1", "revision": 1, "valid": True, "status": "Optimal", "forecast_at": "2026-10-25T00:00Z",
             "intervals": [{"start": "2026-10-25T00:00Z", "end": "2026-10-25T00:05Z"}],
             "flows": {"grid_house": [.4]}, "goals": [], "sessions": [], "summary": {},
             "candidate_at_calculation": {"flows": list(range(10000))},
@@ -33,6 +33,7 @@ async def test_compact_poll_reuses_plan_without_shipping_decision_evidence(tmp_p
             assert response.headers["Cache-Control"] == "no-store"
             assert initial["accepted"]["flows"] == plan["flows"]
             assert initial["accepted"]["intervals"] == plan["intervals"]
+            assert initial["accepted"]["forecast_at"] == plan["forecast_at"]
             assert "candidate_at_calculation" not in initial["accepted"]
             assert "adoption_snapshot" not in initial["accepted"]
             assert len(initial["observed"]) == 120 and len(initial_bytes) < len(full) / 5

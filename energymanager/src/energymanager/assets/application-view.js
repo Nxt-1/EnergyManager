@@ -27,6 +27,7 @@ import {requestError, StatePoller} from './dashboard-client.js';
 import {hasTextSelection, clearTextSelection} from './text-selection.js';
 import {PlanningActivity} from './planning-activity.js';
 import {evMeasuredPower} from './ev-status.js';
+import {peakDisplay, quarterMeasurement, quarterBands, quarterReadout} from './peak-display.js';
 import {sessionContributionMarkup, plannedPowerProfileMarkup, goalPowerProfileMarkup} from './session-details.js';
 
 
@@ -61,7 +62,7 @@ export async function mountApplication(root, options = {}) {
   });
   const colors = {
     grid: '#dc2626',
-    monthly_peak: '#b91c1c',
+    monthly_peak: '#dc2626',
     ess: '#007ac2',
     solar: '#e4ac19',
     house: '#8c65c8',
@@ -223,15 +224,16 @@ export async function mountApplication(root, options = {}) {
       name,
       ...points(name, soc)
     }));
-    if (!soc && page === 'overview') series.push({name: 'monthly_peak', step: true, planned: [],
+    const peakState = !soc && page === 'overview' ? peakDisplay(state) : null;
+    if (peakState) series.push({name: 'monthly_peak', step: true, planned: peakState.predicted,
       observed: stepPoints(observedPoints(state, graphHistory.data, 'monthly_peak'))});
     for (const item of series) for (const kind of ['observed', 'planned'])
-      item[kind] = clipSeries(item[kind], start, end);
+      item[kind] = clipSeries(item[kind], start, end, item.step);
     const visible = series.flatMap(s => [...s.planned, ...s.observed]).filter(p => p[0] >= start && p[0] <=
       end && p[1] !== null);
     const peak = !soc && page === 'overview' ? monthlyPeakWatts(state) : null;
     let low = soc ? 0 : Math.min(0, ...visible.map(p => p[1])),
-      high = soc ? 100 : Math.max(1000, peak ?? 0, ...visible.map(p => p[1]));
+      high = soc ? 100 : Math.max(1000, peak ?? 0, peakState && peakState.quarter.end >= start && peakState.quarter.end <= end ? peakState.quarter.projectedWatts ?? 0 : 0, ...visible.map(p => p[1]));
     if (!soc) {
       low = Math.floor(low);
       high = Math.ceil(high * 1.1 / 100) * 100;
@@ -239,11 +241,16 @@ export async function mountApplication(root, options = {}) {
     const width = $(soc ? 'soc' : 'power').clientWidth || 1000,
       height = soc ? 255 : 360;
     const {left, right, top, bottom} = plotInsets;
-    graphModels[soc ? 'soc' : 'power'] = {start, end, width, height, low, high, series, now: Date.parse(state.now)};
+    graphModels[soc ? 'soc' : 'power'] = {start, end, width, height, low, high, series, now: Date.parse(state.now),
+      quarter: peakState?.quarter};
     const x = value => left + (value - start) / (end - start) * (width - left - right);
     const y = value => height - bottom - (value - low) / (high - low) * (height - top - bottom);
     let svg =
       `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${soc?'Battery state of charge':'Power'} chart, ${esc(time(start))} to ${esc(time(end))}">`;
+    if (peakState) {
+      for (const band of quarterBands(start, end, Date.parse(state.now), state.policy.timezone))
+        svg += `<rect class="quarter-band${band.alternate ? ' quarter-alternate' : ''}${band.active ? ' quarter-active' : ''}" x="${x(band.start)}" y="${top}" width="${x(band.end)-x(band.start)}" height="${height-top-bottom}"/>`;
+    }
     for (let tick = 0; tick <= 4; tick++) {
       const value = low + (high - low) * tick / 4,
         pos = y(value);
@@ -270,14 +277,20 @@ export async function mountApplication(root, options = {}) {
           d += `${penLifted ? 'M' : 'L'}${num(x(point[0]),1)},${num(y(point[1]),1)} `;
           penLifted = false;
         }
-        const lineWidth = soc ? (kind === 'observed' ? 2.8 : 1.8) : (kind === 'observed' ? 1.6 : 1.2);
+        const lineWidth = s.name === 'monthly_peak' ? 2.5 : soc ? (kind === 'observed' ? 2.8 : 1.8) : (kind === 'observed' ? 1.2 : .9);
         svg +=
-          `<path d="${d}" fill="none" stroke="${colors[s.name]}" stroke-width="${lineWidth}" ${s.name==='monthly_peak'?'stroke-dasharray="8 5"':kind==='planned'?'stroke-dasharray="6 4" opacity=".85"':''}><title>${esc(s.name === 'monthly_peak' ? 'Monthly peak · 15-minute average' : s.name)} · ${kind}</title></path>`;
+          `<path d="${d}" fill="none" stroke="${colors[s.name]}" stroke-width="${lineWidth}" ${s.name==='monthly_peak'?'stroke-dasharray="1 5" stroke-linecap="round"':''} ${kind==='planned'?`opacity=".6" ${s.name==='monthly_peak'?'':'stroke-dasharray="6 4"'}`:''}><title>${esc(s.name === 'monthly_peak' ? 'Monthly peak · 15-minute average' : s.name)} · ${kind}</title></path>`;
       }
     const now = Date.parse(state.now);
     if (now >= start && now <= end) svg +=
       `<line x1="${x(now)}" x2="${x(now)}" y1="${top}" y2="${height-bottom}" stroke="#718697" stroke-dasharray="3 3"/>`;
     if (!soc && page === 'overview') {
+      const quarter = peakState.quarter;
+      if (quarter.projectedWatts !== null && quarter.end >= start && quarter.end <= end)
+        svg += `<circle class="quarter-projection" cx="${x(quarter.end)}" cy="${y(quarter.projectedWatts)}" r="4.5" stroke="${colors.grid}" stroke-width="2" fill="var(--surface)"><title>${esc(quarterReadout(quarter, value => time(value, false)))}</title></circle>`;
+      $('monthly-peak-legend').textContent = 'Dotted red: monthly peak · faded after Now: forecast · 15-min average' +
+        (peakState.reason ? ` · Prediction unavailable: ${peakState.reason}` : '');
+      $('monthly-peak-legend').title = 'Prediction uses the accepted plan; it is not a permission limit.';
       const label = peak === null ? 'Monthly peak unavailable' : `Current month peak · ${Math.round(peak)} W`;
       const month = new Intl.DateTimeFormat('en-GB', {timeZone: state.policy.timezone, month: 'short', year: 'numeric'}).format(new Date(state.now));
       const description = peak === null ? 'Current recorded monthly capacity peak unavailable.' :
@@ -535,7 +548,11 @@ export async function mountApplication(root, options = {}) {
       const peakRow = options.native && !state.demo ?
         `<button type="button" class="grid-peak" data-entity-key="monthly_peak_kw" ${canOpen ? '' : 'disabled'} title="${esc(description)}" aria-label="${esc(description)}">${peakContent}</button>` :
         `<span class="grid-peak" title="${esc(description)}" aria-label="${esc(description)}">${peakContent}</span>`;
-      return `<article class="live-item"><div data-live="grid" ${historyAction}>${content}</div>${peakRow}</article>`;
+      const quarter = quarterMeasurement(state);
+      const quarterText = quarter.measuredWatts === null ? '—' : String(Math.round(quarter.measuredWatts));
+      const quarterDescription = `Current quarter meter: ${quarterText} W · imported energy divided by the fixed 0.25-hour quarter; not instantaneous power or the projected final average.`;
+      const quarterContent = `<span class="grid-quarter" title="${esc(quarterDescription)}" aria-label="${esc(quarterDescription)}"><span aria-hidden="true">◷</span><span>${quarterText} W</span></span>`;
+      return `<article class="live-item"><div data-live="grid" ${historyAction}>${content}</div><div class="grid-peak-row">${peakRow}${quarterContent}</div></article>`;
     }).join('');
   }
 

@@ -1,3 +1,10 @@
+## 4.6.3 — Peak forecast and current-quarter display
+
+- Extend recorded monthly peak history with a distinct forecast from the accepted plan's quarter-average imports, including measured prefix and local month resets.
+- Keep the Grid-box monthly peak in place and show the fixed-denominator current-quarter meter value immediately to its right.
+- Use the same red for grid and peak, a heavier dotted peak, lighter power traces, alternating quarter backgrounds and a projected quarter-end marker with cursor details.
+- Preserve EV continuity/deadline safeguards, appliance features, control permissions and peak notifications. Verified offline; installation deployment is separate.
+
 ## 4.6.2 — Washing-machine program names
 
 - Add and rename washing-machine programs from the expanded appliance card.
