@@ -6,6 +6,7 @@ import asyncio
 import math
 import json
 import re
+import unicodedata
 from datetime import datetime
 from hashlib import sha256
 from typing import TYPE_CHECKING, Any
@@ -80,7 +81,38 @@ class ApplianceProfiles:
         self.bosch = BoschDishwasher(self)
 
     def programs(self) -> dict[str, dict[str, str]]:
-        return {**PROGRAMS, "dishwasher": {**PROGRAMS["dishwasher"], **self.settings.get("bosch_programs", {})}}
+        return {
+            **PROGRAMS,
+            "washing_machine": {**PROGRAMS["washing_machine"],
+                                **self.settings.get("manual_programs", {}).get("washing_machine", {})},
+            "dishwasher": {**PROGRAMS["dishwasher"], **self.settings.get("bosch_programs", {})},
+        }
+
+    def save_program(self, body: dict[str, Any], *, create: bool) -> dict[str, Any]:
+        """Edit washing-machine display metadata; identities and capture evidence stay stable."""
+        if type(body.get("revision")) is not int or body["revision"] != self.settings["revision"]:
+            raise ValueError("Profiles changed in another view; reload before saving")
+        if body.get("machine") != "washing_machine":
+            raise ValueError("Only washing-machine programs can be created or renamed manually")
+        raw = body.get("name")
+        if not isinstance(raw, str):
+            raise ValueError("Supply a program name")
+        name = " ".join(unicodedata.normalize("NFKC", raw).split())
+        if not name or len(name) > 80 or not name.isprintable():
+            raise ValueError("Program name must contain 1 to 80 printable characters")
+        programs = self.programs()["washing_machine"]
+        identity = "program_"+uuid4().hex if create else body.get("program")
+        if not isinstance(identity, str) or (not create and identity not in programs):
+            raise ValueError("Choose an existing washing-machine program")
+        duplicate = any(
+            key != identity and " ".join(unicodedata.normalize("NFKC", label).split()).casefold() == name.casefold()
+            for key, label in programs.items())
+        if duplicate:
+            raise ValueError("A washing-machine program with that name already exists")
+        catalogue = {**programs, identity: name}
+        self._persist_settings({**self.settings, "manual_programs": {
+            **self.settings.get("manual_programs", {}), "washing_machine": catalogue}})
+        return {"program": {"id": identity, "name": name}, "library": self.library()}
 
     def start(self) -> None:
         self.task = asyncio.create_task(self._loop())

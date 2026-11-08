@@ -237,6 +237,8 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
                 result = library.configure(body)
             elif action == "arm":
                 result = library.arm(body)
+            elif action in ("program-create", "program-rename"):
+                result = library.save_program(body, create=action == "program-create")
             elif action == "bosch-configure":
                 result = library.configure_bosch(body)
             elif action in ("run-preview","run-ready","run-cancel","run-edit","run-choose"):

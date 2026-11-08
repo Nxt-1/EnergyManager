@@ -1,5 +1,22 @@
 # Run, configure, review and roll back
 
+## Washing-machine program creation and renaming (4.6.2 / V45-A001-P1)
+
+After updating, reload the dashboard and expand Washing machine. Add program opens a
+name-only form. The saved program immediately appears in Record next cycle and as an
+empty foldable program group; recording still requires the mapped washer power sensor.
+Rename program lets you choose an existing or newly created program and save its new
+name. Its ID, recordings, selected average contributors and raw measurements stay intact.
+Open recording review titles also update without resetting an unsaved trim selection.
+
+Names must be1–80 printable characters. Whitespace is normalized and equivalent names
+are rejected without changing the catalogue. Concurrent edited drafts are rejected with
+a reload message; they are not silently overwritten. Names persist across reload/restart
+and demo/configured catalogues remain separate. Bosch has no manual Add/Rename controls.
+Metadata edits do not operate an appliance. Program removal, adding appliances and washer
+scheduling/control are not part of this release. All verification used local fake data;
+no live installation/database access, appliance operation or deployment was performed.
+
 ## EV continuity, peak protection and deadline margin (4.6.1)
 
 Reload the dashboard after updating. A running EV task continues to its own energy

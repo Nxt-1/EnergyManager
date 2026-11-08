@@ -1637,3 +1637,30 @@ test('monthly peak history holds exact values through rises and resets, breaking
   state.demo=true;
   assert.ok(observedPoints(state,null,'monthly_peak').every(([,v])=>v===null));
 });
+
+
+
+test('manual programme names update selectors/review verbatim while preserving selection and rename drafts', () => {
+  const arm={innerHTML:'old',value:'whites_60',matches:()=>false};
+  const rename={innerHTML:'old',value:'whites_60',matches:()=>true,form:{elements:{name:{value:'Unsaved draft'}}}};
+  const title={textContent:''};
+  const page={manualProgramsMounted:true,library:{programs:{washing_machine:{whites_60:'Exact_Name30 & silk',new_id:'New <program>'}}},
+    reviewed:{machine:'washing_machine',program:'whites_60'},root:{querySelectorAll:()=>[arm,rename],querySelector:()=>title}};
+  ApplianceProfilesPage.prototype.renderManualPrograms.call(page);
+  assert.equal(arm.value,'whites_60');assert.equal(rename.form.elements.name.value,'Unsaved draft');
+  assert.match(arm.innerHTML,/New &lt;program&gt;/);
+  assert.equal(title.textContent,'Review · Washing machine · Exact_Name30 & silk');
+  // Browser serialization need not retain the same HTML entity spelling.
+  arm.innerHTML='browser-normalized option markup';
+  ApplianceProfilesPage.prototype.renderManualPrograms.call(page);
+  assert.equal(arm.innerHTML,'browser-normalized option markup');
+});
+
+
+test('a profile poll started before a metadata edit cannot replace the newer catalogue', async () => {
+  const current={revision:8,programs:{washing_machine:{id:'New name'}}};
+  const page={signal:{aborted:false},loading:false,library:current,api:async()=>({revision:7}),
+    renderManualPrograms:()=>assert.fail('Obsolete poll must not render')};
+  await ApplianceProfilesPage.prototype.refresh.call(page);
+  assert.equal(page.library,current);assert.equal(page.loading,false);
+});

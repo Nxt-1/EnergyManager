@@ -257,6 +257,65 @@ This direction does not resolve the scheduling/background-accounting questions a
 See [DECISIONS.md](DECISIONS.md) and the V4.5 coordination record in
 [WORK_STATE.md](WORK_STATE.md).
 
+#### UI program creation and renaming — 8 November 2026 (V45-A001-P1; implemented4.6.2, offline verified)
+
+The user wants to add programs from the UI for the washing machine and similar
+appliances with manually maintained program lists. Bosch dishwasher programs remain
+supplied by its known HA catalogue; do not expose manual program creation for Bosch.
+Use the already agreed program model: a user-defined name with multiple reviewed
+recordings, without a variants model or an invented power/duration estimate.
+
+Authorized small delivery scope: an Add program action inside the expanded washing-
+machine card, a name-only creation form, persistent program identity/name, immediate
+availability in Record next cycle and the existing foldable program groups. New
+programs initially have no recordings/profile. Preserve existing program identities,
+recordings and averaging/trim behavior.
+
+The user confirmed that this package includes renaming programs. Allow renaming both
+existing and newly created washing-machine programs. Rename the display name while
+retaining stable program identity, recording links, selected average members and raw
+captures. The updated name appears consistently in selectors, program groups and
+recording review; do not rewrite previously frozen planning evidence. Bosch's HA
+catalogue remains outside these manual create/rename controls. Reject empty names and
+ambiguous duplicate names within the same appliance; routine name-validation details
+are implementation choices.
+
+Completion criteria for V45-A001-P1: create and rename through both dashboard flows;
+new programs are immediately available for recording; existing IDs/recordings/averages
+survive migration and rename; names and new programs persist across reload/restart.
+Verify stale-edit protection, invalid/duplicate names and that these metadata actions
+do not send appliance commands. Preserve the original trim interaction and foldable
+groups from4.5.8. This is separate from adding appliances, program removal/dependent-
+data policy or washing-machine scheduling/control. On 8 November the user explicitly
+authorized implementation and requested a start 1 hour and 11 minutes later. A one-time
+task targeted the registered implementation chat at19:33:57 Europe/Brussels that day;
+see WORK_STATE.md for its schedule identifier. Reconcile current main and release
+ordering before selecting a release version; do not assume a4.5.x patch is appropriate
+if a newer stream has already reached main.
+
+P1 implementation contract: the effective washing-machine catalogue retains the four
+legacy IDs and overlays a mode-isolated manual_programs.washing_machine map in the
+existing profile settings. The first metadata edit persists the effective legacy names
+alongside new opaque program_UUID identities. Existing recording/sample rows, average
+membership, source signatures and archived planning evidence are not rewritten. There
+is no provisional power/duration/profile for a new program. Bosch remains HA-supplied.
+
+POST /api/profiles/program-create and program-rename require same-origin JSON and the
+current library revision, and accept only washing_machine. Names use Unicode NFKC,
+collapsed/trimmed whitespace,1–80 printable characters and case-folded duplicate checks
+within this appliance (excluding the same ID when renaming). Persist settings atomically
+before advancing in-memory state. Metadata actions do not send appliance commands.
+
+Both dashboards share name-only Add program and program/name Rename forms in the
+expanded washer card. Creation selects the new identity for Record next cycle; selectors,
+foldable groups and an open review heading update without replacing its chart/trim draft.
+Unedited forms take current revision on opening; edited drafts keep their stale-edit guard.
+Older in-flight profile polls cannot replace a newer metadata catalogue. Existing graph
+handles, linked fields, exclusive inline review and same-ID trim saves are retained.
+Program removal, appliance CRUD and washing-machine control/scheduling remain outside P1.
+The one-time start fired8November and its automation was deleted after dispatch. Release
+4.6.2 incorporates main4.6.1; the task's V4.5 label does not roll back newer releases.
+
 #### Pending Appliances UI direction — agreed 2 November 2026
 
 Keep most, potentially all, appliances on one shared Appliances page. Use two stages:

@@ -486,6 +486,14 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                                 "entity_id": f"sensor.synthetic_{machine}", "start_threshold_w": 10,
                                 "idle_timeout_minutes": 15})
                         beginning = application.now() - timedelta(hours=3)
+                        with patch.object(application, "now", return_value=beginning):
+                            washer = profiles.arm({"machine": "washing_machine", "program": "whites_60",
+                                "notes": "SYNTHETIC short legacy washer fixture; not an installation cycle"})
+                        for seconds, power in ((0, 0), (5, 1800), (10, 80), (15, 0)):
+                            profiles.ingest(washer["id"], beginning+timedelta(seconds=seconds), power)
+                        with patch.object(application, "now", return_value=beginning+timedelta(seconds=15)):
+                            profiles.finish(washer["id"])
+                            profiles.accept(washer["id"], {"revision": profiles.settings["revision"], "reviewed": True})
                         for cycle in range(4):
                             with patch.object(application, "now", return_value=beginning):
                                 recording = profiles.arm({"machine": "dishwasher", "program": "eco",

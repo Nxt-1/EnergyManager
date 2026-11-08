@@ -1,3 +1,9 @@
+## 4.6.2 — Washing-machine program names
+
+- Add and rename washing-machine programs from the expanded appliance card.
+- Preserve stable IDs, recordings, average membership and original trim controls.
+- Keep Bosch programs supplied by HA and reject duplicate or stale metadata edits.
+
 ## 4.6.1 — EV continuity and cautious deadline protection
 
 - Continue accepted EV work to its own energy endpoint despite forecast progress leads, and review near-term replacement pauses within the same outcome and cost limits.

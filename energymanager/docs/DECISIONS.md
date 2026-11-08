@@ -1,5 +1,26 @@
 # Current requirements and decisions
 
+- 8 November2026, V45-A001-P1 implementation in4.6.2. Reconciled released main4.6.1
+  before implementation. Washing-machine creation/rename stores stable identities and
+  display names only; existing captures/averages and frozen plans remain unchanged.
+  Names normalize Unicode/whitespace and reject case-folded duplicates. Shared forms
+  preserve trim drafts and revision guards; Bosch remains HA-managed. The one-time
+  scheduled start was consumed and its automation removed. Verified offline only.
+
+- 8 November 2026, V45-A001-P1 authorization and delayed start. The user explicitly
+  authorized implementation of washing-machine program creation/renaming and requested
+  it start in 1 hour and 11 minutes. A one-time task targets the existing registered
+  implementation chat at 19:33:57 Europe/Brussels. Preserve the scoped requirements,
+  existing recordings and Bosch catalogue; broader library work remains separate.
+
+- 8 November 2026, requested user-created programs. The user wants to add programs
+  from the UI for appliances such as the washing machine. Exclude the Bosch dishwasher,
+  whose programs are already known through HA. This narrows the next V45-A001 discussion
+  to program creation using the agreed name/recordings model. The user confirmed that
+  renaming programs is included. Preserve program identity and existing recording/
+  average links when renaming. V45-A001-P1 is the scoped creation/rename follow-up;
+  broader appliance CRUD and program removal are not implicitly authorized.
+
 - 8 November2026, EV-A003–EV-A005: the user authorized scheduled implementation
   and continuation through acceptance and release readiness. EV-Q020 confirms that
   protected allocations mean required service, hard reserves and binding commitments;

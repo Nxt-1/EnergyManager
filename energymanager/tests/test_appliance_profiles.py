@@ -610,3 +610,117 @@ def test_recording_library_keeps_older_records_and_does_not_consolidate_equal_da
     assert len(migrated.library()["recordings"]) == 111
     assert original in {r["id"] for r in migrated.library()["recordings"]}
     assert migrated.members("dishwasher/eco") == [original]
+
+
+
+async def test_washing_program_metadata_preserves_legacy_capture_average_and_frozen_evidence(profiles):
+    profiles.configure({"revision": profiles.settings["revision"], "machine": "washing_machine",
+                        "entity_id": "sensor.synthetic_washer", "start_threshold_w": 10, "idle_timeout_minutes": 1})
+    row = profiles.arm({"machine": "washing_machine", "program": "whites_60", "notes": "SYNTHETIC legacy washer"})
+    for seconds, power in ((0, 0), (5, 1000), (10, 500), (15, 0)):
+        profiles.ingest(row["id"], AT+timedelta(seconds=seconds), power)
+    profiles.finish(row["id"])
+    profiles.accept(row["id"], {"revision": profiles.settings["revision"], "reviewed": True})
+    before = profiles.detail(row["id"])
+    average = await profiles.profile_detail("washing_machine", "whites_60")
+    profiles.store.record(tiny(), {"id": "SYNTHETIC-frozen-program", "curve": average}, "accepted")
+    frozen = profiles.store.connection.execute("SELECT snapshot,result FROM decisions").fetchone()
+    selected, members = dict(profiles.settings["selected"]), dict(profiles.settings["members"])
+    result = profiles.save_program({"revision": profiles.settings["revision"], "machine": "washing_machine",
+                                   "program": "whites_60", "name": "Cotton / 60°C"}, create=False)
+    assert result["program"] == {"id": "whites_60", "name": "Cotton / 60°C"}
+    assert profiles.detail(row["id"]) == before
+    assert profiles.settings["selected"] == selected and profiles.settings["members"] == members
+    restored = ApplianceProfiles(profiles.app)
+    assert restored.programs()["washing_machine"]["whites_60"] == "Cotton / 60°C"
+    current = await restored.profile_detail("washing_machine", "whites_60")
+    assert current["points"] == average["points"] and current["summary"] == average["summary"]
+    assert profiles.store.connection.execute("SELECT snapshot,result FROM decisions").fetchone() == frozen
+
+
+def test_new_washing_program_has_stable_identity_no_invented_profile_and_is_immediately_recordable(profiles):
+    defaults = dict(profiles.programs()["washing_machine"])
+    created = profiles.save_program({"revision": profiles.settings["revision"], "machine": "washing_machine",
+                                    "name": "  Silk   30°C  "}, create=True)
+    identity = created["program"]["id"]
+    assert identity not in defaults and created["program"]["name"] == "Silk 30°C"
+    assert not created["library"]["profiles"] and not created["library"]["recordings"]
+    renamed = profiles.save_program({"revision": profiles.settings["revision"], "machine": "washing_machine",
+                                    "program": identity, "name": "Wool & silk 30"}, create=False)
+    assert renamed["program"]["id"] == identity
+    from contextlib import closing
+    with closing(Store(profiles.store.path)) as restarted_store:
+        restored = ApplianceProfiles(SimpleNamespace(store=restarted_store, demo=False, ha=object(), now=lambda: AT))
+        assert restored.programs()["washing_machine"] == {**defaults, identity: "Wool & silk 30"}
+        restored.configure({"revision": restored.settings["revision"], "machine": "washing_machine",
+                            "entity_id": "sensor.synthetic_washer", "start_threshold_w": 10, "idle_timeout_minutes": 1})
+        row = restored.arm({"machine": "washing_machine", "program": identity})
+        assert row["program"] == identity and row["status"] == "armed"
+
+
+@pytest.mark.parametrize("name", [None, 42, "", "   ", "\x00", "Silk\u200b30", "a"*81])
+def test_invalid_program_names_do_not_change_the_catalogue(profiles, name):
+    before = profiles.library()
+    with pytest.raises(ValueError, match="name"):
+        profiles.save_program({"revision": profiles.settings["revision"], "machine": "washing_machine", "name": name}, create=True)
+    assert profiles.library() == before
+
+
+def test_duplicate_normalization_unknown_programs_bosch_and_stale_edits_are_rejected(profiles):
+    created = profiles.save_program({"revision": profiles.settings["revision"], "machine": "washing_machine", "name": "Café"}, create=True)
+    revision = profiles.settings["revision"]
+    for name in ("  WHITES  60°C  ", "Cafe\u0301", "Ｃａｆé"):
+        with pytest.raises(ValueError, match="already exists"):
+            profiles.save_program({"revision": revision, "machine": "washing_machine", "name": name}, create=True)
+    for machine in ("dishwasher", "mazak"):
+        with pytest.raises(ValueError, match="Only washing-machine"):
+            profiles.save_program({"revision": revision, "machine": machine, "name": "Test"}, create=True)
+    with pytest.raises(ValueError, match="already exists"):
+        profiles.save_program({"revision": revision, "machine": "washing_machine", "program": created["program"]["id"], "name": "Darks 40°C"}, create=False)
+    with pytest.raises(ValueError, match="existing"):
+        profiles.save_program({"revision": revision, "machine": "washing_machine", "program": "absent", "name": "Test"}, create=False)
+    with pytest.raises(ValueError, match="another view"):
+        profiles.save_program({"revision": revision-1, "machine": "washing_machine", "name": "Test"}, create=True)
+    assert profiles.settings["revision"] == revision
+
+
+def test_program_write_failure_is_atomic_and_demo_catalogue_is_independent(profiles):
+    import sqlite3
+    before = profiles.library()
+    profiles.store.connection.executescript("""
+        CREATE TRIGGER synthetic_program_failure BEFORE INSERT ON state
+        BEGIN SELECT RAISE(FAIL,'SYNTHETIC program write failure'); END;
+    """)
+    with pytest.raises(sqlite3.IntegrityError, match="program write failure"):
+        profiles.save_program({"revision": profiles.settings["revision"], "machine": "washing_machine", "name": "Silk"}, create=True)
+    assert profiles.library() == before
+    profiles.store.connection.execute("DROP TRIGGER synthetic_program_failure")
+    profiles.store.connection.commit()
+    demo = ApplianceProfiles(SimpleNamespace(store=profiles.store, demo=True, ha=None, now=lambda: AT))
+    demo.save_program({"revision": demo.settings["revision"], "machine": "washing_machine", "name": "Silk"}, create=True)
+    assert "Silk" not in profiles.programs()["washing_machine"].values()
+    assert demo.library()["recordings"] == []
+
+
+async def test_program_api_origin_revision_and_metadata_edits_never_send_appliance_commands(profiles):
+    application = Application(profiles.store, snapshot=tiny())
+    application.appliance_profiles = profiles
+    calls = []
+    async def forbid_command(*args):
+        calls.append(args)
+        raise AssertionError("Metadata must not command an appliance")
+    async def no_lifecycle():
+        pass
+    profiles.bosch.command = forbid_command
+    application.start = application.close = no_lifecycle
+    async with TestClient(TestServer(create_web(application))) as client:
+        body = {"revision": profiles.settings["revision"], "machine": "washing_machine", "name": "SYNTHETIC Handwash"}
+        assert (await client.post("/api/profiles/program-create", json=body)).status == 403
+        response = await client.post("/api/profiles/program-create", json=body, headers={"X-EnergyManager": "1"})
+        assert response.status == 200
+        created = await response.json()
+        assert (await client.post("/api/profiles/program-create", json=body, headers={"X-EnergyManager": "1"})).status == 400
+        response = await client.post("/api/profiles/program-rename", headers={"X-EnergyManager": "1"}, json={
+            "revision": created["library"]["revision"], "machine": "washing_machine", "program": created["program"]["id"], "name": "SYNTHETIC Handwash renamed"})
+        assert response.status == 200 and not calls
+        assert (await response.json())["program"]["id"] == created["program"]["id"]

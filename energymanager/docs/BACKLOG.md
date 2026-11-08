@@ -150,6 +150,18 @@ with scheduling support determined by operating behavior. Initial support is for
 manually started, uninterrupted program cycles; other equipment needs its own
 supported behavior. This is pending V4.5 direction V45-A001, not implementation
 authorization. Saved-recording removal and program management are identified gaps.
+On 8 November the user requested UI creation of programs for the washing machine
+and similar manually maintained catalogues, excluding the HA-known Bosch programs.
+The small V45-A001-P1 scope uses name-only creation and the existing recording/average
+workflow. The user also confirmed renaming existing and new washing-machine programs,
+preserving their identities and recordings. Program removal/dependent-data policy and
+adding appliances remain separate. See the pending UI program creation and renaming
+section in ARCHITECTURE.md for scope/completion criteria. The user authorized this
+subset on 8 November and requested starting in 1 hour and 11 minutes. Its one-time
+implementation handoff fired on8November; P1 is implemented in4.6.2 and verified offline.
+The automation was deleted after dispatch; see WORK_STATE.md.
+The broader V45-A001 work remains outside this authorization.
+
 The user chose permanent recording deletion after confirmation; removal from an
 average retains the recording. Program/appliance removal and dependent-data rules
 remain open. See ARCHITECTURE.md and

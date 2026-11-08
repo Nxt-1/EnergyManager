@@ -1,5 +1,27 @@
 # EnergyManager 4 verification
 
+## 4.6.2 — V45-A001-P1 washing-machine programs (8 November2026)
+
+Based on released main4.6.1/8cf94bf.767Python tests pass162.51s;106focused appliance
+cases,91frontend cases, Ruff/mypy59modules and shared JS syntax pass. Tests cover stable
+legacy/new IDs, additive catalogue persistence, normalized/duplicate/invalid names,
+revision rejection, transactional failure, mode isolation, API origin guards and no
+appliance commands. Rename preserves recording bodies/samples, selected contributors,
+average curve/statistics and byte-identical archived decisions. New programs have no
+invented profile and arm through the existing mapped-meter path.
+
+Standalone and native fake dashboards create and rename programs, immediately update
+record selectors/groups/review headings, and retain a legacy record/average and its
+unsaved1second trim draft/handle. Reload shows both added and renamed names. Duplicate
+and cross-dashboard stale edits reject while retaining the draft. Bosch exposes no manual
+catalogue forms. Original handles, foldable groups and same-ID trim flow remain present.
+All entities/traces are synthetic/local; no live HA/database/provider, real notifications,
+hardware operation or installation deployment. Wheel/sdist84runtime files match source,
+isolated4.6.2 import passes and an independent SQLite connection verifies persistence.
+Final configured fake E2E25.464s/2019intervals/max control3.353ms/four fake calls passes;
+subsequent remote outcomes belong in ignored artifacts/v462-release-state.json.
+
+
 ## 4.6.1 — EV-A003, EV-A004 and EV-A005 (8 November2026)
 
 Based on released4.6.0/main6031411, incorporating4.5.8. No live HA/database,

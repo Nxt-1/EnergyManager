@@ -47,6 +47,34 @@ requirements rather than replaying every historical checkpoint.
   Preserve existing data. See the pending V45-A001 section in ARCHITECTURE.md and
   the 1 November decision in DECISIONS.md. Detailed scope and completion criteria
   remain to be agreed before implementation.
+  **8 November follow-up after4.5.8:** the user requests adding washing-machine
+  programs through the UI, excluding Bosch's known HA catalogue. Proposed small
+  V45-A001 subset: name-only program creation in the expanded card, persisted and
+  immediately available for recording and foldable groups; preserve existing data.
+  The user confirmed program renaming is included for existing/new washing-machine
+  programs, retaining stable identities and all recording/average links. V45-A001-P1
+  scope/completion criteria are ready in ARCHITECTURE.md under UI program creation
+  and renaming. Program removal, appliance CRUD and washing-machine scheduling/control
+  remain outside scope. The user explicitly authorized implementation on 8 November,
+  asking to start in1hour11minutes. The one-time automation
+  `implement-washing-machine-program-creation-and-renaming` fired at19:34 Europe/Brussels
+  on8November and was deleted after dispatch, preventing repeat implementation.
+  **P1 implementation checkpoint:** main4.6.1 (`8cf94bf`) incorporated in the
+  registered worktree; ready target4.6.2 preserves released EV-A002–EV-A005.
+  Implemented mode-isolated additive washing-machine catalogue, stable legacy/new IDs,
+  normalized/duplicate-checked names, same-origin revision-guarded metadata API, shared
+  Add/Rename forms and immediate selector/group/review updates. Bosch remains read-only
+  for manual catalogue edits. No recording/sample/average or archived-plan rewrites.
+  Verification:106 focused appliance cases and767full Python cases162.51s pass;
+  91frontend cases, Ruff/mypy59modules pass. Both browsers create/rename, reload names,
+  retain existing recording/average identity and inline trim draft/handle linkage;
+  duplicate/stale cross-view edits reject and keep the draft. Metadata requests send
+  no appliance commands. An independent SQLite connection verifies durable names/IDs.
+  Wheel/sdist84runtime files match with isolated4.6.2 import. Final configured fake E2E
+  passes25.464s/2019intervals, max control3.353ms/four fake service calls.
+  NEXT: preserve concurrent primary edits, scoped4.6.2 integration/push and exact-commit
+  CI/publication. Remote results belong in ignored artifacts/v462-release-state.json.
+  No live operation or installation deployment.
   Shared UI direction agreed 2 November: most/potentially all appliances on one page,
   initially shown as relatively large icon cards with relevant information/controls;
   clicking a card opens full appliance information. Card content/detail form pending.

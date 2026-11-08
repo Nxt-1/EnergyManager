@@ -21,13 +21,26 @@ export class ApplianceProfilesPage {
     this.library = null;
     this.previewGeneration = 0;
     root.addEventListener('input', event => {
+      const metadata=event.target.closest('form[data-profile-form^="program-"]');
+      if(metadata) metadata.dataset.edited='true';
       if (['start_seconds','end_seconds'].includes(event.target.name)) this.syncTrim(event.target.form);
     }, {signal});
     signal.addEventListener('abort', () => {
       clearTimeout(this.previewTimer);
       this.chart?.close();
     }, {once:true});
+    root.addEventListener('toggle', event => {
+      if (!event.target.open) return;
+      const form=event.target.querySelector('form[data-profile-form^="program-"]');
+      if (!form || form.dataset.edited) return;
+      form.dataset.revision=this.library.revision;
+      if(form.dataset.profileForm==='program-rename') form.elements.name.value=this.library.programs.washing_machine[form.elements.program.value];
+    }, {capture:true,signal});
     root.addEventListener('change', event => {
+      if (event.target.matches('[data-program-rename-choice]')) {
+        event.target.form.dataset.edited='true';
+        event.target.form.elements.name.value = this.library.programs.washing_machine[event.target.value];
+      }
       if (event.target.matches('[data-bosch-program]')) { this.rememberProgram(event.target.value); this.renderBosch(); this.previewReady(); }
     }, {signal});
     root.addEventListener('submit', event => {
@@ -82,9 +95,10 @@ export class ApplianceProfilesPage {
     this.loading = true;
     try {
       const library = await this.api('profiles');
-      if (this.signal.aborted) return;
+      if (this.signal.aborted || this.library && library.revision < this.library.revision) return;
       this.library = library;
       if (!this.mounted) { this.mount(); this.mounted = true; }
+      this.renderManualPrograms();
       this.renderRecordings();
       this.renderBosch();
       if (library.sampler_error) this.message(library.sampler_error, true);
@@ -130,6 +144,12 @@ export class ApplianceProfilesPage {
       <label>Program<select name="program">${Object.entries(library.programs[machine]).map(([id, label]) => `<option value="${escapeHTML(id)}">${escapeHTML(label)}</option>`).join('')}</select></label>
       <label>Load / options / notes<input name="notes" maxlength="500" placeholder="e.g. full load, extra rinse"></label>
       <button type="submit">Record next cycle</button></form>
+      ${machine === 'washing_machine' ? `<div class="profile-program-management">
+      <details><summary>Add program</summary><form data-profile-form="program-create" data-machine="washing_machine" data-revision="${library.revision}" class="profile-form">
+      <label>Program name<input name="name" maxlength="80" required autocomplete="off"></label><button type="submit">Add program</button></form></details>
+      <details><summary>Rename program</summary><form data-profile-form="program-rename" data-machine="washing_machine" data-revision="${library.revision}" class="profile-form">
+      <label>Program to rename<select name="program" data-program-rename-choice></select></label>
+      <label>New program name<input name="name" maxlength="80" required autocomplete="off"></label><button type="submit">Save name</button></form></details></div>` : ''}
       <h3>Programs and recordings</h3><div data-profile-recordings="${machine}"></div>
       </div></article>`;
     }).join('');
@@ -283,6 +303,24 @@ export class ApplianceProfilesPage {
 
   managedTime(value){return value?escapeHTML(new Date(value).toLocaleString('en-GB',{timeZone:this.library.timezone || this.timezone || 'Europe/Brussels',timeZoneName:'shortOffset'})):'—';}
 
+  renderManualPrograms() {
+    const programs = this.library.programs.washing_machine;
+    const markup = Object.entries(programs).map(([id,name])=>`<option value="${escapeHTML(id)}">${escapeHTML(name)}</option>`).join('');
+    for (const select of this.root.querySelectorAll('[data-profile-form="arm"][data-machine="washing_machine"] select[name="program"], [data-program-rename-choice]')) {
+      if (this.manualProgramMarkup === markup) continue;
+      const previous = select.value;
+      select.innerHTML = markup;
+      if (Object.hasOwn(programs,previous)) select.value=previous;
+      if (select.matches('[data-program-rename-choice]') && !this.manualProgramsMounted) select.form.elements.name.value=programs[select.value];
+    }
+    this.manualProgramMarkup=markup;
+    this.manualProgramsMounted=true;
+    if (this.reviewed?.machine === 'washing_machine') {
+      const heading=this.root.querySelector('[data-profile-review-title]');
+      if (heading) heading.textContent=`${this.reviewed.averaged?'Average':'Review'} · Washing machine · ${programs[this.reviewed.program] ?? this.reviewed.program}`;
+    }
+  }
+
   closeReview() {
     clearTimeout(this.previewTimer);
     this.previewGeneration++;
@@ -321,7 +359,7 @@ export class ApplianceProfilesPage {
         const average = profile ? `${profile.recording_count} included · ${decimal(profile.summary.mean_duration_seconds/60,1)} min mean · ${decimal(profile.summary.energy_kwh,3)} kWh mean` : 'No reviewed recordings included';
         return `<section class="profile-program"><div class="profile-program-heading">
           <button type="button" data-profile-command="program" data-machine="${machine}" data-program="${escapeHTML(program)}" aria-expanded="${open}">
-          <strong>${open?'▾':'▸'} ${escapeHTML(programLabel(label))}</strong><span>${recordings.length} recording${recordings.length===1?'':'s'} · ${escapeHTML(average)}</span></button>
+          <strong>${open?'▾':'▸'} ${escapeHTML(machine==='washing_machine'?label:programLabel(label))}</strong><span>${recordings.length} recording${recordings.length===1?'':'s'} · ${escapeHTML(average)}</span></button>
           ${profile?`<button type="button" data-profile-command="average" data-machine="${machine}" data-program="${escapeHTML(program)}">Inspect average</button>`:''}</div>
           <div class="profile-program-recordings" ${open?'':'hidden'}>${recordings.length ? recordings.map(recording=>{
             const identity=escapeHTML(recording.id), expanded=this.expandedRecording===recording.id;
@@ -360,7 +398,21 @@ export class ApplianceProfilesPage {
   async submit(form) {
     const values = Object.fromEntries(new FormData(form));
     const action = form.dataset.profileForm;
-    if (action === 'bosch-configure') {
+    if (action === 'program-create' || action === 'program-rename') {
+      const revision=Number(form.dataset.revision);
+      const result=await this.api(`profiles/${action}`,'POST',{revision,machine:'washing_machine',...values});
+      this.library=result.library;
+      this.advanceRevision(revision,this.library.revision);
+      this.renderManualPrograms();
+      if (action==='program-create') {
+        this.root.querySelector('[data-profile-form="arm"][data-machine="washing_machine"] select[name="program"]').value=result.program.id;
+        form.elements.name.value='';
+      } else form.elements.name.value=result.program.name;
+      delete form.dataset.edited;
+      form.closest('details').open=false;
+      this.forceRecordings=true;this.renderRecordings();
+      this.message(action==='program-create'?'Program added. It is ready for Record next cycle.':'Program name updated. Recordings and average membership are unchanged.');
+    } else if (action === 'bosch-configure') {
       const revision = Number(form.dataset.revision);
       this.library = await this.api('profiles/bosch-configure','POST',{revision,entities:values});
       this.advanceRevision(revision,this.library.revision);
@@ -520,7 +572,7 @@ export class ApplianceProfilesPage {
     this.forceRecordings=true;this.renderRecordings();
     const panel = this.root.querySelector('[data-profile-review]');
     panel.hidden = false;
-    panel.innerHTML = `<h2>Average · ${machineName(machine)} · ${escapeHTML(this.library.programs[machine][program])}</h2>
+    panel.innerHTML = `<h2 data-profile-review-title>Average · ${machineName(machine)} · ${escapeHTML(this.library.programs[machine][program])}</h2>
       <p>${profile.recording_count} reviewed recording${profile.recording_count === 1 ? '' : 's'} ·
       ${escapeHTML(this.summaryText(profile.summary))}</p>
       <p class="muted">Starts are aligned without stretching time. Each complete cycle contributes zero after its selected end.
@@ -557,7 +609,7 @@ export class ApplianceProfilesPage {
     const saved = recording.status === 'saved';
     const editable = (recording.status === 'review' || saved) && duration > 0;
     panel.hidden = false;
-    panel.innerHTML = `<h2>Review · ${machineName(recording.machine)} · ${escapeHTML(programLabel(this.library.programs[recording.machine][recording.program] ?? recording.program))}</h2>
+    panel.innerHTML = `<h2 data-profile-review-title>Review · ${machineName(recording.machine)} · ${escapeHTML(recording.machine==='washing_machine' ? (this.library.programs[recording.machine][recording.program] ?? recording.program) : programLabel(this.library.programs[recording.machine][recording.program] ?? recording.program))}</h2>
       <p>${escapeHTML(recording.notes)} · ${escapeHTML(recording.entity_id)} · ${escapeHTML(recording.status)}${recording.interruption_reason ? ' · ' + escapeHTML(recording.interruption_reason) : ''}</p>
       ${saved ? '<p class="notice">You can adjust this saved trim. Saving updates this recording in place, preserving raw measurements and its inclusion in the average.</p>' : ''}
       <div data-profile-graph></div>
