@@ -39,9 +39,16 @@ class PlanRecovery:
         return self.digest(self.app.hardware.configuration.started_values)
 
     def requirements_identity(self) -> str:
-        return self.digest({"goals": sorted(json_data(self.app.goals), key=lambda g: g["id"]),
-                            "daily_approvals": self.app.store.get("daily_approvals", {}),
-                            "peak_permissions": self.app.store.get("peak_permissions", {})})
+        requirements = {"goals": sorted(json_data(self.app.goals), key=lambda g: g["id"]),
+                        "daily_approvals": self.app.store.get("daily_approvals", {}),
+                        "peak_permissions": self.app.store.get("peak_permissions", {})}
+        profiles = self.app.appliance_profiles
+        if profiles.bosch.enabled:
+            run = self.app.appliance_runs.run
+            requirements["dishwasher"] = {"mappings": profiles.bosch.config,
+                "meter": profiles.settings["machines"]["dishwasher"]["entity_id"],
+                "run": {key: run.get(key) for key in ("id", "revision", "phase", "started_at", "program")} if run else None}
+        return self.digest(requirements)
 
     def stamp(self, result: dict[str, Any]) -> None:
         """Persist identity with the accepted result in the existing adoption transaction."""
@@ -107,6 +114,10 @@ class PlanRecovery:
         if app.actuator.delivery_fault or charger.error() or charger.vehicle.fault(at):
             self.cancel("EV fault or recovery requires attention before resuming")
             return False
+        bosch = app.appliance_profiles.bosch
+        if bosch.enabled and not app.appliance_runs.reconciled:
+            self.reason = "Waiting for fresh dishwasher feedback before restoring shared EV/ESS instructions"
+            return False
         try:
             source = self.source or self.load()
             self.source = source
@@ -127,6 +138,12 @@ class PlanRecovery:
                 raise ValueError("Saved schedule does not cover the current time")
             if any(i.start < at and (i.withdrawal_kwh > 0 or not i.available) for i in source.intervals):
                 raise ValueError("Travel or an away interval requires a new calculation")
+            current_appliance = app.appliance_runs.context()
+            previous_appliance = source.appliance
+            # An elapsed/manual cycle cannot inherit the timing of a queued or unrelated run.
+            for key in ("id", "revision", "program", "started_at", "recording_ids"):
+                if (current_appliance or {}).get(key) != (previous_appliance or {}).get(key):
+                    raise ValueError("Dishwasher execution or profile changed; a new shared plan is required")
             # Restore runtime context, never the archived calculation or its original flows.
             runtime = replace(source, observation=o, revision=app.revision, policy=app.policy)
         except (ValueError, TypeError, KeyError, IndexError, sqlite3.Error, zlib.error) as exc:

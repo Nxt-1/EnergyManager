@@ -1,5 +1,33 @@
 # Run, configure, review and roll back
 
+## Bosch managed runs (4.5.7 / V45-A002-M2)
+
+Configure the existing Bosch mappings and collect/review at least one complete program
+recording first. Load the dishwasher, select the program and wait for feedback, clear
+any native appliance delay, then choose a latest finish and Ready. Tomorrow12:00/18:00
+are shortcuts; Custom offers today through seven days ahead and hour/minute wheels.
+No deadline is preselected. An impossible deadline displays the earliest estimated
+finish; Ready with that unchanged warning authorizes ASAP. Ready alone does not enable
+hardware authority. Start now and record remains the immediate manual alternative.
+
+The queue survives restarts. Opening the door blocks starting; closing with remote
+permissions restores eligibility without Ready again. A changed selected program keeps
+the deadline and uses its reviewed profile, or waits explicitly if none exists. Before
+execution you may edit/cancel. Pending peak conflicts offer a later allowed finish or
+an explicitly approved on-time peak when the solver establishes those alternatives;
+the request remains queued and the configured phone is notified. No option is invented
+when a bounded search cannot establish it. Original feasibility can resume automatically.
+Once Start is submitted cancellation cannot stop the appliance. Check ambiguous outcomes
+at the appliance before cancelling and creating a replacement request; no automatic replay.
+
+Forecasting now needs matched dishwasher/household evidence, initially at least one
+supported hour and13 five-minute observations within the last seven days. Existing
+retained measured traces can qualify; a new week is unnecessary. Coverage/gaps and
+insufficient data remain visible in forecast status. Standby is subtracted from the
+background estimate and included once outside the scheduled curve. First-seen-running
+or beyond-profile demand remains unknown. Hardware, real phone delivery and installation
+performance are live-unverified; all release evidence uses local fake endpoints.
+
 ## Bosch idle start correction (4.5.6 / V45-Q017)
 
 Update to4.5.6 and reload the dashboard. A successful HA read can report unknown current

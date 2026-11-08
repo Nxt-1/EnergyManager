@@ -232,3 +232,23 @@ async def test_structural_invalidation_cannot_be_overridden_by_later_startup_rea
         assert not app.plan_recovery.attempt() and not app.ev_valid
     finally:
         await f.close()
+
+
+
+async def test_shared_recovery_waits_for_bosch_then_rejects_a_different_appliance_context(tmp_path):
+    f = RecoveryFixture(tmp_path)
+    app = f.restart()
+    app.actuator.enabled = True
+    profiles = app.appliance_profiles
+    profiles.settings["bosch"] = {"operation": "sensor.synthetic_operation", "active_program": "select.synthetic_active"}
+    profiles.settings["machines"]["dishwasher"]["entity_id"] = "sensor.synthetic_dishwasher"
+    try:
+        assert not app.plan_recovery.attempt()
+        assert "fresh dishwasher feedback" in app.plan_recovery.reason
+        assert app.plan_recovery.pending and not app.ev_valid
+        app.appliance_runs.reconciled = True
+        assert not app.plan_recovery.attempt()
+        assert app.plan_recovery.state == "incompatible" and not app.ev_valid
+        assert not f.charger.calls
+    finally:
+        await f.close()

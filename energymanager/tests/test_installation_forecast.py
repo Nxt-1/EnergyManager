@@ -18,6 +18,11 @@ from energymanager.store import Store
 from energymanager.service import Application
 
 
+def measured_history(store, at, power=400):
+    for index in range(13):
+        store.record_load(LoadSample(at-timedelta(minutes=5*(12-index)),power))
+
+
 def weather_payload(start: datetime, hours: int = 216, irradiance: float = 500) -> dict:
     return {"hourly": {"time": [(start + timedelta(hours=i)).timestamp() for i in range(hours)],
                        "global_tilted_irradiance": [irradiance] * hours,
@@ -33,6 +38,7 @@ def test_rolling_seven_days_cover_both_clock_changes_and_current_partial_quarter
     assert len(pv.points) == 216  # Both autumn 02:00 hours survive; spring has no invented local hour.
     assert len({p.period_end_local.astimezone(UTC) for p in pv.points}) == 216
     store = Store(tmp_path / "forecast.sqlite")
+    measured_history(store,start)
     try:
         source = InstallationForecast(HomeAssistantAdapter("http://127.0.0.1/api", {}), store)
         data = source.build_data(pv, (LoadSample(start, 400),), start)
@@ -44,8 +50,8 @@ def test_rolling_seven_days_cover_both_clock_changes_and_current_partial_quarter
         assert all(i.house_kw == pytest.approx(0.4) for i in normalized.intervals)
         expected_dc = 6180 * 0.5 * (1 - 0.0029 * (20 + 0.0275 * 500 - 25)) / 1000
         assert sum(i.pv_dc_kw * i.hours for i in normalized.intervals) == pytest.approx(expected_dc * 168)
-        assert data["forecast_status"]["load_stage"] == "learning"
-        assert data["forecast_status"]["load_methods"] == ["recent_baseline"]
+        assert data["forecast_status"]["load_stage"] == "measured constant"
+        assert data["forecast_status"]["load_methods"] == ["measured-constant-7d-v1"]
     finally:
         store.close()
 
@@ -87,6 +93,7 @@ async def test_original_provider_query_four_setups_and_cached_failure_without_ti
     fake = web.Application()
     fake.add_routes([web.get("/api/states/{entity}", zone), web.get("/weather", weather)])
     store = Store(tmp_path / "inputs.sqlite")
+    measured_history(store,at)
     try:
         async with TestServer(fake) as server:
             async with HomeAssistantAdapter(str(server.make_url("/api")), {}) as ha:
@@ -107,7 +114,7 @@ async def test_original_provider_query_four_setups_and_cached_failure_without_ti
                     assert data["provenance"].startswith("SYNTHETIC")
                     assert data["intervals"][0]["house_kw"] == 0.4  # EV not counted or subtracted twice.
                     assert store.get("pv_forecast_evidence")["calibration_version"] == "2026-10-03-seed"
-                    assert len(store.load_samples(at - timedelta(days=35))) == 1
+                    assert len(store.load_samples(at - timedelta(days=35))) == 13
                     fail = True
                     later = at + timedelta(minutes=31)
                     cached = await source.read(replace(observation, at=later), later)

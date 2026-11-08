@@ -1,4 +1,5 @@
 import {ProfileChart} from './profile-chart.js';
+import {ApplianceDeadline} from './appliance-deadline.js';
 export {profileGraph} from './profile-chart.js';
 
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, character =>
@@ -27,7 +28,7 @@ export class ApplianceProfilesPage {
       this.chart?.close();
     }, {once:true});
     root.addEventListener('change', event => {
-      if (event.target.matches('[data-bosch-program]')) { this.rememberProgram(event.target.value); this.renderBosch(); }
+      if (event.target.matches('[data-bosch-program]')) { this.rememberProgram(event.target.value); this.renderBosch(); this.previewReady(); }
     }, {signal});
     root.addEventListener('submit', event => {
       event.preventDefault();
@@ -105,9 +106,11 @@ export class ApplianceProfilesPage {
       <label>Dishwasher program<select name="program" data-bosch-program></select></label>
       <button type="submit">Select program</button><button type="button" data-profile-command="bosch-start">Start now and record</button>
       <button type="button" data-profile-command="bosch-power">Power on</button></form>
-      <p data-bosch-command role="status"></p>` : '<p>Manually started cycles · recorded with a dedicated power sensor.</p>'}
+      <p data-bosch-command role="status"></p><div data-managed-deadline></div>
+      <p data-managed-warning role="status"></p><div class="actions"><button type="button" data-profile-command="run-ready">Ready</button>
+      <button type="button" data-profile-command="run-cancel" hidden>Cancel queued run</button></div><div data-managed-state></div>` : '<p>Manually started cycles · recorded with a dedicated power sensor.</p>'}
       <div data-appliance-detail="${machine}" hidden>
-      ${bosch ? `<p class="notice">Automatic capture uses actual Bosch execution and the dedicated Refoss meter, including panel/app starts. Every cycle needs review before averaging. Start now sends a command immediately; scheduling is not available yet.</p>
+      ${bosch ? `<p class="notice">Automatic capture uses actual Bosch execution and the dedicated Refoss meter, including panel/app starts. Every cycle needs review before averaging. Start now sends a command immediately. Ready lets EnergyManager plan a start using a reviewed profile and the chosen latest finish.</p>
       <p class="muted" data-bosch-details></p><div class="actions" data-bosch-modifiers></div>
       <details><summary>Bosch HA mappings</summary>
       <p>Selected program only selects; active program starts a cycle. Map different entities. Leave unavailable optional readings blank.</p>
@@ -146,6 +149,9 @@ export class ApplianceProfilesPage {
       ${Object.entries(library.mazak).map(([mode, power]) => `<label>${mode[0].toUpperCase() + mode.slice(1)} (W)<input name="${mode}" type="number" min="0" max="100000" step="1" required value="${power}"></label>`).join('')}
       <button type="submit">Save Mazak averages</button></form><p class="muted">No learned cycle or assumed duration.</p></div></article>
       </div><section data-profile-review hidden></section>`;
+    this.deadlinePicker=new ApplianceDeadline(this.root.querySelector('[data-managed-deadline]'),()=>this.previewReady(),this.signal);
+    this.deadlinePicker.setContext(library.now,library.timezone);
+
   }
 
   expand(machine, force = false) {
@@ -192,6 +198,7 @@ export class ApplianceProfilesPage {
 
   renderBosch() {
     const bosch = this.library.bosch, readings = bosch.readings;
+    this.deadlinePicker?.setContext(this.library.now,this.library.timezone);
     const reading = key => readings[key]?.state ?? 'Unavailable';
     const state = this.root.querySelector('[data-bosch-status]');
     const text = `${programLabel(reading('operation'))} · ${readings.meter?.power_w === undefined ? 'Power unavailable' : decimal(readings.meter.power_w,0) + ' W'} · Progress: ${reading('progress')}${readings.progress?.unit || ''} · Finish: ${reading('finish')}`;
@@ -234,7 +241,47 @@ export class ApplianceProfilesPage {
       `<button type="button" data-profile-command="bosch-modifier" data-modifier="${key}" data-enabled="${reading(key) !== 'on'}" ${blocked || !idle || !remote || !['on','off'].includes(reading(key)) ? 'disabled' : ''}>
       ${escapeHTML(bosch.fields[key].label)}: ${escapeHTML(reading(key))}</button>`).join('');
     if (this.modifierMarkup !== modifierMarkup) { modifiers.innerHTML = modifierMarkup; this.modifierMarkup = modifierMarkup; }
+    if(this.deadlinePicker)this.renderManaged();
   }
+
+  async previewReady(){
+    const generation=(this.readyGeneration||0)+1;this.readyGeneration=generation;
+    this.readyPreview=null;this.renderManaged();
+    const deadline=this.deadlinePicker?.value,program=this.root.querySelector('[data-bosch-program]').value;
+    if(!deadline || !this.library.profiles[`dishwasher/${program}`])return;
+    try{
+      const preview=await this.api('profiles/run-preview','POST',{program,deadline});
+      if(this.signal.aborted || generation!==this.readyGeneration)return;
+      this.readyPreview=preview;this.renderManaged();
+    }catch(error){if(generation===this.readyGeneration)this.message(error.message,true);}
+  }
+
+  renderManaged(){
+    const managed=this.library.managed || {revision:1,run:null},run=managed.run;
+    const queued=run?.phase==='queued',active=run && ['queued','starting','running','attention'].includes(run.phase);
+    if(run && `${run.id}/${run.revision}`!==this.managedIdentity){
+      this.managedIdentity=`${run.id}/${run.revision}`;this.deadlinePicker.setValue(run.deadline);
+      this.readyPreview=null;
+    }
+    const program=this.root.querySelector('[data-bosch-program]').value;
+    const known=!!this.library.profiles[`dishwasher/${program}`];
+    const ready=this.root.querySelector('[data-profile-command="run-ready"]');
+    ready.textContent=queued?'Update deadline':this.readyPreview?.asap?'Ready · start as soon as possible':'Ready';
+    ready.disabled=this.busy || this.library.mode==='demo' || !known || !this.deadlinePicker.value || !this.readyPreview || active&&!queued;
+    const cancel=this.root.querySelector('[data-profile-command="run-cancel"]');cancel.hidden=!active;cancel.disabled=this.busy || ['starting','running'].includes(run?.phase);
+    const warning=this.root.querySelector('[data-managed-warning]');
+    warning.textContent=(!known?'No usable reviewed profile. Use Start now and record. ': '')+(this.readyPreview?.warning ? `${this.readyPreview.warning} Earliest expected finish: ${this.managedTime(this.readyPreview.earliest_finish)}. `:'')+(managed.error || '');
+    const panel=this.root.querySelector('[data-managed-state]');
+    const conflict=run?.conflict;
+    const choice=(key,label)=>conflict?.[key]?`<button type="button" data-profile-command="run-choose" data-choice="${key}" data-proposal="${escapeHTML(conflict.proposal_id)}">${escapeHTML(label)} · ${this.managedTime(conflict[key].estimated_finish)} · ${decimal(conflict[key].peak_kw*1000,0)} W · estimated bill €${decimal(conflict[key].predicted_bill_eur)}</button>`:'';
+    const markup=run?`<p><strong>${escapeHTML(programLabel(run.phase))}</strong> · ${escapeHTML(programLabel(run.program))} · latest finish ${this.managedTime(run.deadline)}</p>
+      <p>${run.planned_start?'Planned start: '+this.managedTime(run.planned_start):''}${run.estimated_finish?' · estimated finish: '+this.managedTime(run.estimated_finish):''}</p>
+      ${run.blocked?`<p class="notice">${escapeHTML(run.blocked)}</p>`:''}
+      ${conflict?`<p class="notice">This request needs a timing/peak choice. It remains queued. ${escapeHTML(managed.notification || '')}</p><div class="actions">${choice('later','Finish later within current allowance')}${choice('on_time','Approve the shown peak for an on-time finish')}</div><p>Edit the deadline above or cancel this queued run.</p>`:''}`:'';
+    if(this.managedMarkup!==markup){panel.innerHTML=markup;this.managedMarkup=markup;}
+  }
+
+  managedTime(value){return value?escapeHTML(new Date(value).toLocaleString('en-GB',{timeZone:this.library.timezone || this.timezone || 'Europe/Brussels',timeZoneName:'shortOffset'})):'—';}
 
   renderRecordings() {
     const library = this.library;
@@ -316,6 +363,18 @@ export class ApplianceProfilesPage {
 
   async command(button) {
     const command = button.dataset.profileCommand, id = button.dataset.id;
+    if(command.startsWith('run-')){
+      const managed=this.library.managed,program=this.root.querySelector('[data-bosch-program]').value;
+      let action=command.slice(4),body={revision:managed.revision};
+      if(action==='ready'){
+        action=managed.run?.phase==='queued'?'edit':'ready';
+        Object.assign(body,{program,deadline:this.deadlinePicker.value,accept_asap:this.readyPreview?.asap===true});
+      }
+      if(action==='choose')Object.assign(body,{choice:button.dataset.choice,proposal_id:button.dataset.proposal,approved:button.dataset.choice==='on_time'});
+      await this.api(`profiles/run-${action}`,'POST',body);await this.refresh();
+      if(action==='ready' || action==='edit')await this.previewReady();
+      return;
+    }
     if (command.startsWith('bosch-')) {
       const program = this.root.querySelector('[data-bosch-program]').value;
       const body = command === 'bosch-start' ? {command:'start',program} : command === 'bosch-power' ? {command:'power_on'} :

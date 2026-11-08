@@ -134,6 +134,8 @@ class ApplianceProfiles:
             sampler_error = f"Recorder stopped: {self.task.exception()}"
         return {"mode": self.mode, "programs": self.programs(), **self.settings, "profiles": selected, "bosch": self.bosch.state(),
                 "sampler_error": sampler_error,
+                "managed": self.app.appliance_runs.view() if hasattr(self.app,"appliance_runs") else None,
+                "now": self.app.now().isoformat(), "timezone": getattr(getattr(self.app,"policy",None),"timezone","Europe/Brussels"),
                 "members": membership,
                 "recordings": [{**row, "included": row["id"] in included}
                                for row in self._rows("status != 'discarded'", limit=100)],
@@ -248,7 +250,7 @@ class ApplianceProfiles:
                                "notes": "Automatic Bosch capture; review modifiers and cycle before inclusion"}, automatic=True)
         modifiers = {key: self.bosch.value(key) for key in ("extra_dry", "half_load", "vario_speed")}
         recording.update(status="recording", source="bosch", started_at=self.app.now().isoformat(),
-                         modifiers=modifiers, interrupted=not observed_start,
+                         modifiers=modifiers, start_observed=observed_start, interrupted=not observed_start,
                          error=None if observed_start else "Cycle already running when observation began; start not observed")
         self._save(recording)
         return recording["id"]

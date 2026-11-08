@@ -29,6 +29,8 @@ from .plan_recovery import PlanRecovery
 from .measurements import HousePowerMismatch
 from .replanning import ReplanningEvidence
 from .appliance_profiles import ApplianceProfiles
+from .appliance_runs import ApplianceRuns
+from .forecast_service import InstallationForecast
 
 
 class Application:
@@ -95,6 +97,9 @@ class Application:
         self.house_mismatch_since: datetime | None = None
         self.plan_recovery = PlanRecovery(self)
         self.appliance_profiles = ApplianceProfiles(self)
+        self.appliance_runs = ApplianceRuns(self)
+        if isinstance(self.forecast, InstallationForecast):
+            self.forecast.background.bosch = self.appliance_profiles.bosch
 
     def now(self) -> datetime:
         return (
@@ -257,6 +262,10 @@ class Application:
                 ]
             else:
                 intervals.append(interval)
+        appliance = self.appliance_runs.context()
+        if (appliance and isinstance(self.forecast,InstallationForecast)
+                and (self.forecast_data is None or self.forecast_data.get("background_meter") != self.forecast.background.meter)):
+            raise ValueError("Waiting for a measured dishwasher-separated background forecast")
         return replace(
             prepared,
             observation=self.observation,
@@ -269,6 +278,7 @@ class Application:
             peak_permissions=tuple(
                 PeakPermission.from_dict(g) for g in self.store.get("peak_permissions", {}).values()
             ),
+            appliance=appliance,
         )
 
     async def input_loop(self) -> None:
@@ -320,7 +330,12 @@ class Application:
                     await asyncio.sleep(5)
                     continue
                 self.forecast_data = data
-                correction = self.replanning.forecast(observation, prepared)
+                correction_observation = observation
+                if isinstance(self.forecast, InstallationForecast) and self.forecast.background.meter:
+                    background = self.forecast.background.matched(observation)
+                    correction_observation = (replace(observation, house_kw=background) if background is not None
+                                              else replace(observation, quality="unknown"))
+                correction = self.replanning.forecast(correction_observation, prepared)
                 self.snapshot = self.replanning.adjusted(prepared)
                 recovered = self.status == "forecast_unavailable"
                 if recovered:
@@ -488,6 +503,8 @@ class Application:
             else:
                 errors = [result.get("reason", "No incumbent")]
             if errors:
+                if result.get("appliance_conflict"):
+                    self.appliance_runs.accepted(result)
                 result["publication_errors"] = errors
                 self.store.record(snapshot, result, "rejected")
                 self.finish_planning("error")
@@ -500,6 +517,7 @@ class Application:
             self.plan_recovery.stamp(result)
             self.store.record(snapshot, result, "accepted")
             self.accepted, self.snapshot = result, snapshot
+            self.appliance_runs.accepted(result)
             if self.demo:
                 self.demo_plant.snapshot = effective
             self.ev_valid = self.observation.connected and self.observation.ev_state_known
@@ -632,6 +650,7 @@ class Application:
                     self.observation = observation
             self.archive_finished_goals(at)
             self.plan_recovery.attempt()
+            self.controller.appliance_peak_limit = self.appliance_runs.peak_limit()
             command = self.controller.tick(
                 self.observation,
                 at,
@@ -883,6 +902,7 @@ class Application:
                         and self.actuator.goe_control else None),
             "provenance": self.snapshot.provenance,
             "forecast_status": getattr(self.forecast, "status", {}),
+            "appliance_run": self.appliance_runs.view(),
             "observation": json_data(self.observation),
             "live_inputs": self.ha.inputs.view(self.now(), self.snapshot.capabilities) if self.ha else None,
             "capabilities": json_data(self.snapshot.capabilities),

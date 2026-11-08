@@ -44,6 +44,8 @@ class Store:
             CREATE TABLE IF NOT EXISTS appliance_samples (
                 recording_id TEXT NOT NULL, at REAL NOT NULL, power_w REAL, error TEXT,
                 PRIMARY KEY(recording_id,at));
+            CREATE TABLE IF NOT EXISTS background_samples (
+                at REAL PRIMARY KEY, house_w REAL NOT NULL, meter_w REAL, background_w REAL, source TEXT NOT NULL, quality TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS ev_incidents (
                 id TEXT PRIMARY KEY, detected_at TEXT NOT NULL, body TEXT NOT NULL);
         """)

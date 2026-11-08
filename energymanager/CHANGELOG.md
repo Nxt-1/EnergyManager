@@ -1,3 +1,10 @@
+## 4.5.7 — Bosch managed scheduling
+
+- Add persistent Ready/deadline controls and explicit per-run timing/peak choices.
+- Jointly plan reviewed Bosch curves with EV/ESS and reconcile guarded scheduled starts.
+- Use a measured seven-day constant background with dishwasher/standby separation.
+- Keep recording-list/trim cleanup as a separate follow-up.
+
 ## 4.5.6 — Bosch idle start capability fix
 
 - Retain available start programs when Home Connect reports no current active program.

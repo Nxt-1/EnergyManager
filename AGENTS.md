@@ -38,6 +38,10 @@ precedence; ask about genuine unresolved policy conflicts.
 - Keep chats conversational, concise and easy to follow. Answer the user's question
   directly, use plain language and keep technical detail proportional to the request.
   Do not turn a discussion into an implementation session or an unsolicited long plan.
+- Keep discussions and work moving. While work remains, include the next substantive
+  item, question, suggestion or concrete next action in the same response, so progress
+  does not depend on an acknowledgement-only prompt. When the current task is complete,
+  state that clearly.
 - Do not write or modify application code without explicit user permission covering
   that work. Questions, screenshots, error reports, suggestions and backlog entries
   alone are discussion. A clear request to implement or fix something authorizes that

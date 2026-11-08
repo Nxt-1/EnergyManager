@@ -37,6 +37,7 @@ class FastControl:
         self.last_meter_at: datetime | None = None
         self.estimated_quarter_kwh = 0.0
         self.last_import_kw = 0.0
+        self.appliance_peak_limit: float | None = None
 
     def tick(
         self,
@@ -166,6 +167,8 @@ class FastControl:
                     ]
                 )
                 limit = min(limit, ess_limit) if f["grid_ev"][position] > 1e-5 else ess_limit
+        if self.appliance_peak_limit is not None:
+            limit = max(limit,self.appliance_peak_limit)
         quarter_end = at.replace(minute=at.minute // 15 * 15, second=0, microsecond=0) + timedelta(minutes=15)
         period_h = max(p.control_period_seconds, 1) / 3600
         quarter_start = quarter_end - timedelta(minutes=15)

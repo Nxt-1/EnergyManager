@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from zoneinfo import ZoneInfo
+from dataclasses import replace
+from datetime import datetime, timedelta
+from bisect import bisect_right
+from .appliance_plan import CycleCurve, starts_for
 
 from .optimization import JointModel
 
@@ -21,6 +25,32 @@ def seed(model: JointModel, peak_limit_kw: float | None = None,
     def put(name: str, t: int, value: float) -> None:
         values[m.variables[name][t]] = value
 
+    if s.appliance:
+        choices = starts_for(s)
+        if s.appliance.get("points") and not choices:
+            return None
+        powers = [s.appliance["idle_w"]/1000]*n
+        if choices:
+            task = s.appliance
+            assert task is not None
+            curve = CycleCurve(task["points"])
+            ends = [interval.end for interval in s.intervals]
+            def score(at: datetime) -> float:
+                cost = 0.0
+                end = at+timedelta(seconds=curve.times[-1])
+                for t in range(bisect_right(ends,at),n):
+                    interval = s.intervals[t]
+                    if interval.start >= end:
+                        break
+                    power = curve.mean_kw(at,interval.start,interval.end,task["idle_w"])
+                    cost += (max(0,interval.house_kw+power-interval.pv_ac_kw)-max(0,interval.house_kw+task["idle_w"]/1000-interval.pv_ac_kw))*interval.hours
+                return cost
+            choice = min(range(len(choices)),key=lambda index:score(choices[index]))
+            put("dishwasher_start",choice,1)
+            powers = [curve.mean_kw(choices[choice],i.start,i.end,s.appliance["idle_w"]) for i in s.intervals]
+        for t,power in enumerate(powers):
+            put("dishwasher_power",t,power)
+        s = replace(s,intervals=tuple(replace(i,house_kw=i.house_kw+power) for i,power in zip(s.intervals,powers)))
     ev, solar, grid = o.ev_kwh, o.ess_kwh - c.ess_min_kwh - o.ess_grid_kwh, o.ess_grid_kwh
     non_grid = grid_ev = 0.0
     last_power = o.ev_power_kw

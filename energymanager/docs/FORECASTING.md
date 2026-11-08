@@ -1,5 +1,30 @@
 # Installation forecasting
 
+## Default measured background (4.5.7 / V45-A002-M2)
+
+The issued default household baseline is a measured constant over a rolling seven days,
+refreshed every30minutes. With Bosch enabled, pair successful dedicated-meter and
+household reads within15seconds and subtract the full dishwasher power, including
+standby. Actual total-house observations stay unchanged. Persist matching/source/quality
+evidence; missing or mismatched readings are not zero. Reuse old raw load samples only
+where retained dedicated measurements establish the same entity's contribution. Never
+infer idle solely from a missing meter or stretch samples across unsupported gaps.
+
+Initial eligibility:13 distinct five-minute bins and3600 supported seconds; adjacent
+retained points may be joined for at most315seconds. Report samples, covered duration,
+gaps, seven-day window fraction and source identity. This is an engineering bootstrap,
+not a validated representative week. Without a mapped Bosch meter the estimate is
+explicitly unseparated. A meter change invalidates a previously mixed forecast. Current
+matched observations also separate dishwasher draw from forecast-bias corrections.
+
+Joint planning adds the frozen measured program curve once, with measured standby
+outside it. It retains the full equal-weight real-elapsed tail for energy/peak accounting,
+using mean duration only for estimated completion. Missing phase/profile evidence blocks
+new planning rather than silently dropping running demand. The earlier time-of-day
+learner below remains comparison code and historical design evidence; it is not the
+issued default. No installation forecast-accuracy claim follows from synthetic checks.
+
+
 The configured application builds its own forecasts using the original weather source
 and recovered installation parameters below, restored in4.0.5. Since4.0.6 the HA
 connection is automatic and the legacy forecast URL field is removed. See SETTINGS.md

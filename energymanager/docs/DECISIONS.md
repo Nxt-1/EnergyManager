@@ -1,5 +1,33 @@
 # Current requirements and decisions
 
+- 8 November 2026, ARCH-018 implementation authorization. The user explicitly
+  approved handing the completed recording-list/trim package to the registered
+  V4.5 implementation chat as separate scope from M2. Includes foldable program groups,
+  one expanded recording, existing Start/End controls, in-place trim saves and latest-
+  saved-trim consolidation. General task-chart/comparison ideas remain outside scope.
+
+- 7 November 2026, M2 implementation authorization. After reviewing the summarized
+  work package, the user explicitly requested the implementation handoff. Scope is
+  Ready/deadline controls, joint Bosch/EV/ESS planning and guarded execution, the
+  seven-day measured constant background estimate with the proposed 30-minute refresh,
+  per-run conflict choices/notifications/queued waiting, persistence and offline
+  verification. Scope and criteria are recorded in ARCHITECTURE.md. The user selected
+  energy-profile visualisations as the next architecture topic after the handoff.
+
+- 7 November 2026, project-wide conversation flow. The user requires each response
+  to include the next substantive item, question, suggestion or concrete next action
+  while work remains. Acknowledgement-only prompts should not be needed to continue.
+  State completion clearly when the current task is done. Recorded in root AGENTS.md.
+
+- 7 November 2026, dishwasher deadline/peak conflicts (V45-Q018). The user wants
+  to choose for each situation, using its timing and peak consequences. They declined
+  selecting a permanent preference between a later finish and higher-peak approval.
+  They accepted showing a later finish within the existing allowance and an on-time
+  option requiring approval, with the required peak and estimated cost where available.
+  Deadline changes and cancellation are also offered. The user accepted showing the
+  alternatives on the appliance card, sending a notification through the configured
+  phone channel and keeping the run queued while the conflict remains unresolved.
+
 - 7 November 2026, V45-Q017 Bosch idle start fix. The user confirmed that the mapped
   active-program entity reports unknown while listing Eco 50 as available. They
   authorized the V4.5 implementation chat to fix the capability parsing and verify

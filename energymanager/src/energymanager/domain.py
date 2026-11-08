@@ -20,7 +20,10 @@ def instant(value: str | datetime) -> datetime:
 
 def json_data(value: Any) -> Any:
     if hasattr(value, "__dataclass_fields__"):
-        return json_data(asdict(value))
+        data = asdict(value)
+        if isinstance(value,Snapshot) and value.appliance is None:
+            data.pop("appliance",None)  # Preserve legacy snapshot evidence/checksums.
+        return json_data(data)
     if isinstance(value, datetime):
         return value.isoformat()
     if isinstance(value, dict):
@@ -252,6 +255,7 @@ class Snapshot:
     hold_phases: int = 1
     hold_plan_id: str | None = None
     peak_permissions: tuple[PeakPermission, ...] = ()
+    appliance: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if not self.intervals:
@@ -306,6 +310,7 @@ class Snapshot:
             hold_phases=data.get("hold_phases", 1),
             hold_plan_id=data.get("hold_plan_id"),
             peak_permissions=tuple(PeakPermission.from_dict(p) for p in data.get("peak_permissions", [])),
+            appliance=data.get("appliance"),
         )
 
 

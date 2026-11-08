@@ -140,6 +140,47 @@ older version restores it in place of the current one, rather than duplicating t
 capture's weight. Success opens the new version at its returned library revision so a
 second edit cannot reuse the previous form's revision. No new machine run is started.
 
+#### Pending recording-list and trim changes (ARCH-018; authorized 8 November 2026)
+
+The user selected foldable program groups for a compact recording list that scales
+to many runs. Program headers retain their summary while collapsed.
+Show one entry per physical recording. Only one recording may be expanded at a time;
+opening another collapses the previous entry. Expanding exposes its graph and trimming
+controls in place. Deletion and technical details may remain directly visible;
+moving them into a secondary menu is not required.
+
+Preserve the original Start/End slider functionality in the expanded recording:
+draggable graph handles, linked numeric start/end fields in seconds, selected-range
+shading, keyboard operation, bounds/non-crossing constraints and the existing chart
+zoom/pan and selection/full-recording controls. The mockup's separate simplified range
+inputs are illustrative, not a replacement for the working graph handles. Verify both
+directions of synchronization between the graph handles and numeric fields after the
+editor moves into the recording entry.
+
+Saving a trim updates that recording's current selected bounds and statistics in place,
+using the same recording identity. It must not create another recording or trim version.
+This supersedes the version-creation behavior described above for the follow-up; the
+existing behavior remains implemented until this separately authorized package ships.
+Keep original captured samples available for adjusting the selection. Maintain atomic
+average membership/statistics updates, stale-edit protection and accepted-plan evidence;
+editing a library selection does not rewrite previously frozen planning evidence.
+
+Consolidate existing trim duplicates into one recording per physical capture, retaining
+the latest saved trim rather than preferring the currently included older trim. Latest
+means trim-save time, not the shared capture timestamp. Preserve the original raw capture
+and whether that physical capture contributes to the average; if included, use the retained
+latest trim exactly once. Identify related entries by capture provenance, not matching
+dates or notes. Previously frozen planning evidence remains unchanged.
+
+The user explicitly authorized this separate implementation handoff on 8 November 2026.
+Completion criteria: compact
+foldable program groups in both dashboard flows; exclusive in-place recording expansion;
+unchanged graph-handle/numeric-field interaction; trim saves retain identity and do not
+increase recording/version counts; existing duplicate captures consolidate to their latest
+trim without lost raw measurements or duplicate average weight. Verify stale edits and
+atomic persistence/membership changes, including after restart, using offline fixtures.
+This follow-up is separate from the authorized M2 implementation and does not amend it.
+
 The original ARCH-005 scheduling direction remains: earliest start/latest completion,
 recommendation plus alternatives, manual appliance start/programming, and fixed
 user-confirmed commitments. Before that milestone, resolve removal from background
@@ -378,7 +419,7 @@ remote start, an open door, appliance faults or existing control/peak permission
 
 #### Agreed Bosch delivery milestones — 2 November 2026
 
-The user approved this split for V45-A002. M1 was explicitly authorized in the registered implementation chat on 2 November and is implemented in4.5.5, verified offline only. M2 remains pending and requires separate implementation authorization.
+The user approved this split for V45-A002. M1 was explicitly authorized in the registered implementation chat on 2 November and is implemented in4.5.5, verified offline only. M2 was separately authorized on7 November2026; its implementation contract is below.
 
 **V45-A002-M1 — appliance cards and profile collection.** Deliver the shared appliance
 card overview/one-card expansion and Bosch program/status feedback, automatic Refoss
@@ -494,9 +535,133 @@ maintains its options independently of current program value.
 joint start optimization alongside EV/ESS and execution through HA at the selected
 time. Include correct separation of dishwasher demand from background forecasts and
 existing mixed history, representation of already-running/manual cycles, and the
-agreed timing/replanning/intervention rules. Its detailed planner/source/peak contracts
-and completion criteria require further architecture work. M2 depends on M1's capture/
+agreed timing/replanning/intervention rules. Its authorized scope and completion criteria are recorded below. M2 depends on M1's capture/
 profile contract and requires a usable reviewed profile per scheduled program.
+
+For a dishwasher deadline that conflicts with the permitted quarter-hour peak, the
+user wants to decide for the particular situation. Present a later finish within the
+current allowance and an on-time option with its required peak increase, plus estimated
+cost consequences where available. Allow changing the deadline or cancelling the run.
+A standing preference for lateness or a higher peak has not been selected. Higher
+proposed peaks continue through explicit approval. The user accepted showing the
+alternatives on the appliance card, sending a notice through the configured phone
+channel and keeping the run queued while the conflict remains unresolved. Resume
+after the user chooses an alternative, or if the original request becomes feasible
+within its deadline and existing permissions. Notification delivery itself does not
+authorize a higher peak or a later finish.
+
+For M2, use a measured constant for the default household background forecast.
+Calculate it from representative household observations after subtracting matched
+Refoss dishwasher draw. Refresh the estimate periodically and use one level across
+each issued planning horizon. Add dishwasher program demand separately for scheduled
+and observed runs. The existing time-of-day learner is a comparison candidate if
+evaluation on separate measured data shows an improvement. The user accepted a rolling
+seven-day averaging window. Refresh cadence, coverage requirements and transition from
+mixed history still need final specification.
+The forecasting change is pending. See [FORECASTING.md](FORECASTING.md) for the
+current learner.
+
+Use valid measured background readings in the agreed rolling seven-day window.
+Refresh on the existing 30-minute forecast cycle is proposed. Older readings are
+eligible where retained evidence establishes the dishwasher
+contribution or an idle period. A full new week of collection is not required. Data
+coverage and initial-estimate eligibility still need definition.
+
+#### M2 implementation scope — authorized 7 November 2026
+
+The user reviewed the work-package summary and explicitly authorized its handoff to
+the registered V4.5 implementation chat on 7 November 2026. The following scope is
+the authorized M2 contract. Subsequent energy-profile visualization discussion is a
+separate follow-up and requires an explicit amendment to enter this implementation.
+
+- Calculate and persist the measured constant background estimate over the agreed
+  rolling seven days. Use the existing 30-minute forecast refresh as the initial
+  engineering default. Reuse retained observations with adequate evidence of the
+  dishwasher contribution, account for gaps and report insufficient coverage. Define
+  and document coverage checks using the actual sampling contracts. A fresh week of
+  measurements is unnecessary when usable historical evidence exists.
+- Keep household/background and explicit dishwasher accounting consistent across
+  historical estimation, forecast corrections, planning and actual execution. Preserve
+  raw evidence and recorded forecast provenance. Missing dishwasher measurements or
+  running-profile estimates must remain explicit rather than becoming zero demand.
+- Add the reviewed program curve to joint EV/ESS planning with a movable start before
+  execution and an uninterrupted cycle afterward. Preserve the curve's energy when
+  mapping it to planning intervals. Use measured duration without added padding and
+  the existing source, quarter-hour peak and approval contracts. Freeze profile and
+  forecast evidence with each accepted plan and reconcile actual/manual runs.
+- Deliver the approved Ready/deadline card controls, two tomorrow presets and compact
+  rolling-date/time-wheel picker. Keep the selected program, account for manual
+  changes and door reopening, and implement the agreed impossible-deadline warning
+  and per-conflict approval/notification/queued-wait behavior.
+- Persist readiness and queued work. Execute through fresh HA feedback and existing
+  command guards at the planned start, with EnergyManager holding the timer. Reconcile
+  actual operation on recovery before sending commands. Respect the existing native-
+  delay guard when accepting management of a run with an appliance-set timer.
+- Verify normal scheduled starts, replanning, manual starts, missing profiles/data,
+  restart/ambiguous command outcomes, pending approvals and complete energy accounting
+  with deterministic local/fake endpoints. Verify both dashboard flows and the existing
+  release checks. Record live installation validation separately when authorized.
+
+Completion requires an accepted joint plan and guarded execution for a reviewed Eco
+profile, with that run counted once in load/energy projections, all agreed user choices
+persisted and the critical offline regressions passing. Implementation must reconcile
+the concurrently maintained EV requirements and release order before integration.
+
+**M2 implementation contract (4.5.7; offline verified, live unverified).** The shared
+Bosch card supplies persistent Ready/deadline/edit/cancel controls and per-run audited
+conflict choices. No deadline is committed by default. The eight rolling local dates
+and hour/minute wheels respect the installation timezone; nonexistent local times block
+saving and repeated times require an occurrence. Door reopening retains readiness;
+selected-program changes use the new reviewed profile against the same deadline.
+Alternatives are counterfactuals, never authority. Unresolved requests remain queued
+with retry/deduplicated notices through the configured phone path. An independently
+valid standby-only EV/ESS plan may remain active while a queued request awaits a choice.
+
+Joint binary start choices integrate the complete measured step curve over partial
+planning intervals, with mean duration used only for estimated finish. Frozen plans
+retain contributor/curve evidence. Selected-run quarter limits and24hour ESS support
+cannot use another possible start as evidence. Source, loss and economic comparisons
+remain independently audited. Outside the complete curve add retained measured standby
+once; the curve replaces standby during its support. Observed running timing is fixed.
+A first-seen-running cycle without a known start, missing profile or already overlong
+run leaves remaining demand explicitly unknown and blocks new planning.
+
+Execution requires the exact current admitted queued plan, fresh validated measurements/
+forecast/appliance feedback, enabled authority and all existing idle/on, door, remote,
+meter and zero-native-delay guards. Recheck generation/mappings immediately before the
+single HA write. Persist starting intent before submission; ambiguous outcomes never
+replay. Actual run/finished feedback is authoritative. Startup shared-plan recovery waits
+for fresh appliance reconciliation and rejects incompatible run/profile contexts. There
+are no automatic program/modifier/power-on commands or native timer programming.
+
+The default measured-constant-7d-v1 background refreshes every30minutes. Store raw house
+and separately matched house-minus-dishwasher evidence, including standby subtraction;
+actual house/grid control retains total physical power. Older mixed samples qualify only
+with retained same-entity dedicated readings bracketing them within15seconds. Deduplicate
+equal retained traces; exclude ambiguous evidence. Join eligible five-minute samples at
+most315seconds apart (300second persistence cadence plus15second read/scheduling tolerance).
+Report supported duration, gaps, source and seven-day coverage; the one-hour/13-bin
+bootstrap is not proof of representativeness. Meter changes invalidate mixed forecasts.
+Bias corrections use matched background; missing readings are gaps rather than zero.
+Unmapped installations use an explicitly unseparated household constant. The earlier
+time-of-day learner remains comparison code, not the issued default.
+
+V45-Q019 — M2 contract clarification (7 November 2026): use measured mean cycle
+duration for the estimated finish/deadline check, without padding. The equal-weight
+real-elapsed average curve still extends to the longest included recording; map its
+complete tail for energy, source and peak accounting. Do not truncate at the mean
+duration or stretch the curve to it. Estimated completion is not a guaranteed end or
+an instruction to mark the appliance finished: observed Bosch state remains authoritative.
+
+The implementation's initial coverage rule is an engineering eligibility threshold:
+at least one covered hour and 13 distinct five-minute household observations within
+the rolling seven days, using matched dedicated-meter observations or explicit retained
+idle evidence. Count only actually supported intervals, never bridge gaps beyond the
+five-minute sampling contract. Meter matching uses observations within 15 seconds;
+available unchanged HA values remain valid under the existing reader contract. Missing
+meter data alone is not idle/zero evidence. Document idle/standby accounting, covered
+duration and gaps; meeting this minimum does not establish that a full week was observed
+or that the estimate has been validated as representative of the installation.
 
 ## Confirmed installation and GUI requirements
 

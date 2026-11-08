@@ -50,6 +50,7 @@ jobs:
           node --check energymanager/src/energymanager/assets/application-view.js
           node --check energymanager/src/energymanager/assets/appliance-profiles.js
           node --check energymanager/src/energymanager/assets/profile-chart.js
+          node --check energymanager/src/energymanager/assets/appliance-deadline.js
           node --check energymanager/src/energymanager/assets/native-live.js
           node --check energymanager/src/energymanager/assets/graph-history.js
           node --check energymanager/src/energymanager/assets/graph-cursor.js

@@ -298,3 +298,15 @@ start delay (seconds), finish, progress and modifier mappings supply feedback/gu
 explicit manual controls. Missing mappings are explicit, and missing command guards block
 that action. Configuration/recording never grants hardware authority. See RUNBOOK.md for
 manual-action prerequisites; scheduling settings are reserved for M2.
+
+
+## Bosch managed queue (4.5.7)
+
+Ready/deadline, per-run peak choice and queue revision persist in the profile evidence
+SQLite database for configured mode. They are run actions on Appliances, not global
+preferences or native appliance timer settings. The existing explicit Bosch and Refoss
+entity mappings remain required; there are no invented/default installation entities.
+Hardware control remains a separate authority switch. No usable reviewed program curve
+means no optimized scheduling; use Start now and record to collect one. Background
+coverage and mapping provenance are reported in forecast status, using the seven-day
+constant model described in FORECASTING.md.

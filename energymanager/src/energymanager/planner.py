@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from hashlib import sha256
 from datetime import timedelta
 from time import monotonic
 from typing import Any
@@ -10,10 +11,11 @@ from uuid import uuid4
 from collections.abc import Callable
 from copy import deepcopy
 
-from .domain import PeakPermission, Snapshot, json_data, instant
+from .domain import PeakPermission, Snapshot, json_data, instant, encode
 from .charging_timing import ChargingTiming
 from .charging_continuity import ChargingContinuity, ChargingWindow
 from .incumbent import seed
+from .appliance_plan import plan_evidence, resolved_power
 from .solar_capture import SolarCapture
 from .optimization import JointModel
 from .validation import TOL, accounting, rolling_comparison_errors, validate
@@ -22,7 +24,8 @@ from .session_attribution import attribute_ev_sessions
 
 
 class Planner:
-    def __init__(self, progress: Callable[[str], None] | None = None) -> None:
+    def __init__(self, progress: Callable[[str], None] | None = None, budget_seconds: float | None = None) -> None:
+        self.budget_seconds = budget_seconds
         self.started = 0.0
         self.deadline = 0.0
         self.stages: list[dict[str, Any]] = []
@@ -415,8 +418,43 @@ class Planner:
         return result
 
     def plan(self, snapshot: Snapshot) -> dict[str, Any]:
+        result = self.calculate(snapshot)
+        task = snapshot.appliance
+        if result.get("valid") or not task or not task.get("points") or task.get("started_at"):
+            return result
+        # Keep EV/ESS usable while a queued appliance awaits a user choice. Alternatives
+        # are counterfactuals, not authority, and share the original wall-clock budget.
+        conflict: dict[str, Any] = {"id":task["id"],"revision":task["revision"],
+                                    "reason":result.get("reason",result["status"]),"later":None,"on_time":None}
+        if result["status"] == "Infeasible":
+            for name,change in (("on_time",{"approved_peak_kw":snapshot.capabilities.grid_connection_kw}),
+                                ("later",{"deadline":(snapshot.intervals[-1].end-timedelta(seconds=task["curve_seconds"]-task["mean_duration_seconds"])).isoformat(),"asap":False})):
+                allowance = min(6.0,max(0,(self.deadline-monotonic())*.2))
+                if allowance < .3:
+                    break
+                trial = replace(snapshot,appliance={**task,**change})
+                model = JointModel(trial)
+                candidate = model.run(allowance)
+                if candidate["feasible"] and not validate(trial,candidate["flows"]):
+                    evidence = plan_evidence(trial,candidate["flows"])
+                    assert evidence is not None
+                    conflict[name] = {"planned_start":evidence["planned_start"],"estimated_finish":evidence["estimated_finish"],
+                                      **accounting(trial,candidate["flows"])}
+        conflict["proposal_id"] = sha256(encode(conflict).encode()).hexdigest()
+        left = self.deadline-monotonic()-.5
+        if left < .3:
+            result["appliance_conflict"] = conflict
+            return result
+        fallback = replace(snapshot,appliance={"id":None,"idle_w":task["idle_w"],"points":[]})
+        base = Planner(self.progress,left).calculate(fallback)
+        base.update(appliance_conflict=conflict,input_digest=snapshot.digest,snapshot_id=snapshot.id)
+        if base.get("valid") and not base.get("effective_snapshot"):
+            base["effective_snapshot"] = json_data(fallback)
+        return base
+
+    def calculate(self, snapshot: Snapshot) -> dict[str, Any]:
         self.started = monotonic()
-        self.deadline = self.started + snapshot.policy.planning_budget_seconds
+        self.deadline = self.started + min(snapshot.policy.planning_budget_seconds,self.budget_seconds if self.budget_seconds is not None else snapshot.policy.planning_budget_seconds)
         self.validation_seconds = 0.0
         self.solar_reserve = 0.0
         self.continuity_reserve = 0.0
@@ -448,6 +486,7 @@ class Planner:
             support = self.run_model("required_ess_support", support_model, min(5, self.remaining() * 0.15))
             higher = replace(
                 s,
+                appliance={**s.appliance,"approved_peak_kw":s.capabilities.grid_connection_kw} if s.appliance else None,
                 goals=tuple(
                     replace(
                         g,
@@ -1282,7 +1321,9 @@ class Planner:
             "valid": True,
             "goals": goals,
             "flows": flows,
-            "intervals": json_data(s.intervals),
+            "intervals": [{**json_data(i),"background_kw":i.house_kw,"dishwasher_kw":power,"house_kw":i.house_kw+power}
+                          for i,power in zip(s.intervals,resolved_power(s,flows))] if s.appliance else json_data(s.intervals),
+            "appliance": plan_evidence(s,flows),
             "sessions": sessions,
             "conditional_tasks": conditional_tasks,
             "reservations": reservations(s, flows),

@@ -85,6 +85,39 @@ requirements rather than replaying every historical checkpoint.
   next reconcile any new primary edits, commit/integrate in version order and run publication.
   Remote results go in ignored artifacts/v455-release-state.json and the final reply.
   Physical hardware, touch and the live installation remain unverified; no deployment.
+- **V45-A002-M2 implementation — authorized 7 November 2026:** the user reviewed the
+  package summary and explicitly requested handoff to the registered implementation
+  chat. Authorized scope and completion criteria are in ARCHITECTURE.md under M2
+  implementation scope. Use the current primary records and updated AGENTS.md before
+  reconciling branch copies. Keep this task stable while architecture discusses the
+  newly selected energy-profile visualisation topic. Handoff delivered to the
+  registered implementation chat on 7 November; implementation progress is recorded
+  by that chat as work proceeds.
+  **Implementation checkpoint (8 November):** from4.5.6 commit241266d in the
+  registered worktree. Primary M2/Q019 requirements reconciled; unrelated EV edits
+  preserved. Implemented measured7day background/coverage and standby separation,
+  frozen joint EV/ESS/dishwasher starts/audit, persistent Ready/deadline/choices and
+  guarded one-shot execution/recovery. Shared rolling-date/time-wheel card verified in
+  both dashboards; native label margins corrected. ARCH-018 is a separate queued task.
+  Verification:708 full Python tests151.27s,87 frontend cases;15 lifecycle cases pass
+  after final estimate-reset regression. Ruff/mypy51modules pass. Synthetic7day2017
+  interval/2961point curve solve passes58.83s within60s, with1.114kWh cycle energy plus
+  separate standby. Both browsers verify Ready/no implicit authority, impossible warning,
+  editing/persistence and actual scheduled fake Run→Finished with cancellation disabled
+  during execution; logs clean. Final45 focused cases and22 recovery cases pass;
+  wheel/sdist76 runtime files match with isolated4.5.7 import. Configured fake E2E
+  passes25.501s/2019intervals, max control4.219ms/four fake service calls.
+  NEXT: preserve/reconcile concurrent primary docs, integrate/push4.5.7 and monitor
+  exact-commit CI/publication. Remote results belong in ignored artifacts/v457-release-state.json.
+  No live deployment.
+- **ARCH-018 recording-list/trim implementation — authorized 8 November 2026:** the
+  user approved handing off this separate package to the registered V4.5 implementation
+  chat. Use the authorized pending section in ARCHITECTURE.md for scope/completion
+  criteria. Deliver after the existing M2 task, preserving its scope and release order.
+  Handoff delivered to the registered implementation chat on 8 November; implementation
+  records progress and verification here. Implementation received the handoff on
+  8 November and queued it after M2 verification/integration/release. M2 is in progress
+  in its dedicated worktree; no ARCH-018 application changes have started.
 - **Setup progress (historical):** local main contains the 4.5.4 release commit; existing verification
   checkpoints remain below. Remote CI/publication has not been independently checked
   during this setup. All 36 affected local documentation links resolve; diff whitespace
@@ -182,6 +215,12 @@ requirements rather than replaying every historical checkpoint.
   Update: the user explicitly authorized M1 in the registered implementation chat, which
   reconciled the primary documents and implemented/verified4.5.5 as recorded above.
   Continue M2 architecture separately without silently expanding M1.
+  V45-Q016 — M2 background direction agreed 6 November. Calculate a constant from
+  measurements with dishwasher draw separated and refresh it periodically. Compare
+  a time-of-day learner against it only with independent measured evaluation. Next
+  define averaging coverage and the transition from legacy mixed history. The user
+  accepted the rolling seven-day averaging window. The existing 30-minute refresh
+  remains proposed. Reuse eligible retained evidence instead of imposing a fresh week.
   V45-Q017 — 7 November, user cannot start Eco 50 in4.5.5. Error is Program is not
   available on the HA active-program start control. Read-only source inspection finds
   bosch.py rejects unknown current state before preserving entity options, then start
@@ -198,7 +237,7 @@ requirements rather than replaying every historical checkpoint.
   blocked and existing selected-program/operation/door/remote/delay/meter/authority
   checks retained. Verify the reported unknown-with-valid-options case and blocked
   unavailable/missing-option cases offline. Handoff delivered to the registered
-  V4.5 implementation chat on 7 November and its repair turn is active.
+  V4.5 implementation chat on 7 November and its repair turn was started.
   No application edit, live read or appliance command performed by this investigation.
   **V4.5 implementation update:** scoped reader fix implemented in4.5.6 after reconciling
   this primary-checkout record with the registered worktree at `fc9768e`. Reproduced
@@ -212,6 +251,61 @@ requirements rather than replaying every historical checkpoint.
   Next: scoped integration/push and existing publication checks. Subsequent remote results
   belong in ignored artifacts/v456-release-state.json and the final reply. Preserve all
   unrelated primary EV/M2/backlog edits; those records are not part of this repair release.
+  **User installation feedback, 7 November:** after updating, the user reports the
+  start issue is fixed and the dishwasher is running. This verifies the manual-start
+  outcome on the installation by user report. The user subsequently reports that
+  the recording finished and was saved. The user supplied the Eco 50 average display
+  of 1 recording, 239.1 minutes mean duration and 1.114 kWh mean energy. This establishes
+  the initial included Eco profile by user report. The raw curve has not been inspected
+  in this chat. Duration is about 3 hours 59 minutes with the agreed absence of padding.
+  V45-Q018 — per-situation choice agreed for M2. When the permitted quarter-hour peak
+  leaves no on-time dishwasher slot, the user wants to decide for that particular
+  situation. They declined a permanent preference for lateness or increased peak.
+  Present timing/peak consequences and use the existing higher-peak approval boundary.
+  The user accepted showing the later finish and on-time/higher-peak alternative,
+  required peak and estimated cost where available, with edit/cancel actions.
+  They accepted a card decision, notification through the configured phone channel
+  and keeping the run queued while the conflict remains unresolved.
+  M2's consolidated scope/completion criteria are in ARCHITECTURE.md under M2
+  implementation scope. The user authorized the reviewed package and its handoff
+  on 7 November. Use the existing 30-minute forecast refresh as the initial engineering
+  default. Root AGENTS.md records the user's project-wide conversation-flow rule.
+  V45-Q019 — implementation asked how mean cycle duration relates to an averaged
+  curve extending to the longest recording. Architecture clarified the existing
+  contracts: mean duration for estimated completion without padding; the full
+  real-elapsed curve including its tail for energy/source/peak accounting, with no
+  truncation/stretching. Actual completion follows Bosch feedback. Initial coverage
+  engineering rule: one supported hour and 13 distinct five-minute observations in
+  seven days, matched meter/explicit idle evidence, no unsupported gap filling.
+  Report actual coverage and preserve existing HA freshness semantics; see ARCHITECTURE.md.
+  This clarifies authorized M2 rather than adding a new feature or installation evidence.
+  **Next architecture topic:** energy-profile visualisations, selected by the user
+  for current discussion after this handoff. See ARCH-018 in BACKLOG.md. Clarify which
+  views/data the user wants before defining scope or changing the authorized M2 task.
+  **8 November clarification:** the user wants a compact, scalable presentation of
+  recording entries rather than changes to plotted powers. Their screenshot shows
+  trim versions as separate large entries. Source inspection confirms revised trims
+  create saved versions; membership toggles do not, and physical captures are not
+  double-weighted. The user agreed to grouping by program and trimming expanded within
+  the same recording entry, with in-place updates and no new entry/version. Deletion
+  and technical details may stay directly visible; version history was rejected.
+  Pending requirements are in ARCHITECTURE.md under ARCH-018. The user confirmed one
+  expanded recording at a time and requested visual examples. Subsequent selections
+  and the completed design scope are recorded below. The user subsequently authorized
+  this separate follow-up; keep the running M2 scope unchanged.
+  **ARCH-018 design examples:** interactive `recording-list.html` in this chat's
+  visualization directory compares open program groups with foldable groups. Uses
+  illustrative records/curves only. Local checks passed for exclusive recording
+  expansion, in-place trim save without added entries, invalid bounds, inclusion/mean
+  updates and 736/320px layouts. No application code changed. The user selected foldable
+  groups and explicitly required retaining original Start/End sliders; preserve the
+  working graph handles, linked numeric fields and existing chart interaction, not
+  the mockup's simplified replacement inputs. Requirements/verification criteria are
+  in ARCHITECTURE.md. The user chose the latest saved trim for existing duplicates,
+  even if an older trim was included. Preserve raw capture data and inclusion/exclusion,
+  using the latest trim once. The user explicitly authorized the separate implementation
+  handoff on 8 November. Next: the implementation chat delivers and verifies this package
+  after M2; the existing M2 scope remains unchanged.
 - **Integration:** subsequent 4.5.x releases precede higher numbered release streams
   on main. Preserve the separate implementation branch and incorporate shared updates
   deliberately before final verification/publication.

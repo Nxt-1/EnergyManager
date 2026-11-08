@@ -239,6 +239,8 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
                 result = library.arm(body)
             elif action == "bosch-configure":
                 result = library.configure_bosch(body)
+            elif action in ("run-preview","run-ready","run-cancel","run-edit","run-choose"):
+                result = await application.appliance_runs.action(action[4:],body)
             elif action == "bosch-command":
                 result = await library.bosch.command(body)
             else:
@@ -292,7 +294,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
                         "datetime-picker.js", "ev-schedule.js", "style.css", "ha-card.js",
                         "application-view.js", "view.html", "native-dashboard.js", "native-dashboard.css",
                         "native-live.js", "graph-history.js", "graph-cursor.js", "dashboard-client.js", "planning-activity.js",
-                        "text-selection.js", "ev-status.js", "session-details.js", "appliance-profiles.js", "profile-chart.js"):
+                        "text-selection.js", "ev-status.js", "session-details.js", "appliance-profiles.js", "profile-chart.js", "appliance-deadline.js"):
             raise web.HTTPNotFound()
         content_type = {"html": "text/html", "js": "text/javascript", "css": "text/css"}[
             name.rsplit(".", 1)[1]

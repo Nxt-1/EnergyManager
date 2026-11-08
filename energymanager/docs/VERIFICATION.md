@@ -1,5 +1,30 @@
 # EnergyManager 4 verification
 
+## 4.5.7 — V45-A002-M2 (8 November2026)
+
+708Python tests pass151.27s;87 frontend cases. Final lifecycle/estimate reset regression
+passes15 cases; Ruff/mypy51modules pass. Synthetic source/physics tests conserve partial
+interval and full-tail energy, fixed running phase and standalone standby, reject ESS
+support from an unchosen start and unrelated-quarter peak permission, and keep elapsed
+deadlines as explicit queued conflicts. Lifecycle cases cover persistent Ready without
+writes, zero native delay/ASAP consent, door reopening, selected-program/profile loss,
+request races/revisions, ambiguous transport/restart/no replay, first-seen-running unknown
+phase, scoped approval, conflict notification and automatic original-feasibility recovery.
+Legacy decision checksum/recovery remains compatible when no appliance is present.
+
+Synthetic7day2017interval/2961point four-hour-profile joint solve is accepted and audited
+in58.83s within60s. Full1.114kWh curve plus measured standby is counted once; mean239.1min
+is distinct from the longer measured tail. Both standalone and native browsers verify
+Ready/deadline/persistence and scheduled fake execution through Run→Finished, no automatic
+hardware enablement and disabled in-run cancellation. Native inherited label margins were
+corrected; selected/displayed wheel values agree. Browser warning/error logs are empty.
+No live HA/database, hardware, real phone, provider or installation deployment was used.
+Physical touch, representative-week accuracy and actual scheduling remain live-unverified.
+Wheel/sdist76 runtime files match source; isolated4.5.7 import passes. Final configured
+fake E2E25.501s/2019intervals, max control4.219ms/four fake service calls passes.
+Remote results belong in ignored artifacts/v457-release-state.json and the final reply.
+
+
 ## 4.5.6 — V45-Q017 Bosch idle start repair (7 November2026)
 
 Reproduced4.5.5 discarding valid active-program options when current state was unknown.

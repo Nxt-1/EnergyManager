@@ -917,3 +917,21 @@ em-entity-picker > input { padding-right:36px; }
 [hidden] { display:none !important; }
 .appliance-card button:not(.profile-trim-handle):hover { background:color-mix(in srgb,var(--surface),var(--accent) 8%); }
 .appliance-card button:disabled { cursor:not-allowed; opacity:.5; }
+
+[data-managed-deadline]{position:relative;margin:16px 0}
+.appliance-finish-options{display:grid;grid-template-columns:1fr 1fr 44px;gap:6px}
+.appliance-finish-options [aria-pressed=true],.appliance-date-tiles [aria-pressed=true]{border-color:var(--accent);background:color-mix(in srgb,var(--surface),var(--accent) 14%)}
+[data-finish-summary]{font-size:12px;color:var(--muted)}
+[data-finish-popup]{position:absolute;left:0;top:100%;z-index:10;width:min(430px,calc(100vw - 56px));padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:0 8px 30px #0003}
+.appliance-picker-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.appliance-picker-body{display:grid;grid-template-columns:1fr 110px;gap:14px}
+.appliance-date-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.appliance-date-tiles button{padding:6px 2px;min-width:0;display:grid;gap:2px}
+.appliance-date-tiles span{font-size:11px}.appliance-date-tiles strong{font-size:17px}
+.appliance-time-wheels{display:grid;grid-template-columns:1fr 1fr;gap:5px;text-align:center;font-size:12px}
+.appliance-time-wheel{height:220px;overflow-y:auto;scroll-snap-type:y mandatory;overscroll-behavior:contain;scrollbar-width:none;padding-block:88px;mask-image:linear-gradient(transparent,#000 30%,#000 70%,transparent)}
+.appliance-time-wheel label{margin:0;padding:0;display:grid;place-items:center;height:44px;scroll-snap-align:center;font-size:18px;position:relative}
+.appliance-time-wheel input{position:absolute;width:1px;height:1px;clip-path:inset(50%)}
+.appliance-time-wheel label:has(input:checked){color:var(--accent);font-weight:600;background:color-mix(in srgb,var(--surface),var(--accent) 10%)}
+.appliance-time-wheel label:has(input:focus-visible){outline:2px solid var(--accent)}
+@media(max-width:420px){.appliance-picker-body{grid-template-columns:1fr}.appliance-time-wheels{width:110px;justify-self:center}}

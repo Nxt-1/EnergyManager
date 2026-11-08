@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from bisect import bisect_right
+
 import math
 from collections import defaultdict
 from collections.abc import Sequence
-from datetime import timedelta
+from datetime import datetime, timedelta
 from time import monotonic
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -13,6 +15,7 @@ from zoneinfo import ZoneInfo
 import highspy
 import numpy as np
 
+from .appliance_plan import CycleCurve, starts_for
 from .domain import Snapshot
 from .validation import TOL
 
@@ -193,6 +196,42 @@ class JointModel:
         m.variable("phase_change", n, 1)
         m.variable("non_grid_cumulative", n + 1)
         m.variable("grid_cumulative", n + 1)
+        appliance_support: dict[int,list[datetime]] = {}
+        if s.appliance:
+            task = s.appliance
+            power = m.variable("dishwasher_power",n,c.grid_connection_kw)
+            choices = starts_for(s)
+            idle = task["idle_w"]/1000
+            if task.get("points") and not choices:
+                m.equality([],1)  # Explicit infeasibility; never silently omit a required cycle.
+            if choices:
+                selection = m.variable("dishwasher_start",len(choices),1,integer=True)
+                m.equality([(index,1) for index in selection],1)
+                curve = CycleCurve(task["points"])
+                coefficients: list[list[tuple[int,float]]] = [[] for _ in s.intervals]
+                interval_ends = [interval.end for interval in s.intervals]
+                for index,at in zip(selection,choices):
+                    curve_end = at+timedelta(seconds=curve.times[-1])
+                    first_index = bisect_right(interval_ends,at)
+                    for t in range(first_index,n):
+                        interval = s.intervals[t]
+                        if interval.start >= curve_end:
+                            break
+                        value = curve.mean_kw(at,interval.start,interval.end,task["idle_w"])-idle
+                        if abs(value)>1e-12:
+                            coefficients[t].append((index,-value))
+                for t in range(n):
+                    m.equality([(power[t],1),*coefficients[t]],idle)
+                    if grid_ess:
+                        interval=s.intervals[t]
+                        same_month=interval.start.astimezone(ZoneInfo(p.timezone)).strftime("%Y-%m")==s.intervals[0].start.astimezone(ZoneInfo(p.timezone)).strftime("%Y-%m")
+                        baseline=max(p.billing_floor_kw,o.monthly_peak_kw) if same_month else p.billing_floor_kw
+                        for column,negative_delta in coefficients[t]:
+                            if interval.house_kw+idle-negative_delta-interval.pv_ac_kw>baseline+1e-8:
+                                appliance_support.setdefault(column,[]).append(interval.start)
+            else:
+                for index in power:
+                    m.equality([(index,1)],idle)
         v = m.variables
         m.equality([(ev[0], 1)], o.ev_kwh)
         m.equality([(solar[0], 1)], o.ess_kwh - c.ess_min_kwh - o.ess_grid_kwh)
@@ -203,6 +242,12 @@ class JointModel:
         self.cash: dict[int, float] = defaultdict(float)
         self.operations: dict[int, float] = defaultdict(float)
         total_withdrawal = 0.0
+        initial_month = s.intervals[0].start.astimezone(ZoneInfo(p.timezone)).strftime("%Y-%m")
+        background_peaks = [i.start for i in s.intervals if grid_ess and
+                            i.house_kw+(s.appliance["idle_w"]/1000 if s.appliance and not s.appliance.get("points") else 0)
+                            -i.pv_ac_kw>max(p.billing_floor_kw,o.monthly_peak_kw
+                            if i.start.astimezone(ZoneInfo(p.timezone)).strftime("%Y-%m")==initial_month else 0)]
+        service_deadlines = sorted(g.deadline for g in s.goals) if grid_ess else []
         for t, interval in enumerate(s.intervals):
             dt = interval.hours
 
@@ -280,10 +325,12 @@ class JointModel:
             # Canonical AC provenance: household imports cannot hide nominally solar ESS precharging.
             m.row([(get("pv_store"), 1), (get("pv_store_mode"), -c.ac_charge_kw)], upper=0)
             m.row(
-                [(get("grid_house"), 1), (get("pv_store_mode"), interval.house_kw)], upper=interval.house_kw
+                [(get("grid_house"), 1), (get("pv_store_mode"), c.grid_connection_kw if s.appliance else interval.house_kw)],
+                upper=c.grid_connection_kw if s.appliance else interval.house_kw
             )
             m.equality(
-                [(get(name), 1) for name in ("pv_house", "grid_house", "solar_dis_house", "grid_dis_house")],
+                [(get(name), 1) for name in ("pv_house", "grid_house", "solar_dis_house", "grid_dis_house")]
+                + ([(get("dishwasher_power"),-1)] if s.appliance else []),
                 interval.house_kw,
             )
             m.equality(
@@ -316,16 +363,23 @@ class JointModel:
                 )
                 if self.tight_ceilings:
                     m.upper[ev[t + 1]] = max(ceilings[t], o.ev_kwh - total_withdrawal)
-            future_support = grid_ess and (
-                any(
-                    interval.start < later.start <= interval.start + timedelta(hours=24)
-                    and later.house_kw - later.pv_ac_kw > max(p.billing_floor_kw, o.monthly_peak_kw)
-                    for later in s.intervals[t:]
-                )
-                or any(interval.start < g.deadline <= interval.start + timedelta(hours=24) for g in s.goals)
-            )
-            if not grid_ess or not future_support:
+            ordinary_support = False
+            if grid_ess:
+                for times in (background_peaks,service_deadlines):
+                    position=bisect_right(times,interval.start)
+                    if position<len(times) and times[position]<=interval.start+timedelta(hours=24):
+                        ordinary_support=True
+                        break
+            support_columns = []
+            if grid_ess and not ordinary_support:
+                for column,times in appliance_support.items():
+                    position=bisect_right(times,interval.start)
+                    if position<len(times) and times[position]<=interval.start+timedelta(hours=24):
+                        support_columns.append(column)
+            if not grid_ess or not (ordinary_support or support_columns):
                 m.upper[get("grid_store")] = 0
+            elif not ordinary_support:
+                m.row([(get("grid_store"),1)]+[(column,-c.ac_charge_kw) for column in support_columns],upper=0)
             imp = [(get(name), 1) for name in ("grid_ev", "grid_house", "grid_store")]
             m.row(imp + [(get("grid_direction"), -c.grid_connection_kw)], upper=0)
             m.row(
@@ -487,6 +541,14 @@ class JointModel:
             ]
             automatic = max(baseline, p.automatic_peak_kw)
             big_quarter = c.grid_connection_kw * 0.25
+            if s.appliance and s.appliance.get("points") and not s.appliance.get("started_at"):
+                task = s.appliance
+                choices = starts_for(s)
+                dwelling = [index for index,at in zip(v.get("dishwasher_start",[]),choices)
+                          if at < s.intervals[slots[-1]].end and at+timedelta(seconds=task["curve_seconds"]) > first.start]
+                ceiling = max(automatic,task.get("approved_peak_kw") or 0)
+                if dwelling:
+                    m.row(terms+[(index,big_quarter) for index in dwelling],upper=ceiling*.25-prefix+big_quarter)
             for resource in ("grid_ev", "grid_store"):
                 controlled = m.variable(f"quarter_control_{resource}_{quarter_key}", 1, 1, integer=True)[0]
                 m.row(
@@ -528,6 +590,14 @@ class JointModel:
                         ):
                             use = m.variable(f"quarter_grant_{quarter_key}_{grant.id}", 1, 1, integer=True)[0]
                             extensions.append((use, -(grant.peak_kw - automatic) * 0.25))
+                if s.appliance and (s.appliance.get("approved_peak_kw") or 0)>automatic:
+                    task = s.appliance
+                    overlap = [index for index,at in zip(v.get("dishwasher_start",[]),starts_for(s))
+                               if at < s.intervals[slots[-1]].end and at+timedelta(seconds=task["curve_seconds"])>first.start]
+                    if overlap:
+                        appliance_grant = m.variable(f"appliance_grant_{resource}_{quarter_key}",1,1,integer=True)[0]
+                        m.row([(appliance_grant,1)]+[(index,-1) for index in overlap],upper=0)
+                        extensions.append((appliance_grant,-(task["approved_peak_kw"]-automatic)*.25))
                 if extensions:
                     m.row([(index, 1) for index, _ in extensions], upper=1)
                 allowed = automatic if (eligible or resource == "grid_store" and grid_ess) else baseline

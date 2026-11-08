@@ -25,6 +25,7 @@ from energymanager.validation import validate
 from energymanager.settings import ConfigurationFile, SETTING_FIELDS
 from energymanager.notifications import Notifications, NotificationTarget
 from energymanager.store import Store
+from energymanager.load_forecast import LoadSample
 from energymanager.bosch import FIELDS
 from energymanager.web import create_web
 from energymanager.journeys import Journeys
@@ -93,6 +94,10 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
             values["synthetic_bosch_operation"] = ("run" if elapsed < 60 else "finished"), None
             values["synthetic_dishwasher"] = (1800 if elapsed < 20 else 100 if elapsed < 60 else 0), "W"
             values["synthetic_bosch_progress"] = min(100, round(elapsed / 60 * 100)), "%"
+        if profiles_fixture and key in ("grid_import_kw","grid_export_kw"):
+            dishwasher = float(values["synthetic_dishwasher"][0])
+            values["grid_import_kw"] = max(0,dishwasher-600),"W"
+            values["grid_export_kw"] = max(0,600-dishwasher),"W"
         value, unit = values[key]
         now = datetime.now(UTC)
         if key == "heartbeat":
@@ -238,6 +243,9 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
         path = stem.with_suffix(".json")
         path.write_text(json.dumps(config), encoding="utf-8")
         store = Store(stem.with_suffix(".sqlite"))
+        # Explicit deterministic one-hour measurement coverage for the constant model.
+        for index in range(13):
+            store.record_load(LoadSample(issued-timedelta(minutes=5*(12-index)),400))
         original_session = aiohttp.ClientSession
 
         def local_session(*args, **kwargs):
@@ -320,7 +328,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                 assert current["observation"]["ev_state_known"]
                 assert len(weather_queries) == 4
                 assert all(q["models"] == "knmi_seamless" and q["forecast_days"] == "9" for q in weather_queries)
-                assert current["forecast_status"]["load_stage"] == "learning"
+                assert current["forecast_status"]["load_stage"] == "measured constant"
                 assert current["forecast_status"]["load_samples"] >= 1
                 assert current["forecast_status"]["weather_error"] is None
                 assert application.forecast_data["intervals"][0]["pv_ac_kw"] > 0
@@ -479,6 +487,11 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                             if cycle < 2:
                                 profiles.accept(recording["id"], {"revision": profiles.settings["revision"], "reviewed": True})
                         profiles.configure_bosch({"revision": profiles.settings["revision"], "entities": bosch_entities})
+                        with store.connection:
+                            for index in range(13):
+                                store.connection.execute("INSERT INTO background_samples VALUES (?,?,?,?,?,?)",(
+                                    (issued-timedelta(minutes=5*(12-index))).timestamp(),400,0,400,
+                                    "sensor.synthetic_dishwasher","SYNTHETIC matched idle measurements"))
                         profiles._persist_settings({**profiles.settings, "bosch_programs": {
                             "synthetic_eco_50": "synthetic_eco_50", "synthetic_intensive_70": "synthetic_intensive_70"}})
                         for cycle in range(2):

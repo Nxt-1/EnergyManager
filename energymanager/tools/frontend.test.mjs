@@ -1581,3 +1581,14 @@ test('unapplied program choice survives recreation only for the same mapped appl
   other.library.mode = 'configured'; other.library.bosch.config.selected_program = 'select.synthetic_b';
   assert.equal(ApplianceProfilesPage.prototype.restoreProgram.call(other,'eco',['eco','intensive']),'eco');
 });
+
+
+import {rollingDates,tomorrowFinish} from '../src/energymanager/assets/appliance-deadline.js';
+test('appliance deadline presets use the next local calendar date across DST and show eight rolling dates',()=>{
+  for(const now of ['2026-10-24T23:30:00Z','2026-03-28T23:30:00Z']){
+    const dates=rollingDates(now,'Europe/Brussels');assert.equal(dates.length,8);
+    assert.equal(new Set(dates).size,8);
+    assert.equal(localDateTime(tomorrowFinish(now,'Europe/Brussels',12),'Europe/Brussels'),dates[1]+'T12:00');
+    assert.equal(localDateTime(tomorrowFinish(now,'Europe/Brussels',18),'Europe/Brussels'),dates[1]+'T18:00');
+  }
+});

@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 import math
 
 from .domain import Snapshot
+from .appliance_plan import resolved_power, selected_start
 
 TOL = 2e-5
 
@@ -74,6 +75,10 @@ def validate(
     s: Snapshot, flows: dict[str, list[float]], service: dict[str, float] | None = None
 ) -> list[str]:
     c, p, o = s.capabilities, s.policy, s.observation
+    try:
+        dishwasher = resolved_power(s,flows)
+    except (ValueError, KeyError, TypeError) as exc:
+        return [str(exc)]
     errors: list[str] = []
     n = len(s.intervals)
     needed = (
@@ -104,6 +109,10 @@ def validate(
             not math.isfinite(value) or value < -TOL for value in values
         ):
             errors.append(f"Malformed trajectory: {name}")
+    if s.appliance:
+        actual = flows.get("dishwasher_power",[])
+        if len(actual) != n or any(not math.isfinite(value) or abs(value-expected)>TOL for value,expected in zip(actual,dishwasher)):
+            errors.append("Dishwasher curve/energy conservation")
     if errors:
         return errors
 
@@ -137,6 +146,12 @@ def validate(
         check(ac_in <= c.ac_charge_kw + TOL and ac_out <= c.ac_discharge_kw + TOL, f"Converter limit {t}")
         check(ac_in < TOL or ac_out < TOL, f"Converter direction {t}")
         check(f["pv_store"] < TOL or f["grid_house"] < TOL, f"AC ESS source relabelling {t}")
+        if s.appliance and f["grid_store"]>TOL:
+            support = any(interval.start<future.start<=interval.start+timedelta(hours=24)
+                          and future.house_kw+dishwasher[j]-future.pv_ac_kw>max(p.billing_floor_kw,o.monthly_peak_kw if future.start.astimezone(ZoneInfo(p.timezone)).strftime("%Y-%m")==s.intervals[0].start.astimezone(ZoneInfo(p.timezone)).strftime("%Y-%m") else 0)
+                          for j,future in enumerate(s.intervals[t:],t))
+            support = support or any(interval.start<g.deadline<=interval.start+timedelta(hours=24) for g in s.goals)
+            check(support,"ESS precharge lacks selected dishwasher/household support within 24 hours")
         charge = ac_in * c.ac_charge_efficiency + f["dc_store"] * c.dc_efficiency
         discharge = (
             f["solar_dis_ev"] + f["solar_dis_house"] + f["grid_dis_house"]
@@ -161,7 +176,7 @@ def validate(
         check(
             close(
                 f["pv_house"] + f["grid_house"] + f["solar_dis_house"] + f["grid_dis_house"],
-                interval.house_kw,
+                interval.house_kw+dishwasher[t],
             ),
             f"House conservation {t}",
         )
@@ -256,6 +271,10 @@ def validate(
         )
         eligible = [g for g in s.goals if at < g.deadline and (g.earliest is None or at >= g.earliest)]
         automatic = max(baseline, p.automatic_peak_kw)
+        if s.appliance and s.appliance.get("points") and not s.appliance.get("started_at"):
+            beginning = selected_start(s,flows)
+            if beginning and beginning < at+timedelta(minutes=15) and beginning+timedelta(seconds=s.appliance["curve_seconds"])>at:
+                check(energy*4 <= max(automatic,s.appliance.get("approved_peak_kw") or 0)+TOL,"Dishwasher peak permission")
         charged = charged_prefix[bisect_left(interval_starts, at + timedelta(minutes=15))]
         ev_limits = [automatic if eligible else baseline]
         for g in eligible:
@@ -271,7 +290,13 @@ def validate(
                 and charged <= deficit + rounding + TOL
             ):
                 ev_limits.append(g.approved_peak_kw or baseline)
-        ess_limits = [automatic] + [
+        dishwasher_limit = None
+        if s.appliance and s.appliance.get("points") and s.appliance.get("approved_peak_kw"):
+            beginning = selected_start(s,flows)
+            if beginning and beginning < at+timedelta(minutes=15) and beginning+timedelta(seconds=s.appliance["curve_seconds"])>at:
+                dishwasher_limit = s.appliance["approved_peak_kw"]
+                ev_limits.append(dishwasher_limit)
+        ess_limits = [automatic] + ([dishwasher_limit] if dishwasher_limit is not None else []) + [
             g.peak_kw
             for g in s.peak_permissions
             if g.state == "granted"

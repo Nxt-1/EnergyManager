@@ -394,13 +394,44 @@ This backlog entry does not authorize implementation.
 
 ## ARCH-018 — Task energy profile visualization
 
-Recorded: 27 October 2026. Status: **deferred**, requested by the user.
+Recorded: 27 October 2026. Updated: 8 November 2026. Status: **recording-list/trim
+package authorized for implementation**; original task-chart ideas remain deferred.
 
 Include a visualization of each task's energy profile. Establish the presentation,
 time resolution and whether it shows planned, measured or both profiles when
 revisiting; keep predictions and observations distinguishable.
 
-This backlog entry does not authorize implementation.
+On 7 November the user asked to put energy-profile visualisations on the immediate
+todo list once the M2 scheduling package was handed to implementation. Clarify whether
+this follow-up covers appliance/program profiles, task/run views or comparisons.
+Existing planned task charts and appliance recording/average graphs are the starting
+point. Preserve the original task-profile intent while the follow-up scope is discussed.
+This discussion does not silently amend the authorized M2 implementation.
+
+8 November clarification: the immediate problem is the presentation and organisation
+of recording entries, not the plotted power values. The user finds the current large
+entries excessive and unsuitable for many recordings, and reports that saving new
+selections appears to create duplicate recordings. Read-only source inspection confirms
+that saving revised trims creates separate immutable saved versions, all listed as
+peers; average membership changes alone do not create recordings. One physical capture
+still contributes at most once to a program average. Prioritise compact, scalable
+recording browsing. The user agreed to grouping per program and expanding trimming
+controls within the same recording entry. Saved trims must update that recording in
+place, without a new entry or version. Deletion and technical details need not move into
+a secondary menu. The proposed version-history approach was rejected. See the pending
+ARCH-018 requirements in ARCHITECTURE.md. One recording expanded at a time is confirmed;
+opening another collapses the previous entry. After reviewing examples, the user chose
+foldable program groups and explicitly required retaining the original Start/End slider
+functionality. Keep draggable graph handles and linked numeric fields; the simplified
+mockup controls do not replace them. The user chose the latest saved trim when
+consolidating existing duplicates, including when an older trim was previously included.
+Retain raw capture data and the capture's inclusion/exclusion; apply the latest trim once.
+The user explicitly authorized the separate recording-list/trim implementation handoff
+on 8 November. Scope and completion criteria are in ARCHITECTURE.md. Preserve the original task-profile
+visualization idea separately within this entry; chart comparisons are not the user's
+current focus and are not part of this authorization.
+
+Authorization covers only the recording-list/trim package, separately from M2.
 
 ## ARCH-019 — Task main energy source
 

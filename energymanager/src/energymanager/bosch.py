@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
@@ -137,6 +138,12 @@ class BoschDishwasher:
             return
         await self.read()
         await self.capture_tick()
+        manager = getattr(self.app,"appliance_runs",None)
+        if manager is not None:
+            try:
+                await manager.reconcile()
+            except (ValueError, TimeoutError) as exc:
+                manager.error = str(exc)
 
     async def capture_tick(self) -> None:
         from .appliance_profiles import MAX_GAP_SECONDS
@@ -201,7 +208,7 @@ class BoschDishwasher:
         self.app.store.put(f"bosch_command_{self.profiles.mode}", command)
         self.last_command = command
 
-    async def command(self, body: dict[str, Any]) -> dict[str, Any]:
+    async def command(self, body: dict[str, Any], *, authorize: Callable[[], bool] | None = None) -> dict[str, Any]:
         from .appliance_profiles import number
 
         if self.lock.locked():
@@ -275,6 +282,8 @@ class BoschDishwasher:
             reason = self.authority_reason()
             if reason or hardware.epoch != epoch or config != self.config:
                 raise ValueError(reason or "Hardware authority or Bosch mappings changed while reading the appliance")
+            if authorize is not None and not authorize():
+                raise ValueError("Managed request changed before the appliance command")
             command = {"action": action, "at": self.app.now().isoformat(), "program": body.get("program"),
                        "feedback": "operation" if action == "start" else key,
                        "expected": "run" if action == "start" else expected,
