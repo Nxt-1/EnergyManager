@@ -470,7 +470,7 @@ updates before incorporating them into the V4.5 implementation branch; discuss t
 next V4.5 task in the architecture chat and start implementation only when authorized.
 No application task, commit or publication is implied by this setup record.
 
-### EV planner — V4.6 / EV-A002–EV-A008
+### EV planner — V4.6 / EV-A002–EV-A009
 
 - **Architecture chat:** EV Task optimization achritecture, local ID
   `01a18e54-5380-7703-b13d-8044baa8a7ac`.
@@ -617,6 +617,31 @@ No application task, commit or publication is implied by this setup record.
   four shared document drafts, push and monitor exact-head CI/image publication.
   Remote outcomes go only in ignored `artifacts/ev-a008-state.json` and the final reply.
   No live installation/database, real notifications, hardware operation or deployment.
+
+
+- **EV-A009 — local complete for4.6.8 (9 November2026):** scheduled user-authorized
+  handoff consumed in registered implementation chat; one-time automation deleted.
+  Branch `codex/ev-a009` from main4.6.7/4cecd64 preserves A008 and appliance work.
+  **Implemented:** current source-causal shared progress warning with expandable goal
+  identities/revisions/titles/deadlines and accurate recovery. A separate display view
+  preserves stored issues/results and independent warnings/notification behavior.
+  Grid projection checks explicit independent resource authority and full executable
+  interval coverage, including EV-disabled household/ESS plans, handovers, cautious
+  execution and appliance evidence. No flow removal, live-load fallback or economic/
+  control repair; measured quarter/history and approved styling remain independent.
+  **Verified:**800Python209.22s, final62focused1.07s,113frontend, Ruff/mypy61/JS/CLI pass.
+  Configured/routed fake E2E25.590/67.219s pass; two journeys/six fake route requests.
+  Actual fake-counter loss yields one warning for nine goals, EV invalid/ESS valid,
+  zero EV flows, measured0W and retained marker in both dashboards. Recovery2.429s
+  clears the warning while calculating, preserving the accepted plan, raw issues,
+  goals, flows and54kWh progress; pending results say Awaiting recalculation.
+  Native/standalone desktop/390px, actual sensor actions, retained details and clean
+  logs pass. Wheel/sdist88runtime files match; isolated4.6.8 import/assets pass.
+  See VERIFICATION.md and ignored `artifacts/ev-a009-state.json` for detailed evidence.
+  **Next:** scoped release commit, integrate latest main in version order preserving
+  latest shared drafts, push and inspect exact-head CI/container/image publication.
+  Remote results belong only in the ignored checkpoint/final; no verification-only
+  follow-up commit. No live installation/database, real phone/hardware or deployment.
 
 
 ## Current checkpoint — saved recording trim correction (4.5.4,31 October2026)

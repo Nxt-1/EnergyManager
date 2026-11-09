@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from .domain import Capabilities, Goal, Observation, Policy, instant
@@ -126,10 +126,17 @@ class EVProgress:
             issue = "EV paused: vehicle energy needs reconciliation"
         elif not usable and s.get("counter_stalled"):
             issue = "EV paused: charging energy counter is not advancing"
+        cause = (None if usable else "post_trip" if s.get("unknown_return") else
+                 "counter_stalled" if s.get("counter_stalled") else "counter_unmapped" if not source else
+                 "vehicle_baseline" if "estimated_kwh" not in s else "counter_unavailable")
         valid_at = usable_at if meter_usable else o.ev_observed_at if fresh_soc else None
         if meter_usable and moving_at is not None and valid_at is not None:
             valid_at = min(valid_at, moving_at)
-        view = {"source": basis, "usable": usable, "issue": issue,
+        view = {"source": basis, "usable": usable, "issue": issue, "cause": cause,
+                "reconciliation_required": bool(s.get("unknown_return")),
+                "counter_stalled": bool(s.get("counter_stalled")),
+                "configured_entity_id": source or None, "reconcile_after": s.get("reconcile_after"),
+                "counter_issue": counter.issue(at) if counter else "Total-energy sensor not configured" if not source else "Counter read unavailable",
                 "valid_until": (valid_at + timedelta(seconds=policy.measurement_max_age_seconds)).isoformat()
                                if valid_at else None,
                 "entity_id": s.get("entity_id") or source or None, "counter_kwh": s.get("counter_kwh"),
@@ -141,3 +148,36 @@ class EVProgress:
         known = usable and (("estimated_kwh" in s and not s.get("unknown_return")) or fresh_soc)
         return replace(o, ev_kwh=energy, ev_state_known=known,
                        ev_progress=view)
+
+
+def progress_warning(observation: Observation, at: datetime, goals: tuple[Goal, ...],
+                     vehicle_source: str | None = None) -> dict[str, Any] | None:
+    """Current operational presentation, independent of saved planning results/notifications."""
+    progress = observation.ev_progress
+    if progress is None:
+        return None
+    if (progress.get("usable") and progress.get("valid_until")
+            and at <= instant(progress["valid_until"])):
+        return None
+    counter_source = progress.get("configured_entity_id", progress.get("entity_id"))
+    cause = progress.get("cause") or ("post_trip" if progress.get("reconciliation_required") else
+        "counter_stalled" if progress.get("counter_stalled") else "counter_unmapped" if not counter_source
+        else "counter_unavailable")
+    vehicle_cause = cause in ("post_trip", "vehicle_baseline")
+    source = vehicle_source if vehicle_cause else counter_source
+    title, action = {
+        "counter_unmapped": ("EV progress sensor not selected", "Select go-e Total energy · eto in Measurements, save and restart."),
+        "counter_unavailable": ("EV charging progress unavailable", "Restore the selected total-energy sensor with declared Wh/kWh units, or a genuinely fresh vehicle SoC."),
+        "counter_stalled": ("EV energy counter is not advancing", "Check the selected total-energy sensor and its updates while charging; restore measured progress."),
+        "post_trip": ("Vehicle energy needs reconciliation", "Restore a genuinely fresh post-trip vehicle SoC; reconnect the vehicle if it is still away."),
+        "vehicle_baseline": ("Vehicle energy baseline unavailable", "Restore a valid vehicle SoC to establish the total-energy reference."),
+    }[cause]
+    affected = {goal.id: {"id": goal.id, "revision": goal.revision, "title": goal.title,
+                          "deadline": goal.deadline.isoformat()}
+                for goal in goals if goal.deadline > at}
+    return {"kind": "ev_progress", "id": "ev-progress:" + cause + ":" + (source or "vehicle"),
+            "cause": cause, "title": title, "text": "EV charging is paused; task progress is retained and ESS remains independent.",
+            "action": action, "entity_id": source,
+            "source_issue": None if vehicle_cause else progress.get("counter_issue"),
+            "vehicle_observed_at": progress.get("vehicle_observed_at"),
+            "affected_goals": sorted(affected.values(), key=lambda goal: (goal["deadline"], goal["id"]))}

@@ -112,6 +112,8 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
             value = "unavailable"
         elif active_fault == "charger" and key == "charger_status":
             value = "unavailable"
+        elif active_fault == "progress" and key == "ev_total_kwh":
+            value = "unavailable"
         attributes = {"unit_of_measurement": unit, "friendly_name": key.replace("_", " ")}
         if profiles_fixture and key in ("synthetic_bosch_selected_program", "synthetic_bosch_active_program"):
             attributes["options"] = ["synthetic_eco_50", "synthetic_intensive_70"]
@@ -276,6 +278,15 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
             configuration = ConfigurationFile(path, addon=True, mode="configured")
             before = monotonic()
             server_app = create_web(application, configuration=configuration)
+            if serve and preview_fault == "progress":
+                async def progress_fixture(request: web.Request) -> web.Response:
+                    nonlocal active_fault
+                    data = await request.json()
+                    if type(data.get("available")) is not bool:
+                        raise web.HTTPBadRequest(text="SYNTHETIC boolean availability required")
+                    active_fault = None if data["available"] else "progress"
+                    return web.json_response({"synthetic": True, "available": data["available"]})
+                server_app.router.add_post('/synthetic/progress', progress_fixture)
             if routing_fixture:
                 application.journeys = Journeys(application, router=RefereeJourneyRouter(
                     GoogleRoutesClient("synthetic-routing-key", allow_requests=True)))
@@ -309,6 +320,8 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                 assert current["observation"]["ev_state_known"]
                 assert current["observation"]["ev_progress"]["usable"]
                 assert current["observation"]["ev_progress"]["entity_id"] == "sensor.ev_total_kwh"
+                assert current["plan_authority"] == {"ev": True, "ess": True, "conditional": True}
+                assert isinstance(current["display_issues"], list)
                 assert current["planning_activity"]["request_id"] == replacement
                 assert current["planning_activity"]["state"] == "ready"
                 from multiprocessing import active_children
@@ -568,7 +581,7 @@ if __name__ == "__main__":
                         help="Record a SYNTHETIC rejected decision for diagnostic/export UI checks")
     parser.add_argument("--deadline-margin-fixture", action="store_true",
                         help="Show a SYNTHETIC deadline-margin warning; display evidence only, requires --serve")
-    parser.add_argument("--input-fault", choices=("quarter", "stale", "unavailable", "read_failure", "charger"),
+    parser.add_argument("--input-fault", choices=("quarter", "stale", "unavailable", "read_failure", "charger", "progress"),
                         help="Inject old metadata, unavailability or HA read failure after local verification")
     arguments = parser.parse_args()
     if arguments.profiles_fixture and not arguments.serve:

@@ -126,9 +126,9 @@ export function evSchedule(state) {
   };
 }
 
-function goalStatus(goal) {
+function goalStatus(goal, progressUsable) {
   if (goal.status === 'unknown_return_state') return 'Return SoC unknown';
-  if (goal.status === 'progress_unavailable') return 'Progress unavailable';
+  if (goal.status === 'progress_unavailable') return progressUsable ? 'Awaiting recalculation' : 'Progress unavailable';
   if (goal.shortfall_kwh > 0.001) return `${number(goal.shortfall_kwh)} kWh shortfall`;
   if (goal.status === 'scheduled') return 'Scheduled';
   return 'Awaiting plan';
@@ -238,7 +238,7 @@ export class EVSchedulePage {
       if (event.type === 'away') return event.goal.return_at ?
         `Expected away until ${stamp(event.end)}` : 'Return unknown · away until measured reconnection';
       if (event.type === 'return') return 'Expected availability · return SoC follows the plan or measured reconnection';
-      return `${number(target(event.goal))}% ${event.type === 'trip' ? 'departure target' : 'minimum SoC'} · ${goalStatus(event.goal)}`;
+      return `${number(target(event.goal))}% ${event.type === 'trip' ? 'departure target' : 'minimum SoC'} · ${goalStatus(event.goal, state.ev_progress_usable)}`;
     };
     if (!schedule.days.some(day => day.date === this.selectedDate)) this.selectedDate = schedule.days[0].date;
     const selectedDay = schedule.days.find(day => day.date === this.selectedDate);

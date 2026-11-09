@@ -1761,6 +1761,79 @@ decisions/command history; synthetic regressions do not become installation evid
 Implemented in4.6.6 and verified offline; see VERIFICATION.md for results and limits.
 No live installation action is included.
 
+### Shared progress warnings and independent grid projection (EV-A009, 4.6.8)
+
+On9November2026 the user requested one implementation work package for the two
+post-A008 dashboard problems and a handoff delayed by1hour10minutes. The reported
+installation incident cleared after the user mapped eto and restarted: both the
+warnings and missing quarter-end marker recovered. Implemented in4.6.8 after the scheduled handoff; it does not change charging/control policy.
+
+**Shared progress warning:** present one concise actionable warning for a common
+EV-progress fault, rather than repeating it for every dependent goal across the
+seven-day horizon. Provide an expandable affected-goal list with goal identity,
+title and deadline, ordered by deadline; recurring daily titles must be distinguishable.
+Group by the actual shared cause, not by matching prose or title. Distinguish an
+unmapped/unavailable total-energy sensor, a stalled counter and genuine post-trip
+reconciliation, using available source evidence. Show the appropriate recovery action;
+do not label generic progress loss Awaiting measured reconnection. Preserve distinct
+goal shortfalls, peak approval requests, planning failures and deadline-margin warnings.
+Use current progress evidence to withdraw/recover the shared operational warning
+without waiting for an expensive replan; do not imply pending goal results have been
+recalculated or that their requirements are met. Keep the summary compact, with
+technical source evidence in details and applicable actual HA sensor actions.
+No new notifications or changes to notification grouping/peak authority are included.
+
+**Independent grid display:** keep valid measured quarter data in the existing Grid
+box, including true zero, independent of EV availability. Assess the accepted grid
+forecast and quarter-end marker against usable executable instructions and resource
+authority, rather than rejecting the entire display solely because ev_plan_valid is
+false. In particular, a current accepted plan with EV disabled and valid household/ESS
+flows can support the projection. Expose any resource validity evidence needed by the
+display explicitly; do not infer ESS validity from EV validity. Preserve measured
+quarter prefix plus remaining gross imports, interval coverage, forecast expiry,
+monthly running maximum and month reset. Never plot revoked EV/ESS/conditional work,
+or silently remove a resource flow and assume the joint remaining flows still balance.
+If no credible executable grid forecast is available, retain the measured value and
+history and omit the prediction with a concise reason in the existing availability
+hint/details. Do not invent a live-load extrapolation fallback, economic repair or
+new solver/control policy. Preserve the approved red long dashes, line weight, monthly
+label, quarter shading, marker, clickable sensor and absence of an extra panel.
+
+Acceptance: native and standalone dashboards at desktop/mobile widths; missing eto
+with several daily/trip goals produces one shared warning with complete affected-goal
+details; revisions/replans do not duplicate it; recovery removes it, including while
+replanning is pending. Cover counter failure/stall, true unknown return and unrelated
+approval/shortfall coexistence. Verify the quarter value/marker with EV progress lost
+but an independently usable grid plan, and with genuinely invalid resource authority,
+expired forecasts, incomplete coverage, missing/zero meter values and quarter/month
+boundaries. Retain EV-A008 progress/watchdog and ESS independence, existing notification
+behavior and all source/quantity/peak/fault guards. Use fake/local endpoints only and
+complete the existing proportionate release checks. Integrate latest main in version
+order, preserving concurrent shared documentation and appliance work. No live access,
+real notification, hardware operation or installation deployment is authorized.
+
+Implementation contracts in4.6.8:
+
+- `Observation.ev_progress` exposes structured current cause/source evidence; its
+  existing watchdog and reconciliation behavior remain unchanged. `display_issues`
+  groups current operational dependency warnings, while persisted `issues` and
+  notification processing retain their original goal/revision identities. A recovered
+  source withdraws the shared warning immediately; frozen goal results remain unchanged
+  and blocked result labels await recalculation. Affected goals use current identities,
+  revisions, titles and deadlines rather than prose matching.
+- `plan_authority` exposes EV, ESS and conditional validity independently. The grid
+  display checks every used resource in each complete joint interval. A revoked
+  resource makes that interval unavailable; it is never removed from the power balance.
+  Missing resource trajectories or authority fail closed. Known idle appliance demand
+  remains household demand; controlled profiles need matching executable run evidence.
+- The display follows whole prior instructions during admission handover and intersects
+  inherited authority. An active certified cautious execution uses its own audited
+  flows/context through its deadline, with later coverage explicitly unavailable.
+  Current-quarter and monthly predictions retain gross imports, measured prefix,
+  partial intervals and existing expiry/month boundaries. A usable prefix can remain
+  visible up to a later revoked/uncovered interval. Measured quarter and history remain
+  available independently. There is no live-load fallback or economic/control repair.
+
 ### Live peak protection priority (EV-A004, 4.6.1)
 
 When an unexpected load change threatens the authorized quarter-hour peak, first

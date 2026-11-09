@@ -26,6 +26,7 @@ class SyntheticInputs:
 
 class SyntheticHA:
     inputs = SyntheticInputs()
+    entities = {}
 
     def __init__(self):
         self.calls = []

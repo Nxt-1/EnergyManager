@@ -26,7 +26,7 @@ import {GraphCursor, plotInsets, clipSeries} from './graph-cursor.js';
 import {requestError, StatePoller} from './dashboard-client.js';
 import {hasTextSelection, clearTextSelection} from './text-selection.js';
 import {PlanningActivity} from './planning-activity.js';
-import {evMeasuredPower} from './ev-status.js';
+import {evMeasuredPower, progressWarningMarkup} from './ev-status.js';
 import {historySources, historyReading} from './ha-history.js';
 import {peakDisplay, quarterMeasurement, quarterBands} from './peak-display.js';
 import {sessionContributionMarkup, plannedPowerProfileMarkup, goalPowerProfileMarkup} from './session-details.js';
@@ -451,9 +451,9 @@ export async function mountApplication(root, options = {}) {
       const meter = goal === nextGoal && chargeKnown ?
         `<p class="subtle">${o.ev_progress ? 'Estimated charge' : 'Current charge'} / next goal target: ${measured(num(o.ev_kwh), o.ev_progress ? 'ev_progress' : 'ev_soc', o.ev_progress ? 'Estimated EV charge' : 'Current EV charge')} / ${num(target)} kWh</p>
         <div class="meter" role="progressbar" aria-label="Current charge towards next goal" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${num(progress, 0)}"><i style="width:${progress}%;background:#16a34a"></i></div>` : '';
-      return `<section class="goal"><div class="goal-title"><strong>${esc(goal.title)}</strong><span class="badge ${goal.shortfall_kwh > 0.001 ? 'warning' : ''}">${goalStatus(goal, state.now)}</span></div>
+      return `<section class="goal"><div class="goal-title"><strong>${esc(goal.title)}</strong><span class="badge ${goal.shortfall_kwh === null || goal.shortfall_kwh > 0.001 ? 'warning' : ''}">${goal.status === 'progress_unavailable' && state.ev_progress_usable ? 'Awaiting recalculation' : goalStatus(goal, state.now)}</span></div>
         <p>${time(goal.deadline)} · ${requirement}</p>
-        <p>${goal.planned_kwh !== undefined && goal.planned_kwh !== null ? num(goal.planned_kwh / c.ev_capacity_kwh * 100, 1) + '% planned · ' : ''}${goal.shortfall_kwh > .001 ? num(goal.shortfall_kwh) + ' kWh shortfall' : 'One shared battery trajectory'}</p>
+        <p>${goal.planned_kwh !== undefined && goal.planned_kwh !== null ? num(goal.planned_kwh / c.ev_capacity_kwh * 100, 1) + '% planned · ' : ''}${goal.shortfall_kwh === null ? 'Goal result unavailable' : goal.shortfall_kwh > .001 ? num(goal.shortfall_kwh) + ' kWh shortfall' : 'One shared battery trajectory'}</p>
         ${goal.completion_margin_minutes !== undefined && goal.completion_margin_minutes !== null ? `<p>${goal.desired_margin_met ? `Ready at least ${state.policy.completion_margin_minutes} min early` : `Limited completion margin / ${num(goal.completion_margin_minutes, 0)} min`}</p>` : ''}
         ${goal.external_charging_required ? '<p class="error">Charging away must be arranged. Return SoC is unknown.</p>' : ''}
         ${meter}<div class="actions"><button data-detail="${esc(goal.id)}">Details</button>${goal.kind !== 'daily' && !goal.calendar ? `<button data-edit="${esc(goal.id)}">Edit</button><button data-delete="${esc(goal.id)}">Remove</button>` : ''}</div></section>`;
@@ -467,11 +467,15 @@ export async function mountApplication(root, options = {}) {
     $('goals').innerHTML = visibleGoals.map(goalCard).join('') || (page === 'overview' ?
       '<p class="empty">No goals due in the next 24 hours.</p>' : '<p class="empty">Add a journey or timed SoC goal.</p>');
     $('cost-card').hidden = page !== 'planning';
-    $('approvals').innerHTML = state.issues.length ? state.issues.map(i => i.kind === 'deadline_margin' ?
+    const expandedProgress = new Set([...$('approvals').querySelectorAll('[data-progress-warning][open]')].map(item => item.dataset.progressWarning));
+    const displayIssues = state.display_issues || state.issues;
+    $('approvals').innerHTML = displayIssues.length ? displayIssues.map(i => i.kind === 'ev_progress' ?
+      progressWarningMarkup(i, state, options) : i.kind === 'deadline_margin' ?
       `<section class="issue"><strong>${esc(i.title)} · PV safety margin</strong><p>${esc(i.text)}</p><p>${time(i.deadline)} · Permitted peak retained</p><p>${esc(notificationStatus(i.notification))}</p></section>` : i.kind === 'planning' ?
       `<section class="issue"><strong>${esc(i.title)}</strong><p>${esc(powerText(i.text))}</p><p>${time(i.first_at)} · ${i.state === 'retrying' ? 'Recalculating' : 'Attention needed'}${i.notification ? ' · ' + esc(notificationStatus(i.notification)) : ''}</p><button data-decision="${esc(i.decision_id)}">Decision evidence</button></section>` :
-      `<section class="issue"><strong>${esc(i.title||goals.find(g=>g.id===i.goal_id)?.title||'EV goal')}</strong><p>${esc(powerText(i.text))}</p><p>${i.kind==='ess_peak'?'Specific forecast peak':i.shortfall_kwh===null?'Awaiting measured reconnection':num(i.shortfall_kwh)+' kWh short'} · ${esc(i.state)}</p>${i.notification ? `<p>${esc(notificationStatus(i.notification))}</p>` : ''}${i.proposed_peak_kw && i.state === 'pending'?`<p>Requested ceiling ${watts(i.proposed_peak_kw)} W</p><button data-approve="${esc(i.goal_id)}">Approve</button> <button data-reject="${esc(i.goal_id)}">Reject</button>`:''}</section>`
+      `<section class="issue"><strong>${esc(i.title||goals.find(g=>g.id===i.goal_id)?.title||'EV goal')}</strong><p>${esc(powerText(i.text))}</p><p>${i.kind==='ess_peak'?'Specific forecast peak':i.shortfall_kwh===null?'Vehicle energy reconciliation required':num(i.shortfall_kwh)+' kWh short'} · ${esc(i.state)}</p>${i.notification ? `<p>${esc(notificationStatus(i.notification))}</p>` : ''}${i.proposed_peak_kw && i.state === 'pending'?`<p>Requested ceiling ${watts(i.proposed_peak_kw)} W</p><button data-approve="${esc(i.goal_id)}">Approve</button> <button data-reject="${esc(i.goal_id)}">Reject</button>`:''}</section>`
     ).join('') : '<p class="empty">No pending decisions or planning problems.</p>';
+    for (const item of $('approvals').querySelectorAll('[data-progress-warning]')) item.open = expandedProgress.has(item.dataset.progressWarning);
     if (plan) {
       const v = plan.summary;
       $('costs').innerHTML = [

@@ -1,5 +1,54 @@
 # EnergyManager 4 verification
 
+## 4.6.8 — EV-A009 shared warnings and independent grid display (9 November2026)
+
+Based on released main4.6.7/4cecd64. EV-A008 and recorder readiness remain covered.
+All sources, counters, notifications and actuator endpoints used below are synthetic/local.
+
+- 800Python tests pass209.22s; final62source/journey/native cases pass1.07s after
+  source-cause diagnostics.113frontend cases, Ruff/mypy61modules, all asset JavaScript
+  syntax and CLI4.6.8 pass. The first broad run exposed a SyntheticHA fixture missing
+  its entity-mapping contract; the corrected fixture and final full run pass.
+- Source-causal presentation groups missing/unmapped/unavailable and stalled-counter
+  faults, distinguishes genuine post-trip reconciliation and updates current affected
+  identities/revisions/deadlines. Recovery is independent of a planning result. Saved
+  issue records, frozen results and unrelated approval/shortfall/planning/margin issues
+  remain unchanged by the view; notification processing is not regrouped.
+- Projection regressions cover a complete EV-disabled household/ESS plan, independently
+  revoked EV/ESS/conditional authority, missing resource evidence, later invalid slots,
+  full prior-plan handover with inherited authority, active cautious coverage/deadline,
+  controlled-appliance execution evidence and known idle. No source flow is dropped.
+  Existing gross-import, measured prefix, partial-slot, forecast-expiry, incomplete
+  coverage, missing/true-zero meter, quarter/month reset and styling checks pass.
+- Configured fake E2E passes25.590s/2019intervals/max control4.399ms/four fake calls.
+  Routed fake E2E passes67.219s/2023intervals/max3.226ms/four fake calls, two calendar
+  imports and six local route queries. Existing cancellation/admission/persistence and
+  known usable progress assertions remain; explicit resource-authority fields are checked.
+- The routed preview then loses the actual fake counter after normal acceptance.
+  API state shows one counter-unavailable warning affecting nine identified daily/trip
+  goals, EV unknown/invalid, ESS valid and a complete accepted plan with zero EV flows.
+  Its existing measured quarter is0W and both dashboards retain one quarter-end marker.
+  Independent execution of the display projection on this actual synthetic API snapshot
+  preserves all flows, returns a0W marker and1345monthly points (26.4ms single local
+  observation; not an installation/mobile benchmark).
+- Restoring that fake source clears the warning in2.429s while planning is calculating.
+  The accepted plan ID, every flow/goal result, saved issues and54.0kWh progress remain
+  unchanged. Both dashboards show Awaiting recalculation for the pending goal results;
+  neither fulfillment nor a recalculated result is invented. The marker remains visible.
+- Native/standalone desktop and390px checks pass: one compact warning, expandable nine
+  titles/deadlines, distinguishable recurring goals, retained expansion across updates,
+  unavailable-result badges, and no repeated reconnection prose. Native Enter opens
+  actual `sensor.ev_total_kwh` and `sensor.quarter_import_kwh`; standalone offers no
+  fabricated HA action. Warning recovery and clean warning/error logs verified in both.
+  Screenshots remain in the existing visualization directory. HA built-ins/touch are
+  simulated; this is not physical installation evidence.
+- Wheel/sdist4.6.8 build and88runtime source/asset/default byte comparisons plus
+  isolated version/import/changed-asset checks pass. Planner, fast dispatch, source/
+  quantity/peak/fault guards and notification decisions have no policy changes.
+
+Exact-head CI/container/publication outcomes go only in the ignored EV-A009 checkpoint
+and final reply. No live HA/database, real notification, hardware or deployment used.
+
 ## 4.6.7 — V45-A003 recorder readiness feedback (9 November2026)
 
 Based on released main4.6.6/068307c, preserving complete EV-A008 execution/progress code.

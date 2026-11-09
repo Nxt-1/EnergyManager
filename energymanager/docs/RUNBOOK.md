@@ -1,5 +1,34 @@
 # Run, configure, review and roll back
 
+## Shared EV-progress warnings and grid projection (4.6.8 / EV-A009)
+
+Overview/Planning shows one current warning for a common progress-source fault.
+Its action distinguishes an unmapped/unavailable eto sensor, a stalled counter and
+post-trip vehicle reconciliation. Expand Affected goals to see current titles and
+deadlines, including the dates of recurring daily goals, and the actual source evidence.
+Native source actions open that mapped HA entity; standalone explains availability.
+
+Restoring the source clears the operational warning without waiting for a replan.
+Previously blocked goal results remain unavailable and show Awaiting recalculation;
+recovery does not assert that a requirement is fulfilled. Other shortfalls, approvals,
+planning failures and margin warnings remain separate. Notification policy is unchanged.
+
+The Grid box retains its measured quarter value, including0W. The red quarter-end
+marker and monthly forecast can remain available when EV progress/authority is lost
+if the accepted full household/ESS instructions are independently usable. Revoked or
+uncovered resource instructions withhold their whole interval; no EV/ESS flow is
+silently removed from the joint balance. Handover follows prior complete instructions;
+cautious execution uses its audited coverage. Uncertain controlled-appliance timing
+also withholds affected predictions, while known idle remains household demand.
+The existing availability hint explains missing predictions; measurement/history stay.
+No live-load extrapolation fallback, control or peak policy is introduced.
+
+Offline source-loss/recovery preview:
+`python tools/offline_e2e.py --serve --routing-fixture --history-fixture --input-fault progress`.
+Its local-only `/synthetic/progress` POST fixture toggles fake counter availability;
+this endpoint exists only in that verification process, not the installed app.
+Native preview uses `tools/native_dashboard_preview.py`. All data/actions are synthetic.
+
 ## Manual recorder readiness (4.6.7 / V45-A003)
 
 Expand the washing machine (or an available manual recorder), select the program and

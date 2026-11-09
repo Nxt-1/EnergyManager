@@ -7,7 +7,7 @@ import {clockValue, localDateTime, localInstants, monthDays, validLocal}
   from '../src/energymanager/assets/date-time.js';
 import {EVSchedulePage, eventsOnDay, evSchedule, scheduleDays} from '../src/energymanager/assets/ev-schedule.js';
 import {nativeLiveState, phaseSelector, setChargerPhase} from '../src/energymanager/assets/native-live.js';
-import {evControlActivityModel, evMeasuredPower, evStatusModel, evStatusMarkup} from '../src/energymanager/assets/ev-status.js';
+import {evControlActivityModel, evMeasuredPower, evStatusModel, evStatusMarkup, progressWarningMarkup} from '../src/energymanager/assets/ev-status.js';
 import {PlanningActivity, planningActivityModel} from '../src/energymanager/assets/planning-activity.js';
 
 test('planning activity reports real stages and elapsed time without a fabricated percentage', () => {
@@ -1689,8 +1689,9 @@ function peakFixture(now='2026-11-08T12:07:00Z') {
   const intervals=Array.from({length:9},(_,t)=>({start:new Date(origin+t*300000).toISOString(),end:new Date(origin+(t+1)*300000).toISOString()}));
   return {now,demo:false,policy:{timezone:'Europe/Brussels',measurement_max_age_seconds:30,forecast_max_age_seconds:3600},
     observation:{at:now,house_kw:12,monthly_peak_kw:2.5},observed:[],ev_plan_valid:true,
+    plan_authority:{ev:true,ess:true,conditional:true},
     live_inputs:{readings:{monthly_peak_kw:{value:2.5,issue:null}},quarter:{at:new Date(Date.parse(now)-10000).toISOString(),energy_kwh:.25,issue:null}},
-    accepted:{valid:true,forecast_at:now,intervals,flows:{grid_ev:[3,3,1,6,6,6,1,1,1],grid_house:Array(9).fill(0),grid_store:Array(9).fill(0),export:Array(9).fill(99)}}};
+    accepted:{valid:true,forecast_at:now,intervals,flows:{...Object.fromEntries(['pv_ev','solar_dis_ev','one','three','amps_one','amps_three','pv_store','dc_store','solar_dis_house','grid_dis_house','dc_invert'].map(name=>[name,Array(9).fill(0)])),grid_ev:[3,3,1,6,6,6,1,1,1],grid_house:Array(9).fill(0),grid_store:Array(9).fill(0),export:Array(9).fill(99)}}};
 }
 
 test('peak forecast uses measured prefix plus clipped remaining gross import and never follows falling power',()=>{
@@ -1752,6 +1753,106 @@ test('quarter backgrounds stay clock-aligned and alternate across DST, pan and c
   assert.ok(bands.slice(1).every((b,t)=>b.alternate!==bands[t].alternate && b.start===bands[t].end));
   assert.ok(quarterBands(start-86400000,start-3600000,now,'Europe/Brussels').every(b=>!b.active));
   assert.deepEqual(clipSeries([[0,7000],[10,0],[20,1000]],5,15,true),[[5,7000,true],[10,0],[15,0,true]]);
+});
+
+test('EV-disabled joint household/ESS instructions retain an independent grid projection',()=>{
+  const state=peakFixture();state.ev_plan_valid=false;state.plan_authority.ev=false;
+  for(const name of ['grid_ev','pv_ev','solar_dis_ev','one','three','amps_one','amps_three']) state.accepted.flows[name].fill(0);
+  state.accepted.flows.grid_house.fill(2);state.accepted.flows.grid_store.fill(.5);
+  const frozen=JSON.stringify(state), display=peakDisplay(state);
+  assert.ok(display.quarter.projectedWatts>1000);assert.ok(display.predicted.length);
+  assert.equal(JSON.stringify(state),frozen);
+  state.plan_authority.ess=false;
+  assert.equal(peakDisplay(state).quarter.projectedWatts,null);
+  assert.match(peakDisplay(state).reason,/ESS instructions/);
+  state.accepted.flows.grid_store.fill(0);
+  assert.ok(peakDisplay(state).quarter.projectedWatts>1000); // No ESS instructions need authority.
+  state.accepted.flows.pv_ev[1]=.2;
+  assert.equal(peakDisplay(state).quarter.projectedWatts,null); // Never subtract the revoked EV flow.
+  assert.match(peakDisplay(state).reason,/EV instructions/);
+});
+
+test('a revoked later resource stops prediction at its coverage boundary without hiding the current marker',()=>{
+  const state=peakFixture();state.plan_authority.ev=false;
+  state.accepted.flows.grid_ev.fill(0);state.accepted.flows.grid_house.fill(2);
+  state.accepted.flows.grid_ev[4]=3;
+  const display=peakDisplay(state);
+  assert.ok(display.quarter.projectedWatts>0);
+  assert.ok(display.predicted.at(-1)[0]<=Date.parse('2026-11-08T12:15Z'));
+  assert.match(display.reason,/EV instructions/);
+});
+
+test('conditional authority is explicit and missing resource evidence never implies zero flow',()=>{
+  const state=peakFixture();state.plan_authority.conditional=false;
+  state.accepted.conditional_tasks=[{scheduled_start:'2026-11-08T12:05Z',deadline:'2026-11-08T12:15Z'}];
+  assert.equal(peakDisplay(state).quarter.projectedWatts,null);
+  assert.match(peakDisplay(state).reason,/Conditional instructions/);
+  state.accepted.conditional_tasks=[];
+  assert.ok(peakDisplay(state).quarter.projectedWatts>0);
+  delete state.accepted.flows.pv_store;
+  assert.equal(peakDisplay(state).quarter.projectedWatts,null);
+  assert.match(peakDisplay(state).reason,/resource coverage/);
+  const noAuthority=peakFixture();delete noAuthority.plan_authority;
+  assert.equal(peakDisplay(noAuthority).quarter.projectedWatts,null);
+  noAuthority.plan_authority={ev:1,ess:true,conditional:true};
+  assert.equal(peakDisplay(noAuthority).quarter.projectedWatts,null);
+});
+
+test('grid projection follows full handover instructions and their intersected authority',()=>{
+  const state=peakFixture(), prior=structuredClone(state.accepted);
+  for(const plan of [prior,state.accepted]) {plan.flows.grid_ev.fill(0);plan.flows.grid_house.fill(plan===prior?3:1);}
+  state.ev_plan_valid=false;state.plan_authority.ev=false;
+  state.accepted.execution_handover={until:'2026-11-08T12:10Z',plan:prior,ev_valid:false,ess_valid:true,conditional_valid:true};
+  const frozen=JSON.stringify(state),display=peakDisplay(state);
+  assert.ok(Math.abs(display.quarter.projectedWatts-(.25+(3*190+300)/3600)*4000)<.001);
+  assert.equal(JSON.stringify(state),frozen);
+  prior.flows.grid_store[1]=1;state.accepted.execution_handover.ess_valid=false;
+  assert.equal(peakDisplay(state).quarter.projectedWatts,null);
+  assert.match(peakDisplay(state).reason,/ESS instructions/);
+});
+
+test('active cautious execution uses its own audited coverage and stops at its deadline',()=>{
+  const state=peakFixture(),flows=structuredClone(state.accepted.flows);
+  flows.grid_ev.fill(0);flows.grid_house.fill(4);
+  state.accepted.id='accepted';state.deadline_execution={active:true,plan_id:'accepted'};
+  state.accepted.deadline_guard={status:'certified',scope:{deadline:'2026-11-08T12:15Z'},
+    context:{intervals:state.accepted.intervals},flows};
+  const display=peakDisplay(state);
+  assert.ok(Math.abs(display.quarter.projectedWatts-(.25+4*490/3600)*4000)<.001);
+  assert.match(display.reason,/coverage ends/);
+  delete state.accepted.deadline_guard.context;
+  assert.equal(peakDisplay(state).quarter.projectedWatts,null);
+});
+
+test('shared progress details distinguish repeated daily titles and expose only genuine native sources',()=>{
+  const state=peakFixture(),issue={id:'ev-progress:counter_unavailable:sensor.actual',title:'EV progress unavailable',
+    action:'Restore the selected counter.',text:'EV paused; ESS independent.',entity_id:'sensor.actual',
+    source_issue:'<SYNTHETIC unavailable>',affected_goals:[
+      {id:'daily-1',revision:1,title:'Morning minimum',deadline:'2026-11-09T06:00Z'},
+      {id:'daily-2',revision:2,title:'Morning minimum',deadline:'2026-11-10T06:00Z'}]};
+  const native=progressWarningMarkup(issue,state,{native:true});
+  assert.equal((native.match(/data-shared-progress=/g)||[]).length,1);
+  assert.match(native,/Affected goals \(2\)/);assert.match(native,/data-goal-id="daily-1"/);
+  assert.match(native,/data-goal-id="daily-2" data-goal-revision="2"/);
+  assert.match(native,/2026-11-09T06:00Z/);assert.match(native,/2026-11-10T06:00Z/);
+  assert.match(native,/data-ha-entities="sensor.actual"/);assert.match(native,/&lt;SYNTHETIC unavailable&gt;/);
+  assert.doesNotMatch(native,/Awaiting measured reconnection/);
+  assert.doesNotMatch(progressWarningMarkup(issue,state),/data-ha-entities=/);
+});
+
+test('joint appliance demand needs matching executable evidence; measured idle needs no start authority',()=>{
+  const state=peakFixture();state.revision=2;
+  state.accepted.intervals[1].dishwasher_kw=.8;
+  assert.equal(peakDisplay(state).quarter.projectedWatts,null);
+  assert.match(peakDisplay(state).reason,/Appliance execution/);
+  state.accepted.id='p';state.accepted.revision=2;
+  state.accepted.appliance={id:'run',revision:3,planned_start:'2026-11-08T12:05Z'};
+  state.appliance_run={run:{id:'run',revision:3,phase:'queued',plan_id:'p',planned_start:'2026-11-08T12:05Z'}};
+  assert.ok(peakDisplay(state).quarter.projectedWatts>0);
+  state.appliance_run.run.blocked='SYNTHETIC revoked permission';
+  assert.equal(peakDisplay(state).quarter.projectedWatts,null);
+  state.accepted.appliance={id:null}; // Known idle is an uncontrolled household component.
+  assert.ok(peakDisplay(state).quarter.projectedWatts>0);
 });
 
 

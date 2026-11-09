@@ -4,6 +4,17 @@ import {historyReading} from './ha-history.js';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 }[char]));
+
+export function progressWarningMarkup(issue, state, {native = false} = {}) {
+  const affected = issue.affected_goals || [];
+  const stamp = value => evIncidentTime(value, state.policy?.timezone || 'UTC');
+  return `<section class="issue" data-shared-progress="${esc(issue.id)}"><strong>${esc(issue.title)}</strong>
+    <p>${esc(issue.action)}</p><details data-progress-warning="${esc(issue.id)}"><summary>Affected goals (${affected.length})</summary>
+    <ul>${affected.map(goal => `<li data-goal-id="${esc(goal.id)}" data-goal-revision="${esc(goal.revision)}"><strong>${esc(goal.title)}</strong> · <time datetime="${esc(goal.deadline)}">${esc(stamp(goal.deadline))}</time></li>`).join('')}</ul>
+    <p>${esc(issue.text)}</p>${issue.entity_id ? `<p>Source: ${historyReading(esc(issue.entity_id), [issue.entity_id], {native,demo:state.demo,label:'EV progress source'})}</p>` : ''}
+    ${['post_trip','vehicle_baseline'].includes(issue.cause) ? `<p>Vehicle sample: ${issue.vehicle_observed_at ? esc(stamp(issue.vehicle_observed_at)) : 'Unknown'}</p>` : ''}
+    ${issue.source_issue ? `<p class="subtle">${esc(issue.source_issue)}</p>` : ''}</details></section>`;
+}
 const numeric = value => value !== null && value !== undefined && value !== '' &&
   Number.isFinite(Number(value)) ? Number(value) : null;
 

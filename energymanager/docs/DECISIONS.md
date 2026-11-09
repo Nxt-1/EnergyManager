@@ -1,5 +1,16 @@
 # Current requirements and decisions
 
+- 9 November2026, EV-A009: after mapping eto and restarting, the user confirms both
+  the repeated EV-progress warnings and missing red quarter-end marker recovered.
+  They requested one work package for grouping the common fault into one actionable
+  warning and keeping grid projection independent of EV availability where the grid
+  instructions remain usable. They authorized scheduling its implementation handoff
+  in1hour10minutes. Scope and acceptance are in ARCHITECTURE.md; no new control,
+  notification or peak policy is selected. Preserve unavailable forecasts when
+  executable coverage cannot be established rather than plotting invalid instructions.
+  Implemented in4.6.8 with a live presentation view, independently exposed resource
+  authority and whole-interval executable coverage. Verified with fake/local sources.
+
 - 9 November 2026, V45-A003 recorder readiness feedback. The user wants visible
   confirmation of idle detection and the latest power while manually arming a recording.
   They chose one clear location rather than repeating it on the collapsed card: place

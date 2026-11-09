@@ -24,7 +24,11 @@ async def preview(backend: str = "http://127.0.0.1:8102/", port: int = 8103) -> 
             raise RuntimeError("Native preview requires the labelled offline_e2e.py --serve fixture")
         async with session.get(backend + "api/dashboard") as response:
             manifest = await response.json()
-        values = {"ev_soc": (45, "%"), "ev_total_kwh": (100000, "Wh"),
+        ev_inputs = state.get("live_inputs", {}).get("readings", {})
+        reported_soc = ev_inputs.get("ev_soc", {}).get("value")
+        total = ev_inputs.get("ev_total_kwh", {})
+        values = {"ev_soc": (reported_soc if reported_soc is not None else "unavailable", "%"),
+                  "ev_total_kwh": (total.get("raw_state") or "unavailable", total.get("raw_unit") or "Wh"),
                   "ess_soc": (50, "%"), "connected": ("on", None),
                   "grid_import_kw": (0, "W"), "grid_export_kw": (600, "W"), "pv_ac_kw": (1000, "W"),
                   "pv_dc_kw": (1000, "W"), "ev_kw": (0, "W"), "ess_kw": (0, "W"),

@@ -1,3 +1,10 @@
+## 4.6.8 — Shared EV progress warnings and independent grid forecasts
+
+- Show one actionable warning per current EV-progress source fault, with affected goals and deadlines in expandable details.
+- Update that warning on source recovery while preserving pending goal results, separate shortfalls/approvals and notification behavior.
+- Keep measured quarter data independent of EV availability. Show the grid prediction only where the complete joint instructions have usable resource authority and coverage, including EV-disabled plans.
+- Preserve EV-A008 safeguards, gross-import accounting, measured prefix, peak styling and appliance behavior. Verified offline; installation deployment is separate.
+
 ## 4.6.7 — Manual recorder readiness and power
 
 - Show the active capture's program, waiting/confirmed idle readiness/recording and latest watts beneath Record next cycle.

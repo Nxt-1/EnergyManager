@@ -530,6 +530,10 @@ body.planning aside .card {
   padding:12px;
   margin-top:10px
 }
+.issue[data-shared-progress] {
+  overflow-wrap: anywhere;
+}
+
 .issue button {
   font-size:12px
 }

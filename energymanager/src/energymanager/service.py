@@ -15,7 +15,7 @@ from .control import Actuator, Command, FakeActuator, FastControl, GuardedActuat
 from .adapters import ForecastSource, HomeAssistantAdapter, JsonForecastAdapter
 from .domain import Goal, Observation, PeakPermission, Policy, Snapshot, daily_goals, json_data
 from .publication import admit
-from .ev_progress import EVProgress
+from .ev_progress import EVProgress, progress_warning
 from .execution import freeze_execution
 from .demo_plant import DemoPlant
 from .forecasts import demo_snapshot
@@ -627,6 +627,7 @@ class Application:
                     "goal_id": goal["id"],
                     "revision": goal["revision"],
                     "state": "reconciliation_required",
+                    "progress_cause": "progress" if goal["status"] == "progress_unavailable" else "post_trip",
                     "shortfall_kwh": None,
                     "proposed_peak_kw": None,
                     "text": ("EV progress unavailable. Restore the total-energy sensor or fresh vehicle SoC; ESS continues."
@@ -913,6 +914,22 @@ class Application:
         for goal in daily_goals(now, now + timedelta(hours=168), self.policy, self.goals):
             approved = daily_approvals.get(goal.id)
             requirements.append(Goal.from_dict(approved) if approved and approved["revision"] == goal.revision else goal)
+        warning = progress_warning(self.observation, now, (*current_goals, *requirements),
+                                   self.ha.entities.get("ev_soc") if self.ha else None)
+        issues = list(self.store.get("issues", {}).values()) + self.deadline_warnings.view() + (
+            [planning_issue] if planning_issue else [])
+        statuses = {(g["id"], g["revision"]): g.get("status") for g in (self.accepted or {}).get("goals", [])}
+        display_issues = []
+        for issue in issues:
+            status = statuses.get((issue.get("goal_id"), issue.get("revision")))
+            dependency = issue.get("state") == "reconciliation_required" and (
+                issue.get("progress_cause") == "progress" or status == "progress_unavailable"
+                or warning is not None and warning["cause"] == "post_trip"
+                and (issue.get("progress_cause") == "post_trip" or status == "unknown_return_state"))
+            if not dependency:
+                display_issues.append(issue)
+        if warning:
+            display_issues.insert(0, warning)
         return {
             "version": __version__,
             "daily_estimate": self.daily_estimates.view(now),
@@ -951,9 +968,14 @@ class Application:
             "routes": self.journeys.status() if self.journeys else {"items": []},
             "accepted": self.accepted,
             "ev_plan_valid": self.ev_valid,
+            "plan_authority": {"ev": self.ev_valid, "ess": self.ess_valid,
+                               "conditional": self.conditional_valid},
+            "deadline_execution": {"active": self.controller.deadline_execution.active,
+                                   "plan_id": self.controller.deadline_execution.plan_id},
+            "ev_progress_usable": None if self.observation.ev_progress is None else warning is None,
+            "display_issues": display_issues,
             "plan_recovery": self.plan_recovery.view(),
-            "issues": list(self.store.get("issues", {}).values()) + self.deadline_warnings.view() + (
-                [planning_issue] if planning_issue else []),
+            "issues": issues,
             "command": self.last_command,
             "observed": self.observed,
             "control_max_seconds": max(self.response_seconds, default=0),
