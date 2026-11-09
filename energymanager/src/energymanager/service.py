@@ -15,6 +15,8 @@ from .control import Actuator, Command, FakeActuator, FastControl, GuardedActuat
 from .adapters import ForecastSource, HomeAssistantAdapter, JsonForecastAdapter
 from .domain import Goal, Observation, PeakPermission, Policy, Snapshot, daily_goals, json_data
 from .publication import admit
+from .ev_progress import EVProgress
+from .execution import freeze_execution
 from .demo_plant import DemoPlant
 from .forecasts import demo_snapshot
 from .store import Store
@@ -60,6 +62,7 @@ class Application:
         if saved_goals is None:
             self.goals = tuple(g for g in self.snapshot.goals if g.kind != "daily")
         self.observation = self.snapshot.observation
+        self.ev_progress = EVProgress(store)
         self.demo_season = "winter" if "winter" in self.snapshot.forecast_id else "mixed"
         self.demo_plant = DemoPlant(self.snapshot)
         self.current_command: Command | None = None
@@ -70,7 +73,8 @@ class Application:
         self.protective_tasks: set[asyncio.Task[None]] = set()
         self.status = "starting"
         self.error: str | None = None
-        self.controller = FastControl(self.snapshot.capabilities, self.snapshot.policy)
+        self.controller = FastControl(self.snapshot.capabilities, self.snapshot.policy, store.get("ev_task"))
+        self.saved_ev_task = json_data(self.controller.ev_task)
         self.actuator: Actuator = FakeActuator()
         self.worker: PlanningWorker | None = None
         self.active_calculation: asyncio.Task[dict[str, Any]] | None = None
@@ -217,6 +221,7 @@ class Application:
             self.conditional_valid,
         )
         command = replace(command, reason=f"Affected instruction revoked: {reason}")
+        self.save_ev_task()
         try:
             await self.actuator.apply(command, self.revision, self.observation)
         except (OSError, RuntimeError) as exc:
@@ -261,34 +266,31 @@ class Application:
             for g in prepared.goals
         )
         prepared = self.replanning.adjusted(prepared)
-        hold_until = prepared.intervals[0].start + timedelta(seconds=self.policy.planning_budget_seconds + 15)
-        intervals = []
-        for interval in prepared.intervals:
-            if interval.start < hold_until < interval.end:
-                intervals += [
-                    replace(interval, end=hold_until),
-                    replace(interval, start=hold_until, withdrawal_kwh=0.0),
-                ]
-            else:
-                intervals.append(interval)
+        if not self.observation.ev_state_known:
+            prepared = replace(prepared, intervals=tuple(replace(i, available=False,
+                withdrawal_kwh=0.0, ev_state_known=False) for i in prepared.intervals))
         appliance = self.appliance_runs.context()
         if (appliance and isinstance(self.forecast,InstallationForecast)
                 and (self.forecast_data is None or self.forecast_data.get("background_meter") != self.forecast.background.meter)):
             raise ValueError("Waiting for a measured dishwasher-separated background forecast")
-        return replace(
+        prepared = replace(
             prepared,
             observation=self.observation,
             goals=goals,
-            intervals=tuple(intervals),
-            hold_until=hold_until,
-            hold_ev_kw=self.last_command["ev_kw"] if self.ev_valid and self.last_command else 0,
-            hold_phases=self.observation.ev_phases,
-            hold_plan_id=self.accepted["id"] if self.accepted else None,
             peak_permissions=tuple(
                 PeakPermission.from_dict(g) for g in self.store.get("peak_permissions", {}).values()
             ),
             appliance=appliance,
         )
+        at = prepared.intervals[0].start
+        charger = (self.actuator.goe_control.planning_state(at, self.observation)
+                   if isinstance(self.actuator, GuardedActuator) and self.actuator.goe_control
+                   else {"phase": self.observation.ev_phases,
+                         "ready_at": (at + timedelta(seconds=30 if self.observation.ev_power_kw < .1 else 0)).isoformat()})
+        old = self.accepted if self.ev_valid and self.accepted and "flows" in self.accepted else None
+        if old and self.controller.deadline_execution.active:
+            old = self.controller.deadline_execution.select(old, self.observation, at, self.ev_valid)
+        return freeze_execution(prepared, old, charger, conditional_valid=self.conditional_valid)
 
     async def input_loop(self) -> None:
         assert self.ha and self.forecast
@@ -512,7 +514,8 @@ class Application:
             )
             if result.get("valid"):
                 retain_checked_fallback(result, self.accepted, effective)
-                result, errors = admit(effective, result, self.observation, self.now())
+                result, errors = admit(effective, result, self.observation, self.now(), previous_plan=self.accepted,
+                                      previous_authority=(self.ev_valid, self.ess_valid, self.conditional_valid))
             else:
                 errors = [result.get("reason", "No incumbent")]
             if errors:
@@ -626,7 +629,9 @@ class Application:
                     "state": "reconciliation_required",
                     "shortfall_kwh": None,
                     "proposed_peak_kw": None,
-                    "text": "Post-trip battery state is unknown. Reconnection measurement is required before dependent charging can execute.",
+                    "text": ("EV progress unavailable. Restore the total-energy sensor or fresh vehicle SoC; ESS continues."
+                             if goal["status"] == "progress_unavailable" else
+                             "Post-trip battery state is unknown. Reconnection measurement is required before dependent charging can execute."),
                 }
             elif goal["shortfall_kwh"] > 2e-5:
                 issues[key] = {
@@ -675,6 +680,7 @@ class Application:
                 self.ess_valid,
                 self.conditional_valid,
             )
+            self.save_ev_task()
             try:
                 await self.actuator.apply(command, self.revision, self.observation)
             except (OSError, RuntimeError) as exc:
@@ -709,6 +715,12 @@ class Application:
             if len(self.observed) > 2000:
                 self.observed = self.observed[-2000:]
             await asyncio.sleep(self.policy.control_period_seconds)
+
+    def save_ev_task(self) -> None:
+        task = json_data(self.controller.ev_task)
+        if task != self.saved_ev_task:
+            self.store.put("ev_task", task)
+            self.saved_ev_task = task
 
     def goal_is_current(self, goal: Goal, at: datetime) -> bool:
         """Past departures remain relevant only while their away/unknown state continues."""
@@ -866,6 +878,10 @@ class Application:
 
     def observe(self, observation: Observation) -> None:
         previous = self.observation
+        if not self.demo and self.ha:
+            observation = self.ev_progress.update(observation, self.ha.inputs.readings.get("ev_total_kwh"),
+                self.ha.entities.get("ev_total_kwh", ""), self.snapshot.capabilities, self.policy,
+                self.goals + self.snapshot.goals)
         self.observation = observation
         if self.demo:
             self.demo_plant.observation = observation

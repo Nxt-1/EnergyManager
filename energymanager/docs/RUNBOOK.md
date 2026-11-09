@@ -1,5 +1,31 @@
 # Run, configure, review and roll back
 
+## EV progress and execution (4.6.6 / EV-A008)
+
+Map the actual go-e Total energy (`eto`) sensor under Measurements, save and restart;
+see SETTINGS.md for units, timestamp and reconciliation rules. Reload the dashboard.
+The EV page separates reported vehicle SoC from estimated counter progress. Progress
+sources shows the actual sample/read times and credited battery gain. An unavailable
+progress warning pauses only EV; check the mapped counter's availability/units and
+whether it advances while charging. Do not reset the retained reference to make a
+warning disappear. An ordinary reconnect does not erase progress.
+
+New calculations freeze the remaining accepted instructions and actual charger
+transition state. Admission can hand over those instructions explicitly without
+rewriting the calculation's frozen source or economics. Phase preparation may occur
+with force-off and zero current; charge is requested only under the live guards.
+A submitted phase write remains tracked until fresh acknowledgement or fault.
+New phase changes reserve existing stop/acknowledgement/restart time in the model;
+this bound is not a measurement of installation latency. Actual delivered energy
+comes from the counter. No new phase lock/dwell or enlarged peak/solve allowance is used.
+
+Offline regression entry points are `tests/test_ev_progress.py`,
+`tests/test_ev_progress_loop.py`, `tests/test_execution.py` and
+`tests/test_execution_charger.py`. Use only their labelled synthetic counters and
+fake endpoints. Archived exports remain unchanged evidence; replaying them does not
+establish what hardware did throughout an earlier hour. Installation validation and
+deployment require separate authorization.
+
 ## Monthly peak forecast and quarter meter (4.6.4 / EV-A006–EV-A007)
 
 Reload the dashboard after updating. The Grid box keeps its monthly-peak icon/value

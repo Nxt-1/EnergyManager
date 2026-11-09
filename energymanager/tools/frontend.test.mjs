@@ -341,6 +341,24 @@ test('EV history actions are absent in demo/standalone and unmapped readings exp
   assert.match(markup,/Synthetic demo reading; no Home Assistant history/);
 });
 
+test('EV progress distinguishes the reported vehicle sample and actual total-energy source', () => {
+  const state = syntheticEVStatus();
+  state.observation.ev_progress = {usable:true,valid_until:state.now,estimated_kwh:23.25,
+    counter_kwh:100.125,entity_id:'sensor.synthetic_eto',reported_kwh:22.932,
+    vehicle_observed_at:null,counter_at:state.now,credited_kwh:.318,uncertain:true,source:'go-e total energy'};
+  let markup = evStatusMarkup(state,{entities:{ev_soc:'sensor.synthetic_soc'}});
+  assert.match(markup,/Estimated charge ≈ 23.25 kWh/);
+  assert.match(markup,/go-e total[\s\S]*data-ha-entities="sensor.synthetic_eto"/);
+  assert.match(markup,/Reported vehicle: 22.93 kWh · Vehicle sample: Unknown/);
+  assert.match(markup,/Estimated battery gain credited: 0.318 kWh/);
+  assert.match(evStatusMarkup(state,{progressExpanded:true}),/<details data-ev-progress open>/);
+  assert.doesNotMatch(markup,/Progress unavailable/);
+  state.now = '2099-01-01T00:00:00Z';
+  markup = evStatusMarkup(state);
+  assert.match(markup,/Progress unavailable · EV paused/);
+  assert.doesNotMatch(markup,/data-ha-entities=/);
+});
+
 test('EV demo ignores installation charger faults and live readings', () => {
   const state = syntheticEVStatus();
   state.demo = true;

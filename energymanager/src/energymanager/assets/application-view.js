@@ -153,7 +153,8 @@ export async function mountApplication(root, options = {}) {
       renderTimeRange(finished);
     }
   }, ['power', 'soc'], (name, content, soc) => measured(content,
-    soc ? name + '_soc' : ({ess:'ess_kw',ev:'ev_kw',monthly_peak:'monthly_peak_kw'}[name] || name), name));
+    soc ? name === 'ev' && state.observation.ev_progress ? 'ev_progress' : name + '_soc' :
+      ({ess:'ess_kw',ev:'ev_kw',monthly_peak:'monthly_peak_kw'}[name] || name), name));
   const charts = root.querySelector('.charts');
   charts.style.setProperty('--plot-left', `${plotInsets.left}px`);
   charts.style.setProperty('--plot-right', `${plotInsets.right}px`);
@@ -448,7 +449,7 @@ export async function mountApplication(root, options = {}) {
         `${num(goal.target_soc_percent, 0)}% SoC`;
       const progress = target > 0 ? Math.max(0, Math.min(100, o.ev_kwh / target * 100)) : 100;
       const meter = goal === nextGoal && chargeKnown ?
-        `<p class="subtle">Current charge / next goal target: ${measured(num(o.ev_kwh), 'ev_soc', 'Current EV charge')} / ${num(target)} kWh</p>
+        `<p class="subtle">${o.ev_progress ? 'Estimated charge' : 'Current charge'} / next goal target: ${measured(num(o.ev_kwh), o.ev_progress ? 'ev_progress' : 'ev_soc', o.ev_progress ? 'Estimated EV charge' : 'Current EV charge')} / ${num(target)} kWh</p>
         <div class="meter" role="progressbar" aria-label="Current charge towards next goal" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${num(progress, 0)}"><i style="width:${progress}%;background:#16a34a"></i></div>` : '';
       return `<section class="goal"><div class="goal-title"><strong>${esc(goal.title)}</strong><span class="badge ${goal.shortfall_kwh > 0.001 ? 'warning' : ''}">${goalStatus(goal, state.now)}</span></div>
         <p>${time(goal.deadline)} · ${requirement}</p>

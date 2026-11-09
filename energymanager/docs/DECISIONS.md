@@ -1,5 +1,22 @@
 # Current requirements and decisions
 
+- 9 November2026, EV-A008 charging-progress source: the user confirms both go-e
+  energy sensors are available and selects cumulative Total energy (`eto`) as the
+  primary measurement, since either counter requires a progress baseline. This
+  supersedes the earlier preference for Energy since connected (`wh`).
+  Retain the progress reference needed to avoid crediting energy already included
+  in the SoC baseline and to preserve task progress across recalculations/restarts.
+  The user accepted pausing EV after the existing measurement watchdog when neither
+  usable meter progress nor fresh vehicle SoC is available; retain the task and
+  progress, show a concise warning and keep ESS independent. Temporary counter gaps
+  retain their reference; unexplained resets do not invent delivery or erase credited
+  progress. New SoC reconciliation must avoid double credit. No additional phase-
+  stability preference is approved: correct execution commitments and transition
+  timing under the existing rules. After reviewing the four-part scope, the user
+  authorized EV-A008 implementation and release on9November: “Ok, hand it off”.
+  Implemented in4.6.6 with a persistent counter ledger, explicit accepted-trajectory
+  handover and independently audited transition delivery. Verified offline only.
+
 - 9 November 2026, V45-A001-P2 inline program actions. The user approved Add/Rename
   icons beside the washing-machine program selector, replacing it temporarily with
   a name field and Save/Cancel. Rename uses the currently selected program; Add selects

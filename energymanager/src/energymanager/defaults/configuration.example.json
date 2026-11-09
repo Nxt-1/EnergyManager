@@ -55,6 +55,7 @@
   },
   "measurements": {
     "ev_soc": "sensor.replace_ev_soc",
+    "ev_total_kwh": "",
     "ess_soc": "sensor.replace_ess_soc",
     "connected": "sensor.replace_connected",
     "pv_ac_kw": "sensor.replace_pv_ac_kw",

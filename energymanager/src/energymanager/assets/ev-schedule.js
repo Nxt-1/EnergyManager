@@ -128,6 +128,7 @@ export function evSchedule(state) {
 
 function goalStatus(goal) {
   if (goal.status === 'unknown_return_state') return 'Return SoC unknown';
+  if (goal.status === 'progress_unavailable') return 'Progress unavailable';
   if (goal.shortfall_kwh > 0.001) return `${number(goal.shortfall_kwh)} kWh shortfall`;
   if (goal.status === 'scheduled') return 'Scheduled';
   return 'Awaiting plan';
@@ -193,11 +194,12 @@ export class EVSchedulePage {
 
   render(state) {
     const calendarExpanded = this.root.querySelector('.calendar-sync')?.open;
+    this.progressExpanded = this.root.querySelector('[data-ev-progress]')?.open ?? this.progressExpanded;
     const scroller = this.root.querySelector('.ev-calendar-scroll');
     const scrollLeft = scroller?.scrollLeft || 0;
     const active = this.root.getRootNode().activeElement;
     const focused = this.root.contains(active) ? active : null;
-    const focusAttribute = focused?.getAttributeNames().find(name => name.startsWith('data-ev-'));
+    const focusAttribute = focused?.getAttributeNames().find(name => name.startsWith('data-ev-') || name === 'data-ha-entities');
     const focusValue = focusAttribute ? focused.getAttribute(focusAttribute) : null;
     const matchingButtons = focusAttribute ? [...this.root.querySelectorAll(`[${focusAttribute}]`)]
       .filter(button => button.getAttribute(focusAttribute) === focusValue) : [];
@@ -325,9 +327,10 @@ export class EVSchedulePage {
     this.state = state;
     const card = this.root.querySelector('#ev-live-status');
     if (!card) return;
+    this.progressExpanded = card.querySelector('[data-ev-progress]')?.open ?? this.progressExpanded;
     const focused = this.root.getRootNode().activeElement;
     const focusAttribute = card.contains(focused) ?
-      ['data-ev-phase', 'data-ev-history'].find(name => focused.hasAttribute(name)) : null;
+      ['data-ev-phase', 'data-ev-history', 'data-ha-entities', 'data-ev-progress-summary'].find(name => focused.hasAttribute(name)) : null;
     const focusValue = focusAttribute ? focused.getAttribute(focusAttribute) : null;
     card.innerHTML = evStatusMarkup(state, this);
     this.updateActivity();

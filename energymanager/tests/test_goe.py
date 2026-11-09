@@ -53,11 +53,12 @@ class ChargerFixture:
             if entity == self.actuators["force"] and self.auto_model:
                 self.set("charger_status", 4 if str(data["option"]) == "1" else 3)
 
-    async def tick(self, *, amps=6, phases=1, power=0, connected=True, generation=1):
+    async def tick(self, *, amps=6, phases=1, power=0, connected=True, generation=1, prepare=False):
         observation = Observation(self.at, 30, 7, connected, .4, 1, 0, ev_power_kw=power,
                                   ev_phases=1 if self.readings.code("phase") == 1 else 3,
                                   ev_phase_source="goe_selector")
-        command = Command(generation, "SYNTHETIC", self.at, amps * phases * .23, 0, phases, amps, 4, "SYNTHETIC")
+        command = Command(generation, "SYNTHETIC", self.at, amps * phases * .23, 0, phases, amps, 4, "SYNTHETIC",
+                          prepare_phase=prepare)
         await self.actuator.apply(command, generation, observation)
         return command, observation
 
@@ -862,3 +863,44 @@ async def test_restart_never_treats_continuing_power_as_a_settled_stop():
     assert f.actuator.delivery_fault
     assert "power did not stop" in f.incidents[0]
     assert not any(c[2].get("option") == "2" for c in f.calls)
+
+
+async def test_phase_preparation_never_enables_energy_and_preserves_the_restart_hold():
+    f = ChargerFixture()
+    for _ in range(50):
+        await f.tick(amps=0, phases=3, prepare=True)
+        assert f.rows[f.actuators["force"]]["state"] == "1"
+        f.refresh(1)
+    assert f.rows[f.actuators["phase"]]["state"] == "2"
+    assert not any(c[2].get("option") == "2" and c[2].get("entity_id") == f.actuators["force"] for c in f.calls)
+    assert not f.incidents
+    await f.tick(phases=3)
+    assert f.rows[f.actuators["force"]]["state"] == "2"
+
+
+async def test_unsubmitted_phase_preparation_can_return_to_acknowledged_mode():
+    f = ChargerFixture()
+    await f.tick(amps=0, phases=3, prepare=True)
+    f.refresh(1)
+    await f.tick(amps=0, phases=1, prepare=True)
+    assert f.actuator.goe_control.phase_started is None
+    assert f.actuator.target_phase is None
+    assert not any(c[2].get("entity_id") == f.actuators["phase"] for c in f.calls)
+
+
+async def test_stopping_retains_a_submitted_phase_write_until_ack_or_fault():
+    f = ChargerFixture()
+    f.ignore.add(f.actuators["phase"])
+    await f.tick(amps=0, phases=3, prepare=True)
+    f.refresh(10)
+    await f.tick(amps=0, phases=3, prepare=True)
+    assert "phase" in f.actuator.goe_control.pending
+    f.refresh(1)
+    await f.tick(amps=0, phases=1)
+    command, observation = await f.tick(amps=0, phases=1)
+    state = f.actuator.goe_control.planning_state(f.at, observation)
+    assert state["phase_committed"] and state["phase"] == 3
+    f.refresh(30)
+    await f.tick(amps=0, phases=1)
+    assert f.actuator.delivery_fault and "not confirmed" in f.incidents[0]
+    assert not any(c[2].get("entity_id") == f.actuators["force"] and c[2].get("option") == "2" for c in f.calls)

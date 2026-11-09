@@ -23,6 +23,12 @@ def json_data(value: Any) -> Any:
         data = asdict(value)
         if isinstance(value,Snapshot) and value.appliance is None:
             data.pop("appliance",None)  # Preserve legacy snapshot evidence/checksums.
+        if isinstance(value, Snapshot) and data["observation"].get("ev_progress") is None:
+            data["observation"].pop("ev_progress", None)
+        if isinstance(value, Snapshot) and value.execution is None:
+            data.pop("execution", None)
+        if isinstance(value, Observation) and value.ev_progress is None:
+            data.pop("ev_progress", None)
         return json_data(data)
     if isinstance(value, datetime):
         return value.isoformat()
@@ -184,6 +190,7 @@ class Observation:
     ev_observed_at: datetime | None = None
     ev_phase_known: bool = True
     ev_phase_source: str = "count"
+    ev_progress: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         instant(self.at)
@@ -256,6 +263,7 @@ class Snapshot:
     hold_plan_id: str | None = None
     peak_permissions: tuple[PeakPermission, ...] = ()
     appliance: dict[str, Any] | None = None
+    execution: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if not self.intervals:
@@ -284,6 +292,16 @@ class Snapshot:
     def ev_known_at(self, index: int) -> bool:
         return self.observation.ev_state_known and (index == 0 or self.intervals[index - 1].ev_state_known)
 
+    def ev_commitment(self, index: int) -> tuple[float, int] | None:
+        at = self.intervals[index].start
+        if self.execution is not None:
+            item = next((item for item in self.execution["commitments"]
+                         if instant(item["start"]) <= at < instant(item["end"])), None)
+            return (item["power_kw"], item["phases"]) if item else None
+        if self.hold_until and at < self.hold_until:
+            return self.hold_ev_kw, self.hold_phases
+        return None
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Snapshot:
         observation = dict(data["observation"])
@@ -311,6 +329,7 @@ class Snapshot:
             hold_plan_id=data.get("hold_plan_id"),
             peak_permissions=tuple(PeakPermission.from_dict(p) for p in data.get("peak_permissions", [])),
             appliance=data.get("appliance"),
+            execution=data.get("execution"),
         )
 
 

@@ -6,13 +6,15 @@ from copy import deepcopy
 from datetime import datetime
 from typing import Any
 
-from .domain import Observation, Snapshot, json_data
+from .domain import Observation, Snapshot, instant, json_data
 from .deadline_audit import validate_certificate
 from .validation import validate, rolling_comparison_errors
+from .execution import execution_identity
 
 
 def admit(
-    snapshot: Snapshot, result: dict[str, Any], observation: Observation, at: datetime
+    snapshot: Snapshot, result: dict[str, Any], observation: Observation, at: datetime, *,
+    previous_plan: dict[str, Any] | None = None, previous_authority: tuple[bool, bool, bool] = (False, False, False),
 ) -> tuple[dict[str, Any], list[str]]:
     """Preserve the calculated schedule; current readings gate authority, not its economics."""
     errors = validate(snapshot, result["flows"], result.get("service"))
@@ -64,6 +66,28 @@ def admit(
     }
     if not errors:
         admitted["adopted_at"] = at.isoformat()
+        admitted["execution_id"] = execution_identity(admitted)
+        if snapshot.execution is not None:
+            until = instant(snapshot.execution["commitment_until"])
+            admitted["execution_admission"] = {"acknowledged_phase": observation.ev_phases,
+                "measured_ev_kw": observation.ev_power_kw, "at": at.isoformat(),
+                "previous_plan_id": previous_plan.get("id") if previous_plan else None}
+            if (previous_plan is not None and previous_plan["id"] == snapshot.hold_plan_id and at < until):
+                admitted["execution_handover"] = {"until": until.isoformat(),
+                    "plan": execution_source(previous_plan, at),
+                    "ev_valid": previous_authority[0], "ess_valid": previous_authority[1],
+                    "conditional_valid": previous_authority[2]}
     # Fast control selects the interval containing the current time. Keep every original
     # rate, stock, withdrawal, reservation and comparison on that same calculation grid.
     return admitted, errors
+
+
+def execution_source(plan: dict[str, Any], at: datetime) -> dict[str, Any]:
+    """Retain only dispatch evidence; do not nest obsolete calculations indefinitely."""
+    keys = ("id", "execution_id", "intervals", "flows", "goals", "sessions", "reservations", "reasons",
+            "conditional_tasks", "forecast_at", "deadline_guard", "execution", "peak_permissions")
+    source = {key: deepcopy(plan[key]) for key in keys if key in plan}
+    handover = plan.get("execution_handover")
+    if handover and at < instant(handover["until"]):
+        source["execution_handover"] = {**handover, "plan": execution_source(handover["plan"], at)}
+    return source

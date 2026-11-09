@@ -52,6 +52,7 @@ def setting_fields() -> tuple[SettingField, ...]:
                                help="Label each iCalendar link. Enable Google Maps per calendar to calculate attendance journeys. Other calendars retain labelled provisional 50 km/four-hour trips. Save and restart to sync."))
     measurements = (
         ("ev_soc", "EV state of charge", ("%",)),
+        ("ev_total_kwh", "go-e Total energy · eto", ("Wh", "kWh")),
         ("ess_soc", "ESS state of charge", ("%",)),
         ("connected", "EV connected", ()),
         ("grid_import_kw", "Grid import power", ("W", "kW")),
@@ -69,9 +70,11 @@ def setting_fields() -> tuple[SettingField, ...]:
         domains: tuple[str, ...] = ("sensor", "number", "input_number")
         if key == "connected":
             domains = ("binary_sensor", "sensor", "input_boolean", "switch")
+        if key == "ev_total_kwh":
+            domains = ("sensor",)
         result.append(SettingField(f"measurements.{key}", label, "Measurements", "entity",
                                    domains=domains, units=units,
-                                   required=key not in ("grid_import_kwh", "grid_export_kwh")))
+                                   required=key not in ("grid_import_kwh", "grid_export_kwh", "ev_total_kwh")))
     for key, label, domain in (
         ("force", "Charger stop / charge selector", "select"),
         ("phase", "Charger phase selector", "select"),

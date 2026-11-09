@@ -118,10 +118,10 @@ async def test_publication_loop_recovers_once_and_clears_attention_without_phone
         attempts.append(len(attempts))
         return {**deepcopy(valid), "id": f"synthetic-{len(attempts)}"}
 
-    def reconcile(snapshot, result, observation, at):
+    def reconcile(snapshot, result, observation, at, **kwargs):
         if len(attempts) == 1:
             return result, ["SYNTHETIC current-input admission failure"]
-        return admit(snapshot, result, observation, at)
+        return admit(snapshot, result, observation, at, **kwargs)
 
     async def accepted():
         app.shutdown = True

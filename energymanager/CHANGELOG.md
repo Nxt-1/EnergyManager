@@ -1,3 +1,11 @@
+## 4.6.6 — EV execution and measured charging progress
+
+- Follow the accepted charging trajectory during recalculation and handover; avoid returning to an obsolete phase prefix.
+- Account for phase-switch stop, acknowledgement and restart time in delivered energy, candidates and independent audits.
+- Add the actual go-e Total energy (`eto`) sensor selector, accepting Wh/kWh, and persist credited battery gain across replans, reconnects and restarts.
+- Distinguish reported vehicle SoC from estimated progress. Retain counter references through gaps/resets and reconcile genuinely fresh SoC without double credit.
+- Pause EV when charging progress is unavailable after the existing watchdog; retain the task and keep ESS independent. Existing source, peak, permission and charger guards remain active.
+
 ## 4.6.5 — Inline washing-machine program actions
 
 - Put Add/Rename icons beside the recording program selector, with one replacement name field and Save/Cancel.

@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 import math
 
 from .domain import Snapshot
+from .execution import PHASE_SWITCH_SECONDS, RESTART_SECONDS
 from .appliance_plan import resolved_power, selected_start
 
 TOL = 2e-5
@@ -132,6 +133,9 @@ def validate(
     interval_starts = [i.start for i in s.intervals]
     goal_indices = {g.deadline: s.checkpoint_index(g.deadline) for g in s.goals}
     grid_total = 0.0
+    execution_phase = s.execution["initial_phase"] if s.execution else o.ev_phases
+    execution_on = o.ev_power_kw > .1
+    execution_waits: list[tuple[datetime, datetime]] = []
     quarters: dict[datetime, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
     for t, interval in enumerate(s.intervals):
         f = {name: flows[name][t] for name in needed}
@@ -216,7 +220,45 @@ def validate(
                 f"Unsupported current {t}",
             )
         check(amps1 < TOL or amps3 < TOL, f"Simultaneous EV modes {t}")
-        check(close(ev_power, (amps1 + 3 * amps3) * c.voltage / 1000), f"EV mode power {t}")
+        fraction = 1.0
+        if s.execution is not None:
+            check(close(f["one"], float(amps1 > TOL)) and close(f["three"], float(amps3 > TOL)),
+                  f"EV requested mode/current {t}")
+            on = amps1 + amps3 > TOL
+            phase = 3 if amps3 > TOL else 1 if on else execution_phase
+            wait = 0.0
+            if on and phase != execution_phase:
+                wait = PHASE_SWITCH_SECONDS
+            elif on and not execution_on:
+                prior_off = s.intervals[t - 1].hours * 3600 if t else RESTART_SECONDS
+                wait = max(0, RESTART_SECONDS - prior_off)
+            if wait:
+                check(not execution_waits or interval.start >= execution_waits[-1][1],
+                      f"Overlapping EV transitions {t}")
+                execution_waits.append((interval.start, interval.start + timedelta(seconds=wait)))
+            lost = sum(max(0.0, (min(interval.end, end) - max(interval.start, start)).total_seconds())
+                       for start, end in execution_waits if end > interval.start)
+            fraction = max(0.0, 1 - lost / (interval.hours * 3600))
+            check(not lost or on, f"EV transition request interrupted before readiness {t}")
+            execution_phase, execution_on = phase, on
+            commitment = s.ev_commitment(t)
+            if commitment is not None:
+                expected_kw, expected_phase = commitment
+                check(close((amps1 + 3 * amps3) * c.voltage / 1000, expected_kw)
+                      and (not on or phase == expected_phase), f"Frozen EV execution commitment {t}")
+            if fraction > TOL:
+                check(f["grid_ev"] / fraction + f["grid_house"] + f["grid_store"] <= c.grid_connection_kw + TOL,
+                      f"Instantaneous EV grid supply {t}")
+                check(f["pv_ev"] / fraction + f["pv_house"] + f["pv_store"]
+                      <= interval.pv_ac_kw + f["dc_invert"] * c.ac_discharge_efficiency + TOL,
+                      f"Instantaneous EV solar supply {t}")
+                check(f["solar_dis_ev"] / fraction + f["solar_dis_house"] + f["grid_dis_house"]
+                      + f["dc_invert"] * c.ac_discharge_efficiency <= c.ac_discharge_kw + TOL,
+                      f"Instantaneous EV converter supply {t}")
+                check((f["solar_dis_ev"] / fraction + f["solar_dis_house"] + f["grid_dis_house"])
+                      / c.ac_discharge_efficiency <= c.battery_discharge_kw + TOL,
+                      f"Instantaneous EV battery supply {t}")
+        check(close(ev_power, (amps1 + 3 * amps3) * c.voltage / 1000 * fraction), f"EV mode power {t}")
         imp = f["grid_ev"] + f["grid_house"] + f["grid_store"]
         check(
             imp <= c.grid_connection_kw + TOL and (imp < TOL or f["export"] < TOL),

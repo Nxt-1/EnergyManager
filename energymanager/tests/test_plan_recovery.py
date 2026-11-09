@@ -124,7 +124,9 @@ async def test_restart_resumes_before_a_blocked_optimizer_and_shutdown_still_sto
         assert app.plan_recovery.state == "restored" and app.ev_valid and app.ess_valid
         assert app.accepted == f.plan and app.revision != app.accepted["revision"]
         assert app.snapshot.forecast_id == f.snapshot.forecast_id
-        assert captured[0].hold_ev_kw == pytest.approx(1.38)
+        assert captured[0].hold_ev_kw == 0  # No invented constant-current calculation hold.
+        assert captured[0].hold_plan_id == f.plan["id"]
+        assert captured[0].ev_commitment(0) == pytest.approx((1.38, 1))
         assert not any(c[2].get("option") == "1" for c in f.charger.calls)
         async with asyncio.timeout(3):
             while app.current_command is None or app.current_command.current_a != 6:

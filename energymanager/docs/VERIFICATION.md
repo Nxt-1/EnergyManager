@@ -1,5 +1,63 @@
 # EnergyManager 4 verification
 
+## 4.6.6 — EV-A008 execution and counter progress (9 November2026)
+
+Based on released main4.6.5/0ea0dfb. All measurements, counters, endpoints and actuator
+responses below are labelled synthetic; the supplied export remains unchanged evidence.
+
+- 796Python tests pass164.27s,102frontend cases pass, Ruff/mypy61modules, shipped JS
+  syntax and CLI4.6.6 pass. Ledger coverage includes unchanged49% SoC through ten
+  actual replans, overlapping/revised goals, restart/reconnect, Wh/kWh, continuous
+  gaps, counter/source resets, genuine SoC alignment/fallback, unknown timing,
+  unknown-return guards, stationary/stalled counters, EV-only pause and guarded recovery.
+- The supplied original plan with the existing real fake-go-e sequencer makes no
+  phase writes, starts delivery after30s and delivers0.4743175kWh stored against its
+  0.473187kWh task. Reconnect plus process/control restart delivers0.4739725kWh, with
+  no incidents. Fifteen publication-ID changes retain its absolute endpoint.
+- The final fresh calculation of the supplied snapshot with a clearly labelled
+  synthetic preceding accepted trajectory passes physical/source/rolling audits in
+  99.930s under120s. Its coherent candidate is checked, including five partial slots,
+  rather than skipped for the old held phase. At the original adoption time, separate
+  admission preserves every frozen flow. Actual fake-go-e delivery makes no phase
+  writes, starts after30s and stops at the new0.468690kWh task within1.66Wh of
+  meter/control quantization; restart/reconnect stays within0.80Wh. The missing prior
+  installation history is not inferred from these synthetic trajectories.
+- Required phase-switch cases cover immediate/delayed/missing acknowledgements,
+  adoption during a submitted selector write, near deadlines, unexpected house load
+  and constrained ESS. Solar-only phase preparation remains force-off through actual
+  fake PV loss and cannot bypass unavailable progress or revoked authority. Snapshot
+  commitments honor conditional/handover authority while retaining eligible required work.
+- Serial fresh7day/≤5min/120s cases pass independent physical, source and rolling
+  economic checks: mixed101.700s, winter103.038s, held/partial urgent permission94.021s.
+  These are valid time-limited incumbents, not global optima. Mixed/winter minimum-grid
+  checks certify; their cautious deadline refreshes remain unverified. Urgent permission
+  reports nominal shortfall under existing authority. Raw attempts remain in artifacts;
+  an unverified refresh is never represented as a cautious certificate.
+- Released4.6.5 mixed baseline takes108.015s with63,894columns/55,843rows/17,489integers.
+  New mixed model has69,989columns/94,266rows/21,535integers, build0.160s versus0.099s.
+  Single timings do not establish a speedup. No expanded budget, reduced horizon,
+  relaxed source constraint or skipped unknown EV requirement is used.
+- Configured fake E2E passes25.542s/2019intervals/max control4.213ms/four fake calls.
+  Routed E2E passes56.092s/2023intervals/max2.922ms/four fake calls, two calendar imports
+  and six fake route queries. Both map a genuine fake total counter and assert usable,
+  known EV progress, preserving route/source/authority coverage and worker cancellation.
+- Native/standalone desktop and390px views show reported vehicle SoC separately from
+  estimated progress, unknown genuine sample time, retained counter/read and credited
+  gain. Expanded details and keyboard focus survive updates. Native Enter opens the
+  actual `sensor.ev_total_kwh` history; standalone has no fabricated action. Settings
+  shows its100000Wh input and compatible Wh/kWh choices; mapping save and cross-view
+  stale-edit rejection pass. A labelled display-only source-loss projection shows the
+  concise EV pause warning with retained progress; actual ESS independence/watchdog
+  behavior is tested separately. Browser warnings/errors are empty. HA built-ins and
+  touch are simulated; this is not physical-phone or installation evidence.
+- Wheel/sdist4.6.6 build;88runtime source/assets/default files byte-match both archives.
+  Isolated wheel imports/version/new modules and final progress asset pass. Screenshots
+  and detailed reports remain in the existing ignored artifact/visualization directories.
+
+Exact-head CI/container/image results belong only in the ignored release checkpoint
+and final reply. No live HA/database, real notification, hardware or installation
+deployment verification was performed.
+
 ## 4.6.5 — V45-A001-P2 inline program actions (9 November2026)
 
 Reconciled released main4.6.4/fcb80b5 before the scoped UI follow-up. No backend,

@@ -13,6 +13,7 @@ from copy import deepcopy
 
 from .domain import PeakPermission, Snapshot, json_data, instant, encode
 from .charging_timing import ChargingTiming
+from .execution import execution_identity
 from .charging_candidates import fixed_grid_reference, reachable_deadline_bounds
 from .deadline_guard import deadline_certificate
 from .charging_continuity import ChargingContinuity, ChargingWindow
@@ -130,10 +131,15 @@ class Planner:
         if s.observation.ev_power_kw < .1 or not s.observation.connected:
             return result, record
         on = [flows["one"][t] + flows["three"][t] > .5 for t in range(len(s.intervals))]
+        phase_stop = next((t for t, active in enumerate(on) if active
+                           and (3 if flows["three"][t] > .5 else 1) != s.observation.ev_phases), None)
         stop = next((t for t, active in enumerate(on) if not active), None)
+        phase_interruption = phase_stop is not None and (stop is None or phase_stop < stop)
+        if phase_interruption:
+            stop = phase_stop
         if stop is None:
             return result, record
-        restart = next((t for t in range(stop + 1, len(on)) if on[t]), None)
+        restart = stop if phase_interruption else next((t for t in range(stop + 1, len(on)) if on[t]), None)
         if restart is None or s.intervals[restart].start - s.intervals[stop].start > timedelta(minutes=15):
             return result, record
         end = restart + 1
@@ -1118,6 +1124,8 @@ class Planner:
                 "phase_setting",
                 "causal_witness",
                 "grid_direction",
+                "restart_wait",
+                "execution_loss",
             }
             for name, indexes in source_model.linear.variables.items():
                 if name in adjustable or name.startswith(("peak_", "quarter_")):
@@ -1228,7 +1236,8 @@ class Planner:
                     "shortfall_kwh": max(0, target - actual) if known_state else None,
                     "status": ("scheduled" if actual >= target - TOL else "shortfall")
                     if known_state
-                    else "unknown_return_state",
+                    else "progress_unavailable" if original.observation.ev_progress
+                    and not original.observation.ev_progress["usable"] else "unknown_return_state",
                     "completion_at": ready_at.isoformat() if margin is not None else None,
                     "completion_margin_minutes": margin,
                     "desired_margin_met": margin is not None and margin >= s.policy.completion_margin_minutes,
@@ -1405,7 +1414,7 @@ class Planner:
                 "provenance": s.provenance,
             }
         )
-        return {
+        output = {
             "id": uuid4().hex,
             "snapshot_id": original.id,
             "revision": original.revision,
@@ -1420,6 +1429,7 @@ class Planner:
             "conditional_tasks": conditional_tasks,
             "reservations": reservations(s, flows),
             "forecast_at": s.forecast_at.isoformat(),
+            "execution": json_data(s.execution),
             "peak_permissions": json_data(s.peak_permissions),
             "summary": summary,
             "reference_summary": accounting(s, reference["flows"]),
@@ -1432,6 +1442,8 @@ class Planner:
             "input_digest": original.digest,
             "effective_snapshot": json_data(s) if s != original else None,
         }
+        output["execution_id"] = execution_identity(output)
+        return output
 
 
 def plan_snapshot(data: dict[str, Any], progress: Callable[[str], None] | None = None) -> dict[str, Any]:

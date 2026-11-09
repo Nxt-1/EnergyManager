@@ -1,5 +1,35 @@
 # Settings and hardware control
 
+## EV total energy and progress (4.6.6 / EV-A008)
+
+In Measurements, select **go-e Total energy · eto**: the actual HA cumulative total
+energy sensor, not Energy since connected. Declared Wh and kWh are accepted and
+normalized; the entity name does not determine units. Save and restart. The mapping
+is optional for ESS operation, but EV needs usable progress or a genuinely fresh
+vehicle SoC. No installation entity ID is assumed.
+
+The persisted baseline credits later positive counter differences once, using the
+configured EV efficiency. Ordinary unplug/replug and application/plan IDs do not
+reset it. Temporary counter gaps retain the reference; a continuous later reading
+recovers the gap. A reset or changed source begins a new segment while retaining
+credited energy, with unknown gap energy marked uncertain. A steady stopped counter
+is valid; measured charging without advancing energy expires the existing watchdog.
+
+Reported vehicle SoC and estimated charge are displayed separately. HA report/read
+timestamps are diagnostic, not vehicle measurement timestamps. The optional
+`vehicle_observed_at` attribute on the SoC sensor is used only when it contains an
+actual vehicle sample timestamp; absent timing remains unknown. An aligned genuinely
+new sample rebases the counter reference. Unaligned information retains credit and
+explicit uncertainty instead of adding overlapping energy twice. Known-trip return
+still requires genuine vehicle reconciliation.
+
+If neither progress source is usable, EV pauses after the existing measurement
+watchdog, retaining its task and progress; ESS continues independently. Recovery
+remains subject to source, quantity, peak, permission and charger-fault guards.
+The EV page's collapsed Progress sources distinguishes reported stock, sample time,
+meter read and estimated credited gain. Native counter history opens its actual
+source; standalone explains history availability. There is no power-integration fallback.
+
 ## P1 grid energy (4.5.2)
 
 Measurements has two new selectors: **P1 cumulative import energy** and **P1 cumulative

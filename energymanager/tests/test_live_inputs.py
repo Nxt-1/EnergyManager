@@ -23,6 +23,7 @@ async def inputs():
     at = datetime(2026, 10, 23, 15, 16, tzinfo=UTC)
     values = {
         "ev_soc": (45, "%"), "ess_soc": (50, "%"), "connected": ("on", None),
+        "ev_total_kwh": (100, "kWh"),
         "grid_import_kw": (0, "W"), "grid_export_kw": (1300, "W"),
         "pv_ac_kw": (3, "kW"), "pv_dc_kw": (0.4, "kW"), "ev_kw": (2000, "W"),
         "ess_kw": (1, "kW"), "quarter_import_kwh": (0.8, "kW"),

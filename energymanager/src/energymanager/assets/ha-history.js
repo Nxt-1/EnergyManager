@@ -4,7 +4,8 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, char =>
 export function historySources(key, entities = {}, groups = {}) {
   const keys = {ev:['ev_soc','ev_kw','connected'], ess:['ess_soc','ess_kw'],
     solar:['pv_ac_kw','pv_dc_kw'], grid:['grid_import_kw','grid_export_kw'],
-    house:['grid_import_kw','grid_export_kw','pv_ac_kw','ess_kw','ev_kw']}[key] || [key];
+    house:['grid_import_kw','grid_export_kw','pv_ac_kw','ess_kw','ev_kw'],
+    ev_progress:['ev_soc','ev_total_kwh']}[key] || [key];
   return genuineEntities(groups[key] ?? keys.map(name => entities[name]));
 }
 

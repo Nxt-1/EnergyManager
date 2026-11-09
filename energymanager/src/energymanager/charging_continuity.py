@@ -45,7 +45,9 @@ class ChargingContinuity:
         return self.flows["one"][t] + self.flows["three"][t] > .5
 
     def sessions(self, window: ChargingWindow) -> int:
-        return sum(self.on(t) and (t == window.first or not self.on(t - 1))
+        return sum(self.on(t) and (t == window.first or not self.on(t - 1)
+                   or self.model.snapshot.execution is not None
+                   and (self.flows["three"][t] > .5) != (self.flows["three"][t - 1] > .5))
                    for t in range(window.first, window.last))
 
     def phases(self, window: ChargingWindow) -> set[int]:
@@ -55,8 +57,11 @@ class ChargingContinuity:
     @staticmethod
     def session_terms(model: JointModel, window: ChargingWindow) -> list[tuple[int, float]]:
         v = model.linear.variables
-        return ([(v[name][window.first], 1.) for name in ("one", "three")]
-                + [(v["start"][t], 1.) for t in range(window.first + 1, window.last)])
+        terms = ([(v[name][window.first], 1.) for name in ("one", "three")]
+                 + [(v["start"][t], 1.) for t in range(window.first + 1, window.last)])
+        if model.snapshot.execution is not None:
+            terms += [(v["phase_restart"][t], 1.) for t in range(window.first + 1, window.last)]
+        return terms
 
     @staticmethod
     def score_terms(model: JointModel, window: ChargingWindow) -> list[tuple[int, float]]:
@@ -109,12 +114,16 @@ class ChargingContinuity:
         timing = self.timing_terms(model)
         m.row(list(timing.items()), upper=model.value(timing, values) + 1e-6)
         if phase is not None:
-            m.row(self.session_terms(model, window), upper=1)
+            free = next((t for t in range(first, last) if s.ev_commitment(t) is None), last)
+            if free < last:
+                m.row(self.session_terms(model, ChargingWindow(free, last, True)), upper=1)
             other = "three" if phase == 1 else "one"
             for t in range(first, last):
+                if s.execution is not None and s.ev_commitment(t) is not None:
+                    continue
                 m.upper[v[other][t]] = m.upper[v[f"amps_{other}"][t]] = 0
                 # Preserve partial-slot quantity in this quick one-session candidate.
-                if abs(s.intervals[t].hours - 5 / 60) > 1e-9:
+                if s.execution is None and abs(s.intervals[t].hours - 5 / 60) > 1e-9:
                     for name in ("one", "three", "amps_one", "amps_three"):
                         index = v[name][t]
                         m.lower[index] = m.upper[index] = flows[name][t]
@@ -130,6 +139,11 @@ class ChargingContinuity:
         avoiding a low-solar gap crossed by an earliest-start profile.
         """
         s, c, flows = self.model.snapshot, self.model.snapshot.capabilities, self.flows
+        if s.execution is not None:
+            # Keep exact boundary energy in the joint physical model: raw amp-slot
+            # packing is not energy preserving when phase/restart waits change.
+            phase = min(c.phases)
+            return self.candidate(window, phase), phase
         active = [t for t in range(window.first, window.last) if self.on(t)]
         regular = [t for t in range(window.first, window.last) if abs(s.intervals[t].hours - 5 / 60) < 1e-9]
         if not active or not regular:

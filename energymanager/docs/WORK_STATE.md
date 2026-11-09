@@ -422,7 +422,7 @@ updates before incorporating them into the V4.5 implementation branch; discuss t
 next V4.5 task in the architecture chat and start implementation only when authorized.
 No application task, commit or publication is implied by this setup record.
 
-### EV planner — V4.6 / EV-A002–EV-A007
+### EV planner — V4.6 / EV-A002–EV-A008
 
 - **Architecture chat:** EV Task optimization achritecture, local ID
   `01a18e54-5380-7703-b13d-8044baa8a7ac`.
@@ -538,6 +538,37 @@ No application task, commit or publication is implied by this setup record.
   **Next:** commit/merge/push4.6.4 and inspect exact-head CI/image publication.
   Remote results belong only in ignored `artifacts/ev-a007-state.json` and the final
   reply. No live HA/database, real notifications, hardware operation or deployment.
+
+
+- **EV-A008 — local complete for4.6.6 (9 November2026):** the user authorized
+  implementation and release in the registered architecture pair: “Ok, hand it off”.
+  Branch `codex/ev-a008`, isolated `energymanager/artifacts/worktrees/ev-a008`, from
+  main4.6.5/0ea0dfb; current primary approved scope read before work. Preserve all
+  unrelated primary drafts and released EV/appliance behavior.
+  **Implemented:** actual accepted-trajectory commitments and authority-aware admission
+  handover, physical stop/ack/restart delivery with partial-slot/source audits and
+  coherent/continuity candidate support; no new phase preference or dwell. Safe phase
+  preparation stays force-off and tracks submitted writes to acknowledgement/fault.
+  Persistent actual eto progress, Wh/kWh selector, distinct vehicle/read timing,
+  reconciliation without double credit, gaps/resets, stable task endpoints and EV-only
+  progress watchdog retain ESS independence and all source/peak/permission/fault guards.
+  **Verified:**796Python164.27s,102frontend, Ruff/mypy61modules/JS/CLI pass. Supplied
+  immutable-plan and newly calculated-plan fake-go-e replays avoid the1→3→1 detour,
+  start after30s and stop within2Wh of their respective accepted quantities. Ten actual
+  replans with unchanged49% SoC and advancing counter retain progress across revisions/
+  restart. Required switches, adoption, delayed/missing acknowledgements and load/ESS
+  constraints pass. Final supplied calculation99.930s; serial seven-day/5min/120s
+  mixed101.700/winter103.038/held-permission94.021s pass independent audits. Raw timeout,
+  cautious-unverified and nominal-shortfall statuses remain explicit; no global optimum
+  or unconditional fallback certification claim. Model-size comparison is recorded.
+  Configured/routed fake E2E25.542/56.092s pass with known usable progress, two journeys
+  and six local route queries. Native/standalone desktop/390px setup, actual source
+  history, retained disclosure/focus and warning presentation pass with clean logs.
+  Wheel/sdist88runtime files match and isolated4.6.6 import passes. See VERIFICATION.md.
+  **Next:** scoped release commit, integrate latest main while preserving the latest
+  four shared document drafts, push and monitor exact-head CI/image publication.
+  Remote outcomes go only in ignored `artifacts/ev-a008-state.json` and the final reply.
+  No live installation/database, real notifications, hardware operation or deployment.
 
 
 ## Current checkpoint — saved recording trim correction (4.5.4,31 October2026)

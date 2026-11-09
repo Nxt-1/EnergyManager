@@ -24,7 +24,8 @@ async def preview(backend: str = "http://127.0.0.1:8102/", port: int = 8103) -> 
             raise RuntimeError("Native preview requires the labelled offline_e2e.py --serve fixture")
         async with session.get(backend + "api/dashboard") as response:
             manifest = await response.json()
-        values = {"ev_soc": (45, "%"), "ess_soc": (50, "%"), "connected": ("on", None),
+        values = {"ev_soc": (45, "%"), "ev_total_kwh": (100000, "Wh"),
+                  "ess_soc": (50, "%"), "connected": ("on", None),
                   "grid_import_kw": (0, "W"), "grid_export_kw": (600, "W"), "pv_ac_kw": (1000, "W"),
                   "pv_dc_kw": (1000, "W"), "ev_kw": (0, "W"), "ess_kw": (0, "W"),
                   "monthly_peak_kw": (2500, "W")}
@@ -75,7 +76,7 @@ async def preview(backend: str = "http://127.0.0.1:8102/", port: int = 8103) -> 
                     ev_scenario = message["scenario"]
                     ev_scenario_at = datetime.now(UTC)
                     if ev_scenario not in ("sampled", "charging", "phase_switch", "fault", "device_fault",
-                                           "stopped", "stale", "disconnected", "settling", "negative"):
+                                           "stopped", "stale", "disconnected", "settling", "negative", "progress"):
                         raise ValueError("Unknown synthetic EV display scenario")
                     ev_power = -35 if ev_scenario == "negative" else 4140 if ev_scenario == "charging" else 0
                     net_grid = 400 + ev_power - 1000  # Keep the synthetic 400W household balance consistent.
@@ -83,6 +84,8 @@ async def preview(backend: str = "http://127.0.0.1:8102/", port: int = 8103) -> 
                                        "grid_export_kw": str(max(0, -net_grid)),
                                        "ev_soc": "57", "connected": "off" if ev_scenario == "disconnected" else "on"}.items():
                         states[manifest["entities"][key]]["state"] = "unavailable" if ev_scenario == "stale" else value
+                    if counter := manifest["entities"].get("ev_total_kwh"):
+                        states[counter]["state"] = "unavailable" if ev_scenario == "progress" else "100000"
                     result = states
                 elif message["type"] != "supervisor/api":
                     raise ValueError("Unexpected synthetic WS command")
@@ -136,10 +139,16 @@ async def preview(backend: str = "http://127.0.0.1:8102/", port: int = 8103) -> 
                                                   "reason": "SYNTHETIC delivery fault; fixture only"}
                     elif ev_scenario == "device_fault":
                         fixture["charger"]["states"].update(charger_error="8", ev_status="5", charger_status="1")
-                    elif ev_scenario == "stopped":
+                    elif ev_scenario in ("stopped", "progress"):
                         fixture["charger"]["states"].update(force="1", ev_status="3", charger_status="4",
                                                             charge_allowed="off")
                         fixture["command"].update(ev_kw=0, current_a=0)
+                        if ev_scenario == "progress":
+                            fixture["observation"]["ev_state_known"] = False
+                            fixture["observation"]["ev_progress"].update(usable=False, valid_until=old,
+                                source="retained progress", issue="SYNTHETIC progress source unavailable")
+                            fixture["charger"]["activity"] = {"as_of": at, "stage": "blocked",
+                                "label": "EV paused: progress unavailable", "detail": "SYNTHETIC EV-only pause; ESS remains independent."}
                     body = json.dumps(fixture).encode()
                 return web.Response(body=body, status=response.status,
                                     headers={"Content-Type": response.headers["Content-Type"],

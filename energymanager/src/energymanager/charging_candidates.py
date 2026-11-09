@@ -33,7 +33,7 @@ def fixed_grid_reference(model: JointModel, reference: dict[str, list[float]]) -
     starts = sum(active and (t == 0 or not on[t - 1]) for t, active in enumerate(on))
     if (1 not in c.phases
             or any(reference[name][t] > 1e-6 for name in ("pv_ev", "solar_dis_ev") for t in range(checkpoint))
-            or s.hold_until and s.hold_ev_kw > .1 and s.hold_phases != 1):
+            or s.execution is None and s.hold_until and s.hold_ev_kw > .1 and s.hold_phases != 1):
         record["reason"] = "The reference source/held phase does not support this single-phase candidate"
         return None, record
     candidate = deepcopy(model)
@@ -48,10 +48,14 @@ def fixed_grid_reference(model: JointModel, reference: dict[str, list[float]]) -
         # Offer one continuous phase-one block; the joint model chooses its exact
         # fractional/held-slot currents and sources before the unrestricted search.
         for t in range(checkpoint):
+            if s.execution is not None and s.ev_commitment(t) is not None:
+                continue
             candidate.linear.upper[candidate.linear.variables["three"][t]] = 0
             candidate.linear.upper[candidate.linear.variables["amps_three"][t]] = 0
-        candidate.linear.row([(candidate.linear.variables["one"][0], 1)]
-                             + [(candidate.linear.variables["start"][t], 1) for t in range(1, checkpoint)], upper=1)
+        first = next((t for t in range(checkpoint) if s.ev_commitment(t) is None), checkpoint)
+        if first < checkpoint:
+            candidate.linear.row([(candidate.linear.variables["one"][first], 1)]
+                + [(candidate.linear.variables["start"][t], 1) for t in range(first + 1, checkpoint)], upper=1)
         candidate.linear.equality([(candidate.linear.variables["ev_energy"][checkpoint], 1)],
                                    reference["ev_energy"][checkpoint])
         record["construction"] = "joint one-session profile at exact reference energy"

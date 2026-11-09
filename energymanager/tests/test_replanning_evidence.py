@@ -27,6 +27,8 @@ def flat_plan(snapshot):
         "ev_energy": [snapshot.observation.ev_kwh] * n,
         "ess_solar": [snapshot.observation.ess_kwh - snapshot.capabilities.ess_min_kwh] * n,
         "ess_grid": [0.0] * n,
+        **{name: [0.0] * (n - 1) for name in
+           ("one", "three", "amps_one", "amps_three", "pv_ev", "grid_ev", "solar_dis_ev")},
     }}
 
 
@@ -200,9 +202,10 @@ async def test_real_input_loop_queues_correction_without_replanning_or_revoking_
 
     class SyntheticHA:
         inputs = SimpleNamespace(readings={})
+        entities = {}
 
         async def observe(self, capabilities):
-            return replace(s.observation, at=clock[0], house_kw=1.4)
+            return replace(s.observation, at=clock[0], ev_observed_at=clock[0], house_kw=1.4)
 
     class SyntheticForecast:
         async def read(self, observation, at):
@@ -276,9 +279,10 @@ async def test_new_forecast_is_queued_without_replacing_an_active_plan(tmp_path,
 
     class SyntheticHA:
         inputs = SimpleNamespace(readings={})
+        entities = {}
 
         async def observe(self, capabilities):
-            return replace(s.observation, at=clock[0])
+            return replace(s.observation, at=clock[0], ev_observed_at=clock[0])
 
     class SyntheticForecast:
         async def read(self, observation, at):

@@ -56,6 +56,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
     active_fault: str | None = None
     values = {
         "ev_soc": (45, "%"),
+        "ev_total_kwh": (100000, "Wh"),
         "ess_soc": (50, "%"),
         "connected": ("on", None),
         "grid_import_kw": (0, "W"),
@@ -229,7 +230,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                 group, key = field.path.split(".")
                 config[group][key] = f"{field.domains[0]}.{key}"
         config["measurements"].update(grid_import_kwh="sensor.grid_import_kwh",
-                                      grid_export_kwh="sensor.grid_export_kwh")
+                                      grid_export_kwh="sensor.grid_export_kwh", ev_total_kwh="sensor.ev_total_kwh")
         config["token_environment"] = "UNUSED_LEGACY_TOKEN"
         config["allow_remote"] = False
         config["ev_diagnostics"] = {key: f"sensor.{key}" for key in
@@ -305,6 +306,9 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                 assert not energy["channels"]["import"]["partial"]
                 response = await client.get("/api/state")
                 current = await response.json()
+                assert current["observation"]["ev_state_known"]
+                assert current["observation"]["ev_progress"]["usable"]
+                assert current["observation"]["ev_progress"]["entity_id"] == "sensor.ev_total_kwh"
                 assert current["planning_activity"]["request_id"] == replacement
                 assert current["planning_activity"]["state"] == "ready"
                 from multiprocessing import active_children
@@ -437,6 +441,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                         "configured optional vehicle status and bounded attributes from fake HA; vehicle measurement age remains unknown",
                         "hardware-off stop confirmed by new device and zero-power observations before injecting preview faults",
                         "spawned real full-horizon HiGHS plan",
+                    "genuine mapped fake go-e total-energy progress remains usable; EV goals are not bypassed as unknown",
                         "manual replan cancels and reaps real HiGHS; only the latest replacement is adopted",
                         "frozen-snapshot validation with separate current admission evidence",
                         "independent guarded calls to local fake only",

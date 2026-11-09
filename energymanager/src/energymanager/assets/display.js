@@ -116,7 +116,8 @@ export function goalStatus(goal, now) {
     return goal.return_at && Date.parse(goal.return_at) > Date.parse(now) ? 'Underway' : 'Awaiting return';
   }
   return goal.shortfall_kwh > .001 ? 'Shortfall' : goal.status === 'scheduled' ? 'Scheduled' :
-    goal.status === 'unknown_return_state' ? 'Unknown state' : 'Waiting';
+    goal.status === 'unknown_return_state' ? 'Unknown state' :
+    goal.status === 'progress_unavailable' ? 'Progress unavailable' : 'Waiting';
 }
 
 export function journeyEnergyKwh(goal, policy) {

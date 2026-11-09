@@ -9,6 +9,7 @@ from bisect import bisect_right
 from .appliance_plan import CycleCurve, starts_for
 
 from .optimization import JointModel
+from .execution import delivery_fraction, wait_events
 
 
 def seed(model: JointModel, peak_limit_kw: float | None = None,
@@ -55,7 +56,9 @@ def seed(model: JointModel, peak_limit_kw: float | None = None,
     non_grid = grid_ev = 0.0
     last_power = o.ev_power_kw
     previous_on = o.ev_power_kw > 0.1
-    previous_phase = o.ev_phases
+    previous_phase = s.execution["initial_phase"] if s.execution else o.ev_phases
+    requested_modes: list[int] = []
+    waits: list[tuple[int, float]] = []
     zone = ZoneInfo(p.timezone)
     current_month = s.intervals[0].start.astimezone(zone).strftime("%Y-%m")
     for t, interval in enumerate(s.intervals):
@@ -113,18 +116,23 @@ def seed(model: JointModel, peak_limit_kw: float | None = None,
             )
             if preferred_phase is not None:
                 phases = preferred_phase
+            if s.execution and any(s.intervals[k].start + timedelta(seconds=seconds) > interval.start
+                                   for k, seconds in waits):
+                phases = previous_phase
             if (
                 1 in c.phases
                 and charge_target - ev
                 < c.minimum_current_a * 3 * c.voltage / 1000 * interval.hours * c.ev_efficiency
             ):
                 phases = 1
+            fraction = delivery_fraction(s, t, wait_events(s, requested_modes + [phases]))
+            delivered_hours = interval.hours * fraction
             amps = min(c.maximum_current_a, int((headroom + 1e-8) * 1000 / (c.voltage * phases)))
             if amps >= c.minimum_current_a and phases in c.phases:
                 # Smallest integer-current final interval rather than excessive overdelivery.
                 active_target = target if use_grid else charge_target
                 needed = (
-                    (active_target - ev) / (interval.hours * c.ev_efficiency) * 1000 / (c.voltage * phases)
+                    (active_target - ev) / (max(delivered_hours, 1e-12) * c.ev_efficiency) * 1000 / (c.voltage * phases)
                 )
                 if use_grid and needed > amps and 0 < needed - amps < c.minimum_current_a:
                     amps = max(c.minimum_current_a, int(needed + 0.999999) - c.minimum_current_a)
@@ -134,17 +142,26 @@ def seed(model: JointModel, peak_limit_kw: float | None = None,
                 amps = min(amps, max(0, maximum_final))
                 if use_grid:
                     # A locked three-phase mode may need to pause before its final small increment.
-                    energy_per_amp = interval.hours * c.ev_efficiency * phases * c.voltage / 1000
+                    energy_per_amp = max(delivered_hours, 1e-12) * c.ev_efficiency * phases * c.voltage / 1000
                     final_current_limit = int((target - ev + final_rounding_kwh + 1e-8) / energy_per_amp)
                     amps = min(amps, final_current_limit)
                 power = amps * phases * c.voltage / 1000 if amps >= c.minimum_current_a else 0
-        if s.hold_until and interval.start < s.hold_until:
-            phases = s.hold_phases
-            amps = round(s.hold_ev_kw * 1000 / (phases * c.voltage)) if interval.available else 0
+        commitment = s.ev_commitment(t)
+        if commitment is not None:
+            committed_kw, phases = commitment
+            amps = round(committed_kw * 1000 / (phases * c.voltage)) if interval.available else 0
             power = amps * phases * c.voltage / 1000
-        if (interval.start - s.intervals[0].start).total_seconds() < 15 and phases != o.ev_phases:
+        if (interval.start - s.intervals[0].start).total_seconds() < 15 and phases != (
+                s.execution["initial_phase"] if s.execution else o.ev_phases):
             amps = 0
             power = 0
+        if power == 0:
+            amps = 0
+        requested_power = power
+        requested_modes.append(phases if amps > 0 else 0)
+        waits = wait_events(s, requested_modes)
+        fraction = delivery_fraction(s, t, waits)
+        power *= fraction
         dc_invert = min(
             interval.pv_dc_kw,
             c.ac_discharge_kw / c.ac_discharge_efficiency,
@@ -152,7 +169,7 @@ def seed(model: JointModel, peak_limit_kw: float | None = None,
         )
         pv_available = interval.pv_ac_kw + dc_invert * c.ac_discharge_efficiency
         solar_house = min(pv_available, interval.house_kw)
-        pv_ev = min(max(0, pv_available - solar_house), power)
+        pv_ev = min(max(0, pv_available - solar_house) * fraction, power)
         direct = power - pv_ev
         remaining_house = interval.house_kw - solar_house
         solar_dis_house = min(
@@ -195,10 +212,10 @@ def seed(model: JointModel, peak_limit_kw: float | None = None,
         put("converter_charge", t, float(ac_store > 1e-8))
         put("export", t, surplus if direct < 1e-8 and grid_house < 1e-8 else 0)
         put("curtail", t, surplus if direct >= 1e-8 or grid_house >= 1e-8 else 0)
-        put("one", t, float(power > 0 and phases == 1))
-        put("three", t, float(power > 0 and phases == 3))
-        put("amps_one", t, amps if power and phases == 1 else 0)
-        put("amps_three", t, amps if power and phases == 3 else 0)
+        put("one", t, float(amps > 0 and phases == 1))
+        put("three", t, float(amps > 0 and phases == 3))
+        put("amps_one", t, amps if phases == 1 else 0)
+        put("amps_three", t, amps if phases == 3 else 0)
         put("grid_direction", t, float(grid_house + direct > 1e-8))
         put("start", t, float(power > 0 and not previous_on))
         put("variation", t, abs(power - last_power))
@@ -217,8 +234,8 @@ def seed(model: JointModel, peak_limit_kw: float | None = None,
         ) * interval.hours
         if ev < -1e-8 or ev > c.ev_capacity_kwh + 1e-8:
             return None
-        last_power, previous_on = power, power > 0
-        if power > 0:
+        last_power, previous_on = requested_power, amps > 0
+        if amps > 0:
             previous_phase = phases
     for name, value in (
         ("ev_energy", ev),

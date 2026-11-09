@@ -17,6 +17,7 @@ import numpy as np
 
 from .appliance_plan import CycleCurve, starts_for
 from .domain import Snapshot
+from .execution import PHASE_SWITCH_SECONDS, RESTART_SECONDS
 from .validation import TOL
 
 INF = highspy.kHighsInf
@@ -150,12 +151,15 @@ class JointModel:
         self.months: dict[str, int] = {}
         self.rolling_metadata: dict[int, tuple[int, int, list[tuple[list[int], float]]]] = {}
         self.continuity_limits_added = False
+        self.execution_products: list[tuple[int, int, int]] = []
         self.build(ceilings, grid_ess, ev_total_limit)
         # Append operational bookkeeping after the physical model. Keep its variable
         # ordering stable for the economic MIP and its checked starting schedule.
-        self.linear.variable("phase_setting", len(snapshot.intervals), 1)
+        self.linear.variable("phase_setting", len(snapshot.intervals), 1, integer=snapshot.execution is not None)
         restarts = self.linear.variable("phase_restart", len(snapshot.intervals), 1)
         self.operations.update({index: 10.0 for index in restarts})
+        if snapshot.execution is not None:
+            self.add_execution_limits()
 
     def build(self, ceilings: list[float] | None, grid_ess: bool, ev_total_limit: float | None) -> None:
         s, m = self.snapshot, self.linear
@@ -194,7 +198,7 @@ class JointModel:
         for name in ("amps_one", "amps_three"):
             m.variable(name, n, c.maximum_current_a, integer=True)
         m.variable("variation", n, max(c.voltage * 3 * c.maximum_current_a / 1000, o.ev_power_kw))
-        m.variable("phase_change", n, 1)
+        m.variable("phase_change", n, 1, integer=s.execution is not None)
         m.variable("non_grid_cumulative", n + 1)
         m.variable("grid_cumulative", n + 1)
         appliance_support: dict[int,list[datetime]] = {}
@@ -257,7 +261,8 @@ class JointModel:
 
             power_terms = [(get("amps_one"), c.voltage / 1000), (get("amps_three"), c.voltage * 3 / 1000)]
             charge_terms = [(get(name), 1) for name in ("pv_ev", "grid_ev", "solar_dis_ev")]
-            m.equality(charge_terms + [(index, -coef) for index, coef in power_terms])
+            if s.execution is None:
+                m.equality(charge_terms + [(index, -coef) for index, coef in power_terms])
             for phase, phase_allowed in (("one", 1 in c.phases), ("three", 3 in c.phases)):
                 phase_active, amps = get(phase), get(f"amps_{phase}")
                 m.row([(amps, 1), (phase_active, -c.maximum_current_a)], upper=0)
@@ -265,13 +270,15 @@ class JointModel:
                 if not phase_allowed or not interval.available:
                     m.upper[phase_active] = 0
                 if (interval.start - s.intervals[0].start).total_seconds() < 15 and (phase == "three") != (
-                    o.ev_phases == 3
+                    (s.execution["initial_phase"] if s.execution else o.ev_phases) == 3
                 ):
                     m.upper[phase_active] = 0
             m.row([(get("one"), 1), (get("three"), 1)], upper=1)
-            if s.hold_until and interval.start < s.hold_until:
-                phase = "three" if s.hold_phases == 3 else "one"
-                amps = round(s.hold_ev_kw * 1000 / (s.hold_phases * c.voltage)) if interval.available else 0
+            commitment = s.ev_commitment(t)
+            if commitment is not None:
+                committed_kw, phases = commitment
+                phase = "three" if phases == 3 else "one"
+                amps = round(committed_kw * 1000 / (phases * c.voltage)) if interval.available else 0
                 for mode in ("one", "three"):
                     hold_active = float(amps > 0 and mode == phase)
                     m.equality([(get(mode), 1)], hold_active)
@@ -757,6 +764,93 @@ class JointModel:
                 values[index] = max(values[index], baseline, average)
         return values
 
+    def add_execution_limits(self) -> None:
+        """Model requested amperes separately from energy delivered during sequencer waits."""
+        s, m, c = self.snapshot, self.linear, self.snapshot.capabilities
+        assert s.execution is not None
+        v, n = m.variables, len(s.intervals)
+        restarts = m.variable("restart_wait", n, 1)
+        initial_phase = float(s.execution["initial_phase"] == 3)
+        initial_on = float(s.observation.ev_power_kw > .1)
+        events: list[tuple[int, int, float]] = []
+        for t in range(n):
+            setting, change = v["phase_setting"][t], v["phase_change"][t]
+            active = [(v["one"][t], 1), (v["three"][t], 1)]
+            previous = [(v["phase_setting"][t - 1], 1)] if t else []
+            previous_on = [(v["one"][t - 1], 1), (v["three"][t - 1], 1)] if t else []
+            prior = 0.0 if t else initial_phase
+            was_on = 0.0 if t else initial_on
+            m.row([(v["three"][t], 1), (setting, -1)], upper=0)
+            m.row([(v["one"][t], 1), (setting, 1)], upper=1)
+            m.row([(change, 1)] + [(i, -a) for i, a in active], upper=0)
+            # Exact XOR; unpriced economic searches cannot invent a wait to save energy.
+            m.row([(change, 1), (setting, -1)] + previous, lower=-prior)
+            m.row([(change, 1), (setting, 1)] + [(i, -a) for i, a in previous], lower=prior)
+            m.row([(change, 1), (setting, -1)] + [(i, -a) for i, a in previous], upper=prior)
+            m.row([(change, 1), (setting, 1)] + previous, upper=2 - prior)
+            wait = restarts[t]
+            prior_off = s.intervals[t - 1].hours * 3600 if t else RESTART_SECONDS
+            remaining = max(0, RESTART_SECONDS - prior_off)
+            events.append((t, change, PHASE_SWITCH_SECONDS))
+            if remaining:
+                m.integer.append(wait)
+                m.row([(wait, 1)] + [(i, -a) for i, a in active], upper=0)
+                m.row([(wait, 1)] + previous_on, upper=1 - was_on)
+                m.row([(wait, 1), (change, 1)], upper=1)
+                m.row([(wait, 1), (change, 1)] + previous_on + [(i, -a) for i, a in active], lower=-was_on)
+                events.append((t, wait, remaining))
+            else:
+                m.upper[wait] = 0
+        first_event = 0
+        for t, interval in enumerate(s.intervals):
+            while first_event < len(events) and (s.intervals[events[first_event][0]].start
+                    + timedelta(seconds=events[first_event][2]) <= interval.start):
+                first_event += 1
+            power: list[tuple[int, float]] = [(v[name][t], 1) for name in ("pv_ev", "grid_ev", "solar_dis_ev")]
+            power += [(v["amps_one"][t], -c.voltage / 1000),
+                      (v["amps_three"][t], -3 * c.voltage / 1000)]
+            overlapping = []
+            for k, flag, seconds in events[first_event:]:
+                if k > t:
+                    break
+                stop = s.intervals[k].start + timedelta(seconds=seconds)
+                overlap = max(0.0, (min(interval.end, stop) - max(interval.start, s.intervals[k].start)).total_seconds())
+                if not overlap:
+                    continue
+                lost = overlap / (interval.hours * 3600)
+                overlapping.append((flag, 1.0))
+                m.row([(v["one"][t], 1), (v["three"][t], 1), (flag, -1)], lower=0)
+                for name, phases in (("one", 1), ("three", 3)):
+                    amps = v[f"amps_{name}"][t]
+                    product = m.variable("_execution_product", 1, c.maximum_current_a)[0]
+                    self.execution_products.append((product, amps, flag))
+                    m.row([(product, 1), (amps, -1)], upper=0)
+                    m.row([(product, 1), (flag, -c.maximum_current_a)], upper=0)
+                    m.row([(product, 1), (amps, -1), (flag, -c.maximum_current_a)], lower=-c.maximum_current_a)
+                    power.append((product, lost * phases * c.voltage / 1000))
+                fraction = 1 - lost
+                if fraction > 1e-8:
+                    # Constant house/storage dispatch plus the EV's higher on-period
+                    # rate must fit the actual source/converter, not only its average.
+                    limits = [
+                        ([(v["grid_ev"][t], 1 / fraction), (v["grid_house"][t], 1),
+                          (v["grid_store"][t], 1)], c.grid_connection_kw),
+                        ([(v["pv_ev"][t], 1 / fraction), (v["pv_house"][t], 1),
+                          (v["pv_store"][t], 1), (v["dc_invert"][t], -c.ac_discharge_efficiency)], interval.pv_ac_kw),
+                        ([(v["solar_dis_ev"][t], 1 / fraction), (v["solar_dis_house"][t], 1),
+                          (v["grid_dis_house"][t], 1), (v["dc_invert"][t], c.ac_discharge_efficiency)], c.ac_discharge_kw),
+                        ([(v["solar_dis_ev"][t], 1 / fraction / c.ac_discharge_efficiency),
+                          (v["solar_dis_house"][t], 1 / c.ac_discharge_efficiency),
+                          (v["grid_dis_house"][t], 1 / c.ac_discharge_efficiency)], c.battery_discharge_kw),
+                    ]
+                    for terms, upper in limits:
+                        bound = sum(max(0, coefficient) * m.upper[index] for index, coefficient in terms)
+                        m.row(terms + [(flag, bound)], upper=upper + bound)
+            m.row(overlapping, upper=1)
+            m.equality(power)
+        m.variables.pop("_execution_product", None)
+        m.variables["execution_loss"] = [product for product, _, _ in self.execution_products]
+
     def canonical_values(self, initial: list[float]) -> list[float]:
         """Tighten unpriced auxiliary indicators without altering any physical decision."""
         values = self.complete_warm(initial)
@@ -764,7 +858,7 @@ class JointModel:
         v, c, o = self.linear.variables, self.snapshot.capabilities, self.snapshot.observation
         previous_on = o.ev_power_kw > 0.1
         previous_power = max(0.0, o.ev_power_kw)
-        previous_setting = float(o.ev_phases == 3)
+        previous_setting = float((self.snapshot.execution["initial_phase"] if self.snapshot.execution else o.ev_phases) == 3)
         for t in range(len(self.snapshot.intervals)):
             on = values[v["one"][t]] + values[v["three"][t]] > 0.5
             power = (values[v["amps_one"][t]] + 3 * values[v["amps_three"][t]]) * c.voltage / 1000
@@ -774,11 +868,17 @@ class JointModel:
             values[v["variation"][t]] = abs(power - previous_power)
             values[v["phase_change"][t]] = abs(setting - previous_setting)
             values[v["phase_restart"][t]] = abs(setting - previous_setting) if on and previous_on else 0.0
+            if "restart_wait" in v:
+                prior_off = self.snapshot.intervals[t - 1].hours * 3600 if t else RESTART_SECONDS
+                values[v["restart_wait"][t]] = float(on and not previous_on and setting == previous_setting
+                                                    and prior_off < RESTART_SECONDS)
             previous_on, previous_power, previous_setting = on, power, setting
             if "ess_change" in v:
                 values[v["ess_change"][t]] = (
                     abs(values[v["battery_charge"][t]] - values[v["battery_charge"][t - 1]]) if t else 0
                 )
+        for product, amps, flag in self.execution_products:
+            values[product] = values[amps] * values[flag]
         for goal in self.snapshot.goals:
             name = f"margin_shortfall_{goal.id}"
             if name in v:
@@ -889,7 +989,8 @@ class JointModel:
                 if t:
                     m.row([(setting, sign), (v["phase_setting"][t - 1], -sign), (change, -1)], upper=0)
                 else:
-                    m.row([(setting, sign), (change, -1)], upper=sign * float(o.ev_phases == 3))
+                    phase = self.snapshot.execution["initial_phase"] if self.snapshot.execution else o.ev_phases
+                    m.row([(setting, sign), (change, -1)], upper=sign * float(phase == 3))
             if t:
                 m.row([(change, 1), (restart, -1)] + active
                       + [(v["one"][t - 1], 1), (v["three"][t - 1], 1)], upper=2)

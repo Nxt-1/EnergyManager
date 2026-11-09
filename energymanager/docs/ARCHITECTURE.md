@@ -1565,6 +1565,147 @@ availability hint. Predicted cells and configured controller values are not
 measured-entity actions. The quarter action opens the actual input entity in
 HA native units, independent of its normalized dashboard display.
 
+### Charging bounce and progress source (EV-A008, 4.6.6)
+
+For the4.6.3 charging-bounce follow-up, use the actual configured go-e cumulative
+Total energy (`eto`) sensor as the primary delivered-energy measurement. The user
+confirms both sensors are available and selected total energy after clarifying
+that either counter needs a progress baseline. This supersedes the earlier session-
+counter preference. Ordinary disconnection/reconnection must not reset the baseline
+or re-credit delivered energy. Use counter differences rather than integrating power.
+Normalize declared Wh/kWh units. Retain a reference identifying the energy already
+included in the SoC/progress baseline, so later readings credit only additional
+delivery. Recalculation must preserve that progress. A counter reset starts a new
+measurement segment; it does not itself fulfill or cancel an EV requirement.
+Battery gain remains an estimate using the configured efficiency. Persist the
+baseline and credited task progress across application restarts as well as replans.
+Reconcile genuinely new vehicle SoC information against the appropriate counter
+reference, crediting subsequent delivery once. Re-reading an unchanged old SoC from
+HA must not reset progress. Preserve the distinction between HA read/report time
+and the vehicle measurement time; never invent precise timing that is unavailable.
+
+On a temporary missing counter reading, preserve the last valid reference. A later
+continuous cumulative reading can recover delivery during the gap. On a counter
+reset or source change, preserve credited progress and begin a new measurement
+segment; energy spanning an unexplained discontinuity remains uncertain. Do not
+turn a negative counter difference into negative charging or credit a reset as
+delivery. A steady counter while charging is stopped is valid.
+
+The user confirmed the missing-progress fallback on9November2026: use a genuinely
+fresh vehicle SoC if available. If neither usable charger-energy progress nor fresh
+vehicle SoC is available, pause EV charging after the existing measurement watchdog
+expires, retain the task/progress and show a concise warning. ESS remains independent.
+Resume eligible task execution under existing source, peak, authority and charger
+guards once progress is usable again. These rules do not override charger incidents.
+
+The user requested root-cause analysis before choosing a phase-stability preference.
+The captured replacement demonstrates an incorrect execution-commitment assumption:
+snapshot construction fixes the current command/observed phase for135seconds, while
+the previous accepted plan continues executing. By new-plan admission the charger
+has changed from3to1phase, but34.55seconds of the new plan's fixed3-phase prefix
+remain. Adoption requests3phase and its following instruction requests1phase again.
+The model's phase-change terms score transitions without representing the actual
+stop/acknowledgement/restart energy gap. Its on/off continuity check sees nonzero
+charging on both sides, so active continuation review is not applicable; the coherent
+single-phase alternative is skipped because of the held3-phase prefix. This is
+confirmed for the supplied replacement, not every preceding screenshot gap.
+
+EV-A008 corrects those mechanisms:
+
+- Execution commitments used by a new snapshot must reflect the remaining accepted
+  instructions, actual acknowledged state and pending charger transitions. Do not
+  assume that the command seen at calculation start remains constant for the entire
+  calculation allowance while the old schedule continues executing. Preserve ordinary
+  execution and independent live protection during recalculation.
+- A replacement must not force a return to an obsolete phase solely to satisfy its
+  calculation-time prefix. Handle departures from a predicted execution commitment
+  through explicit live/admission sequencing within current authority. Preserve
+  immutable calculation inputs/results and independent validation; do not introduce
+  publication-time economic repair or reject a valid plan merely for a changed SoC.
+- Represent phase transition stop, acknowledgement and restart waits in executable
+  charging time, delivered energy and deadline comparisons. Existing go-e guards
+  remain in force. Continuity assessment must count the physical interruption of a
+  phase change even when both adjacent planned power values are nonzero. Cover the
+  held/partial interval and coherent-candidate paths, not just a final score penalty.
+- Use persistent go-e total-energy progress in subsequent planning inputs and fast
+  task execution. A new plan ID must not restart the same unmet requirement's energy
+  allowance. Carry relevant progress when a requirement changes without inventing
+  new authority. Keep reported vehicle SoC, counter-derived estimated gain and their
+  source/timing evidence distinguishable; original archived snapshots remain intact.
+- Provide a selectable actual HA total-energy sensor accepting declared Wh/kWh.
+  Preserve ESS operation when that mapping/progress is unavailable. Unknown vehicle
+  measurement timing cannot be replaced by an assumed HA polling timestamp. Where
+  a new SoC cannot be aligned reliably, retain credited progress and explicit
+  uncertainty; use the agreed watchdog fallback if neither progress source is usable.
+  Preserve existing away/unknown-return, source, quantity, peak and fault guards.
+
+No new minimum phase dwell, arbitrary phase lock, enlarged peak authority or increased
+production solve budget is part of this package. A general preference for the current
+phase remains unconfirmed and is not required to correct a hard obsolete commitment.
+Routine representation, state-storage and solver choices belong to implementation
+within these contracts; report a genuine uncovered policy conflict to the user.
+
+EV-A008 was authorized for implementation and release on9November2026 after the
+user reviewed the four-part scope and instructed “Ok, hand it off”. Acceptance coverage:
+
+1. Replay the supplied replacement state and fake go-e sequencer. Remove the
+   ineffective1→3→1 detour and its76s interruption while retaining permitted energy,
+   deadlines and live peak protection. The prior export remains unchanged evidence.
+2. Run a closed loop with repeated replans, counter increments and unchanged49% SoC.
+   Verify that credited energy persists, the same top-up is not repeatedly purchased,
+   and the active task finishes its authorized quantity. Include restarts, overlapping
+   goals, revisions, rounding, ordinary reconnects and existing unknown-return guards.
+3. Exercise real required phase changes as well as avoidable ones, including a
+   transition spanning plan adoption, delayed/missing acknowledgements, fractional
+   slots, a near deadline, unexpected house load and a constrained ESS. Requested
+   transitions must have feasible post-wait delivery; retain all existing stop waits.
+4. Verify Wh/kWh, genuine new SoC reconciliation, repeated old SoC reads, unavailable
+   timing, temporary counter gaps, counter/source resets, valid stationary readings,
+   fresh-SoC fallback, watchdog pause and guarded recovery. Credit each measured
+   increment once; do not invent energy across an unexplained discontinuity.
+5. Retain independent physical/source/economic audits and test varied grid/PV/travel
+   and held/partial scenarios under the existing seven-day/five-minute/120s limits.
+   Measure model/runtime changes rather than assuming new transition detail is free.
+   Verify native/standalone sensor mapping and concise progress/availability display.
+   Existing release checks remain required. The separately reported routed-fixture
+   timeout is not permission to relax acceptance or expand planner behavior.
+
+Implementation contracts in4.6.6:
+
+- Optional `Observation.ev_progress` retains reported stock, actual vehicle sample
+  time, counter read/source, estimated stock, credited gain, uncertainty and validity.
+  The persistent ledger is independent of plan/goal IDs. A stationary stopped counter
+  is usable; measured charging without advancement expires the existing watchdog and
+  remains blocked until real progress or a genuinely fresh vehicle sample recovers it.
+  Unknown-return protection remains in force. The optional SoC sensor attribute
+  `vehicle_observed_at` must be an actual vehicle sample time; absent timing is unknown.
+- A frozen `Snapshot.execution` records actual/pending charger state and segmented
+  accepted instructions, capped to their remaining task quantity. Legacy snapshots
+  omit this field and retain their original digest and arithmetic. A separate admitted
+  `execution_handover` continues the valid prior source through the frozen boundary,
+  intersecting current EV/ESS/conditional authority. It never repairs frozen flows.
+  Instruction hashes distinguish changed work from a publication-ID-only change;
+  the active absolute energy endpoint persists through restart and source pauses.
+- Requested integer current is distinct from average delivered power during waits.
+  A future phase switch reserves130s: stop acknowledgement30s, preparation10s,
+  selector acknowledgement30s, restart hold30s and start acknowledgement30s; current
+  confirmation overlaps the hold. These are conservative existing protocol allowances,
+  not measured installation latency. Same-phase restarts retain the remaining30s
+  restart hold. Waits cross partial intervals; joint source/converter/battery limits
+  constrain instantaneous delivery as well as average energy. An independent audit
+  reconstructs the timeline. Continuity counts physical phase interruptions.
+- Admission suppresses only an ineffective immediate-return phase prefix shorter
+  than the mandatory40s physical preparation/restart. It adds no phase preference or
+  dwell. Zero-energy phase preparation keeps force-off; a submitted selector write
+  remains pending until fresh acknowledgement or fault. Live peak/source/permission
+  and charger guards still determine actual charging. The counter determines actual
+  progress even when real acknowledgements complete earlier than the model reserve.
+
+The original hour's complete incident attribution remains limited by missing prior
+decisions/command history; synthetic regressions do not become installation evidence.
+Implemented in4.6.6 and verified offline; see VERIFICATION.md for results and limits.
+No live installation action is included.
+
 ### Live peak protection priority (EV-A004, 4.6.1)
 
 When an unexpected load change threatens the authorized quarter-hour peak, first

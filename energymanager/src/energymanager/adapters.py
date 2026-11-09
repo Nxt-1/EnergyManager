@@ -113,6 +113,8 @@ class HomeAssistantAdapter:
         if self.options.house_source == "separate_grid":
             shared = tuple(key for key in shared if key != "house_kw") + ("grid_import_kw", "grid_export_kw")
         keys = (*shared, "ev_soc", "ev_phases")
+        if self.entities.get("ev_total_kwh"):
+            keys += ("ev_total_kwh",)
 
         async def read(key: str) -> dict[str, Any] | Exception:
             try:
@@ -167,7 +169,15 @@ class HomeAssistantAdapter:
         ev_at = None
         try:
             ev_kwh = number("ev_soc") / 100 * c.ev_capacity_kwh
-            ev_at = self.inputs.readings["ev_soc"].reported_at
+            # HA report/change metadata is not the vehicle's measurement time.
+            # A source can explicitly supply that time; absent evidence stays unknown.
+            row = responses[keys.index("ev_soc")]
+            attributes = row.get("attributes", {}) if isinstance(row, dict) else {}
+            if isinstance(attributes, dict) and attributes.get("vehicle_observed_at"):
+                try:
+                    ev_at = instant(attributes["vehicle_observed_at"])
+                except (ValueError, TypeError, AttributeError):
+                    pass  # Invalid optional timing never becomes a fabricated sample time.
             ev_known = 0 <= ev_kwh <= c.ev_capacity_kwh
         except (ValueError, KeyError, TypeError):
             ev_kwh = self.last_observation.ev_kwh if self.last_observation else 0

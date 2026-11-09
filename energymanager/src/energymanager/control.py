@@ -13,6 +13,7 @@ from .domain import Capabilities, Observation, Policy, instant
 from .live_peak import LivePeak
 from .deadline_execution import DeadlineExecution, required_energy
 from .goe import GoEReadings, GoEControl, RESUME_DELAY_SECONDS
+from .execution import requested_mode
 
 
 @dataclass(frozen=True)
@@ -27,10 +28,11 @@ class Command:
     peak_limit_kw: float
     reason: str
     replan: bool = False
+    prepare_phase: bool = False
 
 
 class FastControl:
-    def __init__(self, capabilities: Capabilities, policy: Policy) -> None:
+    def __init__(self, capabilities: Capabilities, policy: Policy, task: dict[str, Any] | None = None) -> None:
         self.c = capabilities
         self.p = policy
         self.deviation_since: datetime | None = None
@@ -42,7 +44,7 @@ class FastControl:
         self.appliance_peak_limit: float | None = None
         self.peak = LivePeak(capabilities, policy)
         self.deadline_execution = DeadlineExecution()
-        self.ev_task: dict[str, Any] | None = None
+        self.ev_task = {**task, "execution_key": tuple(task["execution_key"])} if task else None
         self.peak_evidence: dict[str, Any] = {}
 
     def tick(
@@ -56,6 +58,14 @@ class FastControl:
         conditional_valid: bool = True,
     ) -> Command:
         c, p, o = self.c, self.p, observation
+        while plan and plan.get("execution_handover") and at < instant(plan["execution_handover"]["until"]):
+            handover = plan["execution_handover"]
+            ev_valid = ev_valid and handover["ev_valid"]
+            ess_valid = ess_valid and handover["ess_valid"]
+            conditional_valid = conditional_valid and handover["conditional_valid"]
+            plan = handover["plan"]
+        progress_usable = o.ev_progress is None or (bool(o.ev_progress.get("usable"))
+            and o.ev_progress.get("valid_until") is not None and at <= instant(o.ev_progress["valid_until"]))
         baseline = max(o.monthly_peak_kw, p.billing_floor_kw)
         limit = baseline
         fresh = (at - o.at).total_seconds() <= p.measurement_max_age_seconds and o.quality not in (
@@ -97,10 +107,11 @@ class FastControl:
         task_target: float | None = None
         source_limited = False
         carried_grid = False
-        execution_key = ((plan or {}).get("id"), self.deadline_execution.active)
-        if self.ev_task and (self.ev_task["execution_key"] != execution_key
+        grid_requested = False
+        execution_key = ((plan or {}).get("execution_id", (plan or {}).get("id")), self.deadline_execution.active)
+        if self.ev_task and (self.ev_task["execution_key"] != execution_key and progress_usable
                              or at >= instant(self.ev_task["deadline"])
-                             or o.ev_kwh >= self.ev_task["target"] - 1e-6 or not ev_valid):
+                             or o.ev_kwh >= self.ev_task["target"] - 1e-6):
             self.ev_task = None
         if plan and position is not None:
             f = plan["flows"]
@@ -135,6 +146,9 @@ class FastControl:
             )
             if f["one"][position] + f["three"][position] > 0.5:
                 phases = 3 if f["three"][position] > 0.5 else 1
+                requested, phases = requested_mode(plan, position, at, o.ev_phases, c)
+                if ev_valid:
+                    planned_ev = requested if plan.get("execution") else min(planned_ev, requested)
             else:
                 upcoming = next(
                     (
@@ -160,9 +174,10 @@ class FastControl:
                 planned_ev = 0.0
             if planned_ev > 1e-6:
                 task_end = position
-                while task_end + 1 < len(plan["intervals"]) and sum(
-                    f[name][task_end + 1] for name in ("pv_ev", "grid_ev", "solar_dis_ev")
-                ) > 1e-5:
+                while task_end + 1 < len(plan["intervals"]) and (
+                    f["one"][task_end + 1] + f["three"][task_end + 1] > .5
+                    if plan.get("execution") else sum(f[name][task_end + 1]
+                    for name in ("pv_ev", "grid_ev", "solar_dis_ev")) > 1e-5):
                     task_end += 1
                 target = f["ev_energy"][task_end + 1]
                 end_at = plan["intervals"][task_end]["end"]
@@ -176,9 +191,14 @@ class FastControl:
                 expiry = max(deadlines) if deadlines else end_at
                 if self.deadline_execution.active:
                     target = min(target, required_energy(plan["deadline_guard"], at))
+                source_slot = position
+                if plan.get("execution") and sum(f[name][position] for name in ("pv_ev", "grid_ev", "solar_dis_ev")) < 1e-6:
+                    source_slot = next((t for t in range(position, task_end + 1)
+                        if sum(f[name][t] for name in ("pv_ev", "grid_ev", "solar_dis_ev")) > 1e-6), position)
+                grid_requested = f["grid_ev"][source_slot] > 1e-5
                 self.ev_task = {"plan_id": plan["id"], "execution_key": execution_key,
                                 "target": target, "deadline": expiry, "scheduled_end": end_at,
-                                "power": planned_ev, "phases": phases, "grid": f["grid_ev"][position] > 1e-5}
+                                "power": planned_ev, "phases": phases, "grid": grid_requested}
             elif self.ev_task and plan["intervals"][position]["available"]:
                 # Finish this task's remaining quantity after a late physical response.
                 # A later goal never raises this saved endpoint; a replacement is reviewed
@@ -192,14 +212,17 @@ class FastControl:
                 if task_complete:
                     planned_ev = 0.0
                 else:
-                    planned_ev = min(planned_ev, max(0.0, task_target - o.ev_kwh) / c.ev_efficiency
-                                     / max(p.control_period_seconds, 1) * 3600)
+                    finish_kw = max(0.0, task_target - o.ev_kwh) / c.ev_efficiency / max(p.control_period_seconds, 1) * 3600
+                    minimum_kw = c.minimum_current_a * phases * c.voltage / 1000
+                    # Close a sub-tick residual with one executable current quantum;
+                    # do not invent stock or strand it below the minimum current.
+                    planned_ev = min(planned_ev, max(minimum_kw, finish_kw))
             forecast_fresh = (
                 at - instant(plan.get("forecast_at", at.isoformat()))
             ).total_seconds() <= p.forecast_max_age_seconds
             if (not forecast_fresh or not conditional_valid) and not eligible:
                 planned_ev = 0.0
-            if f["grid_ev"][position] > 1e-5 or carried_grid:
+            if f["grid_ev"][position] > 1e-5 or carried_grid or grid_requested:
                 limit = max(
                     [baseline, p.automatic_peak_kw]
                     + [
@@ -333,7 +356,8 @@ class FastControl:
         else:
             self.deviation_since = None
         # An optional task cannot purchase direct grid energy during a sustained source loss.
-        if plan and position is not None and plan["flows"]["grid_ev"][position] < 1e-5 and not carried_grid:
+        if (plan and position is not None and plan["flows"]["grid_ev"][position] < 1e-5
+                and not carried_grid and not grid_requested):
             eligible_discharge = min(
                 available_discharge,
                 max(0, o.ess_kwh - c.ess_min_kwh - o.ess_grid_kwh - protected_solar)
@@ -344,11 +368,16 @@ class FastControl:
             source_limit = max(0, solar_source - (0 if conditional else o.house_kw))
             source_limited = source_limit < ev - 1e-6
             ev = min(ev, source_limit)
-        if not o.ev_phase_known or not o.connected or not ev_valid or not o.ev_state_known:
+        if not o.ev_phase_known or not o.connected or not ev_valid or not o.ev_state_known or not progress_usable:
             ev = 0.0
         amps = min(c.maximum_current_a, math.floor((ev + 1e-9) * 1000 / (c.voltage * phases)))
         if amps < c.minimum_current_a:
             amps = 0
+        prepare_phase = bool(plan and plan.get("execution") and position is not None
+            and f["one"][position] + f["three"][position] > .5 and task_target is not None
+            and o.ev_kwh < task_target - 1e-6 and not amps and ev_valid and o.ev_state_known
+            and o.ev_phase_known and o.connected and progress_usable and (forecast_fresh or eligible)
+            and (conditional_valid or eligible or grid_requested or carried_grid))
         ev = amps * phases * c.voltage / 1000
         # Recompute ESS after EV reductions; never intentionally export stored energy.
         if ess > 0:
@@ -361,6 +390,7 @@ class FastControl:
         reason = (
             "Charger phase information unavailable; EV paused, ESS balancing continues"
             if not o.ev_phase_known
+            else "EV paused: charging progress unavailable" if not progress_usable
             else
             "Quarter-hour peak protection"
             if emergency
@@ -382,6 +412,7 @@ class FastControl:
             limit,
             reason,
             plan is not None and position is None,
+            prepare_phase,
         )
 
 
@@ -513,7 +544,7 @@ class GuardedActuator:
         self.command_generation, self.command_plan = command.generation, command.plan_id
         if not all(self.entities.get(name) for name in ("force", "phase", "current", "ess_setpoint")):
             raise ValueError("Incomplete actuator mapping")
-        if self.fault_until and command.at < self.fault_until and command.current_a:
+        if self.fault_until and command.at < self.fault_until and (command.current_a or command.prepare_phase):
             return
         if not observation.ev_phase_known:
             self.phase = None

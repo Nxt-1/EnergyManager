@@ -108,13 +108,13 @@ class LiveInputs:
         units = {key: "kW" for key in (
             "house_kw", "pv_ac_kw", "pv_dc_kw", "ev_kw", "ess_kw", "grid_import_kw",
             "grid_export_kw", "monthly_peak_kw")}
-        units.update(ev_soc="%", ess_soc="%",
+        units.update(ev_soc="%", ess_soc="%", ev_total_kwh="kWh",
                      quarter_import_kwh="kWh" if self.options.quarter_source == "energy" else "kW")
         self.readings = {}
         for key, row in values.items():
             self.readings[key] = Reading.parse(self.entities[key], row, received_at, units.get(key),
                 self.maximum_read_age, nonnegative=key in ("pv_ac_kw", "pv_dc_kw", "grid_import_kw",
-                    "grid_export_kw", "quarter_import_kwh", "monthly_peak_kw"))
+                    "grid_export_kw", "quarter_import_kwh", "monthly_peak_kw", "ev_total_kwh"))
 
     def number(self, key: str, at: datetime) -> float:
         return float(self.readings[key].require(at))

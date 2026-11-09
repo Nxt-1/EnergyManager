@@ -18,7 +18,7 @@ class ChargingTiming:
         values = self.model.warm_from(flows)
         adjustable = {"one", "three", "amps_one", "amps_three", "grid_ev", "ev_energy",
                       "grid_cumulative", "grid_direction", "start", "phase_setting", "phase_change",
-                      "phase_restart", "variation", "causal_witness"}
+                      "phase_restart", "variation", "causal_witness", "restart_wait", "execution_loss"}
         for name, indexes in m.variables.items():
             if name in adjustable or name == "rolling_cash_prefix" or name.startswith(("quarter_", "rolling_quarter_")):
                 continue
@@ -49,6 +49,10 @@ class ChargingTiming:
             elif on:
                 sessions[-1] = (sessions[-1][0], t + 1)
         best = model.warm_from(flows)
+        if s.execution is not None:
+            # The timing MILP recomputes delivery waits and source rates together.
+            # Moving average-power arrays alone would invent energy at a new start.
+            return best
         previous_end = 0
         for left, right in sessions:
             if monotonic() >= deadline:

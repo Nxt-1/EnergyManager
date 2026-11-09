@@ -1,4 +1,5 @@
 import {connectionIcon, evFaultText, evIncidentTime, powerText, watts} from './display.js';
+import {historyReading} from './ha-history.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -187,6 +188,16 @@ export function evStatusMarkup(state, interaction = {}) {
     ['Device status age (s)', model.states.heartbeat, 'heartbeat'],
     ['HA read', time(model.charger?.at), null], ['Device frame', time(model.charger?.device_at), null]
   ];
+  const progress = state.observation?.ev_progress;
+  const progressUsable = progress?.usable && Date.parse(state.now) <= Date.parse(progress.valid_until);
+  const progressMarkup = progress ? `<div class="ev-progress-status">
+    <span title="Estimated stored energy using the configured charging efficiency; distinct from reported vehicle SoC.">Estimated charge ≈ ${Number(progress.estimated_kwh).toFixed(2)} kWh</span>
+    <span> · go-e total ${historyReading(progress.counter_kwh === null ? '— kWh' : `${Number(progress.counter_kwh).toFixed(3)} kWh`,
+      [progress.entity_id], {native:!!interaction.entities,demo:model.demo,label:'go-e Total energy'})}</span>
+    ${!progressUsable ? '<span class="error" role="status"> · Progress unavailable · EV paused</span>' : progress.uncertain ? '<span title="Baseline or measurement timing remains uncertain; credited progress is retained."> ◐</span>' : ''}
+    <details data-ev-progress${interaction.progressExpanded ? ' open' : ''}><summary data-ev-progress-summary="true">Progress sources</summary><p>Reported vehicle: ${progress.reported_kwh === null ? '—' : Number(progress.reported_kwh).toFixed(2)} kWh · Vehicle sample: ${progress.vehicle_observed_at ? esc(time(progress.vehicle_observed_at)) : 'Unknown'}<br>
+    Counter read: ${esc(time(progress.counter_at))} · Estimated battery gain credited: ${Number(progress.credited_kwh).toFixed(3)} kWh · ${esc(progress.source)}${progress.uncertain ? ' · Unaligned or missing energy remains uncertain.' : ''}</p></details>
+    </div>` : '';
   const diagnostics = model.diagnostics.map(field => {
     const raw = field.key === 'connected' ? null : model.states[field.key];
     const text = field.text === 'Unverified' && raw !== null && raw !== undefined ?
@@ -198,6 +209,7 @@ export function evStatusMarkup(state, interaction = {}) {
       <div class="ev-state-label"><i></i><strong>${esc(model.status)}</strong></div>
       ${!activity || ['fault', 'warning'].includes(model.tone) ? `<div class="ev-status-verdict"><strong>${esc(model.summary)}</strong>${model.reason ? `<p class="ev-status-reason">${esc(powerText(model.reason))}</p>` : ''}</div>` : ''}
       ${activity}
+      ${progressMarkup}
       <div class="ev-combined-layout">
       <div class="ev-flow ${model.flowing ? 'ev-flowing' : ''}">
         <svg aria-hidden="true" viewBox="0 0 500 150" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
