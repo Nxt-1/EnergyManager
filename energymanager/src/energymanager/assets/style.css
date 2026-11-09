@@ -876,6 +876,15 @@ em-entity-picker > input { padding-right:36px; }
 .profile-program-icon { display:flex; align-items:center; justify-content:center; width:44px; min-height:44px; padding:10px; }
 #profiles-panel .profile-program-icon svg { width:22px; height:22px; }
 .profile-program-icon:disabled { opacity:.45; cursor:default; }
+.profile-recorder-status { flex-basis:100%; margin:0; font-size:13px; overflow-wrap:anywhere; }
+.profile-recorder-status[hidden] { display:none; }
+.profile-recorder-status[data-state="ready"] { color:#087a46; font-weight:600; }
+.profile-recorder-status[data-state="recording"] { color:var(--accent); }
+.profile-recorder-status[data-state="unavailable"] { color:#98630c; }
+@media(prefers-color-scheme:dark) {
+  .profile-recorder-status[data-state="ready"] { color:#76dfad; }
+  .profile-recorder-status[data-state="unavailable"] { color:#f5c56a; }
+}
 .profile-form .profile-check { display:flex; align-items:center; gap:10px; flex-basis:100%; }
 .profile-check input { width:auto; }
 .profile-recording { padding:12px 0; border-bottom:1px solid var(--line); overflow-wrap:anywhere; }

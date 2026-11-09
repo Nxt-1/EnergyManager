@@ -1850,3 +1850,93 @@ test('metadata errors retain typed names and original conflict revision across a
   assert.ok(record.disabled && !name.disabled);
   assert.equal(page.library.revision,15);
 });
+
+
+import {recorderFeedback} from '../src/energymanager/assets/appliance-profiles.js';
+
+function recorderFixture(changes = {}) {
+  return {now:'2026-11-09T12:00:10Z',maximum_gap_seconds:15,bosch:{enabled:false},
+    programs:{washing_machine:{whites_60:'Whites 60°C',darks_40:'Darks 40°C'}},
+    recordings:[{id:'synthetic-active',machine:'washing_machine',program:'whites_60',status:'armed',
+      idle_seen:false,last_at:null,last_power_w:null,error:null,...changes}]};
+}
+
+test('manual recorder feedback follows the actual capture through waiting, idle and recording with real zero watts', () => {
+  const library = recorderFixture();
+  assert.match(recorderFeedback(library,'washing_machine').text,/Whites 60°C · Waiting for idle · Power unavailable/);
+  Object.assign(library.recordings[0],{last_at:library.now,last_power_w:1500});
+  assert.match(recorderFeedback(library,'washing_machine').text,/Waiting for idle · 1500 W/);
+  Object.assign(library.recordings[0],{last_power_w:0,idle_seen:true});
+  const ready = recorderFeedback(library,'washing_machine');
+  assert.equal(ready.state,'ready');
+  assert.match(ready.text,/Ready to record · Idle detected — start the machine · 0 W/);
+  Object.assign(library.recordings[0],{status:'recording',last_power_w:1800});
+  assert.match(recorderFeedback(library,'washing_machine').text,/Whites 60°C · Recording · 1800 W/);
+  assert.equal(recorderFeedback(library,'dishwasher'),null);
+});
+
+test('missing, failed, stale and restarted recorder evidence never shows ready or fabricates zero', () => {
+  const changes = [
+    {last_power_w:null}, {last_power_w:'0'}, {last_power_w:NaN}, {last_at:null},
+    {last_at:'2026-11-09T11:59:00Z'}, {last_at:'2026-11-09T12:01:00Z'},
+    {error:'Power read failed'}, {status:undefined}, {idle_seen:false,last_at:null,error:'Service restarted while armed'},
+  ];
+  for (const change of changes) {
+    const feedback = recorderFeedback(recorderFixture({last_at:'2026-11-09T12:00:10Z',last_power_w:0,idle_seen:true,...change}),'washing_machine');
+    assert.equal(feedback.state,'unavailable');
+    assert.doesNotMatch(feedback.text,/Ready|0 W/);
+    assert.match(feedback.text,/unavailable/);
+  }
+  const good = recorderFixture({last_at:'2026-11-09T12:00:10Z',last_power_w:5,idle_seen:true});
+  assert.equal(recorderFeedback(good,'washing_machine',15).state,'ready');
+  assert.equal(recorderFeedback(good,'washing_machine',15.01).state,'unavailable');
+  assert.equal(recorderFeedback(good,'washing_machine',0,false).state,'unavailable');
+  assert.equal(recorderFeedback({...good,sampler_error:'Recorder stopped'},'washing_machine').state,'unavailable');
+  assert.equal(recorderFeedback({...good,now:null},'washing_machine').state,'unavailable');
+  assert.equal(recorderFeedback({...good,recordings:undefined},'washing_machine').state,'unavailable');
+  // A successful current read is enough; unchanged historical HA report metadata adds no gate or dwell.
+  Object.assign(good.recordings[0],{last_changed:'2020-01-01',last_reported:'2020-01-01'});
+  assert.equal(recorderFeedback(good,'washing_machine').state,'ready');
+});
+
+test('completed captures and Bosch automatic runs have no manual recorder indicator', () => {
+  for (const status of ['review','saved','cancelled','discarded']) {
+    assert.equal(recorderFeedback(recorderFixture({status}),'washing_machine'),null);
+  }
+  assert.equal(recorderFeedback(recorderFixture({source:'bosch'}),'washing_machine'),null);
+  assert.equal(recorderFeedback({bosch:{enabled:true}},'dishwasher'),null);
+});
+
+test('recorder status failure and recovery update only the indicator while preserving drafts and review', async t => {
+  const indicator = {dataset:{recorderStatus:'washing_machine'},textContent:'',hidden:true};
+  const message = {textContent:''};
+  const draft = {name:'Unsubmitted program',notes:'Keep notes',start:1,end:9};
+  const page = Object.create(ApplianceProfilesPage.prototype);
+  Object.assign(page,{library:recorderFixture({last_at:'2026-11-09T12:00:10Z',last_power_w:0,idle_seen:true}),
+    libraryObservedAt:performance.now(),mounted:true,signal:{aborted:false},
+    root:{querySelectorAll:()=>[indicator],querySelector:()=>message},reviewed:draft,
+    renderManualPrograms(){},renderRecordings(){},renderBosch(){},
+    api:async()=>{throw new Error('Synthetic status failure');}});
+  page.renderRecorderStatus();
+  assert.equal(indicator.dataset.state,'ready');
+  await page.refresh();
+  assert.match(indicator.textContent,/Recorder status unavailable/);
+  page.api=async()=>page.library;
+  await page.refresh();
+  assert.equal(indicator.dataset.state,'ready');
+  assert.equal(page.reviewed,draft);
+  assert.deepEqual(draft,{name:'Unsubmitted program',notes:'Keep notes',start:1,end:9});
+  assert.equal(message.textContent,'');
+  page.api=async()=>({...page.library,sampler_error:'Synthetic recorder stopped'});
+  await page.refresh();
+  assert.equal(indicator.dataset.state,'unavailable');
+  page.api=async()=>({...page.library,sampler_error:null});
+  await page.refresh();
+  assert.equal(indicator.dataset.state,'ready');
+  assert.equal(message.textContent,'');
+  let clock = 10000;
+  t.mock.method(performance,'now',()=>clock);
+  page.api=async()=>{clock+=16000;return page.library;};
+  await page.refresh();
+  assert.equal(indicator.dataset.state,'unavailable');
+});

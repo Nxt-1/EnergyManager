@@ -23,3 +23,6 @@ main { max-width:none; padding:0; }
 :host(.planning) .layout { display:block; }
 :host(.planning) aside { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; }
 @media(max-width:950px) { :host(.planning) aside { grid-template-columns:1fr; } }
+
+.profile-recorder-status[data-state="ready"] { color:var(--success-color,color-mix(in srgb,#16b46c 60%,var(--primary-text-color,#263440))); }
+.profile-recorder-status[data-state="unavailable"] { color:var(--warning-color,color-mix(in srgb,#d39725 60%,var(--primary-text-color,#263440))); }

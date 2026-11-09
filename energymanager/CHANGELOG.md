@@ -1,3 +1,9 @@
+## 4.6.7 — Manual recorder readiness and power
+
+- Show the active capture's program, waiting/confirmed idle readiness/recording and latest watts beneath Record next cycle.
+- Withdraw Ready on missing, failed or stale evidence; recover from fresh reads and retain existing restart/detection rules.
+- Preserve input/trim drafts, Bosch automatic capture and released EV behavior. Verified with local synthetic endpoints.
+
 ## 4.6.6 — EV execution and measured charging progress
 
 - Follow the accepted charging trajectory during recalculation and handover; avoid returning to an obsolete phase prefix.

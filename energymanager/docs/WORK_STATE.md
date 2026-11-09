@@ -105,6 +105,54 @@ requirements rather than replaying every historical checkpoint.
   NEXT: preserve concurrent primary edits, integrate/push4.6.5 and verify exact-commit
   CI/publication. Remote results belong in ignored artifacts/v465-release-state.json.
   No live installation/database/provider/hardware/notification/deployment access.
+  **V45-A003 — recorder readiness feedback (9 November):** read-only inspection confirms
+  idle_seen/latest power are already exposed, but the static armed message does not
+  reflect idle confirmation, status sits inside foldable groups and power is in Details.
+  The user chose one clear live indicator beneath Record next cycle in the expanded
+  card. Scope/completion criteria are in ARCHITECTURE.md: show the active program,
+  waiting/ready/recording and latest power, with unavailable/stale evidence withdrawing
+  false readiness. Preserve backend detection contracts. The user authorized the handoff
+  on 9 November only after the V4.6 EV implementation finishes. At the check, registered
+  EV chat `01a1b64b-a1fe-74d2-a393-afe7ed1aeb39` (host local) was active on EV-A008,
+  running full regression; release/completion was not established. Initial wait cursor
+  `39e28cfb-4863-4864-b760-6d8463898837:8`. Do not dispatch to the V4.5 implementation
+  chat before confirmed EV-A008 completion. Quiet heartbeat watch
+  `hand-off-recorder-feedback-after-ev-completion` checked every five minutes and was
+  deleted after the confirmed dependency completion and handoff below. It did not
+  resume EV work or dispatch the recorder package early.
+  **Completion-watch blocker, 9 November:** EV chat wait cursor
+  `39e28cfb-4863-4864-b760-6d8463898837:18` reports the EV-A008 turn failed at its
+  usage limit before final dashboard/release completion. Main remains4.6.5/0ea0dfb.
+  The user was notified that EV implementation needs resuming; this is not completion
+  and V45-A003 has not been dispatched. Keep the existing dependency watch, without
+  automatically resuming EV or repeating the same usage-limit notification.
+  **Dependency satisfied, 9 November:** EV chat wait cursor
+  `39e28cfb-4863-4864-b760-6d8463898837:23` reports its turn completed and explicitly
+  confirms4.6.6 released as068307cbc1319aaff0fa80d4e24c68a342a084b5. Reported checks:
+  796Python/102frontend, successful CI and image publication; no installation deployment.
+  Primary main independently matches that release commit. The earlier usage-limit stop
+  above is historical. The user prompted continuation and the recorded conditional
+  handoff was delivered to registered V4.5 implementation chat
+  `01a174ba-43a6-7680-9dff-a5828471be00` (host local). The completed watch was deleted
+  after successful delivery.
+  **A003 implementation checkpoint:** main4.6.6/068307c incorporated before target4.6.7.
+  Implemented one expanded-form live manual recorder indicator, actual capture program/
+  watts, positive idle readiness and explicit missing/stale/failed feedback. API failures,
+  delayed responses and elapsed gap age cannot retain Ready. Static armed text removed;
+  backend detector/HA-read rules, Bosch automatic feedback and released EV code unchanged.
+  Verification:113focused Python cases2.33s;106frontend cases, Ruff/mypy61modules and
+  all packaged JS syntax pass. New cases cover read evidence/unchanged HA timestamps,
+  restart, real zero vs missing power, expired status/measurement, recovery and latency.
+  Both-dashboard local browser flow: waiting→ready→recording, selector-independent
+  program/1500→0→1800W, missing reads/status failure/recovery, paused-read staleness and
+  armed recorder restart requiring new idle. Unsaved name/notes/review1second trim
+  survive; original keyboard start→2seconds and end field→handle9seconds stay linked.
+  No collapsed-card duplicate; native light/dark cues and captured browser logs verified.
+  Configured fake E2E25.993s/2019intervals/max control4.244ms/four fake calls passes.
+  Wheel/sdist88runtime files byte-match source; isolated4.6.7 import passes.
+  NEXT: preserve current primary drafts, ready-release integration/push and exact-commit
+  CI/publication. Remote outcomes go in ignored artifacts/v467-release-state.json.
+  No live HA/database/provider/hardware/phone or installation deployment access.
   Shared UI direction agreed 2 November: most/potentially all appliances on one page,
   initially shown as relatively large icon cards with relevant information/controls;
   clicking a card opens full appliance information. Card content/detail form pending.

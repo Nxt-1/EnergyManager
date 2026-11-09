@@ -724,3 +724,45 @@ async def test_program_api_origin_revision_and_metadata_edits_never_send_applian
             "revision": created["library"]["revision"], "machine": "washing_machine", "program": created["program"]["id"], "name": "SYNTHETIC Handwash renamed"})
         assert response.status == 200 and not calls
         assert (await response.json())["program"]["id"] == created["program"]["id"]
+
+
+
+async def test_manual_readiness_library_evidence_recovers_from_failed_read_and_restart(profiles):
+    """SYNTHETIC local reads: unchanged HA report times do not change recorder rules."""
+    value = "0.005"
+    async def state(request):
+        return web.json_response({"state": value, "attributes": {"unit_of_measurement": "kW"},
+                                  "last_changed": "2020-01-01T00:00:00Z", "last_reported": "2020-01-01T00:00:00Z"})
+    fake = web.Application()
+    fake.router.add_get("/states/{entity}", state)
+    from energymanager.adapters import HomeAssistantAdapter
+    async with TestServer(fake) as server:
+        async with HomeAssistantAdapter(str(server.make_url('/')), {}) as ha:
+            profiles.app.ha = ha
+            identity = arm(profiles)
+            initial = profiles.library()["recordings"][0]
+            assert initial["last_at"] is None and initial["last_power_w"] is None and not initial["idle_seen"]
+            for second in (0, 5):
+                profiles.app.now = lambda second=second: AT + timedelta(seconds=second)
+                await profiles._sample(profiles.get(identity))
+                row = profiles.library()["recordings"][0]
+                assert row["status"] == "armed" and row["idle_seen"] and row["last_power_w"] == 5
+                assert row["last_at"] == profiles.library()["now"]
+            value = "unavailable"
+            profiles.app.now = lambda: AT + timedelta(seconds=10)
+            await profiles._sample(profiles.get(identity))
+            row = profiles.library()["recordings"][0]
+            assert row["last_power_w"] is None and not row["idle_seen"] and row["error"]
+            value = "0"
+            profiles.app.now = lambda: AT + timedelta(seconds=15)
+            await profiles._sample(profiles.get(identity))
+            assert profiles.get(identity)["idle_seen"]
+            restored = ApplianceProfiles(profiles.app)
+            row = restored.library()["recordings"][0]
+            assert not row["idle_seen"] and row["last_at"] is None
+            for second, value in ((20, "1.8"), (25, "0"), (30, "1.8")):
+                profiles.app.now = lambda second=second: AT + timedelta(seconds=second)
+                await restored._sample(restored.get(identity))
+                row = restored.library()["recordings"][0]
+                assert row["status"] == ("recording" if second == 30 else "armed")
+            assert row["program"] == "eco" and row["last_power_w"] == 1800 and row["error"] is None

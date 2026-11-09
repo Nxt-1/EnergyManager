@@ -1,5 +1,39 @@
 # EnergyManager 4 verification
 
+## 4.6.7 — V45-A003 recorder readiness feedback (9 November2026)
+
+Based on released main4.6.6/068307c, preserving complete EV-A008 execution/progress code.
+Application changes are shared recorder feedback and scoped theme styling; no detector,
+backend storage, HA timestamp gate, idle dwell, hardware or start-policy change.
+
+- 113focused profile/Bosch/run/native Python cases pass2.33s. One new local fake HA
+  case verifies exposed first-read/idle/failed-read/restart evidence with available
+  unchanged historical HA report times, current read timestamps and the actual program.
+- 106frontend cases pass. New feedback cases cover waiting/ready/recording, true zero,
+  absent/invalid/failed/stale power/status, sampler errors, delayed responses, recovery,
+  completed/Bosch exclusion and retained draft/review references. Existing graph grip,
+  cursor/zoom/pan, groups and EV/source-history cases remain covered.
+- Ruff/mypy61modules, all packaged JS syntax, wheel/sdist4.6.7 and isolated import pass;
+  all88runtime files match source bytes. Final package evidence is in ignored
+  artifacts/a003-package-verification.json.
+- Both-dashboard synthetic browser flow shows initial unavailable, waiting at1500W,
+  explicit idle readiness at0W and Recording at1800W, while a different selector never
+  relabels the capture. Missing power, HTTP status failure and paused-read staleness
+  withdraw Ready and recover. Recorder restart clears idle/observation evidence;1500W
+  still waits, then fresh0→1800W starts. No collapsed-card indicator; native light/dark
+  cues inspected. Name/notes and the open1second trim survive all updates; keyboard
+  start→2seconds and end field→handle9seconds stay linked. Browser logs are empty.
+  Native HA built-ins, readings and restart are simulated; no physical hardware claim.
+- Configured local fake E2E passes25.993s/2019intervals/max control4.244ms/four fake
+  service calls, including original worker cancellation/replacement and persisted plan
+  recovery. Timings are synthetic integration evidence, not installation performance.
+
+Browser harness and checkpoints are ignored artifacts; no synthetic control endpoint
+is shipped. Screenshots recorder-ready-native.png and recorder-recording-native.png
+remain in this chat's visualization directory. Full Python/routed/container release
+checks run in CI. Exact-head remote outcomes go in the ignored release checkpoint and
+final reply, without a follow-up documentation-only commit. No live access/deployment.
+
 ## 4.6.6 — EV-A008 execution and counter progress (9 November2026)
 
 Based on released main4.6.5/0ea0dfb. All measurements, counters, endpoints and actuator

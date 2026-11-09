@@ -1,5 +1,19 @@
 # Current requirements and decisions
 
+- 9 November 2026, V45-A003 recorder readiness feedback. The user wants visible
+  confirmation of idle detection and the latest power while manually arming a recording.
+  They chose one clear location rather than repeating it on the collapsed card: place
+  the live status beneath Record next cycle. Preserve current recorder detection rules.
+  The user subsequently authorized implementation handoff only after the V4.6 EV
+  implementation finishes. EV-A008 was the active task at authorization; no early
+  dispatch or concurrent implementation of this feedback change is authorized.
+  Its completion/release was confirmed on 9 November as4.6.6/068307c with CI and image
+  publication passing, satisfying the condition for the recorder-feedback handoff.
+  Implemented in4.6.7 using existing capture/read timestamps and the15second gap bound,
+  with browser monotonic/request-age checks and no new detector/HA freshness policy.
+  Both dashboards retain drafts and clear misleading Ready on missing/stale evidence.
+  Verification uses local fake reads, status failures and recorder restart only.
+
 - 9 November2026, EV-A008 charging-progress source: the user confirms both go-e
   energy sensors are available and selects cumulative Total energy (`eto`) as the
   primary measurement, since either counter requires a progress baseline. This

@@ -1,5 +1,24 @@
 # Run, configure, review and roll back
 
+## Manual recorder readiness (4.6.7 / V45-A003)
+
+Expand the washing machine (or an available manual recorder), select the program and
+choose Record next cycle. Directly beneath it, Waiting for idle shows the armed program
+and latest watts. Before the first successful read, power is explicitly unavailable.
+Ready to record / Idle detected — start the machine confirms idle has actually been
+observed. Starting the machine then changes the indicator to Recording with measured
+power. Changing the selector does not change the already armed capture's identity.
+
+Unavailable reads/status or evidence older than the existing15second gap withdraw
+Ready; an unavailable value is never0W. After recorder restart, new idle evidence is
+required. Available unchanged HA sensor states remain valid. Existing five-second
+sampling, thresholds, idle completion and recording review rules remain unchanged.
+The indicator appears only in the expanded recording form; Bosch automatic feedback
+remains separate. Name, notes and open trim drafts survive live status updates.
+
+Offline checks use deterministic local/fake endpoints and isolated synthetic stores;
+no installation commissioning or remote machine start is implied by readiness.
+
 ## EV progress and execution (4.6.6 / EV-A008)
 
 Map the actual go-e Total energy (`eto`) sensor under Measurements, save and restart;

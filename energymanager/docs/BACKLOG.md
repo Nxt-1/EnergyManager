@@ -145,6 +145,18 @@ Raw recordings are retained, and review graphs support linked trim handles and z
 Appliance scheduling remains deferred.
 The maintained architecture records these confirmed requirements and open decisions.
 
+9 November recorder feedback follow-up (V45-A003): the user wants positive confirmation
+that idle has been observed and visibility of latest power after arming. They selected
+one clear location, directly beneath Record next cycle in the expanded card, without
+duplicating it on the collapsed card. Show waiting/ready/recording and unavailable states
+from existing recorder evidence, preserving its detection logic. Scope/completion criteria
+are in ARCHITECTURE.md. The user authorized handoff on 9 November, conditional on
+the current V4.6 EV implementation (EV-A008 at authorization) finishing first.
+EV-A008 is now confirmed complete as4.6.6 with CI/publication successful. The authorized
+recorder-feedback change is implemented in4.6.7 from that released base, verified with
+local synthetic readings/faults/restart. Broader appliance changes remain separate;
+see WORK_STATE.md.
+
 On 1 November 2026 the user agreed to a user-managed appliance/program library,
 with scheduling support determined by operating behavior. Initial support is for
 manually started, uninterrupted program cycles; other equipment needs its own

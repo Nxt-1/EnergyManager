@@ -12,6 +12,30 @@ const programLabel = value => {
 };
 const decimal = (value, digits = 2) => value === null || value === undefined ? '—' : Number(value).toFixed(digits);
 
+export function recorderFeedback(library, machine, elapsedSeconds = 0, statusAvailable = true) {
+  if (machine === 'dishwasher' && library.bosch?.enabled) return null;
+  const unavailable = program => ({state:'unavailable', text:`⚠ ${program ? program+' · ' : ''}Recorder status unavailable · Power unavailable`});
+  if (!Array.isArray(library.recordings)) return unavailable('');
+  const recording = library.recordings.find(row => row.machine === machine && row.source !== 'bosch'
+    && !['saved','review','cancelled','discarded'].includes(row.status));
+  if (!recording) return null;
+  const program = library.programs?.[machine]?.[recording.program] ?? recording.program ?? '';
+  const snapshotAt = Date.parse(library.now), maximumAge = library.maximum_gap_seconds;
+  if (!statusAvailable || library.sampler_error || !['armed','recording'].includes(recording.status)
+      || !Number.isFinite(snapshotAt) || !Number.isFinite(maximumAge) || maximumAge <= 0
+      || !Number.isFinite(elapsedSeconds) || elapsedSeconds < 0 || elapsedSeconds > maximumAge) return unavailable(program);
+  // Compare recorder read times with backend time, advanced by monotonic browser elapsed time.
+  // HA last_changed/last_reported do not establish the age of an available unchanged read.
+  const age = (snapshotAt - Date.parse(recording.last_at))/1000 + elapsedSeconds;
+  const measured = Number.isFinite(recording.last_power_w) && recording.last_power_w >= 0
+    && !recording.error && Number.isFinite(age) && age >= 0 && age <= maximumAge;
+  if (!measured) return {state:'unavailable', text:`⚠ ${program} · ${recording.status === 'recording' ? 'Recording' : 'Waiting for idle'} · Power unavailable${age > maximumAge ? ' (stale)' : ''}`};
+  const watts = `${Math.round(recording.last_power_w)} W`;
+  if (recording.status === 'recording') return {state:'recording',text:`● ${program} · Recording · ${watts}`};
+  if (recording.idle_seen === true) return {state:'ready',text:`✓ ${program} · Ready to record · Idle detected — start the machine · ${watts}`};
+  return {state:'waiting',text:`◷ ${program} · Waiting for idle · ${watts}`};
+}
+
 const programIcon = action => {
   const paths = {add:'M12 5v14M5 12h14', rename:'m16 3 5 5-12 12-6 1 1-6Z M14 5l5 5',
     save:'m5 12 4 4L19 6', cancel:'m6 6 12 12M18 6 6 18'};
@@ -66,6 +90,8 @@ export class ApplianceProfilesPage {
       if (card) this.expand(card.dataset.applianceCard);
 
     }, {signal});
+    this.statusTimer = setInterval(() => { if (this.visible) this.renderRecorderStatus(); }, 1000);
+    signal.addEventListener('abort', () => clearInterval(this.statusTimer), {once:true});
     this.timer = setInterval(() => { if (this.visible) this.refresh(); }, 5000);
     signal.addEventListener('abort', () => clearInterval(this.timer), {once: true});
   }
@@ -73,7 +99,7 @@ export class ApplianceProfilesPage {
   setVisible(visible) {
     const newlyVisible = visible && !this.visible;
     this.visible = visible;
-    if (newlyVisible) this.refresh();
+    if (newlyVisible) { this.renderRecorderStatus(); this.refresh(); }
   }
 
   async perform(action) {
@@ -103,16 +129,27 @@ export class ApplianceProfilesPage {
   async refresh() {
     if (this.loading || this.signal.aborted) return;
     this.loading = true;
+    const requestedAt = performance.now();
     try {
       const library = await this.api('profiles');
-      if (this.signal.aborted || this.library && library.revision < this.library.revision) return;
+      if (this.signal.aborted || this.library && (library.revision < this.library.revision
+          || library.revision === this.library.revision && Date.parse(library.now) < Date.parse(this.library.now))) return;
       this.library = library;
+      // Include request latency: a delayed response cannot renew old readiness.
+      this.libraryObservedAt = requestedAt;
+      this.recorderStatusUnavailable = false;
+      if (this.profileRefreshError && this.root.querySelector('[data-profile-message]')?.textContent === this.profileRefreshError) this.message('');
+      this.profileRefreshError = null;
       if (!this.mounted) { this.mount(); this.mounted = true; }
       this.renderManualPrograms();
       this.renderRecordings();
       this.renderBosch();
-      if (library.sampler_error) this.message(library.sampler_error, true);
+      this.renderRecorderStatus();
+      if (library.sampler_error) { this.profileRefreshError = library.sampler_error; this.message(library.sampler_error, true); }
     } catch (error) {
+      this.recorderStatusUnavailable = true;
+      this.renderRecorderStatus();
+      this.profileRefreshError = error.message;
       if (!this.root.querySelector('[data-profile-message]')) this.root.innerHTML = '<p data-profile-message role="alert"></p>';
       this.message(error.message, true);
     } finally { this.loading = false; }
@@ -163,7 +200,8 @@ export class ApplianceProfilesPage {
       <button type="button" class="profile-program-icon" data-program-action="cancel" aria-label="Cancel program edit" title="Cancel">${programIcon('cancel')}</button></div></div>` :
       `<label>Program<select name="program">${Object.entries(library.programs[machine]).map(([id, label]) => `<option value="${escapeHTML(id)}">${escapeHTML(label)}</option>`).join('')}</select></label>`}
       <label>Load / options / notes<input name="notes" maxlength="500" placeholder="e.g. full load, extra rinse"></label>
-      <button type="submit" data-profile-arm>Record next cycle</button></form>
+      <button type="submit" data-profile-arm>Record next cycle</button>
+      <p class="profile-recorder-status" data-recorder-status="${machine}" role="status" hidden></p></form>
       <h3>Programs and recordings</h3><div data-profile-recordings="${machine}"></div>
       </div></article>`;
     }).join('');
@@ -324,6 +362,19 @@ export class ApplianceProfilesPage {
 
   managedTime(value){return value?escapeHTML(new Date(value).toLocaleString('en-GB',{timeZone:this.library.timezone || this.timezone || 'Europe/Brussels',timeZoneName:'shortOffset'})):'—';}
 
+  renderRecorderStatus() {
+    if (!this.library) return;
+    const elapsed = (performance.now() - this.libraryObservedAt)/1000;
+    for (const element of this.root.querySelectorAll('[data-recorder-status]')) {
+      const feedback = recorderFeedback(this.library, element.dataset.recorderStatus, elapsed, !this.recorderStatusUnavailable);
+      element.hidden = !feedback;
+      if (feedback) {
+        if (element.textContent !== feedback.text) element.textContent = feedback.text;
+        element.dataset.state = feedback.state;
+      }
+    }
+  }
+
   renderManualPrograms() {
     const programs = this.library.programs.washing_machine;
     const markup = Object.entries(programs).map(([id,name])=>`<option value="${escapeHTML(id)}">${escapeHTML(name)}</option>`).join('');
@@ -464,8 +515,12 @@ export class ApplianceProfilesPage {
       await this.api('profiles/bosch-command','POST',{command:'select',program:values.program});
       this.message('Selection submitted; awaiting appliance feedback. No start command was sent.');
     } else if (action === 'arm') {
-      await this.api('profiles/arm', 'POST', {...values, machine: form.dataset.machine});
-      this.message('Armed. Start the machine after the recorder has observed idle power.');
+      const recording = await this.api('profiles/arm', 'POST', {...values, machine: form.dataset.machine});
+      this.library = {...this.library, now:recording.armed_at,
+        recordings:[recording, ...this.library.recordings.filter(row=>row.id !== recording.id)]};
+      this.libraryObservedAt = performance.now();
+      this.recorderStatusUnavailable = false;
+      this.renderRecorderStatus();
     } else if (action === 'configure' || action === 'mazak') {
       const body = {revision: Number(form.dataset.revision), machine: form.dataset.machine};
       if (action === 'mazak') Object.assign(body, {machine: 'mazak', powers_w: Object.fromEntries(Object.entries(values).map(([key, value]) => [key, Number(value)]))});

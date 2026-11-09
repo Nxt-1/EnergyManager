@@ -89,6 +89,61 @@ energy alone cannot establish completion. A 24-hour arm/capture cap bounds sessi
 Service interruption keeps raw evidence for inspection but disallows selecting the
 interrupted run. An armed restart requires new idle evidence before detecting a start.
 
+#### Recorder readiness feedback — V45-A003 (implemented in4.6.7; 9 November)
+
+The user wants clearer positive feedback that a manually armed recorder has observed
+idle and is ready to detect the machine starting. Use one clear status location directly
+beneath Record next cycle in the expanded appliance card; do not duplicate this indicator
+on the collapsed card. Identify the armed program and show its latest measured power.
+Update automatically from the active capture: waiting for idle, confirmed ready to record
+with an explicit cue that the user can start the machine, and recording once capture
+starts. Before a valid reading or when measurements/status are unavailable, show that
+explicitly and do not retain a misleading Ready indication or treat missing power as zero.
+
+Use the existing backend status, idle_seen, last_power_w and observation evidence, with
+the existing threshold, polling, gap/restart and freshness contracts. This is a feedback
+change, not a new idle dwell time, arming/start policy or hardware command. Bosch's
+automatic feedback-driven capture behavior remains separate. Keep the display concise
+and combine text/icon cues with colour where helpful.
+
+Completion criteria: both dashboards visibly progress from waiting through confirmed
+idle to recording without opening program groups/Details; display the active capture's
+power and program; handle read failures, missing/stale status, recovery and restart
+without false readiness. Preserve input/trim drafts and existing recorder transitions.
+Verify with deterministic local/fake readings. On 9 November the user explicitly
+authorized this implementation handoff only once the V4.6 EV implementation finishes.
+At authorization, the registered EV implementation chat was working on EV-A008;
+regression/release checks were still in progress. Do not dispatch V45-A003 before
+that task's confirmed completion. Reconcile its released main changes and version
+order before implementing this follow-up. See WORK_STATE.md for the completion watch.
+EV-A008 completion was confirmed on 9 November by its implementation chat's completed
+release report:4.6.6/068307cbc1319aaff0fa80d4e24c68a342a084b5, with CI and image
+publication successful. Release4.6.7 incorporates that complete release before this UI change.
+
+Both dashboards render one text/icon status immediately after the manual arm button,
+inside the expanded recording form. It identifies the capture's actual program from
+the library, independently of the selector or an unsaved name draft. The arm response
+shows Waiting for idle / Power unavailable until a valid read. Confirmed idle shows
+Ready to record / Idle detected — start the machine and actual watts (including0W);
+running captures show Recording. Finished/interrupted captures leave this live indicator;
+their existing review evidence remains in the library. Bosch automatic capture is excluded.
+
+Feedback uses status, idle_seen, last_power_w, error and last_at, with backend now and
+the published maximum_gap_seconds (15s). Advance age by monotonic browser time, including
+status-request latency. Failed/missing/old status, sampler failure, missing/failed power,
+invalid times or observations older than that gap withdraw Ready and label unavailable;
+missing power is never shown as0W. A local one-second display tick prevents a hung status
+request from leaving Ready indefinitely; API polling remains five seconds. Current
+available unchanged HA reads stay valid regardless of HA change/report timestamps.
+Restart's existing cleared idle_seen/last_at requires fresh idle confirmation. No idle
+dwell, threshold, recorder transition, persistence schema or hardware policy is added.
+
+The feedback renderer updates only indicator text/state. Input/name/notes and the
+active review/trim form remain intact while existing library polling continues. The static armed acknowledgement is removed; recovered
+status/sampler errors clear their own acknowledgement without erasing unrelated errors.
+Older same-revision profile responses cannot replace a newer post-arm snapshot. Verified
+with local synthetic reads/status faults and recorder restart; installation unverified.
+
 The existing database adds indexed appliance_recordings and appliance_samples tables.
 UTC timestamps/raw W, source, program, settings, quality failures and load notes survive
 restart. Review/save stores immutable selected bounds/statistics on that recording.
