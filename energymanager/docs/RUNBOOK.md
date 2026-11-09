@@ -38,14 +38,18 @@ and `python tools/native_dashboard_preview.py`. Both are synthetic/local; actual
 HA Recorder, meter timing, mobile hardware and installation performance remain
 unverified. Control, permission and peak-notification policy is unchanged.
 
-## Washing-machine program creation and renaming (4.6.2 / V45-A001-P1)
+## Washing-machine program names (4.6.5 / V45-A001-P1/P2)
 
-After updating, reload the dashboard and expand Washing machine. Add program opens a
-name-only form. The saved program immediately appears in Record next cycle and as an
-empty foldable program group; recording still requires the mapped washer power sensor.
-Rename program lets you choose an existing or newly created program and save its new
-name. Its ID, recordings, selected average contributors and raw measurements stay intact.
-Open recording review titles also update without resetting an unsaved trim selection.
+After updating, reload either dashboard and expand Washing machine. Beside the recording
+program selector, + adds a program and the pencil renames the selected program. The name
+field replaces that selector; check/Enter saves and x/Escape cancels without changing
+metadata. Record next cycle is unavailable during name editing. Save errors keep the
+typed name; Cancel restores the selector, and reopening starts from current metadata.
+
+Creation selects the saved program immediately for Record next cycle and adds an empty
+foldable group; recording still requires the mapped washer power sensor. Rename keeps
+the ID, recordings, average contributors and raw measurements. Name actions preserve
+unsaved recording notes and open review/trim drafts, updating the current review title.
 
 Names must be1–80 printable characters. Whitespace is normalized and equivalent names
 are rejected without changing the catalogue. Concurrent edited drafts are rejected with

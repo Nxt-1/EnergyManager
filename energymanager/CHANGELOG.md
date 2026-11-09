@@ -1,3 +1,9 @@
+## 4.6.5 — Inline washing-machine program actions
+
+- Put Add/Rename icons beside the recording program selector, with one replacement name field and Save/Cancel.
+- Rename the selected program directly, select newly created programs and support Enter/Escape.
+- Preserve existing metadata validation/identities, name/recording/trim drafts and Bosch's HA catalogue. Verified offline in both dashboards.
+
 ## 4.6.4 — Compact peak display and native source history
 
 - Use a heavier long-dash red monthly peak, preserving the forecast, label and quarter shading/marker.

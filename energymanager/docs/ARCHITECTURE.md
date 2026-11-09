@@ -306,15 +306,49 @@ collapsed/trimmed whitespace,1–80 printable characters and case-folded duplica
 within this appliance (excluding the same ID when renaming). Persist settings atomically
 before advancing in-memory state. Metadata actions do not send appliance commands.
 
-Both dashboards share name-only Add program and program/name Rename forms in the
-expanded washer card. Creation selects the new identity for Record next cycle; selectors,
-foldable groups and an open review heading update without replacing its chart/trim draft.
-Unedited forms take current revision on opening; edited drafts keep their stale-edit guard.
+Both dashboards share Add/Rename controls in the expanded washer card (inline from
+4.6.5/P2 below, superseding P1's separate fold-outs). Creation selects the new identity
+for Record next cycle; selectors, foldable groups and an open review heading update
+without replacing its chart/trim draft. Opening a name editor snapshots the current
+revision; edited drafts retain that conflict guard across ordinary catalogue polling.
 Older in-flight profile polls cannot replace a newer metadata catalogue. Existing graph
 handles, linked fields, exclusive inline review and same-ID trim saves are retained.
 Program removal, appliance CRUD and washing-machine control/scheduling remain outside P1.
 The one-time start fired8November and its automation was deleted after dispatch. Release
 4.6.2 incorporates main4.6.1; the task's V4.5 label does not roll back newer releases.
+
+#### Inline program actions — V45-A001-P2 (implemented in4.6.5; 9 November)
+
+The user approved the selector-adjacent Add/Rename preview and confirmed that the
+name field replaces the selector while editing. Place Add and Rename icons beside
+the washing-machine recording program selector. Rename targets that selection and
+prefills its current name. Add opens an empty name field. Only one inline editor
+appears, with Save/Cancel icons; creation selects the new program automatically.
+Cancel retains the original program/name and makes no metadata change. Replace the
+two separate management fold-outs and their duplicate program selector with these
+controls. Keep concise labels, accessible action names and usable touch targets.
+
+Preserve P1's existing metadata APIs, validation, stable identities, recording/average
+links and stale-edit handling. Retain name drafts on validation/conflict errors and
+do not reset recording notes or an existing recording trim draft when saving names.
+Bosch remains outside manual Add/Rename. The approved preview is
+`program-selector-actions.html` in this chat's visualization directory.
+
+Completion criteria: both dashboards support Add/selected-program Rename, Save and
+Cancel in the approved location; the newly created program becomes selected; name
+editing never arms a recording or sends an appliance command. Verify keyboard
+Save/Cancel, narrow layouts, validation/conflict handling and preservation of current
+recording/review state. This is a separate UI follow-up to implemented P1. On 9 November
+the user explicitly authorized the implementation handoff: "yes, hand it over".
+Release4.6.5 incorporates main4.6.4 before this UI follow-up. Both dashboards use the
+shared selector/name row with44px labelled Add/Rename/Save/Cancel icon targets. Only
+the active control is enabled: editing disables the hidden selector and Record next
+cycle, and routes submission exclusively to P1's metadata endpoint. Enter saves and
+Escape cancels; focus returns to the selector after success/cancel. Save errors keep
+the typed name, original identity/revision, recording notes and open review/trim state.
+Same-view successful profile edits advance compatible revision guards as in P1;
+another view's edits remain conflicts. No preview example data enters the application.
+Verified with deterministic local fixtures; installation behavior remains unverified.
 
 #### Pending Appliances UI direction — agreed 2 November 2026
 

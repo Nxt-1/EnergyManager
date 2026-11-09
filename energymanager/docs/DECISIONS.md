@@ -1,5 +1,14 @@
 # Current requirements and decisions
 
+- 9 November 2026, V45-A001-P2 inline program actions. The user approved Add/Rename
+  icons beside the washing-machine program selector, replacing it temporarily with
+  a name field and Save/Cancel. Rename uses the currently selected program; Add selects
+  the created program. Replace the separate management fold-outs. The user then
+  explicitly authorized this separate implementation handoff: "yes, hand it over".
+  Implemented in4.6.5 after incorporating main4.6.4. The shared row retains P1 metadata
+  APIs/identities and original edit revision, disables recording while editing and
+  preserves name/notes/trim drafts. Verified with local synthetic services only.
+
 - 8 November2026, dashboard presentation and EV-A007: the user prefers minimal
   visible text and visual cues where suitable. Across the dashboard, applicable
   measured values/states should open their actual HA sensor's standard more-info/

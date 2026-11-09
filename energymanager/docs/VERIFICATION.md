@@ -1,5 +1,35 @@
 # EnergyManager 4 verification
 
+## 4.6.5 — V45-A001-P2 inline program actions (9 November2026)
+
+Reconciled released main4.6.4/fcb80b5 before the scoped UI follow-up. No backend,
+planner/control/permission, catalogue schema or chart code changes.
+
+- 112 focused Python tests pass1.97s: existing profile metadata validation/persistence,
+ stable IDs/raw samples/average membership/mode isolation, Bosch/run and native assets.
+- 101 frontend tests pass; new cases cover blank Add/selected Rename, Cancel without API
+ calls, exact metadata-only request bodies, new ID selection and retained stale drafts.
+ Existing source-history, groups, same-ID review, handles/cursor/zoom/pan cases pass.
+ Ruff/mypy59modules and every packaged JavaScript syntax check pass.
+- Browser checks on both dashboards: create selects the new program with no profile;
+ rename prefills the selected legacy/new program, updates names without changing IDs;
+ Save/check, Cancel/x and Enter/Escape work. Duplicate and cross-view stale edits keep
+ the typed name. Unsaved notes, the existing inline review and a1second trim survive
+ metadata saves; the original start handle then moves the linked field to2seconds.
+ Bosch has no Add/Rename, browser warning/error logs are empty. Light native/dark
+ standalone selector and editor inspected at320px with44px icon targets. The native
+ harness simulates HA built-ins; this is not installation or physical-touch evidence.
+- Configured local fake E2E passes25.519s/2019intervals/max control4.144ms/four fake
+ service calls, including worker cancellation/replacement and recovered persistence.
+ These timings are synthetic integration evidence. No live services were contacted.
+- Wheel/sdist4.6.5 build;86runtime files byte-match source and isolated version checks are recorded
+ in ignored artifacts/p2-package-verification.json. Screenshots retained in the existing
+ chat visualization directory as inline-program-actions-narrow.png and native.png.
+
+Full Python/configured+routed/container checks run in release CI. Exact-head remote
+outcomes go in the ignored release checkpoint/final reply, without another commit.
+No live HA/database/provider/hardware/phone or installation deployment verification.
+
 ## 4.6.4 — EV-A007 compact peak and genuine source actions (9 November2026)
 
 Based on released main4.6.3/f1c3ce1. No planner/control/permission/notification-policy

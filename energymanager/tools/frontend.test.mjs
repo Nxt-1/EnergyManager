@@ -1640,14 +1640,13 @@ test('monthly peak history holds exact values through rises and resets, breaking
 
 
 
-test('manual programme names update selectors/review verbatim while preserving selection and rename drafts', () => {
+test('manual programme names update the recording selector and review verbatim while preserving selection', () => {
   const arm={innerHTML:'old',value:'whites_60',matches:()=>false};
-  const rename={innerHTML:'old',value:'whites_60',matches:()=>true,form:{elements:{name:{value:'Unsaved draft'}}}};
   const title={textContent:''};
-  const page={manualProgramsMounted:true,library:{programs:{washing_machine:{whites_60:'Exact_Name30 & silk',new_id:'New <program>'}}},
-    reviewed:{machine:'washing_machine',program:'whites_60'},root:{querySelectorAll:()=>[arm,rename],querySelector:()=>title}};
+  const page={library:{programs:{washing_machine:{whites_60:'Exact_Name30 & silk',new_id:'New <program>'}}},
+    reviewed:{machine:'washing_machine',program:'whites_60'},root:{querySelectorAll:()=>[arm],querySelector:()=>title}};
   ApplianceProfilesPage.prototype.renderManualPrograms.call(page);
-  assert.equal(arm.value,'whites_60');assert.equal(rename.form.elements.name.value,'Unsaved draft');
+  assert.equal(arm.value,'whites_60');
   assert.match(arm.innerHTML,/New &lt;program&gt;/);
   assert.equal(title.textContent,'Review · Washing machine · Exact_Name30 & silk');
   // Browser serialization need not retain the same HTML entity spelling.
@@ -1762,4 +1761,74 @@ test('standalone, demo and missing mappings never advertise a native sensor acti
   }
   const missing=historyReading('— W',[],{native:true,label:'Missing'});
   assert.match(missing,/HA source not mapped/);assert.doesNotMatch(missing,/<button/);
+});
+
+
+function manualProgramEditor() {
+  const select = {value:'whites_60',focus(){this.focused=true;}};
+  const name = {value:'',focus(){this.focused=true;}};
+  const notes = {value:'Keep my recording notes'};
+  const selector = {hidden:false}, editor = {hidden:true}, record = {disabled:false};
+  const form = {elements:{program:select,program_name:name,notes},
+    querySelector:key=>({'[data-program-selector]':selector,'[data-program-editor]':editor,'[data-profile-arm]':record}[key])};
+  const page = Object.create(ApplianceProfilesPage.prototype);
+  Object.assign(page, {library:{revision:12,programs:{washing_machine:{whites_60:'Whites 60°C'}}},
+    root:{querySelectorAll:()=>[]}, message(){}, renderManualPrograms(){},
+    renderRecordings(){this.rendered=true;}, reviewed:{id:'original',start_seconds:2,end_seconds:9},
+    api:()=>assert.fail('Opening/cancelling an editor must never call an endpoint')});
+  return {page,form,select,name,notes,selector,editor,record};
+}
+
+test('inline rename targets the selected identity; add is blank and cancel changes no metadata or drafts', () => {
+  const {page,form,select,name,notes,selector,editor,record} = manualProgramEditor();
+  const original = page.library;
+  page.editProgram('rename',form);
+  assert.deepEqual(page.programEdit,{action:'rename',program:'whites_60',revision:12});
+  assert.equal(name.value,'Whites 60°C');
+  assert.ok(selector.hidden && !editor.hidden && select.disabled && record.disabled && name.focused);
+  name.value='Unsaved name';
+  page.editProgram('cancel',form);
+  assert.equal(page.library,original);
+  assert.equal(select.value,'whites_60');
+  assert.equal(notes.value,'Keep my recording notes');
+  assert.deepEqual(page.reviewed,{id:'original',start_seconds:2,end_seconds:9});
+  assert.ok(!selector.hidden && editor.hidden && !record.disabled && name.disabled && select.focused);
+  page.editProgram('create',form);
+  assert.equal(name.value,'');
+});
+
+test('inline metadata save selects the returned ID, preserves other drafts and only calls the metadata API', async () => {
+  for (const action of ['create','rename']) {
+    const {page,form,select,name,notes,record} = manualProgramEditor();
+    const review = page.reviewed;
+    page.editProgram(action,form);
+    name.value='Delicates 30°C';
+    const id = action==='create' ? 'stable_new_id' : 'whites_60';
+    const calls = [];
+    page.api=async (...args)=>{
+      calls.push(args);
+      return {program:{id,name:name.value},library:{revision:13,programs:{washing_machine:{[id]:name.value}}}};
+    };
+    await page.saveProgram(form);
+    assert.deepEqual(calls,[[`profiles/program-${action}`,'POST',{
+      revision:12,machine:'washing_machine',name:'Delicates 30°C',...(action==='rename'?{program:'whites_60'}:{})}]]);
+    assert.equal(select.value,id);
+    assert.equal(page.programEdit,null);
+    assert.ok(!record.disabled && page.rendered);
+    assert.equal(notes.value,'Keep my recording notes');
+    assert.equal(page.reviewed,review);
+  }
+});
+
+test('metadata errors retain typed names and original conflict revision across a newer catalogue poll', async () => {
+  const {page,form,name,record} = manualProgramEditor();
+  page.editProgram('rename',form);
+  name.value='Typed draft';
+  page.library={...page.library,revision:15};
+  page.api=async (endpoint,method,body)=>{assert.equal(body.revision,12);throw new Error('Profiles changed');};
+  await assert.rejects(page.saveProgram(form),/Profiles changed/);
+  assert.equal(name.value,'Typed draft');
+  assert.equal(page.programEdit.revision,12);
+  assert.ok(record.disabled && !name.disabled);
+  assert.equal(page.library.revision,15);
 });

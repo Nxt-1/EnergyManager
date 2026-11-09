@@ -75,6 +75,36 @@ requirements rather than replaying every historical checkpoint.
   NEXT: preserve concurrent primary edits, scoped4.6.2 integration/push and exact-commit
   CI/publication. Remote results belong in ignored artifacts/v462-release-state.json.
   No live operation or installation deployment.
+  **9 November UI follow-up:** the user requested a render continuing the proposal to
+  move Add/Rename beside the recording program selector. `program-selector-actions.html`
+  in this chat's visualization directory previews direct selected-program rename,
+  name-only inline editing, Save/Cancel and automatic selection after creation.
+  This is a design preview with illustrative data, not application implementation.
+  Preview checks passed for selected-program rename without identity change, automatic
+  selection after creation, duplicate rejection, Save/Cancel and Enter/Escape. Icons
+  and layout inspected at736/320px with local supplied Lucide assets; no live calls.
+  The user approved the preview and confirmed replacing the selector during editing.
+  V45-A001-P2 design/scope/completion criteria are complete in ARCHITECTURE.md under
+  Inline program actions. The user explicitly authorized handoff on 9 November.
+  Handoff delivered to the registered V4.5 implementation chat on 9 November as separate
+  scope from completed P1. Main was4.6.4/fcb80b5 when checked; reconcile current main
+  and version order at implementation rather than assigning an old-stream patch.
+  **P2 implementation checkpoint —9November:** main4.6.4/fcb80b5 incorporated in
+  the clean registered worktree; target4.6.5. Shared inline Add/selected-program Rename
+  replaces the old management fold-outs and second selector. Save/Cancel and Enter/Escape
+  preserve P1 APIs/identities, metadata revision guards, notes and the open review/trim
+  editor. Record next cycle is disabled during name editing. Bosch has no metadata controls.
+  Verification:112focused profile/Bosch/run/native Python tests pass1.97s;101frontend
+  cases pass, including cancel/no calls, selected ID/new selection, exact metadata-only
+  requests and stale-draft retention. Ruff/mypy59modules and all packaged JS syntax pass.
+  Both-dashboard synthetic browser checks cover creation, direct selected rename,
+  duplicate/cross-view conflict retention, notes/trim preservation and320px light/dark
+  layouts. Original start handle still updates the linked seconds field; logs are clean.
+  Configured local fake E2E passes25.519s/2019intervals, max control4.144ms/four fake calls.
+  Package identity/source checks recorded in artifacts/p2-package-verification.json.
+  NEXT: preserve concurrent primary edits, integrate/push4.6.5 and verify exact-commit
+  CI/publication. Remote results belong in ignored artifacts/v465-release-state.json.
+  No live installation/database/provider/hardware/notification/deployment access.
   Shared UI direction agreed 2 November: most/potentially all appliances on one page,
   initially shown as relatively large icon cards with relevant information/controls;
   clicking a card opens full appliance information. Card content/detail form pending.

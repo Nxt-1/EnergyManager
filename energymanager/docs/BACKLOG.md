@@ -162,6 +162,15 @@ implementation handoff fired on8November; P1 is implemented in4.6.2 and verified
 The automation was deleted after dispatch; see WORK_STATE.md.
 The broader V45-A001 work remains outside this authorization.
 
+9 November: the user wants the shipped Add/Rename UI integrated better and requested
+a render of icons beside the existing program selector, with one inline name editor
+and Save/Cancel. Rename uses the selected program; creation selects the new entry.
+The user approved the preview and confirmed replacing the selector with the name field
+while editing. V45-A001-P2 scope/completion criteria are recorded in ARCHITECTURE.md.
+The user explicitly authorized this separate UI follow-up's implementation handoff on
+9 November. Implemented in4.6.5 with offline both-dashboard/draft/conflict verification.
+Keep broader V45-A001 work and program removal outside this package.
+
 The user chose permanent recording deletion after confirmation; removal from an
 average retains the recording. Program/appliance removal and dependent-data rules
 remain open. See ARCHITECTURE.md and

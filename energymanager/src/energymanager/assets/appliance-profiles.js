@@ -12,6 +12,12 @@ const programLabel = value => {
 };
 const decimal = (value, digits = 2) => value === null || value === undefined ? '—' : Number(value).toFixed(digits);
 
+const programIcon = action => {
+  const paths = {add:'M12 5v14M5 12h14', rename:'m16 3 5 5-12 12-6 1 1-6Z M14 5l5 5',
+    save:'m5 12 4 4L19 6', cancel:'m6 6 12 12M18 6 6 18'};
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${paths[action]}"/></svg>`;
+};
+
 export class ApplianceProfilesPage {
   constructor(root, api, signal, interaction = {}) {
     this.root = root;
@@ -23,33 +29,33 @@ export class ApplianceProfilesPage {
     this.library = null;
     this.previewGeneration = 0;
     root.addEventListener('input', event => {
-      const metadata=event.target.closest('form[data-profile-form^="program-"]');
-      if(metadata) metadata.dataset.edited='true';
       if (['start_seconds','end_seconds'].includes(event.target.name)) this.syncTrim(event.target.form);
     }, {signal});
     signal.addEventListener('abort', () => {
       clearTimeout(this.previewTimer);
       this.chart?.close();
     }, {once:true});
-    root.addEventListener('toggle', event => {
-      if (!event.target.open) return;
-      const form=event.target.querySelector('form[data-profile-form^="program-"]');
-      if (!form || form.dataset.edited) return;
-      form.dataset.revision=this.library.revision;
-      if(form.dataset.profileForm==='program-rename') form.elements.name.value=this.library.programs.washing_machine[form.elements.program.value];
-    }, {capture:true,signal});
     root.addEventListener('change', event => {
-      if (event.target.matches('[data-program-rename-choice]')) {
-        event.target.form.dataset.edited='true';
-        event.target.form.elements.name.value = this.library.programs.washing_machine[event.target.value];
-      }
       if (event.target.matches('[data-bosch-program]')) { this.rememberProgram(event.target.value); this.renderBosch(); this.previewReady(); }
+    }, {signal});
+    root.addEventListener('keydown', event => {
+      const form = event.target.closest('[data-program-editor]')?.closest('form');
+      if (!form || !this.programEdit) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (!this.busy) this.editProgram('cancel', form);
+      } else if (event.key === 'Enter' && event.target.matches('[data-program-name]')) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
     }, {signal});
     root.addEventListener('submit', event => {
       event.preventDefault();
       this.perform(() => this.submit(event.target));
     }, {signal});
     root.addEventListener('click', event => {
+      const programAction = event.target.closest('[data-program-action]');
+      if (programAction) { if (!this.busy) this.editProgram(programAction.dataset.programAction, programAction.form); return; }
       const button = event.target.closest('[data-profile-command]');
       if (button?.dataset.profileCommand === 'program') { this.toggleProgram(button); return; }
       if (button) { this.perform(() => this.command(button)); return; }
@@ -83,6 +89,8 @@ export class ApplianceProfilesPage {
     } finally {
       this.busy = false;
       buttons.forEach((disabled,button) => { if (button.isConnected) button.disabled = disabled; });
+      const washer = this.root.querySelector('[data-profile-form="arm"][data-machine="washing_machine"]');
+      if (washer) washer.querySelector('[data-profile-arm]').disabled = !!this.programEdit;
       if (this.mounted) this.renderBosch();
     }
   }
@@ -143,15 +151,19 @@ export class ApplianceProfilesPage {
       <button type="submit">Save recording settings</button></form>
       <p class="muted">Idle settings apply to manually armed captures. Bosch automatic captures finish from operation feedback.</p></details>
       <form data-profile-form="arm" data-machine="${machine}" class="profile-form" ${bosch ? 'data-dishwasher-arm' : ''}>
-      <label>Program<select name="program">${Object.entries(library.programs[machine]).map(([id, label]) => `<option value="${escapeHTML(id)}">${escapeHTML(label)}</option>`).join('')}</select></label>
+      ${machine === 'washing_machine' ? `<div class="profile-program-field">
+      <span id="washer-program-label">Program</span>
+      <div class="profile-program-row" data-program-selector>
+      <select name="program" aria-labelledby="washer-program-label">${Object.entries(library.programs[machine]).map(([id, label]) => `<option value="${escapeHTML(id)}">${escapeHTML(label)}</option>`).join('')}</select>
+      <button type="button" class="profile-program-icon" data-program-action="create" aria-label="Add program" title="Add program">${programIcon('add')}</button>
+      <button type="button" class="profile-program-icon" data-program-action="rename" aria-label="Rename selected program" title="Rename selected program">${programIcon('rename')}</button></div>
+      <div class="profile-program-row" data-program-editor hidden>
+      <input name="program_name" data-program-name aria-labelledby="washer-program-label" maxlength="80" required autocomplete="off" disabled>
+      <button type="submit" class="profile-program-icon" aria-label="Save program name" title="Save">${programIcon('save')}</button>
+      <button type="button" class="profile-program-icon" data-program-action="cancel" aria-label="Cancel program edit" title="Cancel">${programIcon('cancel')}</button></div></div>` :
+      `<label>Program<select name="program">${Object.entries(library.programs[machine]).map(([id, label]) => `<option value="${escapeHTML(id)}">${escapeHTML(label)}</option>`).join('')}</select></label>`}
       <label>Load / options / notes<input name="notes" maxlength="500" placeholder="e.g. full load, extra rinse"></label>
-      <button type="submit">Record next cycle</button></form>
-      ${machine === 'washing_machine' ? `<div class="profile-program-management">
-      <details><summary>Add program</summary><form data-profile-form="program-create" data-machine="washing_machine" data-revision="${library.revision}" class="profile-form">
-      <label>Program name<input name="name" maxlength="80" required autocomplete="off"></label><button type="submit">Add program</button></form></details>
-      <details><summary>Rename program</summary><form data-profile-form="program-rename" data-machine="washing_machine" data-revision="${library.revision}" class="profile-form">
-      <label>Program to rename<select name="program" data-program-rename-choice></select></label>
-      <label>New program name<input name="name" maxlength="80" required autocomplete="off"></label><button type="submit">Save name</button></form></details></div>` : ''}
+      <button type="submit" data-profile-arm>Record next cycle</button></form>
       <h3>Programs and recordings</h3><div data-profile-recordings="${machine}"></div>
       </div></article>`;
     }).join('');
@@ -315,15 +327,13 @@ export class ApplianceProfilesPage {
   renderManualPrograms() {
     const programs = this.library.programs.washing_machine;
     const markup = Object.entries(programs).map(([id,name])=>`<option value="${escapeHTML(id)}">${escapeHTML(name)}</option>`).join('');
-    for (const select of this.root.querySelectorAll('[data-profile-form="arm"][data-machine="washing_machine"] select[name="program"], [data-program-rename-choice]')) {
+    for (const select of this.root.querySelectorAll('[data-profile-form="arm"][data-machine="washing_machine"] select[name="program"]')) {
       if (this.manualProgramMarkup === markup) continue;
       const previous = select.value;
       select.innerHTML = markup;
       if (Object.hasOwn(programs,previous)) select.value=previous;
-      if (select.matches('[data-program-rename-choice]') && !this.manualProgramsMounted) select.form.elements.name.value=programs[select.value];
     }
     this.manualProgramMarkup=markup;
-    this.manualProgramsMounted=true;
     if (this.reviewed?.machine === 'washing_machine') {
       const heading=this.root.querySelector('[data-profile-review-title]');
       if (heading) heading.textContent=`${this.reviewed.averaged?'Average':'Review'} · Washing machine · ${programs[this.reviewed.program] ?? this.reviewed.program}`;
@@ -404,23 +414,47 @@ export class ApplianceProfilesPage {
     this.forceRecordings = false;
   }
 
+  editProgram(action, form) {
+    const select = form.elements.program;
+    const input = form.elements.program_name;
+    if (action === 'cancel') {
+      this.programEdit = null;
+      input.value = '';
+      this.message('');
+    } else {
+      this.programEdit = {action, program:select.value, revision:this.library.revision};
+      input.value = action === 'rename' ? this.library.programs.washing_machine[select.value] : '';
+    }
+    const editing = !!this.programEdit;
+    form.querySelector('[data-program-selector]').hidden = editing;
+    form.querySelector('[data-program-editor]').hidden = !editing;
+    select.disabled = editing;
+    input.disabled = !editing;
+    form.querySelector('[data-profile-arm]').disabled = editing;
+    if (editing) input.focus();
+    else select.focus();
+  }
+
+  async saveProgram(form) {
+    const {action, program, revision} = this.programEdit;
+    const body = {revision, machine:'washing_machine', name:form.elements.program_name.value};
+    if (action === 'rename') body.program = program;
+    const result = await this.api(`profiles/program-${action}`, 'POST', body);
+    this.library = result.library;
+    this.advanceRevision(revision, this.library.revision);
+    this.renderManualPrograms();
+    form.elements.program.value = result.program.id;
+    this.editProgram('cancel', form);
+    this.forceRecordings = true;
+    this.renderRecordings();
+    this.message(action === 'create' ? 'Program added.' : 'Program name updated.');
+  }
+
   async submit(form) {
     const values = Object.fromEntries(new FormData(form));
     const action = form.dataset.profileForm;
-    if (action === 'program-create' || action === 'program-rename') {
-      const revision=Number(form.dataset.revision);
-      const result=await this.api(`profiles/${action}`,'POST',{revision,machine:'washing_machine',...values});
-      this.library=result.library;
-      this.advanceRevision(revision,this.library.revision);
-      this.renderManualPrograms();
-      if (action==='program-create') {
-        this.root.querySelector('[data-profile-form="arm"][data-machine="washing_machine"] select[name="program"]').value=result.program.id;
-        form.elements.name.value='';
-      } else form.elements.name.value=result.program.name;
-      delete form.dataset.edited;
-      form.closest('details').open=false;
-      this.forceRecordings=true;this.renderRecordings();
-      this.message(action==='program-create'?'Program added. It is ready for Record next cycle.':'Program name updated. Recordings and average membership are unchanged.');
+    if (action === 'arm' && form.dataset.machine === 'washing_machine' && this.programEdit) {
+      await this.saveProgram(form);
     } else if (action === 'bosch-configure') {
       const revision = Number(form.dataset.revision);
       this.library = await this.api('profiles/bosch-configure','POST',{revision,entities:values});
@@ -453,6 +487,7 @@ export class ApplianceProfilesPage {
 
   advanceRevision(previous, next) {
     if (next !== previous + 1) return;
+    if (this.programEdit?.revision === previous) this.programEdit.revision = next;
     for (const form of this.root.querySelectorAll('form[data-revision]')) {
       if (Number(form.dataset.revision) === previous) form.dataset.revision = next;
     }

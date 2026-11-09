@@ -869,6 +869,13 @@ em-entity-picker > input { padding-right:36px; }
 .profile-form { display:flex; flex-wrap:wrap; align-items:end; gap:12px; margin:16px 0; }
 .profile-form label { flex:1 1 180px; min-width:0; }
 .profile-form input,.profile-form select { width:100%; min-width:0; box-sizing:border-box; }
+.profile-program-field { flex:1 1 240px; min-width:0; }
+.profile-program-row { display:grid; grid-template-columns:minmax(0,1fr) 44px 44px; gap:6px; align-items:center; margin-top:6px; }
+.profile-program-row[hidden] { display:none; }
+.profile-program-row input,.profile-program-row select { height:44px; }
+.profile-program-icon { display:flex; align-items:center; justify-content:center; width:44px; min-height:44px; padding:10px; }
+#profiles-panel .profile-program-icon svg { width:22px; height:22px; }
+.profile-program-icon:disabled { opacity:.45; cursor:default; }
 .profile-form .profile-check { display:flex; align-items:center; gap:10px; flex-basis:100%; }
 .profile-check input { width:auto; }
 .profile-recording { padding:12px 0; border-bottom:1px solid var(--line); overflow-wrap:anywhere; }
