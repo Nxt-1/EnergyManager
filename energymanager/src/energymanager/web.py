@@ -294,7 +294,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         name = request.match_info.get("name", "index.html")
         if name not in ("index.html", "app.js", "settings.js", "display.js", "date-time.js",
                         "datetime-picker.js", "ev-schedule.js", "style.css", "ha-card.js",
-                        "application-view.js", "peak-display.js", "view.html", "native-dashboard.js", "native-dashboard.css",
+                        "application-view.js", "peak-display.js", "ha-history.js", "view.html", "native-dashboard.js", "native-dashboard.css",
                         "native-live.js", "graph-history.js", "graph-cursor.js", "dashboard-client.js", "planning-activity.js",
                         "text-selection.js", "ev-status.js", "session-details.js", "appliance-profiles.js", "profile-chart.js", "appliance-deadline.js"):
             raise web.HTTPNotFound()

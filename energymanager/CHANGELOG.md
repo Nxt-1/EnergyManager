@@ -1,3 +1,11 @@
+## 4.6.4 — Compact peak display and native source history
+
+- Use a heavier long-dash red monthly peak, preserving the forecast, label and quarter shading/marker.
+- Keep the quarter value beside monthly peak and give it a red icon and the actual mapped HA quarter-sensor history action.
+- Keep the cursor to its actual/planned table, with measured values opening genuine source history and forecast values remaining distinct.
+- Repair native history actions for live/daily readings, configured household/grid contributors and appliance feedback/captured sources; standalone/demo and missing mappings remain explicit.
+- Preserve EV/deadline safeguards, appliance controls, permissions and peak notifications. Verified offline; installation deployment is separate.
+
 ## 4.6.3 — Peak forecast and current-quarter display
 
 - Extend recorded monthly peak history with a distinct forecast from the accepted plan's quarter-average imports, including measured prefix and local month resets.

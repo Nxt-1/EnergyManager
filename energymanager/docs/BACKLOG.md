@@ -527,6 +527,14 @@ alternating quarter-hour backgrounds, current-quarter emphasis and a simple
 projected-end marker are agreed. Implemented in4.6.3 after the8November authorization;
 verification and release coordination remain in WORK_STATE.md.
 
+Further peak-display refinement is scoped as EV-A007 in
+[ARCHITECTURE.md](ARCHITECTURE.md#peak-display-refinement-ev-a007-464):
+use Long dashes slightly heavier than the current peak line, give the quarter value a red icon/native mapped
+sensor action and remove cursor prose. Retain quarter shading and value placement.
+The minimal-text and applicable HA-sensor-action preferences apply dashboard-wide.
+Authorized on8November2026; implemented in4.6.4. Offline verification and
+release coordination are recorded in WORK_STATE.md.
+
 ## ARCH-026 — Deterministic planning inputs and limits before MILP
 
 Recorded6November2026; scoped into EV-A005 and authorized8November.

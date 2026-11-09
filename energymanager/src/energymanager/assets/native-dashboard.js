@@ -5,6 +5,7 @@ import {
   nativeLiveState, setChargerPhase
 } from './native-live.js';
 import {hasTextSelection} from './text-selection.js';
+import {historySources, genuineEntities} from './ha-history.js';
 
 const runtimes = new Map();
 
@@ -81,6 +82,7 @@ export function generateDashboard(config, manifest, connection) {
         const controller = await mountApplication(root, {
           native: true,
           entities: manifest.entities,
+          historySources: manifest.history_sources,
           decisionDownloadUrl: id => `${runtime.base}api/decisions/${id}?download=1`,
           page: this.config.view,
           api,
@@ -101,15 +103,8 @@ export function generateDashboard(config, manifest, connection) {
             composed: true,
             detail: {entityId}
           }));
-          const openHistory = key => {
-            const keys = {
-              ev: ['ev_soc', 'ev_kw', 'connected'],
-              ess: ['ess_soc', 'ess_kw'],
-              solar: ['pv_ac_kw', 'pv_dc_kw'],
-              grid: ['grid_import_kw', 'grid_export_kw'],
-              house: ['grid_import_kw', 'grid_export_kw', 'pv_ac_kw', 'ess_kw', 'ev_kw']
-            } [key];
-            const ids = keys.map(name => manifest.entities[name]).filter(Boolean);
+          const openHistory = (ids, label = 'Source histories') => {
+            if (!ids.length) return;
             if (ids.length === 1) {
               moreInfo(ids[0]);
               return;
@@ -117,7 +112,7 @@ export function generateDashboard(config, manifest, connection) {
             const body = root.querySelector('#detail-body');
             body.replaceChildren();
             const title = document.createElement('h2');
-            title.textContent = key === 'house' ? 'Household demand · source histories' : 'Source histories';
+            title.textContent = label;
             body.append(title);
             for (const id of ids) {
               const button = document.createElement('button');
@@ -131,14 +126,17 @@ export function generateDashboard(config, manifest, connection) {
             root.querySelector('#detail-dialog').showModal();
           };
           root.addEventListener('click', event => {
+            if (manifest.demo || hasTextSelection(root) || event.target.closest('[data-history-unavailable]')) return;
             const entity = event.target.closest('[data-entity-key]');
-            if (entity && !manifest.demo && !hasTextSelection(root)) {
+            if (entity) {
               const id = manifest.entities[entity.dataset.entityKey];
               if (id) moreInfo(id);
               return;
             }
+            const sources = event.target.closest('[data-ha-entities]');
+            if (sources) { openHistory(genuineEntities(sources.dataset.haEntities.split(' '))); return; }
             const card = event.target.closest('[data-live]');
-            if (card && !manifest.demo && !hasTextSelection(root)) openHistory(card.dataset.live);
+            if (card?.getAttribute('role') === 'group') openHistory(historySources(card.dataset.live, manifest.entities, manifest.history_sources));
           }, {
             signal: this.liveEvents.signal
           });

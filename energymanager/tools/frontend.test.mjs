@@ -1665,7 +1665,7 @@ test('a profile poll started before a metadata edit cannot replace the newer cat
   assert.equal(page.library,current);assert.equal(page.loading,false);
 });
 
-import {peakDisplay, quarterMeasurement, quarterStart, quarterBands, quarterReadout} from '../src/energymanager/assets/peak-display.js';
+import {peakDisplay, quarterMeasurement, quarterStart, quarterBands} from '../src/energymanager/assets/peak-display.js';
 
 function peakFixture(now='2026-11-08T12:07:00Z') {
   const origin=quarterStart(Date.parse(now),'Europe/Brussels');
@@ -1686,8 +1686,7 @@ test('peak forecast uses measured prefix plus clipped remaining gross import and
   state.accepted.peak_permissions=[{peak_kw:20}];
   assert.equal(peakDisplay(state).predicted.at(-1)[1],6000);
   assert.equal(JSON.stringify({...state,accepted:{...state.accepted,peak_permissions:undefined}}),frozen);
-  const readout=quarterReadout(display.quarter,value=>new Date(value).toISOString());
-  assert.match(readout,/Meter contribution 1000 W.*Projected final average 1967 W.*8m 00s remaining/);
+  assert.equal(display.quarter.secondsLeft,480);
 });
 
 test('zero quarter readings remain zero and missing, stale or previous-quarter inputs are unavailable',()=>{
@@ -1736,4 +1735,31 @@ test('quarter backgrounds stay clock-aligned and alternate across DST, pan and c
   assert.ok(bands.slice(1).every((b,t)=>b.alternate!==bands[t].alternate && b.start===bands[t].end));
   assert.ok(quarterBands(start-86400000,start-3600000,now,'Europe/Brussels').every(b=>!b.active));
   assert.deepEqual(clipSeries([[0,7000],[10,0],[20,1000]],5,15,true),[[5,7000,true],[10,0],[15,0,true]]);
+});
+
+
+import {historySources, historyReading, genuineEntities} from '../src/energymanager/assets/ha-history.js';
+
+test('HA history uses genuine configured sources, including composites and normalized quarter displays',()=>{
+  const entities={quarter_import_kwh:'sensor.actual_quarter',pv_ac_kw:'sensor.ac',pv_dc_kw:'sensor.dc'};
+  assert.deepEqual(historySources('solar',entities),['sensor.ac','sensor.dc']);
+  assert.deepEqual(historySources('house',entities,{house:['sensor.dedicated_house']}),['sensor.dedicated_house']);
+  assert.deepEqual(genuineEntities(['sensor.ac','sensor.ac','',null,'sensor.fake \" onload=bad']),['sensor.ac']);
+  const html=historyReading('800 W',historySources('quarter_import_kwh',entities),
+    {native:true,label:'Quarter meter',key:'quarter_import_kwh',className:'grid-quarter'});
+  assert.match(html,/<button type="button"/);assert.match(html,/data-ha-entities="sensor.actual_quarter"/);
+  assert.match(html,/data-entity-key="quarter_import_kwh"/);assert.doesNotMatch(html,/sensor.actual_quarter_w/);
+  assert.match(html,/<span class="history-label">Quarter meter: <\/span>800 W/);
+  assert.doesNotMatch(html,/aria-label=/); // Preserve the visible value in the accessible button name.
+  const composite=historyReading('2.4 kWh',['sensor.ac','sensor.dc'],{native:true,label:'Solar energy'});
+  assert.match(composite,/data-ha-entities="sensor.ac sensor.dc"/);
+});
+
+test('standalone, demo and missing mappings never advertise a native sensor action',()=>{
+  for(const options of [{native:false},{native:true,demo:true}]){
+    const html=historyReading('0 W',['sensor.real'],options);
+    assert.doesNotMatch(html,/<button|data-ha-entities/);assert.match(html,/data-history-unavailable/);
+  }
+  const missing=historyReading('— W',[],{native:true,label:'Missing'});
+  assert.match(missing,/HA source not mapped/);assert.doesNotMatch(missing,/<button/);
 });

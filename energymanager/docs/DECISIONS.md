@@ -1,5 +1,17 @@
 # Current requirements and decisions
 
+- 8 November2026, dashboard presentation and EV-A007: the user prefers minimal
+  visible text and visual cues where suitable. Across the dashboard, applicable
+  measured values/states should open their actual HA sensor's standard more-info/
+  history. Keep the current-quarter value's location, give it a red icon and the
+  real mapped quarter-demand sensor action. Remove the verbose quarter paragraph
+  from the cursor popup. Alternating quarter shading is approved. The user selected
+  Long dashes from the visual alternatives and requested a slightly increased peak
+  line weight compared with the current implementation. Keep normal power traces
+  light, the same red grid/peak colour and existing label. The user subsequently
+  authorized handoff for implementation and release: “Hand it over”.
+  Implemented in4.6.4; verified offline with real source IDs in a synthetic HA harness.
+
 - 8 November2026, EV-A006 peak display: retain the same red colour for grid power
   and peak, use a slightly heavier dotted peak line and lighter normal power lines,
   and retain the existing label. Keep the monthly-peak indication in its current

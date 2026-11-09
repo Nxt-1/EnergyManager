@@ -27,7 +27,8 @@ import {requestError, StatePoller} from './dashboard-client.js';
 import {hasTextSelection, clearTextSelection} from './text-selection.js';
 import {PlanningActivity} from './planning-activity.js';
 import {evMeasuredPower} from './ev-status.js';
-import {peakDisplay, quarterMeasurement, quarterBands, quarterReadout} from './peak-display.js';
+import {historySources, historyReading} from './ha-history.js';
+import {peakDisplay, quarterMeasurement, quarterBands} from './peak-display.js';
 import {sessionContributionMarkup, plannedPowerProfileMarkup, goalPowerProfileMarkup} from './session-details.js';
 
 
@@ -106,7 +107,10 @@ export async function mountApplication(root, options = {}) {
       throw requestError(error, path, method);
     }
   }
-  const profilesPage = new ApplianceProfilesPage($('profiles-panel'), api, lifecycle.signal);
+  const sourceIds = key => historySources(key, options.entities, options.historySources);
+  const measured = (content, key, label, className = 'history-reading') => historyReading(content, sourceIds(key),
+    {native: options.native, demo: state.demo, label, className});
+  const profilesPage = new ApplianceProfilesPage($('profiles-panel'), api, lifecycle.signal, {native: options.native});
   const settingsPage = new SettingsPage($('settings-panel'), api, lifecycle.signal);
   const evPage = new EVSchedulePage($('ev-panel'), {
     add: kind => openGoal(null, kind),
@@ -148,7 +152,8 @@ export async function mountApplication(root, options = {}) {
       if (finished) { pointerHeld = false; pointerUntil = 0; }
       renderTimeRange(finished);
     }
-  });
+  }, ['power', 'soc'], (name, content, soc) => measured(content,
+    soc ? name + '_soc' : ({ess:'ess_kw',ev:'ev_kw',monthly_peak:'monthly_peak_kw'}[name] || name), name));
   const charts = root.querySelector('.charts');
   charts.style.setProperty('--plot-left', `${plotInsets.left}px`);
   charts.style.setProperty('--plot-right', `${plotInsets.right}px`);
@@ -277,9 +282,9 @@ export async function mountApplication(root, options = {}) {
           d += `${penLifted ? 'M' : 'L'}${num(x(point[0]),1)},${num(y(point[1]),1)} `;
           penLifted = false;
         }
-        const lineWidth = s.name === 'monthly_peak' ? 2.5 : soc ? (kind === 'observed' ? 2.8 : 1.8) : (kind === 'observed' ? 1.2 : .9);
+        const lineWidth = s.name === 'monthly_peak' ? 3 : soc ? (kind === 'observed' ? 2.8 : 1.8) : (kind === 'observed' ? 1.2 : .9);
         svg +=
-          `<path d="${d}" fill="none" stroke="${colors[s.name]}" stroke-width="${lineWidth}" ${s.name==='monthly_peak'?'stroke-dasharray="1 5" stroke-linecap="round"':''} ${kind==='planned'?`opacity=".6" ${s.name==='monthly_peak'?'':'stroke-dasharray="6 4"'}`:''}><title>${esc(s.name === 'monthly_peak' ? 'Monthly peak · 15-minute average' : s.name)} · ${kind}</title></path>`;
+          `<path d="${d}" fill="none" stroke="${colors[s.name]}" stroke-width="${lineWidth}" ${s.name==='monthly_peak'?'stroke-dasharray="17 9" stroke-linecap="butt"':''} ${kind==='planned'?`opacity=".6" ${s.name==='monthly_peak'?'':'stroke-dasharray="6 4"'}`:''}><title>${esc(s.name === 'monthly_peak' ? 'Monthly peak · 15-minute average' : s.name)} · ${kind}</title></path>`;
       }
     const now = Date.parse(state.now);
     if (now >= start && now <= end) svg +=
@@ -287,10 +292,10 @@ export async function mountApplication(root, options = {}) {
     if (!soc && page === 'overview') {
       const quarter = peakState.quarter;
       if (quarter.projectedWatts !== null && quarter.end >= start && quarter.end <= end)
-        svg += `<circle class="quarter-projection" cx="${x(quarter.end)}" cy="${y(quarter.projectedWatts)}" r="4.5" stroke="${colors.grid}" stroke-width="2" fill="var(--surface)"><title>${esc(quarterReadout(quarter, value => time(value, false)))}</title></circle>`;
-      $('monthly-peak-legend').textContent = 'Dotted red: monthly peak · faded after Now: forecast · 15-min average' +
-        (peakState.reason ? ` · Prediction unavailable: ${peakState.reason}` : '');
-      $('monthly-peak-legend').title = 'Prediction uses the accepted plan; it is not a permission limit.';
+        svg += `<circle class="quarter-projection" cx="${x(quarter.end)}" cy="${y(quarter.projectedWatts)}" r="4.5" stroke="${colors.grid}" stroke-width="2" fill="var(--surface)"><title>Projected quarter: ${Math.round(quarter.projectedWatts)} W</title></circle>`;
+      $('monthly-peak-legend').textContent = 'Peak · 15 min' +
+        (peakState.reason ? ' · Forecast unavailable' : '');
+      $('monthly-peak-legend').title = peakState.reason || 'Recorded / accepted-plan forecast; not a permission limit.';
       const label = peak === null ? 'Monthly peak unavailable' : `Current month peak · ${Math.round(peak)} W`;
       const month = new Intl.DateTimeFormat('en-GB', {timeZone: state.policy.timezone, month: 'short', year: 'numeric'}).format(new Date(state.now));
       const description = peak === null ? 'Current recorded monthly capacity peak unavailable.' :
@@ -443,7 +448,7 @@ export async function mountApplication(root, options = {}) {
         `${num(goal.target_soc_percent, 0)}% SoC`;
       const progress = target > 0 ? Math.max(0, Math.min(100, o.ev_kwh / target * 100)) : 100;
       const meter = goal === nextGoal && chargeKnown ?
-        `<p class="subtle">Current charge / next goal target: ${num(o.ev_kwh)} / ${num(target)} kWh</p>
+        `<p class="subtle">Current charge / next goal target: ${measured(num(o.ev_kwh), 'ev_soc', 'Current EV charge')} / ${num(target)} kWh</p>
         <div class="meter" role="progressbar" aria-label="Current charge towards next goal" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${num(progress, 0)}"><i style="width:${progress}%;background:#16a34a"></i></div>` : '';
       return `<section class="goal"><div class="goal-title"><strong>${esc(goal.title)}</strong><span class="badge ${goal.shortfall_kwh > 0.001 ? 'warning' : ''}">${goalStatus(goal, state.now)}</span></div>
         <p>${time(goal.deadline)} · ${requirement}</p>
@@ -525,21 +530,23 @@ export async function mountApplication(root, options = {}) {
       }
       let compact = '';
       const readings = state.live_inputs?.readings;
-      if (key === 'solar') compact = `<span title="AC solar">∿ ${watts(readings ? readings.pv_ac_kw?.value : liveKnown ? o.pv_ac_kw : null)} W</span> · <span title="DC solar">⎓ ${watts(readings ? readings.pv_dc_kw?.value : liveKnown ? o.pv_dc_kw : null)} W</span>`;
-      if (key === 'ess') compact = `<span title="Minimum battery state of charge">≥ ${num(c.ess_min_kwh/c.ess_capacity_kwh*100,0)}%</span> · <span title="ESS AC power: positive charging, negative discharging. Direct DC solar charging is separate.">${watts(essDisplayPower(readings ? readings.ess_kw?.value : liveKnown ? o.ess_power_kw : null))} W</span>`;
-      if (key === 'ev') compact = `<span title="Actual EV charging power" aria-label="Actual EV charging power: ${watts(evMeasuredPower(state))} W">⚡ ${watts(evMeasuredPower(state))} W</span>`;
+      if (key === 'solar') compact = `<span title="AC solar">∿ ${measured(watts(readings ? readings.pv_ac_kw?.value : liveKnown ? o.pv_ac_kw : null), 'pv_ac_kw', 'AC solar')} W</span> · <span title="DC solar">⎓ ${measured(watts(readings ? readings.pv_dc_kw?.value : liveKnown ? o.pv_dc_kw : null), 'pv_dc_kw', 'DC solar')} W</span>`;
+      if (key === 'ess') compact = `<span data-history-unavailable title="Configured minimum battery state of charge">≥ ${num(c.ess_min_kwh/c.ess_capacity_kwh*100,0)}%</span> · <span title="ESS AC power: positive charging, negative discharging. Direct DC solar charging is separate.">${measured(watts(essDisplayPower(readings ? readings.ess_kw?.value : liveKnown ? o.ess_power_kw : null)), 'ess_kw', 'ESS AC power')} W</span>`;
+      if (key === 'ev') compact = `<span title="Actual EV charging power" aria-label="Actual EV charging power: ${watts(evMeasuredPower(state))} W">⚡ ${measured(watts(evMeasuredPower(state)), 'ev_kw', 'Measured EV power')} W</span>`;
       let connected = liveKnown ? o.connected : null;
       if (!state.demo && state.live_inputs) {
         const connection = state.live_inputs.cards.ev?.label;
         connected = connection === 'Connected' ? true : connection === 'Away / disconnected' ? false : null;
       }
       const rows = dailyEnergyRows(dailyEnergy, key, state).map(row => {
+        const source = {import:'grid_import_kwh',export:'grid_export_kwh',solar_ac:'pv_ac_kw',solar_dc:'pv_dc_kw',
+          ess_charge:'ess_kw',ess_discharge:'ess_kw',house:'house',ev:'ev_kw'}[row.name];
         const coverage = row.partial ? ' Partial recorded coverage.' : '';
         const recorded = row.recordedAt ? ` Recorded through ${evIncidentTime(row.recordedAt, state.policy.timezone)}.` : '';
-        return `<span class="energy-row" title="${esc(row.label)}: recorded today ⇢ fixed day-end estimate. ${esc(row.capture + ' ' + row.source + '. ' + row.error)}${recorded}${coverage}" aria-label="${esc(row.label)}: ${row.actual} kWh recorded, ${row.predicted} kWh fixed day-end estimate${row.partial ? ', partial coverage' : ''}"><span class="energy-symbol" aria-hidden="true">${row.symbol}</span><span>${row.actual}</span><span class="prediction-arrow" aria-hidden="true">⇢</span><span>${row.predicted}</span><span class="energy-unit">kWh${row.partial ? ' ◐' : ''}</span></span>`;
+        return `<span class="energy-row" title="${esc(row.label)}: recorded today ⇢ fixed day-end estimate. ${esc(row.capture + ' ' + row.source + '. ' + row.error)}${recorded}${coverage}" aria-label="${esc(row.label)}: ${row.actual} kWh recorded, ${row.predicted} kWh fixed day-end estimate${row.partial ? ', partial coverage' : ''}"><span class="energy-symbol" aria-hidden="true">${row.symbol}</span>${measured(row.actual, source, row.label)}<span class="prediction-arrow" aria-hidden="true">⇢</span><span data-history-unavailable title="Forecast; not a measured HA entity">${row.predicted}</span><span class="energy-unit">kWh${row.partial ? ' ◐' : ''}</span></span>`;
       }).join('');
-      const content = `<span class="live-label muted">${name}${key === 'ev' ? connectionIcon(connected) : ''}</span><strong style="color:${colors[key]}">${unit==='W'?watts(value):num(value,0)} <small style="display:inline;font-size:13px">${unit}</small></strong>${compact ? `<small class="live-components">${compact}</small>` : ''}<div class="daily-energy">${rows}</div>${issues.length ? `<span class="input-warning" title="${esc(issues.map(powerText).join('; '))}" aria-label="${esc(issues.map(powerText).join('; '))}">⚠</span>` : ''}${unit==='%' && value !== null ?`<div class="meter"><i style="width:${Math.max(0,Math.min(100,value))}%;background:${colors[key]}"></i></div>`:''}`;
-      const historyAction = options.native ? 'role="button" tabindex="0"' : '';
+      const content = `<span class="live-label muted">${name}${key === 'ev' ? measured(connectionIcon(connected), 'connected', 'EV connection') : ''}</span><strong style="color:${colors[key]}">${measured(unit==='W'?watts(value):num(value,0), ({ess:'ess_soc',ev:'ev_soc'}[key] || key), name)} <small style="display:inline;font-size:13px">${unit}</small></strong>${compact ? `<small class="live-components">${compact}</small>` : ''}<div class="daily-energy">${rows}</div>${issues.length ? `<span class="input-warning" title="${esc(issues.map(powerText).join('; '))}" aria-label="${esc(issues.map(powerText).join('; '))}">⚠</span>` : ''}${unit==='%' && value !== null ?`<div class="meter"><i style="width:${Math.max(0,Math.min(100,value))}%;background:${colors[key]}"></i></div>`:''}`;
+      const historyAction = options.native && !state.demo && sourceIds(key).length ? 'role="group"' : 'title="HA source history unavailable"';
       if (key !== 'grid') return `<article class="live-item" data-live="${key}" ${historyAction}>${content}</article>`;
       const peak = monthlyPeakWatts(state), peakText = peak === null ? '—' : String(Math.round(peak));
       const canOpen = options.native && !state.demo && !!options.entities?.monthly_peak_kw;
@@ -550,8 +557,10 @@ export async function mountApplication(root, options = {}) {
         `<span class="grid-peak" title="${esc(description)}" aria-label="${esc(description)}">${peakContent}</span>`;
       const quarter = quarterMeasurement(state);
       const quarterText = quarter.measuredWatts === null ? '—' : String(Math.round(quarter.measuredWatts));
-      const quarterDescription = `Current quarter meter: ${quarterText} W · imported energy divided by the fixed 0.25-hour quarter; not instantaneous power or the projected final average.`;
-      const quarterContent = `<span class="grid-quarter" title="${esc(quarterDescription)}" aria-label="${esc(quarterDescription)}"><span aria-hidden="true">◷</span><span>${quarterText} W</span></span>`;
+      const quarterDescription = 'Current quarter';
+      const quarterIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 5v7h6M12 3v2M21 12h-2"/></svg>';
+      const quarterContent = historyReading(`${quarterIcon}<span>${quarterText} W</span>`, sourceIds('quarter_import_kwh'),
+        {native: options.native, demo: state.demo, label: quarterDescription, className: 'grid-quarter', key: 'quarter_import_kwh'});
       return `<article class="live-item"><div data-live="grid" ${historyAction}>${content}</div><div class="grid-peak-row">${peakRow}${quarterContent}</div></article>`;
     }).join('');
   }

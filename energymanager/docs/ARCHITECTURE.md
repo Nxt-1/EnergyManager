@@ -943,6 +943,17 @@ charger timer changes belong to this release. Temperature compensation remains d
 
 ### Native managed Home Assistant dashboard
 
+Dashboard presentation preference confirmed 8 November2026: keep visible text
+minimal and prefer clear visual cues over explanatory paragraphs. Preserve concise
+values, units and accessible names; put supplementary detail in appropriate native
+sensor history or optional detail rather than the normal dashboard/cursor view.
+Where a displayed measured value or state has an applicable real HA entity, make
+it a keyboard/touch-accessible standard HA more-info/history action for that entity.
+Apply this across the dashboard, not only EV readings. Derived/composite values use
+their genuine contributing-source history where available; forecasts and controller
+requests must not masquerade as measured HA sensors. This is a presentation/source
+contract, not authorization to create synthetic HA entities.
+
 Version4.2.0 replaces the optional iframe wrapper with a real HA dashboard strategy,
 native sensor history actions and custom planning, EV and settings
 cards. The add-on remains the planner, controller and persistent configuration owner.
@@ -1477,8 +1488,48 @@ Recorded and predicted peaks use the same red dotted2.5px line, with faded predi
 after Now; ordinary power traces are1.2px observed/0.9px planned. The existing label
 and monthly-peak history action stay in place. A clock symbol identifies the adjacent
 quarter meter. Clock-aligned quarter bands and a highlighted active band follow the
-visible range, with a hollow red quarter-end projection marker. The cursor exposes
-measured and planned energy contributions, final average, meter-read time and time left.
+visible range, with a hollow red quarter-end projection marker. The4.6.3 cursor
+exposed quarter contribution/time prose; EV-A007 below replaces that presentation while preserving the forecast calculation.
+
+### Peak display refinement (EV-A007, 4.6.4)
+
+The user selected Long dashes after reviewing alternatives to the4.6.3 dotted
+peak. Implemented in4.6.4 as17px/9px long dashes at3px. Peak and grid power retain
+the same red colour, existing monthly label and forecast semantics. Normal power
+remains1.2/.9px and the planned peak remains faded. Alternating quarter shading,
+current-quarter emphasis and the quarter-end projection marker are preserved.
+
+Keep the quarter value in its approved Grid-box position. Replace its plain clock
+character with a red icon consistent with the other Grid readings. In native HA,
+make the icon/value a standard more-info/history action on the configured
+`quarter_import_kwh` input entity (the actual quarter-demand sensor, in its native
+units), not the converted display value or a fabricated sensor. Retain a meaningful
+accessible name and missing-mapping handling, and do not imply a native HA history
+action in standalone/demo where it cannot be opened.
+
+Remove the verbose quarter explanation appended to the cursor popup: interval
+dates, conversion formula, contribution prose, meter-read timestamp and countdown.
+Retain the compact actual/planned values and visual quarter marker. The requested
+dashboard-wide minimal-text and genuine HA-source actions are specified above.
+The user authorized EV-A007 implementation and release on 8 November2026 by
+instructing the architecture chat to hand the settled package over.
+
+Implemented and verified offline in4.6.4. Acceptance checks cover the
+selected long dashes and increased weight, preserved shading/label/value placement,
+compact cursor without the quarter prose, and red quarter icon plus actual mapped
+HA sensor action. Review applicable measured dashboard values/states for genuine
+entity or contributing-source history actions under the dashboard-wide contract.
+Verify keyboard/touch, native/standalone, missing mappings and desktop/mobile
+layouts without inventing HA entities or changing control/notification policy.
+
+The read-only dashboard manifest provides genuine household/grid contributor
+groups for the configured measurement mode. Individual live/daily readings,
+actual graph-cursor cells, Bosch feedback and captured recording/profile sources
+use their configured entity IDs. Composite readings retain a source chooser.
+Standalone, demo and missing mappings remain noninteractive with a concise
+availability hint. Predicted cells and configured controller values are not
+measured-entity actions. The quarter action opens the actual input entity in
+HA native units, independent of its normalized dashboard display.
 
 ### Live peak protection priority (EV-A004, 4.6.1)
 

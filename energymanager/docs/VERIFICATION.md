@@ -1,5 +1,36 @@
 # EnergyManager 4 verification
 
+## 4.6.4 — EV-A007 compact peak and genuine source actions (9 November2026)
+
+Based on released main4.6.3/f1c3ce1. No planner/control/permission/notification-policy
+changes. Existing EV safeguards and washing-machine/Bosch behavior remain covered.
+
+- 143 focused Python tests pass5.66s: native mappings/assets, all four measurement
+  topologies, polling/live input, measured peaks/history, appliance profiles and Bosch.
+ 98frontend tests pass; genuine direct/composite/quarter sources and honest standalone,
+  demo and missing mappings covered. Ruff/mypy59modules and all JS syntax pass.
+- Native contract preview verifies the quarter's Enter/Space action opens the actual
+ `sensor.quarter_import_kwh`, the solar chooser opens its selected AC/DC sensor, daily
+  import opens its cumulative meter, Bosch power opens its dedicated sensor and a
+  profile average opens its captured contributor. No normalized-W sensor is invented.
+- Desktop native light/standalone dark and390px native layout show red3px17/9 dashes,
+  faded planned peak, unchanged monthly label, alternating/active quarter bands and
+  end marker. Monthly and red-SVG quarter remain on the same bottom row. Cursor has
+  only its timestamp and Actual/Planned table; Actual cells have genuine source
+  actions, Planned cells have none. Native pointer replay changes zoom/pan ranges;
+  physical touch/HA built-ins are simulated. Browser console is clean.
+- Standalone has no native source buttons; quarter is a span with the native-history
+  availability hint. Demo and unmapped behavior are verified deterministically.
+- Configured local fake E2E passes25.516s/2019intervals/max control2.228ms/four fake
+  calls, including worker cancellation/replacement, restored admission and persistence.
+  Timing is synthetic integration evidence, not installation performance.
+- Wheel/sdist4.6.4 build; all86runtime source/assets/default files match bytes and
+  isolated wheel version/new history-helper asset import passes.
+
+Existing release CI runs the full Python suite, frontend, configured/routed fake E2E,
+package and container checks. Exact-head remote outcomes go to the ignored checkpoint
+and final reply. No live HA/database, real notification, hardware or deployment test.
+
 ## 4.6.3 — EV-A006 peak forecast and quarter display (8 November2026)
 
 Based on main4.6.2 (278cf48); no controller, planner, permission or notification-policy

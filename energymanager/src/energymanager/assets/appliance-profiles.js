@@ -1,3 +1,4 @@
+import {historyReading} from './ha-history.js';
 import {ProfileChart} from './profile-chart.js';
 import {ApplianceDeadline} from './appliance-deadline.js';
 export {profileGraph} from './profile-chart.js';
@@ -12,8 +13,9 @@ const programLabel = value => {
 const decimal = (value, digits = 2) => value === null || value === undefined ? '—' : Number(value).toFixed(digits);
 
 export class ApplianceProfilesPage {
-  constructor(root, api, signal) {
+  constructor(root, api, signal, interaction = {}) {
     this.root = root;
+    this.interaction = interaction;
     this.api = api;
     this.signal = signal;
     this.visible = false;
@@ -221,10 +223,17 @@ export class ApplianceProfilesPage {
     this.deadlinePicker?.setContext(this.library.now,this.library.timezone);
     const reading = key => readings[key]?.state ?? 'Unavailable';
     const state = this.root.querySelector('[data-bosch-status]');
-    const text = `${programLabel(reading('operation'))} · ${readings.meter?.power_w === undefined ? 'Power unavailable' : decimal(readings.meter.power_w,0) + ' W'} · Progress: ${reading('progress')}${readings.progress?.unit || ''} · Finish: ${reading('finish')}`;
-    this.root.querySelector('[data-bosch-details]').textContent = `Door: ${reading('door')} · Remote control/start: ${reading('remote_control')} / ${reading('remote_start')} · Selected: ${reading('selected_program')} · Active: ${reading('active_program')}`;
-    state.textContent = bosch.enabled ? text + (bosch.at ? ' · Last read: ' + new Date(bosch.at).toLocaleString('en-GB',{timeZone:this.timezone || 'Europe/Brussels'}) : ' · Waiting for first read') : 'Map Bosch feedback and the dedicated Refoss power sensor to enable automatic recordings.';
-    if (bosch.capture_error) state.textContent += ' · ' + bosch.capture_error;
+    const history = (key, content, label) => historyReading(escapeHTML(content), [readings[key]?.entity_id],
+      {native: this.interaction?.native, demo: this.library.mode === 'demo', label});
+    const power = readings.meter?.power_w === undefined ? '— W' : decimal(readings.meter.power_w,0) + ' W';
+    const text = `${history('operation',programLabel(reading('operation')),'Operation')} · ${history('meter',power,'Appliance power')} · ${history('progress',reading('progress')+(readings.progress?.unit || ''),'Progress')} · ${history('finish',reading('finish'),'Finish')}`;
+    this.root.querySelector('[data-bosch-details]').innerHTML = [
+      ['door','Door'],['remote_control','Remote control'],['remote_start','Remote start'],
+      ['selected_program','Selected'],['active_program','Active']].map(([key,label])=>
+        `${label}: ${history(key,reading(key),label)}`).join(' · ');
+    state.innerHTML = bosch.enabled ? text : 'Map Bosch feedback and the dedicated power sensor.';
+    state.title = bosch.at ? `Read ${new Date(bosch.at).toLocaleString('en-GB',{timeZone:this.timezone || 'Europe/Brussels'})}` : '';
+    if (bosch.capture_error) state.innerHTML += ' · '+escapeHTML(bosch.capture_error);
     const feedback = this.root.querySelector('[data-bosch-command]');
     feedback.textContent = [bosch.control_error,bosch.command?.message].filter(Boolean).join(' · ');
     const select = this.root.querySelector('[data-bosch-program]');
@@ -372,7 +381,7 @@ export class ApplianceProfilesPage {
               ${recording.status==='saved'?`<button type="button" data-profile-command="select" data-id="${identity}" data-included="${!recording.included}">${recording.included?'Remove from average':'Add to average'}</button>`:
                 recording.status==='recording'?`<button type="button" data-profile-command="finish" data-id="${identity}">Finish recording now</button>`:`<button type="button" data-profile-command="discard" data-id="${identity}">Discard recording</button>`}
               </div><div class="profile-recording-details"><details><summary>Details</summary><p>${escapeHTML(recording.notes)}</p>
-              <p>${escapeHTML(status)}${recording.source==='bosch'?' · automatic Bosch capture':''} · ${recording.sample_count} samples · ${escapeHTML(recording.entity_id)} · ${recording.last_power_w===null?'Power unavailable':Math.round(recording.last_power_w)+' W'}</p>
+              <p>${escapeHTML(status)}${recording.source==='bosch'?' · automatic Bosch capture':''} · ${recording.sample_count} samples · ${escapeHTML(recording.entity_id)} · ${historyReading(recording.last_power_w===null?'— W':Math.round(recording.last_power_w)+' W',[recording.entity_id],{native:this.interaction?.native,demo:library.mode==='demo',label:'Recorded power'})}</p>
               ${recording.error || recording.interruption_reason?`<p class="notice">${escapeHTML(recording.error || recording.interruption_reason)}</p>`:''}
               ${recording.modifiers?`<p>Modifiers at start: ${escapeHTML(Object.entries(recording.modifiers).map(([name,value])=>name+': '+(value??'unavailable')).join(', '))}</p>`:''}</details>
               <details class="profile-delete"><summary>Delete recording…</summary><p>Permanently delete this physical recording, its samples and its contribution. This cannot be undone.</p>
@@ -579,6 +588,8 @@ export class ApplianceProfilesPage {
       Mean cycle duration: ${decimal(profile.summary.mean_duration_seconds/60,1)} min;
       graph extends to the longest cycle: ${decimal(profile.summary.duration_seconds/60,1)} min.</p>
       <div data-profile-graph></div>
+      <p>${historyReading('Source history', (this.library.recordings || []).filter(r=>profile.recording_ids.includes(r.id)).map(r=>r.entity_id),
+        {native:this.interaction?.native,demo:this.library.mode==='demo',label:'Average contributing sources'})}</p>
       <h3>Included recordings</h3><div class="actions profile-contributors">
       ${profile.recording_ids.map((identity,index) => `<span>Recording ${index+1}
       <button data-profile-command="review" data-id="${identity}">Inspect</button>
@@ -610,7 +621,7 @@ export class ApplianceProfilesPage {
     const editable = (recording.status === 'review' || saved) && duration > 0;
     panel.hidden = false;
     panel.innerHTML = `<h2 data-profile-review-title>Review · ${machineName(recording.machine)} · ${escapeHTML(recording.machine==='washing_machine' ? (this.library.programs[recording.machine][recording.program] ?? recording.program) : programLabel(this.library.programs[recording.machine][recording.program] ?? recording.program))}</h2>
-      <p>${escapeHTML(recording.notes)} · ${escapeHTML(recording.entity_id)} · ${escapeHTML(recording.status)}${recording.interruption_reason ? ' · ' + escapeHTML(recording.interruption_reason) : ''}</p>
+      <p>${escapeHTML(recording.notes)} · ${historyReading(escapeHTML(recording.entity_id || 'History'),[recording.entity_id],{native:this.interaction?.native,demo:this.library.mode==='demo',label:'Recording source'})} · ${escapeHTML(recording.status)}${recording.interruption_reason ? ' · ' + escapeHTML(recording.interruption_reason) : ''}</p>
       ${saved ? '<p class="notice">You can adjust this saved trim. Saving updates this recording in place, preserving raw measurements and its inclusion in the average.</p>' : ''}
       <div data-profile-graph></div>
       <p class="muted">Gaps are unknown; short measured peaks remain visible. Trim seconds are relative to the detected start.</p>

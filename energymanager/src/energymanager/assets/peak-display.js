@@ -95,13 +95,3 @@ export function peakDisplay(state) {
   }
   return result;
 }
-
-export function quarterReadout(quarter, formatTime) {
-  const watts = value => value === null ? 'unavailable' : `${Math.round(value)} W`;
-  const seconds = Math.ceil(quarter.secondsLeft);
-  return `Quarter ${formatTime(quarter.start)} – ${formatTime(quarter.end)} · ` +
-    `Meter contribution ${watts(quarter.measuredWatts)} (energy ÷ 0.25 h) · ` +
-    `Planned remaining contribution ${watts(quarter.remainingWatts)} · ` +
-    `Projected final average ${watts(quarter.projectedWatts)} · ${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, '0')}s remaining` +
-    (Number.isFinite(quarter.readAt) ? ` · Meter read ${formatTime(quarter.readAt)}` : '');
-}

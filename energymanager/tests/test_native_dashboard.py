@@ -22,7 +22,8 @@ def test_manifest_uses_active_entities_and_never_exposes_credentials(tmp_path):
     application.demo = False
     manifest = dashboard_manifest(application)
     assert manifest == {"protocol": 1, "version": __version__, "demo": False,
-                        "entities": {"ev_soc": "sensor.synthetic_car"}, "phase_selector": None}
+                        "entities": {"ev_soc": "sensor.synthetic_car"}, "history_sources": {"house": [], "grid": []},
+                        "phase_selector": None}
     application.store.close()
 
 
@@ -57,7 +58,7 @@ async def test_versioned_native_bundle_is_complete_and_rejects_stale_versions(tm
         assert response.headers["Cache-Control"] == "no-store"
         assert (await response.json())["version"] == __version__
         for name in ("native-dashboard.js", "native-live.js", "native-dashboard.css", "dashboard-client.js", "text-selection.js", "ev-status.js", "session-details.js", "appliance-profiles.js", "profile-chart.js",
-                     "application-view.js", "peak-display.js", "graph-history.js", "graph-cursor.js", "view.html", "settings.js", "datetime-picker.js", "style.css"):
+                     "application-view.js", "peak-display.js", "ha-history.js", "graph-history.js", "graph-cursor.js", "view.html", "settings.js", "datetime-picker.js", "style.css"):
             response = await client.get(f"/frontend/{__version__}/{name}")
             assert response.status == 200, name
             assert response.headers["Cache-Control"] == "no-cache"
@@ -95,3 +96,24 @@ def test_manifest_phase_selector_uses_actuator_mapping_and_is_hidden_in_demo(tmp
     application.actuator = FakeActuator()
     assert dashboard_manifest(application)["phase_selector"] is None
     application.store.close()
+
+
+def test_history_groups_follow_the_configured_house_measurement_source(tmp_path):
+    from energymanager.measurements import MeasurementOptions
+    app = Application(Store(tmp_path / "sources.sqlite"), snapshot=tiny(), demo=False)
+    keys = ("house_kw", "ev_kw", "pv_ac_kw", "ess_kw", "grid_import_kw", "grid_export_kw")
+    entities = {key: "sensor.synthetic_" + key for key in keys}
+    expected = {
+        "direct": (["house_kw"], ["house_kw", "ev_kw", "pv_ac_kw", "ess_kw"]),
+        "total_consumption": (["house_kw", "ev_kw"], ["house_kw", "pv_ac_kw", "ess_kw"]),
+        "signed_grid": (["house_kw", "pv_ac_kw", "ess_kw", "ev_kw"], ["house_kw"]),
+        "separate_grid": (["grid_import_kw", "grid_export_kw", "pv_ac_kw", "ess_kw", "ev_kw"],
+                          ["grid_import_kw", "grid_export_kw"]),
+    }
+    for mode, (house, grid) in expected.items():
+        app.ha = SimpleNamespace(entities=entities, options=MeasurementOptions(house_source=mode))
+        sources = dashboard_manifest(app)["history_sources"]
+        assert sources == {"house": [entities[key] for key in house], "grid": [entities[key] for key in grid]}
+    app.demo = True
+    assert dashboard_manifest(app)["history_sources"] == {"house": [], "grid": []}
+    app.store.close()

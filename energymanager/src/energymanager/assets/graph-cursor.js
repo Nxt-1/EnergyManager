@@ -1,5 +1,4 @@
 import {hasTextSelection} from './text-selection.js';
-import {quarterReadout} from './peak-display.js';
 
 export const plotInsets = {left: 58, right: 16, top: 12, bottom: 32};
 export const timeZoomLimits = {minimum: 15 * 60000, maximum: 7 * 24 * 3600000};
@@ -31,12 +30,13 @@ export function clipSeries(points, start, end, held = false) {
 }
 
 export class GraphCursor {
-  constructor(root, formatTime, colors, signal, pan = null, names = ['power', 'soc']) {
+  constructor(root, formatTime, colors, signal, pan = null, names = ['power', 'soc'], history = null) {
     this.root = root;
     this.names = names;
     this.formatTime = formatTime;
     this.colors = colors;
     this.models = {};
+    this.history = history;
     this.at = null;
     this.active = null;
     this.pinned = false;
@@ -345,8 +345,11 @@ export class GraphCursor {
         label.style.color = this.colors[series.name];
         for (const [kind] of columns) {
           const reading = valueAt(series[kind], this.at, series.step);
-          row.insertCell().textContent = reading ? `${reading.approximate ? '≈' : ''}${
+          const cell = row.insertCell();
+          const text = reading ? `${reading.approximate ? '≈' : ''}${
             reading.value.toFixed(name === 'soc' ? 1 : 0)} ${name === 'soc' ? '%' : 'W'}` : '—';
+          if (kind === 'observed' && this.history) cell.innerHTML = this.history(series.name, text, name === 'soc');
+          else cell.textContent = text;
           if (reading) svg('circle', {cx: x, cy: y(reading.value), r: 3.5,
             fill: kind === 'observed' ? this.colors[series.name] : 'var(--surface)',
             stroke: this.colors[series.name], 'stroke-width': 1.5});
@@ -357,12 +360,6 @@ export class GraphCursor {
       const time = document.createElement('strong');
       time.textContent = this.formatTime(this.at);
       tooltip.append(time, table);
-      if (model.quarter && this.at >= model.quarter.start && this.at <= model.quarter.end) {
-        const context = document.createElement('p');
-        context.className = 'quarter-readout';
-        context.textContent = quarterReadout(model.quarter, this.formatTime);
-        tooltip.append(context);
-      }
       tooltip.setAttribute('aria-live', announce ? 'polite' : 'off');
       const scale = plot.querySelector('svg').getBoundingClientRect().width / model.width;
       const pixelX = x * scale, pixelWidth = model.width * scale;

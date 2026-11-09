@@ -392,7 +392,7 @@ updates before incorporating them into the V4.5 implementation branch; discuss t
 next V4.5 task in the architecture chat and start implementation only when authorized.
 No application task, commit or publication is implied by this setup record.
 
-### EV planner — V4.6 / EV-A002–EV-A006
+### EV planner — V4.6 / EV-A002–EV-A007
 
 - **Architecture chat:** EV Task optimization achritecture, local ID
   `01a18e54-5380-7703-b13d-8044baa8a7ac`.
@@ -483,6 +483,31 @@ No application task, commit or publication is implied by this setup record.
   and inspect exact-head CI/image publication. Remote results go only to ignored
   `artifacts/ev-a006-state.json` and the final reply. No live HA/database, actual
   notifications, hardware operation or installation deployment performed.
+
+
+- **EV-A007 — complete for4.6.4 (9 November2026):** implementation and release
+  authorized8November in the registered paired architecture chat after the user
+  selected Long dashes and instructed “Hand it over”. Branch `codex/ev-a007`, isolated
+  checkout `energymanager/artifacts/worktrees/ev-a007`, based on released main4.6.3/
+  f1c3ce1; current primary pending requirements read before work. Unrelated drafts
+  remain outside this release. EV-A002–EV-A006 and appliance behavior are preserved.
+  **Implemented:** red17/9px dashes at3px, unchanged label/forecast/quarter shading,
+  red quarter SVG in its existing bottom-row location with actual quarter-input HA
+  history, compact cursor, genuine source actions for live/daily/actual cursor values
+  and appliance feedback/captured sources. House/grid contributors follow configured
+  measurement topology. Predictions/controller values remain distinct; standalone,
+  demo and unmapped sources do not expose fabricated HA actions.
+  **Verified:**143focused Python cases5.66s,98frontend cases, Ruff/mypy59modules,
+  all JS syntax and4.6.4 CLI/wheel import pass. Accessible names retain measured values. Native/standalone desktop and
+  390px layouts, quarter Enter/Space history, composite chooser, actual daily source,
+  Bosch power and averaged-profile contributor history pass with clean logs. Native
+  pinch/two-finger replay changes range; this is simulated touch evidence only.
+  Configured fake E2E25.516s/2019intervals/max control2.228ms/four fake calls passes,
+  including spawned-worker cancellation/replacement, admission and persistence.
+  Wheel/sdist all86runtime files match source; isolated asset import passes.
+  **Next:** commit/merge/push4.6.4 and inspect exact-head CI/image publication.
+  Remote results belong only in ignored `artifacts/ev-a007-state.json` and the final
+  reply. No live HA/database, real notifications, hardware operation or deployment.
 
 
 ## Current checkpoint — saved recording trim correction (4.5.4,31 October2026)

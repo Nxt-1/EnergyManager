@@ -42,7 +42,7 @@ export function dailyEnergyRows(summary, key, state) {
     house: [['', 'house', 'Household energy']], ev: [['', 'ev', 'EV charging energy']]
   };
   const number = value => Number.isFinite(value) ? value.toFixed(2) : '—';
-  return definitions[key].map(([symbol, name, label]) => ({symbol, label,
+  return definitions[key].map(([symbol, name, label]) => ({symbol, label, name,
     actual: number(current ? summary.kwh?.[name] : null), predicted: number(prediction?.[name]),
     partial: current && !!(summary.channels?.[name]?.partial ?? summary.partial), capture,
     source: current ? summary.channels?.[name]?.source ?? summary.power_source ?? summary.source : '',
