@@ -48,6 +48,22 @@ remains separate. Name, notes and open trim drafts survive live status updates.
 Offline checks use deterministic local/fake endpoints and isolated synthetic stores;
 no installation commissioning or remote machine start is implied by readiness.
 
+## EV stock after driving (4.6.9 / EV-A008 follow-up)
+
+If reported SoC is below retained estimated charge after driving, inspect Progress
+sources. A charging counter proves added energy, not remaining stock after an absence.
+Every observed return requires new vehicle stock evidence, whether or not a trip was
+registered. An unchanged old reading and a moving charger counter cannot resolve it.
+A changed lower valid SoC with a usable eto counter rebases stock once; timing stays
+unknown when the source supplies no physical timestamp. Uncertain overlap is omitted,
+and only subsequent delivery is credited to the corrected stock. The existing
+uncertainty indicator remains visible. Without usable evidence, reconcile the source;
+do not reset the ledger or mark the requirement fulfilled. EV authority is revoked
+for recalculation when the stock baseline changes; ESS remains independent.
+
+This changes stock accounting only. Existing charger faults and permissions still
+apply; restarting/retrying hardware is not part of this recovery policy.
+
 ## EV progress and execution (4.6.6 / EV-A008)
 
 Map the actual go-e Total energy (`eto`) sensor under Measurements, save and restart;

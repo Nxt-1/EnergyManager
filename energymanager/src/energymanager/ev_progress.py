@@ -26,14 +26,18 @@ class EVProgress:
         reported = o.ev_kwh if o.ev_state_known else None
         fresh_soc = (reported is not None and o.ev_observed_at is not None
                      and -5 <= (at - o.ev_observed_at).total_seconds() <= policy.measurement_max_age_seconds)
+        previous_reported = s.get("reported_kwh")
         if not o.connected:
+            if "away_since" not in s:
+                s["away_soc_reference_kwh"] = previous_reported if previous_reported is not None else reported
             s.setdefault("away_since", at.isoformat())
         elif s.get("away_since"):
             away = instant(s.pop("away_since"))
-            departures = [g.deadline for g in goals if g.kind == "trip" and away <= g.deadline <= at]
-            if departures:
-                s["unknown_return"] = True
-                s["reconcile_after"] = max(departures).isoformat()
+            # A charging counter cannot account for driving, registered or otherwise.
+            # Keep its ledger, but require new stock evidence after every observed return.
+            s["unknown_return"] = True
+            s["reconcile_after"] = away.isoformat()
+            s["uncertain"] = True
         if s.get("unknown_return"):
             fresh_soc = fresh_soc and o.ev_observed_at is not None and o.ev_observed_at >= instant(s["reconcile_after"])
         initializing = "estimated_kwh" not in s
@@ -79,32 +83,58 @@ class EVProgress:
                 delivery_at = max(instant(s["charging_since"]), instant(s.get("advanced_at", s["charging_since"])))
                 if (at - delivery_at).total_seconds() > policy.measurement_max_age_seconds:
                     s["counter_stalled"] = True
-        # An unchanged HA value/report time never establishes a new vehicle sample.
-        soc_changed = reported is not None and reported != s.get("soc_reference_kwh")
-        if fresh_soc and o.ev_observed_at is not None and (soc_changed or s.get("unknown_return")) and (
-                s.get("vehicle_at") is None or o.ev_observed_at > instant(s["vehicle_at"])):
-            assert o.ev_observed_at is not None and reported is not None
-            before = next((r for r in reversed(history) if instant(r["at"]) <= o.ev_observed_at), None)
-            after = next((r for r in history if instant(r["at"]) >= o.ev_observed_at), None)
+        # Changed values are evidence distinct from HA read/report timestamps. Some
+        # sources (including FordConnect Query SoC) expose no physical sample time.
+        # Never repeatedly rebase on the old rounded SoC while the counter advances.
+        reference = s.get("soc_reference_kwh")
+        soc_changed = reported is not None and reference is not None and reported != reference
+        lower_soc = (reported is not None and reference is not None and soc_changed
+                     and (reported < reference or previous_reported is not None and reported < previous_reported))
+        changed_return = (s.get("unknown_return") and soc_changed
+                          and reported != s.get("away_soc_reference_kwh", reference))
+        untimed_change = o.ev_observed_at is None and (lower_soc or changed_return)
+        timed_change = (fresh_soc and o.ev_observed_at is not None and (soc_changed or s.get("unknown_return"))
+                        and (s.get("vehicle_at") is None
+                             or o.ev_observed_at > instant(s["vehicle_at"])))
+        if o.connected and (timed_change or untimed_change):
+            assert reported is not None
+            before = next((r for r in reversed(history)
+                           if o.ev_observed_at is not None and instant(r["at"]) <= o.ev_observed_at), None)
+            after = next((r for r in history
+                          if o.ev_observed_at is not None and instant(r["at"]) >= o.ev_observed_at), None)
             aligned = before is not None and after is not None and before["kwh"] == after["kwh"]
-            if aligned and valid:
-                assert before is not None
-                s["estimated_kwh"] = min(c.ev_capacity_kwh, reported
-                    + (s["counter_kwh"] - before["kwh"]) * c.ev_efficiency)
-                s.update(vehicle_at=o.ev_observed_at.isoformat(), uncertain=False,
-                         reconciled_counter_kwh=before["kwh"], unknown_return=False, soc_reference_kwh=reported)
-            elif history:
-                s["uncertain"] = True
-                # An unaligned SoC can establish a higher stock floor, never erase
-                # measured progress. Anchor future increments at the next counter
-                # read instead of adding an overlapping missing segment twice.
-                if reported > s["estimated_kwh"]:
-                    s["estimated_kwh"] = reported
-                    if not valid:
-                        s["counter_rebase_pending"] = True
+            rebase = valid and (aligned or lower_soc or s.get("unknown_return")
+                               or reported > s["estimated_kwh"])
+            vehicle_only = fresh_soc and not valid and (lower_soc or s.get("unknown_return")
+                                                       or reported > s["estimated_kwh"])
+            if rebase or vehicle_only:
+                # With unknown/unaligned timing, omit any overlapping delivery up to
+                # this read. Only later counter increments belong to the new baseline.
+                counter_reference = s.get("counter_kwh")
+                subsequent = 0.0
+                if aligned and valid:
+                    assert before is not None
+                    counter_reference = before["kwh"]
+                    subsequent = (s["counter_kwh"] - counter_reference) * c.ev_efficiency
+                s.update(estimated_kwh=min(c.ev_capacity_kwh, reported + subsequent),
+                         vehicle_at=o.ev_observed_at.isoformat() if o.ev_observed_at else None,
+                         uncertain=not (aligned and valid), unknown_return=False,
+                         soc_reference_kwh=reported, reconciled_counter_kwh=counter_reference,
+                         baseline_revision=s.get("baseline_revision", 0) + 1,
+                         reconciliation_basis="vehicle sample" if aligned and valid else
+                                              "changed SoC; sample timing unknown" if untimed_change else
+                                              "vehicle sample; counter overlap omitted")
+                if vehicle_only:
+                    s["counter_rebase_pending"] = True
+                    s.pop("usable_at", None)
             else:
-                s.update(estimated_kwh=reported, vehicle_at=o.ev_observed_at.isoformat(),
-                         unknown_return=False, soc_reference_kwh=reported)
+                s["uncertain"] = True
+                if untimed_change:
+                    # A lower reading contradicts retained stock, but cannot authorize
+                    # either that stock or an untimed fallback during a counter outage.
+                    s["unknown_return"] = True
+                    s.setdefault("reconcile_after", at.isoformat())
+        fresh_soc = fresh_soc and not s.get("unknown_return", False)
         usable_at = instant(s["usable_at"]) if s.get("usable_at") else None
         meter_usable = ("estimated_kwh" in s and usable_at is not None
                         and -5 <= (at - usable_at).total_seconds() <= policy.measurement_max_age_seconds)
@@ -143,7 +173,9 @@ class EVProgress:
                 "counter_at": s.get("counter_at"), "reported_kwh": reported,
                 "vehicle_observed_at": s.get("reported_vehicle_at"),
                 "estimated_kwh": energy, "credited_kwh": s.get("credited_kwh", 0.0),
-                "uncertain": s.get("uncertain", False), "segments": s.get("segments", 0)}
+                "uncertain": s.get("uncertain", False), "segments": s.get("segments", 0),
+                "baseline_revision": s.get("baseline_revision", 0),
+                "reconciliation_basis": s.get("reconciliation_basis")}
         self.store.put("ev_progress", s)
         known = usable and (("estimated_kwh" in s and not s.get("unknown_return")) or fresh_soc)
         return replace(o, ev_kwh=energy, ev_state_known=known,
@@ -169,7 +201,7 @@ def progress_warning(observation: Observation, at: datetime, goals: tuple[Goal, 
         "counter_unmapped": ("EV progress sensor not selected", "Select go-e Total energy · eto in Measurements, save and restart."),
         "counter_unavailable": ("EV charging progress unavailable", "Restore the selected total-energy sensor with declared Wh/kWh units, or a genuinely fresh vehicle SoC."),
         "counter_stalled": ("EV energy counter is not advancing", "Check the selected total-energy sensor and its updates while charging; restore measured progress."),
-        "post_trip": ("Vehicle energy needs reconciliation", "Restore a genuinely fresh post-trip vehicle SoC; reconnect the vehicle if it is still away."),
+        "post_trip": ("Vehicle energy needs reconciliation", "Restore a changed post-trip vehicle SoC with a usable total-energy counter, or a genuinely fresh vehicle sample; reconnect the vehicle if it is still away."),
         "vehicle_baseline": ("Vehicle energy baseline unavailable", "Restore a valid vehicle SoC to establish the total-energy reference."),
     }[cause]
     affected = {goal.id: {"id": goal.id, "revision": goal.revision, "title": goal.title,

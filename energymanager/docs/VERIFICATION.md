@@ -1,5 +1,44 @@
 # EnergyManager 4 verification
 
+## 4.6.9 — Vehicle stock after driving (EV-A008 follow-up, 10 November2026)
+
+Based on released4.6.8/de726ed. All counters, ledgers, endpoints and actuator calls
+below are labelled synthetic/local; the user-supplied frozen decision is unchanged.
+
+- 809Python cases pass171.40s;25focused cases pass5.33s (final19restart cases0.47s);113frontend pass0.407s.
+  Ruff, mypy61modules and CLI4.6.9 pass. Regressions cover planned/unplanned returns,
+  missing physical timestamps, repeated unchanged values, genuinely fresh aligned/
+  unaligned lower samples, stale explicit timestamps, counter gaps and restart credit.
+  A real planner case confirms high retained stock cannot mark an unresolved return
+  fulfilled and that corrected17% stock schedules energy for the50% daily target.
+- Application regression proves a changed stock baseline revokes EV authority and
+  requests exactly one recalculation while ESS authority and saved results remain.
+  Existing execution/charger/fault/permission/peak and progress-warning cases pass.
+  No retry/reboot or notification-policy changes are included.
+- Frozen export2b8665d16f06478d89e164b531bdc91b/revision863 retains SHA256
+  `826d923c31370055b5063eb442b78e4350c90c705d2d193f5685aa2a40dc4bac`
+  and digest`8c5236354aa2f1208aa08a075e973f7091333dc610c088f51ee50aaff93d79ca`.
+  An explicitly synthetic reconstructed persisted ledger reproduces23.4513kWh versus
+  reported7.956kWh, with.7533kWh historical charging credit. Correction uses7.956kWh
+  once, leaves vehicle sample time unknown and retains baseline/overlap uncertainty.
+  All2021intervals/goals/execution context are preserved for the corrected replay;
+  full solve103.749s validates and schedules17.16299kWh before11November07:00 Brussels,
+  reaching23.40269kWh against23.4kWh target, versus zero charging in the supplied result.
+  The complete installation ledger was not supplied. This reproduces the failure and
+  correction, not the historical timing of any driving or missing charging segment.
+- Configured fake E2E25.691s/2019intervals/max control3.140ms and routed60.864s/2023/
+  max3.991ms pass. Actual mapped fake eto remains usable with old HA report metadata;
+  EV goals are not bypassed as unknown. Both perform four fake actuator calls; routed
+  imports two calendar trips with six local route queries. No installation benchmark.
+- Wheel/sdist4.6.9 build,88runtime byte comparisons and isolated version/import pass.
+  Existing113frontend cases cover both-dashboard progress-source/history rendering.
+  This correction changes stock accounting and existing warning recovery prose;
+  no layout or dashboard interaction changes require new visual acceptance.
+
+Detailed frozen replay, package and local logs remain in ignored artifacts, indexed
+by `artifacts/ev-progress-return-state.json`. Exact-head CI/container/publication results
+belong only in that checkpoint and final reply. No live source or deployment used.
+
 ## 4.6.8 — EV-A009 shared warnings and independent grid display (9 November2026)
 
 Based on released main4.6.7/4cecd64. EV-A008 and recorder readiness remain covered.

@@ -73,3 +73,39 @@ def test_real_replans_keep_49_percent_and_finish_once_with_persistent_total(tmp_
     assert observation.ev_progress["reported_kwh"] == 22.932
     assert observation.ev_kwh == pytest.approx(22.932 + stored)
     store.close()
+
+
+def test_lower_return_stock_requires_and_plans_energy_for_the_daily_fifty_percent_goal(tmp_path):
+    from test_ev_progress import meter, update
+    c = replace(C, phases=(1,))
+    p = replace(P, planning_budget_seconds=2, automatic_peak_kw=3.5)
+    store = Store(tmp_path / "synthetic.sqlite")
+    progress = EVProgress(store)
+    old = progress.update(sample(soc=23.4513), meter(0, 100), "sensor.synthetic_eto", c, p)
+    update(progress, 1, 100, soc=23.4513, connected=False)
+    returned = update(progress, 2, 100, soc=23.4513)
+    assert not returned.ev_state_known and returned.ev_kwh == 23.4513
+    new = update(progress, 5, 100, soc=7.956)
+    deadline = AT + timedelta(hours=14)
+    goal = Goal("morning", "SYNTHETIC 50% daily target", deadline, 50, kind="daily")
+    points = time_grid(AT, 14, boundaries=(deadline,))
+    intervals = tuple(Interval(a, b, .4, 0, 0) for a, b in zip(points, points[1:]))
+    before = Snapshot("SYNTHETIC stale stock", 1, old, AT, "SYNTHETIC grid-only", intervals, (goal,), c, p)
+    after = replace(before, id="SYNTHETIC reconciled stock", revision=2, observation=new)
+    unavailable = replace(before, id="SYNTHETIC unresolved return", observation=returned,
+        intervals=tuple(replace(i, available=False, ev_state_known=False) for i in intervals))
+    for snapshot in (before, unavailable, after):
+        result = Planner().plan(snapshot)
+        assert result["valid"], result
+        assert validate(snapshot, result["flows"], result["service"]) == []
+        if snapshot is before:
+            assert sum(result["flows"]["grid_ev"]) == pytest.approx(0)
+        elif snapshot is unavailable:
+            assert result["goals"][0]["status"] == "progress_unavailable"
+            assert result["goals"][0]["planned_kwh"] is None
+            assert result["goals"][0]["completion_at"] is None
+        else:
+            assert sum(result["flows"]["grid_ev"]) > 0
+            assert result["flows"]["ev_energy"][-1] >= 23.4 - .001
+            assert result["goals"][0]["shortfall_kwh"] < .001
+    store.close()

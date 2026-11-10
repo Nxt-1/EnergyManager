@@ -897,6 +897,10 @@ class Application:
             )
         elif previous.ev_state_known != observation.ev_state_known:
             self.changed("ev_state_reconciled" if observation.ev_state_known else "ev_state_unknown", ev=True)
+        elif (observation.ev_progress and previous.ev_progress
+              and observation.ev_progress.get("baseline_revision", 0)
+                  != previous.ev_progress.get("baseline_revision", 0)):
+            self.changed("ev_stock_reconciled", ev=True)
 
         self.archive_finished_goals(self.now(), observed=observation)
 

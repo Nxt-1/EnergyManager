@@ -18,10 +18,18 @@ is valid; measured charging without advancing energy expires the existing watchd
 Reported vehicle SoC and estimated charge are displayed separately. HA report/read
 timestamps are diagnostic, not vehicle measurement timestamps. The optional
 `vehicle_observed_at` attribute on the SoC sensor is used only when it contains an
-actual vehicle sample timestamp; absent timing remains unknown. An aligned genuinely
-new sample rebases the counter reference. Unaligned information retains credit and
-explicit uncertainty instead of adding overlapping energy twice. Known-trip return
-still requires genuine vehicle reconciliation.
+actual vehicle sample timestamp; absent timing remains unknown. Every observed
+return, including after unplanned driving, requires new stock evidence. Repeated old
+values or counter advancement alone cannot reconcile stock after driving.
+
+In4.6.9 a changed lower valid SoC without a physical timestamp can establish a new
+stock baseline at the current usable total-energy counter. Unknown delivery overlap
+through that read is omitted; only later increments are added. Credited delivery is
+retained separately. A repeated unchanged value never rebases that stock again.
+Fresh physical samples still use aligned counter evidence where available; otherwise
+new lower/return stock retains explicit overlap uncertainty. Without sufficient
+source evidence EV pauses with reconciliation required; ESS remains independent.
+Stock changes request a new plan, rather than using prior high stock to meet a goal.
 
 If neither progress source is usable, EV pauses after the existing measurement
 watchdog, retaining its task and progress; ESS continues independently. Recovery

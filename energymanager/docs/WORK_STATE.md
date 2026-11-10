@@ -644,6 +644,35 @@ No application task, commit or publication is implied by this setup record.
   follow-up commit. No live installation/database, real phone/hardware or deployment.
 
 
+- **EV-A008 follow-up — vehicle stock after returns (4.6.9, 10 November2026):**
+  Scoped implementation handoff authorized by the user's “yes, send it over” in EV
+  charging errors architecture `01a1b5ee-a26d-7481-8cfe-f160c58f7efc`; approval and
+  current primary records checked before coding. EV-A009 is already complete4.6.8.
+  Branch `codex/ev-progress-return`, isolated in ignored artifacts, starts from
+  main/origin4.6.8/de726ed. No unrelated drafts or application scope taken over.
+  **Implemented:** all observed returns require new stock evidence regardless of
+  trip membership, retaining counter references/credited delivery. Changed lower
+  untimed SoC can anchor stock once at a current valid counter; overlapping delivery
+  is omitted, future increments credited once and physical timing remains unknown.
+  Fresh aligned samples retain bracketing; unaligned lower/return samples retain
+  uncertainty. Repeated old values cannot repeatedly rebase or recover unknown stock;
+  insufficient evidence leaves EV unavailable rather than falsely meeting a goal.
+  Persistent baseline revisions revoke only EV authority and request recalculation.
+  **Verified:**809Python171.40s,25source/return/planner/presentation cases5.33s,
+  113frontend0.407s, Ruff/mypy61/CLI pass. Configured fake E2E25.691s/2019intervals/
+  max3.140ms and routed60.864s/2023/max3.991ms pass; two calendar imports/six fake
+  routes. Wheel/sdist88runtime files match and isolated4.6.9 import passes.
+  Frozen supplied export SHA256826d923c...c4bac/digest8c523635...d79ca stays unchanged.
+  Explicitly synthetic reconstructed ledger corrects23.4513kWh to7.956kWh, retaining
+  credited delivery; full2021interval replay103.749s schedules17.16299kWh before
+  11November07:00 Brussels versus0 previously, reaching23.40269kWh for23.4kWh target.
+  Full historical ledger/driving timeline was not supplied; no precise physical
+  timestamp, driving withdrawal or installation performance is inferred.
+  **Next:** scoped commit/integration in version order, push and exact-head CI/image
+  publication. Remote results only in ignored `artifacts/ev-progress-return-state.json`
+  and final reply, without a verification-only commit. No live HA/database, hardware,
+  real notifications, installation deployment or retry/reboot-policy change.
+
 ## Current checkpoint — saved recording trim correction (4.5.4,31 October2026)
 
 AUTHORIZED: repair the requested draggable recording bounds. User clarified the

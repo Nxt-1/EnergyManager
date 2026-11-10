@@ -1,5 +1,16 @@
 # Current requirements and decisions
 
+- 10 November2026, EV-A008 stock follow-up: user authorized handing the confirmed
+  17% versus retained50.1% discrepancy and export to the existing EV implementation
+  chat for this scoped correction. Reconcile all observed returns, including
+  unplanned driving, preserve delivered-energy continuity and correct genuinely
+  changed lower SoC without double credit. Ford SoC has no guaranteed physical sample
+  timestamp: distinguish changed-value evidence from precise measurement timing;
+  anchor unknown overlap conservatively at a valid counter and retain uncertainty.
+  Repeated old values must not reset stock, and insufficient evidence cannot satisfy
+  the daily goal from retained high inventory. Existing charger protections remain;
+  retry/reboot policy, live HA/database, hardware and deployment remain outside scope.
+
 - 9 November2026, EV-A009: after mapping eto and restarting, the user confirms both
   the repeated EV-progress warnings and missing red quarter-end marker recovered.
   They requested one work package for grouping the common fault into one actionable

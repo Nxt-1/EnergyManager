@@ -82,3 +82,26 @@ def test_read_watchdog_updates_operational_warning_without_a_new_observation(tmp
     assert progress_warning(fresh_vehicle, AT, ()) is None
     assert progress_warning(fresh_vehicle, AT + timedelta(seconds=31), ())['cause'] == 'counter_unmapped'
     store.close()
+
+
+def test_stock_reconciliation_revokes_old_ev_authority_and_requests_one_replan(tmp_path):
+    from types import SimpleNamespace
+    store = Store(tmp_path / 'synthetic.sqlite')
+    s = tiny()
+    ha = SimpleNamespace(entities={'ev_total_kwh': 'sensor.synthetic_eto'},
+                         inputs=SimpleNamespace(readings={'ev_total_kwh': meter(0, 100)}))
+    app = Application(store, snapshot=replace(s, observation=sample(soc=23.4513)), ha=ha, demo=False)
+    app.now = lambda: AT
+    app.observe(sample(soc=23.4513))
+    app.ev_valid = app.ess_valid = True
+    app.accepted = {'id': 'SYNTHETIC preserved result'}
+    revision = app.revision
+    app.observe(sample(5, soc=7.956))
+    assert app.observation.ev_kwh == 7.956 and app.observation.ev_state_known
+    assert app.revision == revision + 1 and app.requested.is_set()
+    assert not app.ev_valid and app.ess_valid
+    assert app.accepted == {'id': 'SYNTHETIC preserved result'}
+    assert any(e['kind'] == 'invalidation' and e['body']['reason'] == 'ev_stock_reconciled' for e in store.events())
+    app.observe(sample(10, soc=7.956))
+    assert app.revision == revision + 1
+    store.close()

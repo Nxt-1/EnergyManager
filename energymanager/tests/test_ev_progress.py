@@ -202,3 +202,98 @@ def test_stationary_total_is_valid_at_rest_but_stalled_delivery_requires_real_re
     recovered = update(progress, 105, 100.1)
     assert recovered.ev_progress["usable"] and recovered.ev_kwh == pytest.approx(23.022)
     store.close()
+
+
+@pytest.mark.parametrize("scheduled", [False, True])
+def test_every_return_needs_new_stock_evidence_without_erasing_the_counter_ledger(tmp_path, scheduled):
+    store = Store(tmp_path / "synthetic.sqlite")
+    progress = EVProgress(store)
+    goal = Goal("trip", "SYNTHETIC trip", AT + timedelta(seconds=10), kind="trip", distance_km=20)
+    goals = (goal,) if scheduled else ()
+    update(progress, 0, 100)
+    update(progress, 5, 100.2)
+    progress.update(sample(10, connected=False), meter(10, 100.2), "sensor.synthetic_eto", C, P, goals)
+    store.close()
+    store = Store(tmp_path / "synthetic.sqlite")
+    progress = EVProgress(store)
+    returned = progress.update(sample(20), meter(20, 100.2), "sensor.synthetic_eto", C, P, goals)
+    assert not returned.ev_state_known and returned.ev_progress["reconciliation_required"]
+    assert returned.ev_kwh == pytest.approx(23.112)
+    assert returned.ev_progress["credited_kwh"] == pytest.approx(.18)
+    # Neither another poll nor counter advancement proves the pre-drive stock.
+    assert not update(progress, 25, 100.3).ev_state_known
+    new = update(progress, 30, 100.3, soc=7.956)
+    assert new.ev_state_known and new.ev_kwh == 7.956
+    assert new.ev_observed_at is None and new.ev_progress["uncertain"]
+    assert not new.ev_progress["reconciliation_required"]
+    assert new.ev_progress["credited_kwh"] == pytest.approx(.27)
+    store.close()
+    store = Store(tmp_path / "synthetic.sqlite")
+    after = update(EVProgress(store), 35, 100.4, soc=7.956)
+    assert after.ev_kwh == pytest.approx(8.046)
+    assert after.ev_progress["baseline_revision"] == new.ev_progress["baseline_revision"]
+    store.close()
+
+
+def test_new_lower_untimed_soc_corrects_the_frozen_incident_without_counting_old_delivery(tmp_path):
+    # SYNTHETIC persisted ledger reproduces export 2b8665d... revision863.
+    # The export has no full ledger; its stock/counter/credit fields are exact inputs.
+    store = Store(tmp_path / "synthetic.sqlite")
+    store.put("ev_progress", {"estimated_kwh": 23.4513, "reported_kwh": 7.956,
+        "soc_reference_kwh": 22.698, "credited_kwh": .7533,
+        "counter_kwh": 750.182, "entity_id": "sensor.synthetic_eto", "uncertain": True})
+    progress = EVProgress(store)
+    corrected = update(progress, 0, 750.182, soc=7.956)
+    assert corrected.ev_state_known and corrected.ev_kwh == 7.956
+    assert corrected.ev_progress["credited_kwh"] == .7533
+    assert corrected.ev_observed_at is None
+    assert "timing unknown" in corrected.ev_progress["reconciliation_basis"]
+    for seconds, total in ((5, 750.282), (10, 750.382), (15, 750.382)):
+        continued = update(progress, seconds, total, soc=7.956)
+    assert continued.ev_kwh == pytest.approx(8.136)
+    assert continued.ev_progress["baseline_revision"] == 1
+    assert continued.ev_progress["credited_kwh"] == pytest.approx(.9333)
+    store.close()
+
+
+def test_lower_untimed_soc_waits_for_counter_while_repeated_old_values_cannot_recover_return(tmp_path):
+    store = Store(tmp_path / "synthetic.sqlite")
+    progress = EVProgress(store)
+    update(progress, 0, 100)
+    lower = update(progress, 5, None, soc=7.956)
+    assert not lower.ev_state_known and lower.ev_progress["reconciliation_required"]
+    assert not update(progress, 10, None, soc=7.956).ev_state_known
+    recovered = update(progress, 15, 100.5, soc=7.956)
+    assert recovered.ev_state_known and recovered.ev_kwh == 7.956
+    update(progress, 20, 100.5, soc=7.956, connected=False)
+    assert not update(progress, 25, 100.5, soc=7.956).ev_state_known
+    assert not update(progress, 30, 100.5, soc=7.956, vehicle_at=AT).ev_state_known
+    # Same rounded stock is sufficient only with an actual new post-away sample.
+    fresh = update(progress, 35, 100.5, soc=7.956, vehicle_at=AT + timedelta(seconds=35))
+    assert fresh.ev_state_known and fresh.ev_kwh == 7.956
+    store.close()
+
+
+@pytest.mark.parametrize("counter", [None, 100.4])
+def test_new_lower_timed_soc_omits_unaligned_delivery_and_rebases_future_counter_once(tmp_path, counter):
+    store = Store(tmp_path / "synthetic.sqlite")
+    progress = EVProgress(store)
+    update(progress, 0, 100)
+    update(progress, 5, 100.2)
+    low = update(progress, 10, counter, soc=7.956, vehicle_at=AT + timedelta(seconds=7))
+    assert low.ev_state_known and low.ev_kwh == 7.956 and low.ev_progress["uncertain"]
+    next_total = counter if counter is not None else 100.4
+    next_o = update(progress, 15, next_total, soc=7.956, vehicle_at=AT + timedelta(seconds=7))
+    assert next_o.ev_kwh == 7.956
+    assert update(progress, 20, next_total + .1, soc=7.956).ev_kwh == pytest.approx(8.046)
+    store.close()
+
+
+def test_stale_physical_sample_is_not_changed_value_evidence(tmp_path):
+    store = Store(tmp_path / "synthetic.sqlite")
+    progress = EVProgress(store)
+    update(progress, 0, 100)
+    o = update(progress, 5, 100.1, soc=7.956, vehicle_at=AT - timedelta(hours=1))
+    assert o.ev_kwh == pytest.approx(23.022) and o.ev_state_known
+    assert o.ev_progress["baseline_revision"] == 0
+    store.close()

@@ -1761,6 +1761,48 @@ decisions/command history; synthetic regressions do not become installation evid
 Implemented in4.6.6 and verified offline; see VERIFICATION.md for results and limits.
 No live installation action is included.
 
+### Vehicle stock after returns (EV-A008 follow-up, 4.6.9)
+
+The10November supplied decision used23.4513kWh (50.1096% of46.8kWh) despite
+reported7.956kWh (17%) after user-confirmed driving. A valid cumulative charging
+counter measures added energy, not withdrawals. Stock reconciliation must not depend
+on whether a registered trip departure occurred during disconnection.
+
+Every observed disconnect/return retains the ledger and credited delivery, but makes
+stock unavailable until genuinely new vehicle evidence reconciles it. Repeated old
+SoC, HA read/report-time changes and counter advancement alone cannot prove the old
+stock survived an absence. No driving consumption is inferred or inserted.
+
+A changed valid lower SoC is also stock evidence when the source has no physical
+sample timestamp. Compare with the retained vehicle reference/previous reported
+value, rather than the counter-grown estimate: an unchanged49% reading must not
+repeatedly reset a charging estimate that has reached50%. The FordConnect Query SoC
+implementation currently exposes the numeric value and battery range, without a
+physical sample timestamp; HA last_updated/last_reported remain diagnostic metadata.
+See its [upstream SoC implementation](https://github.com/marq24/ha-fordconnect-query/blob/main/custom_components/fordconnect_query/fordpass_handler.py).
+
+With a current valid total-energy counter, new lower untimed SoC establishes stock
+at that counter read once. Keep the physical timestamp unknown and mark baseline/
+overlap uncertainty. Omit overlapping delivery through that read; add only later
+counter increments, including after restart. Changed return SoC can likewise rebase
+after an absence. Do not add cumulative credited gain to the new stock. Credit is
+retained historical delivery, not an assertion that it remains in the battery.
+
+A genuine fresh timed sample uses counter bracketing when aligned. Lower/return
+samples with unaligned timing use the same conservative current-counter anchor,
+without estimating the missing overlap. If only a fresh physical sample is usable,
+use its stock and rebase at the next valid counter read without crediting the gap.
+An explicitly stale physical timestamp cannot be replaced by an HA read timestamp
+or treated as untimed change evidence. Without either usable reconciliation path,
+retain stock/credit as diagnostic evidence, expose reconciliation required and keep
+EV unknown/unavailable; a goal must not be reported met from that retained stock.
+
+A persisted stock-baseline revision invalidates prior EV authority and requests
+recalculation once, even if availability stays known. ESS authority remains independent.
+Frozen decisions are evidence and are not rewritten. Existing watchdog, source,
+quantity, peak, charger-fault and permission guards remain. No retry/reboot policy,
+notification-policy change or live operation belongs to this correction.
+
 ### Shared progress warnings and independent grid projection (EV-A009, 4.6.8)
 
 On9November2026 the user requested one implementation work package for the two

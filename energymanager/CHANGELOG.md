@@ -1,3 +1,10 @@
+## 4.6.9 — Correct EV stock after driving
+
+- Require stock reconciliation after observed returns, including unplanned trips, while retaining measured charging credit.
+- Accept genuinely changed lower vehicle SoC without fabricating its measurement time. Anchor later charging to the current total-energy counter once and retain unknown-overlap uncertainty.
+- Recalculate EV requirements when stock changes; prevent retained high stock from falsely satisfying daily goals. Preserve ESS independence and existing charger/error/permission guards.
+- Verified offline with synthetic ledgers and the supplied frozen export; no installation deployment.
+
 ## 4.6.8 — Shared EV progress warnings and independent grid forecasts
 
 - Show one actionable warning per current EV-progress source fault, with affected goals and deadlines in expandable details.
