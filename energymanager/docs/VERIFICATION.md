@@ -1,5 +1,61 @@
 # EnergyManager 4 verification
 
+## 4.6.10 — Unreliable feedback and bounded manual recovery (EV-A010,11November2026)
+
+Based on released4.6.9/fd6d4a9. All measurements, counters, notification destinations,
+endpoints and actuator operations below are explicitly synthetic/local. The supplied
+frozen forecast is unchanged; no live installation/database/hardware was accessed.
+
+- Final840Python cases pass171.75s;118frontend cases pass397.6ms. Ruff, mypy63modules,
+  all asset JavaScript syntax and CLI4.6.10 pass. The final31focused feedback/manual
+  cases pass4.65s. Existing A008/A009 stock/source/execution/grid/appliance cases pass.
+- The feedback matrix covers fast/slow measured3point gain plus15minute grace,
+  rounding/delayed changed readings, parked/small-top-up/near-full behavior, pauses,
+  replans/restarts, missing/reset/changed/stalled counters, continuous gap recovery,
+  absent/stale vehicle times and one persistent incident/notification identity.
+  Manual confirmation/dismissal/update, overnight waiting beyond12hours, completed/
+  changed/new goals, unplug/return, lower/higher changed recovery and unchanged
+  cached values are checked. Historical energy credit stays separate from new stock.
+- A real synthetic3600second control loop stops49→50% charging within one minimum
+  control dose; a later80% goal cannot enlarge it. Partial15second prefixes, a130second
+  phase wait spanning the completion interval and single/three-phase small quantities
+  validate source/EV/ESS/quarter balance and normal admission. No flow is trimmed to
+  create an accepted plan, and an uncapped seed is never execution authority.
+- Full seven-day synthetic manual17% case on the supplied forecast completes in
+  77.3149s within the original120s wall budget. Completion refinement2021→2022intervals
+  freezes a new context; reference, full-joint independent validation and admission
+  pass. Maximum stock is exactly23.4kWh for the confirmed50% goal. Captured digest
+  `3ba50a392dbf1577120d490282ac7bb12a14eeca337381b78a26d8e3a645cf67`;
+  effective digest`0a2a8003c6641432dcf15401d6af8e33a43c1eb3f01e65cc47d58af1930dac10`.
+- Non-executable advisory tests independently audit complete joint flows/context,
+  retain due instruction windows and gate refresh requests on current sources,
+  revision and forecast. Timeout/missing/satisfied candidates invent no prompt time.
+  The full2022interval completed-scope/later70% case takes22.3874s total: authoritative
+  plan validates and remains capped, but the optional3second advisory solve times out
+  without a checked candidate. It is explicitly unverified, with no instruction or
+  phone timing guarantee. The small real-model checked path and due-window/dedup
+  integration pass; no extra budget or deadline/max-rate reminder is introduced.
+- Native/standalone desktop1360px and mobile390px browsers verify blank entry,
+  dismissal without authority, confirmed17%/updated19% references, counter-loss pause,
+  preserved reference on recovery, switch-off pending/error behavior, completion and
+  changed vehicle57% recovery to34.2kWh. Historical18.6kWh credit remains separate;
+  completed manual mode remained stopped for more than two elapsed hours before
+  recovery. Native battery history opens the actual `sensor.ev_soc`, not a fabricated
+  manual sensor. No console warnings/errors were observed. Screenshots are local
+  synthetic evidence; HA built-in cards/Supervisor remain simulated.
+- Configured fake E2E passes25.656s/2019intervals/max control2.744ms/four fake actuator
+  calls. Routed fake E2E passes65.936s/2023intervals/max5.158ms/four calls, two calendar
+  imports and six local route queries. Existing cancellation, current admission,
+  persistence, authority and usable-progress assertions remain enabled.
+- Wheel/sdist4.6.10 build; all91runtime files match source byte-for-byte in both
+  artifacts. Isolated wheel import/version passes. No Docker daemon is used locally;
+  exact-head CI/container/image publication must complete through existing workflows.
+
+Evidence is indexed in ignored `artifacts/ev-a010-state.json`. Subsequent remote
+outcomes belong there and in the paired chat/final reply, without a follow-up docs
+commit. Detector calibration and physical meter/control response remain installation
+unverified. No live installation deployment or real notification was performed.
+
 ## 4.6.9 — Vehicle stock after driving (EV-A008 follow-up, 10 November2026)
 
 Based on released4.6.8/de726ed. All counters, ledgers, endpoints and actuator calls

@@ -112,6 +112,7 @@ function scaleDecimal(value, scale) {
 
 
 export function goalStatus(goal, now) {
+  if (goal.status === 'manual_reference_required') return 'Manual reference required';
   if (goal.kind === 'trip' && Date.parse(goal.deadline) <= Date.parse(now)) {
     return goal.return_at && Date.parse(goal.return_at) > Date.parse(now) ? 'Underway' : 'Awaiting return';
   }

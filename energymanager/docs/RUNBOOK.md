@@ -1,5 +1,36 @@
 # Run, configure, review and roll back
 
+## Manual SoC recovery (4.6.10 / EV-A010)
+
+When EV feedback is unavailable or suspected stuck, restore its sources or open
+EV → Manual SoC. Turning on the switch opens a blank entry; enter the actual current
+battery percentage and review the next existing goal's target/deadline. Only
+**Confirm reference & goal** grants bounded manual authority. Cancel grants none.
+There must be a usable go-e total-energy counter. Reported vehicle SoC stays separate;
+the manual estimate is not a new HA entity or measured battery confirmation.
+
+Confirmed work survives waiting, pauses, recalculation, restart and reference age.
+It stops at its estimated requirement within meter/control resolution and never
+renews automatically for later goals. The display shows the reference's age.
+An unanswered age reminder does not cancel confirmed work. One new-reference request
+can appear when audited scheduling evidence shows additional charging is now due;
+unavailable advisory evidence cannot guarantee that notification's timing.
+
+Unplugging, a changed goal, deadline expiry or meter reset/source change blocks further
+manual work until a new current reference/goal is confirmed. Counter failure/stall
+retains the reference while normal measurement guards pause EV; ESS remains independent.
+Turning Manual SoC off removes its authority; unresolved vehicle feedback leaves EV
+paused. A changed valid vehicle-reported percentage automatically exits manual mode,
+corrects the baseline once and sends one recovery notice, even if it differs from
+the estimate. Unchanged cached values do not recover it. No charger reboot is required.
+
+Offline verification only: `python tools/offline_e2e.py --serve --feedback-fixture`
+starts a labelled local synthetic backend. In another terminal run
+`python tools/native_dashboard_preview.py`; inspect standalone and native preview on
+desktop and390px widths. Its `/synthetic/feedback` endpoint exists only in this test
+tool; it can seed a synthetic issue, counter/connection faults, completion and changed
+recovery. Do not use installation endpoints or databases for these checks.
+
 ## Shared EV-progress warnings and grid projection (4.6.8 / EV-A009)
 
 Overview/Planning shows one current warning for a common progress-source fault.

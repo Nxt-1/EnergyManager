@@ -2041,3 +2041,87 @@ test('recorder status failure and recovery update only the indicator while prese
   await page.refresh();
   assert.equal(indicator.dataset.state,'unavailable');
 });
+
+
+import {ManualSoC, manualSoCMarkup, manualConfirmationGoal} from '../src/energymanager/assets/manual-soc.js';
+const manualFixture = () => ({now:'2026-11-10T20:00:00Z',policy:{timezone:'Europe/Brussels'},
+  ev_manual:{reference:null,reference_age_seconds:null,next_goal:{id:'synthetic-next',revision:2,
+    title:'SYNTHETIC morning <target>',target_percent:50,target_kwh:23.4,deadline:'2026-11-11T06:00:00Z'}}});
+
+test('manual switch offers blank actual input and an explicit goal without turning a cached SoC into a reference', () => {
+  const state=manualFixture(), draft={open:true,value:'',busy:false,error:null};
+  const html=manualSoCMarkup(state,draft);
+  assert.match(html,/role="switch"/);
+  assert.match(html,/Not active/);
+  assert.match(html,/value=""/);
+  assert.match(html,/SYNTHETIC morning &lt;target&gt;/);
+  assert.match(html,/50.0%/);
+  assert.match(html,/07:00/);
+  assert.match(html,/Confirm reference & goal/);
+  assert.doesNotMatch(html,/data-ha-entities|Awaiting measured reconnection|12.hour/);
+});
+
+test('confirmed manual reference displays long nonblocking age and completion distinctly from vehicle SoC', () => {
+  const state=manualFixture();
+  state.ev_manual.reference={enabled:true,soc_percent:17,status:'completed'};
+  state.ev_manual.reference_age_seconds=120000;
+  const html=manualSoCMarkup(state,{value:'',busy:false,error:null});
+  assert.match(html,/Entered 17.0%/);
+  assert.match(html,/33 h 20 min ago/);
+  assert.match(html,/complete · estimated/);
+  assert.match(html,/Confirm new reference/);
+  assert.doesNotMatch(html,/expired|hard cutoff/i);
+});
+
+test('opening/dismissing manual entry sends nothing; explicit entry confirms exact displayed goal and preserves failed drafts', async () => {
+  const handlers=new Map(), calls=[];
+  const root={addEventListener:(name,handler)=>handlers.set(name,handler)};
+  let fail=false;
+  const draft=new ManualSoC(root,async body=>{calls.push(body);if(fail)throw new Error('POST ev/manual-soc: Synthetic stale goal');},()=>{});
+  draft.state=manualFixture();
+  const change=checked=>handlers.get('change')({target:{matches:s=>s==='[data-ev-manual-toggle]',checked}});
+  const click=selector=>handlers.get('click')({target:{closest:s=>s===selector?{}:null}});
+  await change(true);
+  assert.equal(draft.open,true);assert.equal(calls.length,0);
+  await click('[data-ev-manual-confirm]');
+  assert.match(draft.error,/actual current SoC/);assert.equal(calls.length,0);
+  await click('[data-ev-manual-cancel]');
+  assert.equal(draft.open,false);assert.equal(calls.length,0);
+  await change(true);
+  handlers.get('input')({target:{matches:()=>true,value:'17'}});
+  fail=true;
+  await click('[data-ev-manual-confirm]');
+  assert.equal(draft.value,'17');assert.equal(draft.open,true);assert.match(draft.error,/stale goal/);assert.doesNotMatch(draft.error,/POST ev/);
+  fail=false;
+  await click('[data-ev-manual-confirm]');
+  assert.deepEqual(calls.at(-1),{enabled:true,confirmed:true,soc_percent:17,goal_id:'synthetic-next',
+    goal_revision:2,deadline:'2026-11-11T06:00:00Z',target_kwh:23.4});
+  assert.equal(draft.value,'');
+  draft.state.ev_manual.reference={enabled:true};
+  await change(false);
+  assert.deepEqual(calls.at(-1),{enabled:false});
+});
+
+
+test('manual confirmation selects the next goal that the entered actual SoC needs', () => {
+  const state=manualFixture(), first=state.ev_manual.next_goal;
+  state.ev_manual.goals=[first,{...first,id:'synthetic-later',target_percent:70,target_kwh:32.76}];
+  assert.equal(manualConfirmationGoal(state,'').id,first.id);
+  assert.equal(manualConfirmationGoal(state,'49').id,first.id);
+  assert.equal(manualConfirmationGoal(state,'50').id,'synthetic-later');
+  assert.equal(manualConfirmationGoal(state,'100').id,first.id); // Explicit zero-delivery scope is valid.
+});
+
+test('pending manual switch-off shows off intent while retaining an explicit wait state', async () => {
+  let finish;
+  const state=manualFixture();
+  state.ev_manual.reference={enabled:true,status:'active',soc_percent:17};
+  const draft=new ManualSoC({addEventListener(){}},async()=>{},()=>{});
+  const pending=draft.send({enabled:false},()=>new Promise(resolve=>{finish=resolve}),()=>{});
+  const html=manualSoCMarkup(state,draft);
+  assert.match(html,/Turning manual mode off/);
+  assert.doesNotMatch(html,/data-ev-manual-toggle\s+checked/);
+  assert.doesNotMatch(html,/data-manual-reference/);
+  finish();await pending;
+  assert.equal(draft.intent,null);
+});

@@ -1803,6 +1803,199 @@ Frozen decisions are evidence and are not rewritten. Existing watchdog, source,
 quantity, peak, charger-fault and permission guards remain. No retry/reboot policy,
 notification-policy change or live operation belongs to this correction.
 
+### Unreliable vehicle feedback and manual recovery (EV-A010, 4.6.10)
+
+On10November2026 the user reconsidered the charging tracker following the Ford-side
+outage and4.6.9 stock correction. Charging delivery cannot indefinitely establish
+actual battery stock without vehicle feedback. The confirmed direction is to detect
+unreliable feedback, report it and provide a deliberate recovery path; this direction is implemented in4.6.10 under the contracts below.
+
+Confirmed detection cases: enough measured charging without the expected reported
+SoC change; a new vehicle SoC materially contradicting estimated charging progress;
+and a return from an absence without sufficient battery-state evidence. Detect
+suspected inconsistency, not a proven Ford fault. Unchanged parked SoC alone is not
+failure, and a successful HA read/report timestamp does not prove a new vehicle sample.
+Later clarification: disagreement with the estimate is diagnostic evidence, not
+grounds by itself to reject genuinely new vehicle feedback, pause recovered operation
+or require that feedback to converge on the estimate. The estimate may be wrong.
+The agreed initial detection threshold below must retain sensor rounding/loss
+allowances and be verified against delayed updates. The user accepts one mobile alert and a persistent in-app warning,
+with automatic EV charging paused when a trustworthy battery reference is unavailable.
+Keep the task and evidence. ESS and all other independent functions must continue;
+do not shut down the whole manager because vehicle feedback is unreliable.
+
+The user selects a manual-SoC option in the EV tab, described as a slider-style
+switch. On a detected issue the system may offer to activate it, but activation
+requires the user's confirmation and an actual current SoC reference; a prompt
+without a reply must not authorize fallback charging or reuse a known-unreliable
+automatic value as a manual reading. Measured charger energy then supports bounded
+best-effort charging from that reference. This does not authorize an indefinite
+self-maintained battery estimate; no decision to remove all counter tracking is made.
+
+Confirmed: unplugging invalidates the manual reference, because the car may have
+been driven. The user suggests a several-hour timeout but explicitly raises the
+sleeping/offline case: a refresh request must not routinely defeat an already
+confirmed home charge merely because the user cannot answer it. No duration or
+hard time cutoff is agreed. The earlier12hour cutoff recommendation is withdrawn.
+
+The user subsequently accepted separating reference-age reminders from a bounded
+manual authorization for the next charging goal. Confirmation identifies current SoC
+and that existing goal/target/deadline; counted delivery persists through scheduled
+waiting, pauses, replans and restart. An age reminder cannot revoke that objective,
+including if charging has not started yet or the user cannot answer. Stop adding
+energy once its authorized estimated requirement is delivered; do not roll manual
+authorization forward to later goals or repeated top-ups indefinitely. Existing goal
+deadline semantics are unchanged; no new time-based stop policy is established here.
+Unplugging still invalidates the reference, and existing measurement, charger, source
+and peak guards remain. Completion is a best-effort estimate, not measured SoC
+confirmation. The user selects automatic return to normal mode when genuinely new
+valid vehicle readings appear, with one recovery notification and no confirmation
+prompt. Do not require agreement with the manual/counter-derived estimate. Reconcile
+to the new vehicle reference and subsequent counted delivery once; historical charging
+credit must not be added to it again. A lower or higher recovered reading can correct
+the provisional estimate. For recovery, a changed valid numeric vehicle SoC is
+sufficient practical evidence of a new report; compare it with the previous vehicle-
+reported value, not the manual reference or counter-derived estimate. Do not add a
+multiple-sample requirement, estimate-agreement gate or invented physical timestamp.
+Retain normal source availability/basic value validation. Repeated reads of an
+unchanged value are not new-report evidence, but are not alone proof of failure
+either.
+
+The user accepted this initial engineering default after having no preferred threshold:
+flag suspected stuck SoC when measured counter delivery, adjusted by configured
+charging efficiency, represents3percentage points of configured usable battery
+capacity since the last changed vehicle report, and the report remains unchanged
+for a further15elapsed minutes after crossing that threshold. This is a testable
+starting tolerance, not an installation-calibrated guarantee or a Ford requirement.
+Do not restart the evidence/grace on replans, ordinary charging pauses, process
+restarts or repeated HA reads. A changed valid report recovers/resets the evidence.
+Respect counter gaps/resets/source changes, capacity saturation and normal measurement
+guards; uncertain counter delivery cannot be invented to reach the threshold.
+Unchanged parked SoC without measured charging does not trigger it. Group the resulting
+fault as one incident; unchanged bad source data must not repeatedly notify or stop an
+already authorized manual fallback goal. Validate rounded readings, delayed updates,
+fast/slow/interrupted charging, near-full targets and the original small top-up case
+before implementation acceptance. This is an agreed starting policy, still unverified
+for the installation. The user accepts this reminder policy: show reference age in the EV tab and
+request a refreshed reference when another charge actually requires one, without
+periodic age-only phone reminders. One unresolved refresh request must not repeatedly
+notify during polling/replanning; retain it in-app until actionable evidence resolves
+it. Do not request a refresh merely for each later goal listed in the seven-day horizon.
+Implementation clarification: actionable means a specific additional charge is now
+otherwise due to start but lacks a valid manual/automatic reference. A current
+accepted instruction may evidence that demand; a separately represented blocked
+planning demand may also do so. Do not require the extra charge to have executable
+manual authority before requesting the very reference needed to authorize it.
+Neither future goal existence nor an arbitrary reminder clock is sufficient. Keep
+the extra charge blocked and retain one pending request; in-app future/reference-
+needed status may be shown before the demand becomes due.
+The blocked would-start evidence must follow normal scheduling constraints. Deadline
+minus required energy at the hardware's maximum charge rate is not a substitute:
+that last theoretical physical opportunity can occur too late under actual peak,
+source or availability limits. Do not introduce it as a prompt-only timing policy.
+Use actual scheduling/candidate evidence within the existing solve budget; escalate
+a genuinely missing timing policy rather than silently inventing a reminder clock.
+Where no existing successor evidence survives the manual-scope mask, a non-executable
+advisory candidate may be built using the existing joint model/requirements machinery
+and the still-connected provisional ledger. Relax only the manual-scope execution
+restriction in that explicitly hypothetical context; retain ordinary availability,
+source, physical, peak/permission and unknown-return constraints and normal scheduling
+objective. Independently validate its complete joint flows and retain its input/context
+and due additional instruction as notification evidence. Never admit, dispatch, publish
+as an accepted forecast or grant permissions from these advisory flows. Model creation,
+solve and audit all share the existing single global120second planning budget and
+must preserve authoritative planning/audit reserves. Do not run a second budgeted
+planner or background retry clock for reminders. If no audited candidate fits or it
+times out, mark advisory evidence unavailable/unverified; do not manufacture a start
+time or use the rejected physical-rate fallback. Verify end-to-end runtime and expose
+this limitation rather than claiming a guaranteed notification from absent evidence.
+
+Implementation scope and completion criteria:
+
+Manual completion may fall inside a normal planning interval: fixed integer current
+over whole five-minute slots need not represent an ordinary exact top-up quantity.
+An event boundary derived from a checked candidate's physically delivered-energy
+timeline may refine the calculation grid (still at most five minutes per interval).
+Freeze that derived context/provenance and solve/independently audit the complete
+joint balance and matching reference on it, including phase/restart waits and all
+time-indexed evidence. Preserve original snapshot/candidate evidence and identity;
+different arrays cannot reuse its digest. This is bounded calculation-time quantity
+representation, not publication-time flow truncation/economic repair. All stages
+share the original120second deadline; no fresh budget or unbounded refinement loop.
+A seed exceeding manual scope cannot become an accepted fallback. Live metering still
+enforces the authorized endpoint under existing resolution/tolerances; no larger
+manual allowance or relaxed audit is implied. Verify small top-ups and partial-slot
+completion, joint EV/ESS/source/quarter balance and budget behavior.
+
+- EV-tab manual switch reveals a current-SoC entry and compact confirmation of the
+  next existing goal's target/deadline. Enable only after valid explicit input and
+  confirmation. Show manual/automatic source, estimated charge and reference age
+  concisely; retain the reported vehicle value separately and preserve actual HA
+  source actions. Do not fabricate an HA sensor for the manual estimate.
+- A valid counter anchors each entered/updated manual reference. Apply configured
+  efficiency, credit subsequent delivery once and cap work to the confirmed goal.
+  Persist reference, goal/revision, counter evidence and delivery across waiting,
+  pauses, replans and restart. Preserve historical evidence rather than adding it to
+  the new battery baseline. A missing/stalled counter cannot be bypassed by manual
+  entry; existing watchdog/measurement guards remain active.
+- Unplug invalidates manual authority. Turning the switch off removes manual
+  authority; use normal automatic operation only when usable, otherwise keep EV
+  paused. A new manual reading can refresh the reference through the same explicit
+  confirmation. Goal changes cannot silently enlarge the confirmed energy scope;
+  request confirmation of expanded fallback work. Preserve current goal deadlines
+  and peak/source/permission/charger guards; no manual action implicitly raises a peak.
+- Recovery accepts the next changed valid vehicle report independently of the
+  estimate, exits manual mode, clears the operational issue and sends one recovery
+  notification per incident. Reconcile/replan without resetting historical credit
+  or counting overlap twice. New unchanged reads, polls or process restarts neither
+  fabricate recovery nor repeatedly create alerts. Counter-based diagnosis must not
+  interrupt an already authorized fallback just because Ford remains stuck.
+- Verify fake/local closed-loop cases: normal/delayed/rounded/stuck SoC; configured
+  threshold plus grace; small top-ups and near-full charging; source/counter failure,
+  gaps/reset/change; manual confirmation/dismissal/update; unattended waiting and
+  overnight completion; pause/replan/restart; unplug/return; completed/new/edited
+  goals; lower/higher changed recovery readings and unchanged cached readings that
+  differ from the manual entry. Include counter overlap, incident deduplication,
+  ESS/other-function independence and native/standalone desktop/mobile UI. Existing
+  proportionate release checks remain required. No speculative Ford backend repair,
+  charger retry/reboot or new whole-system shutdown policy belongs to this package.
+
+On10November2026, after reviewing the ready work package, the user explicitly
+authorized its implementation handoff: "You have permission to hand it off". The
+registered V4.6 implementation counterpart may implement and verify this scope,
+then complete release under standing ready-release permission. Routine representation,
+accessibility, validation and test fixture details belong to implementation within
+these contracts. New policy conflicts require clarification. Incorporate latest main
+in version order (4.6.9/fd6d4a9 at handoff preparation) and preserve concurrent shared
+drafts and released appliance/EV behavior. No live HA/database access, real notification
+sending, hardware operation or installation deployment is authorized.
+
+Implementation: persist `ev_feedback` separately from historical charging credit.
+Confirmation freezes goal identity/revision/target/deadline, reference and current
+counter source/value. There is no reference-age expiry. Missing/stalled metering
+retains the scope but withdraws usability under existing watchdogs; reset/source
+change, capacity/efficiency change or unplug requires confirmation again. Switching
+off cannot promote the manual or older untrustworthy automatic reference to unlimited
+authority. A changed valid vehicle value restores automatic stock once, higher or
+lower, without inventing a physical timestamp; untimed changes have only the normal
+bounded receipt watchdog. Unchanged reads cannot extend that new-report evidence.
+
+The live cap applies before integer current rounding. Completion within one minimum
+control dose is labelled estimated completion and blocks further EV work; it does
+not extend the authorized quantity. Planning uses at most one checked seed followed
+by one full joint completion-event refinement, preserving both contexts/digests.
+Later goals explicitly need a new manual reference instead of appearing fulfilled.
+The optional advisory gets at most3seconds of remaining solve allowance, inside the
+same global120second deadline including construction/audit reserves. Retain all its
+audited additional instruction windows so missing an early short window cannot
+silently discard later due evidence. Unverified advisory evidence supplies no mobile
+due-time guarantee. A fresh confirmation or changed vehicle report removes the
+pending request and any unsent stale refresh message. Notification delivery runs
+outside fast control and uses persisted incident/request keys for deduplication.
+
+Offline acceptance and runtime limits are recorded in VERIFICATION.md. Installation
+behavior and threshold calibration remain unverified; no live deployment was done.
+
 ### Shared progress warnings and independent grid projection (EV-A009, 4.6.8)
 
 On9November2026 the user requested one implementation work package for the two

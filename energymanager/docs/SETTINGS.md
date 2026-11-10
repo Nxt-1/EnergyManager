@@ -1,5 +1,15 @@
 # Settings and hardware control
 
+## Manual EV reference (4.6.10)
+
+Manual SoC is confirmed on the EV page, not an installation configuration override.
+Enter an actual current reading and confirm the displayed existing goal. It persists
+only for that goal/revision/target/deadline, using the selected cumulative go-e meter
+and configured charging efficiency. No age cutoff or automatic later-goal renewal
+exists. Unplug/reset/source change requires confirmation again. Meter/fault/peak and
+permission guards remain active. Changed valid vehicle readings automatically restore
+normal stock; estimated/manual agreement is not required. See RUNBOOK.md for recovery.
+
 ## EV total energy and progress (4.6.6 / EV-A008)
 
 In Measurements, select **go-e Total energy · eto**: the actual HA cumulative total

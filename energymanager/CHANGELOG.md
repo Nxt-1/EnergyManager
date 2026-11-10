@@ -1,3 +1,11 @@
+## 4.6.10 — Explicit recovery from unreliable EV feedback
+
+- Detect suspected stuck battery feedback from measured charging and show one actionable incident, while ESS continues.
+- Confirm an actual current Manual SoC for one existing charging goal; retain it through waiting/restart and stop at the measured quantity without automatic renewal.
+- Return automatically on a changed valid vehicle reading, correct stock once and deduplicate recovery/refresh notifications.
+- Show manual reference age and request a new reference only for checked additional charging due now. Preserve source, charger and peak guards.
+- Verify full joint manual completion, offline failure/recovery cases and both dashboards on desktop/mobile. Installation deployment remains separate.
+
 ## 4.6.9 — Correct EV stock after driving
 
 - Require stock reconciliation after observed returns, including unplanned trips, while retaining measured charging credit.

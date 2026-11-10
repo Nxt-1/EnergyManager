@@ -186,6 +186,9 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
             )
         )
 
+    async def manual_soc(request: web.Request) -> web.Response:
+        return web.json_response(application.manual_soc(await request.json()))
+
     async def replan(request: web.Request) -> web.Response:
         return web.json_response(application.request_plan("manual", restart=True), status=202)
 
@@ -296,7 +299,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
                         "datetime-picker.js", "ev-schedule.js", "style.css", "ha-card.js",
                         "application-view.js", "peak-display.js", "ha-history.js", "view.html", "native-dashboard.js", "native-dashboard.css",
                         "native-live.js", "graph-history.js", "graph-cursor.js", "dashboard-client.js", "planning-activity.js",
-                        "text-selection.js", "ev-status.js", "session-details.js", "appliance-profiles.js", "profile-chart.js", "appliance-deadline.js"):
+                        "text-selection.js", "ev-status.js", "manual-soc.js", "session-details.js", "appliance-profiles.js", "profile-chart.js", "appliance-deadline.js"):
             raise web.HTTPNotFound()
         content_type = {"html": "text/html", "js": "text/javascript", "css": "text/css"}[
             name.rsplit(".", 1)[1]
@@ -321,6 +324,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
             web.get("/api/profile-recordings/{id}", recording),
             web.post("/api/profile-recordings/{id}/{action}", recording),
             web.get("/api/state", state),
+            web.post("/api/ev/manual-soc", manual_soc),
             web.get("/api/daily-energy", energy),
             web.get("/api/history", history),
             web.get("/api/dashboard", dashboard),

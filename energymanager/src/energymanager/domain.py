@@ -289,11 +289,22 @@ class Snapshot:
     def checkpoint_index(self, deadline: datetime) -> int:
         return sum(interval.end <= instant(deadline) for interval in self.intervals)
 
+    @property
+    def ev_ceiling_kwh(self) -> float:
+        manual = (self.observation.ev_progress or {}).get("manual") or {}
+        if manual.get("enabled"):
+            return min(self.capabilities.ev_capacity_kwh, max(self.observation.ev_kwh, manual["limit_kwh"]))
+        return self.capabilities.ev_capacity_kwh
+
     def ev_known_at(self, index: int) -> bool:
         return self.observation.ev_state_known and (index == 0 or self.intervals[index - 1].ev_state_known)
 
     def ev_commitment(self, index: int) -> tuple[float, int] | None:
         at = self.intervals[index].start
+        manual = (self.observation.ev_progress or {}).get("manual") or {}
+        for item in manual.get("schedule", []):
+            if instant(item["start"]) <= at < instant(item["end"]):
+                return float(item["power_kw"]), int(item["phases"])
         if self.execution is not None:
             item = next((item for item in self.execution["commitments"]
                          if instant(item["start"]) <= at < instant(item["end"])), None)

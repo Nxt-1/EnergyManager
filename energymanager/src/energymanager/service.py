@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import aiohttp
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -13,7 +14,7 @@ from uuid import uuid4
 from . import __version__
 from .control import Actuator, Command, FakeActuator, FastControl, GuardedActuator
 from .adapters import ForecastSource, HomeAssistantAdapter, JsonForecastAdapter
-from .domain import Goal, Observation, PeakPermission, Policy, Snapshot, daily_goals, json_data
+from .domain import Goal, Observation, PeakPermission, Policy, Snapshot, daily_goals, instant, json_data
 from .publication import admit
 from .ev_progress import EVProgress, progress_warning
 from .execution import freeze_execution
@@ -52,6 +53,7 @@ class Application:
         self.ha, self.forecast = ha, forecast
         self.forecast_data: dict[str, Any] | None = None
         self.input_task: asyncio.Task[None] | None = None
+        self.feedback_notifications: asyncio.Task[None] | None = None
         self.policy = policy or Policy()
         self.revision = int(store.get("revision", 1))
         saved_goals = store.get("goals")
@@ -125,6 +127,7 @@ class Application:
             self.calendars.start()
         self.worker = PlanningWorker()
         self.control_task = asyncio.create_task(self.control_loop())
+        self.feedback_notifications = asyncio.create_task(self.feedback_notification_loop())
         self.planning = asyncio.create_task(self.planning_loop())
         if self.ha and self.forecast:
             await self.ha.__aenter__()
@@ -171,11 +174,11 @@ class Application:
             self.revision,
             self.observation,
         )
-        for task in (self.control_task, self.planning, self.input_task, *self.protective_tasks):
+        for task in (self.control_task, self.planning, self.input_task, self.feedback_notifications, *self.protective_tasks):
             if task:
                 task.cancel()
         await asyncio.gather(
-            *(t for t in (self.control_task, self.planning, self.input_task, *self.protective_tasks) if t),
+            *(t for t in (self.control_task, self.planning, self.input_task, self.feedback_notifications, *self.protective_tasks) if t),
             return_exceptions=True,
         )
         if self.forecast:
@@ -269,6 +272,11 @@ class Application:
         if not self.observation.ev_state_known:
             prepared = replace(prepared, intervals=tuple(replace(i, available=False,
                 withdrawal_kwh=0.0, ev_state_known=False) for i in prepared.intervals))
+        manual = (self.observation.ev_progress or {}).get("manual") or {}
+        if manual.get("enabled"):
+            deadline = instant(manual["goal"]["deadline"])
+            prepared = replace(prepared, intervals=tuple(replace(i, available=False,
+                withdrawal_kwh=0.0, ev_state_known=False) if i.start >= deadline else i for i in prepared.intervals))
         appliance = self.appliance_runs.context()
         if (appliance and isinstance(self.forecast,InstallationForecast)
                 and (self.forecast_data is None or self.forecast_data.get("background_meter") != self.forecast.background.meter)):
@@ -622,6 +630,8 @@ class Application:
         proposals = {p["goal_id"]: p for p in plan.get("permission_proposals", [])}
         for goal in plan["goals"]:
             key = f"{goal['id']}:{goal['revision']}"
+            if goal.get("status") == "manual_reference_required":
+                continue  # Scope-limited future results are not separate source incidents.
             if goal["shortfall_kwh"] is None:
                 issues[key] = {
                     "goal_id": goal["id"],
@@ -882,7 +892,7 @@ class Application:
         if not self.demo and self.ha:
             observation = self.ev_progress.update(observation, self.ha.inputs.readings.get("ev_total_kwh"),
                 self.ha.entities.get("ev_total_kwh", ""), self.snapshot.capabilities, self.policy,
-                self.goals + self.snapshot.goals)
+                self.ev_requirements(observation.at))
         self.observation = observation
         if self.demo:
             self.demo_plant.observation = observation
@@ -901,8 +911,104 @@ class Application:
               and observation.ev_progress.get("baseline_revision", 0)
                   != previous.ev_progress.get("baseline_revision", 0)):
             self.changed("ev_stock_reconciled", ev=True)
+        elif (observation.ev_progress and previous.ev_progress
+              and (observation.ev_progress.get("manual") or {}).get("status")
+                  != (previous.ev_progress.get("manual") or {}).get("status")):
+            self.changed("manual_goal_scope_changed", ev=True)
 
         self.archive_finished_goals(self.now(), observed=observation)
+
+    def ev_requirements(self, at: datetime) -> tuple[Goal, ...]:
+        requirements = {g.id: g for g in daily_goals(at, at + timedelta(hours=168), self.policy, self.goals)}
+        requirements.update({g.id: g for g in self.goals if g.deadline > at})
+        return tuple(sorted(requirements.values(), key=lambda g: (g.deadline, g.id)))
+
+    def manual_view(self, at: datetime) -> dict[str, Any]:
+        goals = self.ev_requirements(at)
+        manual = self.ev_progress.feedback.state.get("manual")
+        choices = [{**json_data(g), "target_kwh":g.target(self.snapshot.capabilities, self.policy),
+                    "target_percent":g.target(self.snapshot.capabilities, self.policy) / self.snapshot.capabilities.ev_capacity_kwh * 100}
+                   for g in goals]
+        return {"reference": manual, "goals":choices, "next_goal":choices[0] if choices else None,
+                "refresh": self.ev_progress.feedback.state.get("refresh"),
+                "reference_age_seconds": max(0, (at - instant(manual["entered_at"])).total_seconds()) if manual else None}
+
+    def manual_soc(self, data: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(data, dict) or type(data.get("enabled")) is not bool:
+            raise ValueError("Choose a Manual SoC state")
+        at = self.now()
+        if not data["enabled"]:
+            if set(data) != {"enabled"}:
+                raise ValueError("Manual SoC off does not accept a reference")
+            self.ev_progress.feedback.disable()
+        else:
+            if set(data) != {"enabled", "confirmed", "soc_percent", "goal_id", "goal_revision", "target_kwh", "deadline"} or data["confirmed"] is not True:
+                raise ValueError("Enter current SoC and explicitly confirm the displayed next goal")
+            value = data["soc_percent"]
+            if type(value) not in (int, float) or not math.isfinite(value) or not 0 <= value <= 100:
+                raise ValueError("Enter the actual current SoC between 0 and 100%")
+            reference = value / 100 * self.snapshot.capabilities.ev_capacity_kwh
+            goals = self.ev_requirements(at)
+            if not goals:
+                raise ValueError("No existing future EV goal to confirm")
+            goal = next((g for g in goals if g.target(self.snapshot.capabilities, self.policy) > reference), goals[0])
+            if (data["goal_id"] != goal.id or type(data["goal_revision"]) is not int
+                    or data["goal_revision"] != goal.revision or data["deadline"] != goal.deadline.isoformat()
+                    or type(data["target_kwh"]) not in (int, float)
+                    or data["target_kwh"] != goal.target(self.snapshot.capabilities, self.policy)):
+                raise ValueError("The next goal changed; review and confirm it again")
+            self.ev_progress.feedback.confirm(data["soc_percent"], goal, self.observation,
+                self.ha.inputs.readings.get("ev_total_kwh") if self.ha else None,
+                self.ha.entities.get("ev_total_kwh", "") if self.ha else "",
+                self.snapshot.capabilities, self.policy, at)
+        automatic = self.ev_progress.automatic_observation
+        if automatic is not None:
+            self.observation = self.ev_progress.feedback.apply(automatic, at, self.policy)
+        self.changed("manual_soc_confirmed" if data["enabled"] else "manual_soc_disabled", ev=True)
+        return self.manual_view(at)
+
+    def check_manual_demand(self, at: datetime) -> None:
+        manual = self.ev_progress.feedback.state.get("manual", {})
+        if (not manual.get("enabled") or not self.observation.connected or manual.get("status") == "unplugged"
+                or manual.get("status") == "active" and manual["delivered_kwh"] < manual["quantity_kwh"] - 1e-6):
+            return
+        progress = self.observation.ev_progress or {}
+        if (self.observation.quality == "unknown" or (at - self.observation.at).total_seconds() > self.policy.measurement_max_age_seconds
+                or progress.get("counter_issue") or progress.get("counter_stalled")):
+            return
+        plan = self.accepted or {}
+        advisory = plan.get("manual_advisory", {})
+        demand = next((d for d in advisory.get("instructions", [advisory.get("instruction")])
+                       if d and instant(d["would_start"]) <= at < instant(d["instruction_end"])), None)
+        if (advisory.get("status") == "checked" and demand and plan.get("revision") == self.revision
+                and (at - instant(advisory["forecast_at"])).total_seconds() <= self.policy.forecast_max_age_seconds
+                and instant(demand["would_start"]) <= at < instant(demand["instruction_end"])
+                and any(g.id == demand["goal_id"] and g.revision == demand["revision"]
+                        for g in self.ev_requirements(at))):
+            self.ev_progress.feedback.request_refresh(at, demand)
+            return
+        # An already accepted, currently due extra instruction is direct evidence,
+        # even while manual quantity guards correctly withhold its execution.
+        if plan.get("revision") != self.revision:
+            return
+        position = next((t for t, i in enumerate(plan.get("intervals", []))
+                         if instant(i["start"]) <= at < instant(i["end"])), None)
+        if (position is not None and sum(plan["flows"][k][position] for k in ("pv_ev", "grid_ev", "solar_dis_ev")) > 1e-5):
+            self.ev_progress.feedback.request_refresh(at, {"manual_id":manual["id"],
+                "would_start":plan["intervals"][position]["start"], "source":"accepted", "plan_id":plan["id"]})
+
+    async def notify_ev_feedback(self) -> None:
+        self.check_manual_demand(self.now())
+        feedback = self.ev_progress.feedback
+        for key, body in tuple(feedback.state.get("notices", {}).items()):
+            if await self.notifications.inform(key, body):
+                feedback.state["notices"].pop(key, None)
+                feedback.save()
+
+    async def feedback_notification_loop(self) -> None:
+        while not self.shutdown:
+            await self.notify_ev_feedback()
+            await asyncio.sleep(5)
 
     def state(self) -> dict[str, Any]:
         now = self.now()
@@ -927,7 +1033,7 @@ class Application:
         for issue in issues:
             status = statuses.get((issue.get("goal_id"), issue.get("revision")))
             dependency = issue.get("state") == "reconciliation_required" and (
-                issue.get("progress_cause") == "progress" or status == "progress_unavailable"
+                issue.get("progress_cause") == "progress" or status in ("progress_unavailable", "manual_reference_required")
                 or warning is not None and warning["cause"] == "post_trip"
                 and (issue.get("progress_cause") == "post_trip" or status == "unknown_return_state"))
             if not dependency:
@@ -976,7 +1082,10 @@ class Application:
                                "conditional": self.conditional_valid},
             "deadline_execution": {"active": self.controller.deadline_execution.active,
                                    "plan_id": self.controller.deadline_execution.plan_id},
-            "ev_progress_usable": None if self.observation.ev_progress is None else warning is None,
+            "ev_manual": self.manual_view(now),
+            "ev_progress_usable": None if self.observation.ev_progress is None else bool(
+                self.observation.ev_progress.get("usable") and self.observation.ev_progress.get("valid_until")
+                and now <= instant(self.observation.ev_progress["valid_until"])) ,
             "display_issues": display_issues,
             "plan_recovery": self.plan_recovery.view(),
             "issues": issues,

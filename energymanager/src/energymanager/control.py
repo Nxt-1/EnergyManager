@@ -370,13 +370,19 @@ class FastControl:
             ev = min(ev, source_limit)
         if not o.ev_phase_known or not o.connected or not ev_valid or not o.ev_state_known or not progress_usable:
             ev = 0.0
+        manual = (o.ev_progress or {}).get("manual") or {}
+        manual_allowed = True
+        if manual.get("enabled"):
+            manual_allowed = manual["status"] == "active" and at < instant(manual["goal"]["deadline"])
+            remaining = min(manual["quantity_kwh"] - manual["delivered_kwh"], manual["limit_kwh"] - o.ev_kwh)
+            ev = min(ev, max(0.0, remaining) / c.ev_efficiency / period_h) if manual_allowed else 0.0
         amps = min(c.maximum_current_a, math.floor((ev + 1e-9) * 1000 / (c.voltage * phases)))
         if amps < c.minimum_current_a:
             amps = 0
         prepare_phase = bool(plan and plan.get("execution") and position is not None
             and f["one"][position] + f["three"][position] > .5 and task_target is not None
             and o.ev_kwh < task_target - 1e-6 and not amps and ev_valid and o.ev_state_known
-            and o.ev_phase_known and o.connected and progress_usable and (forecast_fresh or eligible)
+            and o.ev_phase_known and o.connected and progress_usable and manual_allowed and (forecast_fresh or eligible)
             and (conditional_valid or eligible or grid_requested or carried_grid))
         ev = amps * phases * c.voltage / 1000
         # Recompute ESS after EV reductions; never intentionally export stored energy.

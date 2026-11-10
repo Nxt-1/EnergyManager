@@ -123,6 +123,11 @@ export async function mountApplication(root, options = {}) {
       await refresh(true);
     },
     settings: () => showPage('settings'),
+    manual: async body => {
+      await api('ev/manual-soc', 'POST', body);
+      pointerUntil = 0;
+      await refresh(true);
+    },
     phase: options.setPhase,
     entities: options.native ? options.entities : null,
     sync: async () => {

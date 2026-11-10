@@ -470,12 +470,30 @@ updates before incorporating them into the V4.5 implementation branch; discuss t
 next V4.5 task in the architecture chat and start implementation only when authorized.
 No application task, commit or publication is implied by this setup record.
 
-### EV planner — V4.6 / EV-A002–EV-A009
+### EV planner — V4.6 / EV-A002–EV-A010
 
 - **Architecture chat:** EV Task optimization achritecture, local ID
   `01a18e54-5380-7703-b13d-8044baa8a7ac`.
 - **Implementation chat:** EV task optimization implementation, local ID
   `01a1b64b-a1fe-74d2-a393-afe7ed1aeb39`.
+- **EV-A010 — unreliable vehicle feedback and manual recovery (4.6.10,11November2026):**
+  Explicit user handoff verified in the registered architecture chat. Implemented on
+  `codex/ev-a010`, based on released4.6.9/fd6d4a9, incorporating its stock correction
+  and all A008/A009/appliance behavior. Persistent3point/15minute incident detection,
+  one deduplicated problem/recovery queue, explicit blank-entry single-goal manual
+  confirmation, measured endpoint, no age expiry/renewal and changed-report recovery
+  are implemented. Source/peak/charger guards and ESS independence remain active.
+  Both dashboards have compact accessible controls; dismissal grants no authority.
+  Clarifications from the pair: refresh only on currently due audited scheduling
+  evidence; no deadline/max-rate reminder. A non-executable full-joint advisory may
+  use the provisional still-connected ledger within the original120s budget.
+  Exact manual quantities may use one frozen completion-event refinement and full
+  joint re-solve/audit under the same deadline; an uncapped seed is never authority.
+  Local regression, seven-day runtime, package and desktop/mobile synthetic results
+  are in VERIFICATION.md. Current detailed evidence is indexed in the ignored
+  `artifacts/ev-a010-state.json`; remote exact-head results belong there and in the
+  final report to the paired chat. No live access, notifications or deployment used.
+
 - **EV-A002 historical authorization:** EV-A002 authorized7November2026 and assigned V4.6, initially
   held on its own branch while V4.5 finished. On8November the user authorized merge
   and release. This describes the historical4.6.0 scope.

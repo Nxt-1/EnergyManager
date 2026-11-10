@@ -21,14 +21,17 @@ from .incumbent import seed
 from .appliance_plan import plan_evidence, resolved_power
 from .solar_capture import SolarCapture
 from .optimization import JointModel
+from .manual_planning import additional_instructions, advisory_context, completion_context
 from .validation import TOL, accounting, rolling_comparison_errors, validate
 from .reservations import reservations
 from .session_attribution import attribute_ev_sessions
 
 
 class Planner:
-    def __init__(self, progress: Callable[[str], None] | None = None, budget_seconds: float | None = None) -> None:
+    def __init__(self, progress: Callable[[str], None] | None = None, budget_seconds: float | None = None,
+                 *, wall_deadline: float | None = None) -> None:
         self.budget_seconds = budget_seconds
+        self.wall_deadline = wall_deadline
         self.started = 0.0
         self.deadline = 0.0
         self.stages: list[dict[str, Any]] = []
@@ -480,6 +483,82 @@ class Planner:
         return result
 
     def plan(self, snapshot: Snapshot) -> dict[str, Any]:
+        manual = (snapshot.observation.ev_progress or {}).get("manual") or {}
+        if (manual.get("enabled") and manual.get("status") == "active" and snapshot.observation.ev_state_known
+                and snapshot.observation.ev_kwh < manual["limit_kwh"] - TOL):
+            result = self.manual_plan(snapshot)
+        else:
+            result = self.regular_plan(snapshot)
+        if result.get("valid") and manual.get("enabled"):
+            result["manual_advisory"] = self.manual_advisory(snapshot)
+            result["seconds"] = monotonic() - self.started
+        return result
+
+    def manual_plan(self, snapshot: Snapshot) -> dict[str, Any]:
+        # One seed and one refined full-joint calculation share the original wall
+        # deadline. The uncapped seed is provenance, never executable authority.
+        started = monotonic()
+        budget = min(snapshot.policy.planning_budget_seconds, self.budget_seconds or snapshot.policy.planning_budget_seconds)
+        deadline = min(started + budget, self.wall_deadline or float("inf"))
+        manual = dict((snapshot.observation.ev_progress or {})["manual"])
+        ordinary = replace(snapshot, observation=replace(snapshot.observation,
+            ev_progress={**(snapshot.observation.ev_progress or {}), "manual": {**manual, "enabled": False}}))
+        seed_planner = Planner(self.progress, max(0, (deadline - monotonic()) * .55), wall_deadline=deadline)
+        seed_result = seed_planner.regular_plan(ordinary)
+        if not seed_result.get("valid"):
+            seed_result.update(valid=False, manual_refinement={"status":"seed_unverified"}, input_digest=snapshot.digest)
+            return seed_result
+        seed = Snapshot.from_dict(seed_result["effective_snapshot"]) if seed_result.get("effective_snapshot") else ordinary
+        refined = completion_context(snapshot, seed, seed_result["flows"])
+        remaining = deadline - monotonic() - .1
+        if remaining < .3:
+            self.started = started
+            return self.failure(snapshot, "unverified", "Manual completion refinement has no remaining wall budget")
+        final_planner = Planner(self.progress, remaining, wall_deadline=deadline)
+        result = final_planner.regular_plan(refined)
+        result.update(input_digest=snapshot.digest, snapshot_id=snapshot.id, seconds=monotonic()-started,
+            manual_refinement={"status":"checked" if result.get("valid") else "unverified",
+                "seed_digest":seed.digest, "seed_snapshot":json_data(seed), "seed_flows":seed_result["flows"],
+                "seed_service":seed_result["service"], "original_digest":snapshot.digest},
+            stages=seed_result["stages"] + result["stages"])
+        if result.get("valid") and not result.get("effective_snapshot"):
+            result["effective_snapshot"] = json_data(refined)
+        # Expose the same bounded clock to any optional advisory stage.
+        self.started, self.deadline = started, deadline
+        self.validation_seconds = final_planner.validation_seconds
+        self.solver_overrun = max(seed_planner.solver_overrun, final_planner.solver_overrun)
+        self.stages = result["stages"]
+        return result
+
+    def manual_advisory(self, snapshot: Snapshot) -> dict[str, Any]:
+        # Optional diagnostic work uses only the authoritative calculation's remaining
+        # wall budget and audit reserve. No candidate means no invented prompt time.
+        if self.remaining() < .5:
+            return {"status": "unverified", "reason": "No remaining advisory/audit budget"}
+        context = advisory_context(snapshot)
+        if context is None:
+            return {"status": "not_applicable"}
+        if self.remaining() < .4:
+            return {"status": "unverified", "reason": "Advisory construction consumed remaining budget"}
+        model = JointModel(context)
+        allowance = min(3.0, self.remaining() * .5)
+        if allowance < .2:
+            return {"status": "unverified", "reason": "No remaining advisory solve budget"}
+        candidate = self.run_model("manual_blocked_advisory", model, allowance, objective=model.economic)
+        if not candidate["feasible"]:
+            return {"status": "unverified", "reason": candidate["status"]}
+        errors = self.validate_candidate(context, candidate["flows"])
+        if errors:
+            return {"status": "unverified", "errors": errors}
+        instructions = additional_instructions(snapshot, context, candidate["flows"])
+        return {"status": "checked" if instructions else "no_additional_instruction", "executable": False,
+                "context": json_data(context), "context_digest": context.digest,
+                "flows": candidate["flows"], "service": {}, "instruction": instructions[0] if instructions else None,
+                "instructions": instructions,
+                "source_snapshot_id": snapshot.id, "revision": snapshot.revision,
+                "forecast_at": snapshot.forecast_at.isoformat()}
+
+    def regular_plan(self, snapshot: Snapshot) -> dict[str, Any]:
         result = self.calculate(snapshot)
         task = snapshot.appliance
         if result.get("valid") or not task or not task.get("points") or task.get("started_at"):
@@ -517,6 +596,8 @@ class Planner:
     def calculate(self, snapshot: Snapshot) -> dict[str, Any]:
         self.started = monotonic()
         self.deadline = self.started + min(snapshot.policy.planning_budget_seconds,self.budget_seconds if self.budget_seconds is not None else snapshot.policy.planning_budget_seconds)
+        if self.wall_deadline is not None:
+            self.deadline = min(self.deadline, self.wall_deadline)
         self.validation_seconds = 0.0
         self.solar_reserve = 0.0
         self.continuity_reserve = 0.0
@@ -1236,6 +1317,7 @@ class Planner:
                     "shortfall_kwh": max(0, target - actual) if known_state else None,
                     "status": ("scheduled" if actual >= target - TOL else "shortfall")
                     if known_state
+                    else "manual_reference_required" if ((original.observation.ev_progress or {}).get("manual") or {}).get("enabled")
                     else "progress_unavailable" if original.observation.ev_progress
                     and not original.observation.ev_progress["usable"] else "unknown_return_state",
                     "completion_at": ready_at.isoformat() if margin is not None else None,

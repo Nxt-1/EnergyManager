@@ -49,7 +49,8 @@ class VerificationResolver(AbstractResolver):
 async def run(*, serve: bool = False, preview_fault: str | None = None,
               history_fixture: bool = False, calendar_fixture: bool = False, routing_fixture: bool = False,
               ev_fault_fixture: bool = False, planner_failure_fixture: bool = False,
-              profiles_fixture: bool = False, deadline_margin_fixture: bool = False, port: int = 8102) -> None:
+              profiles_fixture: bool = False, deadline_margin_fixture: bool = False,
+              feedback_fixture: bool = False, port: int = 8102) -> None:
     issued = datetime.now(UTC)
     calls = []
     weather_queries = []
@@ -287,6 +288,37 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                     active_fault = None if data["available"] else "progress"
                     return web.json_response({"synthetic": True, "available": data["available"]})
                 server_app.router.add_post('/synthetic/progress', progress_fixture)
+            if serve and feedback_fixture:
+                async def feedback_preview(request: web.Request) -> web.Response:
+                    nonlocal active_fault
+                    data = await request.json()
+                    action = data.get("action")
+                    if action == "problem":
+                        # Explicitly synthetic prior delivery/grace history, for UI
+                        # previews only. Deterministic detector tests prove its maths.
+                        feedback = application.ev_progress.feedback
+                        feedback.state.update(delivery_kwh=application.snapshot.capabilities.ev_capacity_kwh*.03,
+                            threshold_at=(application.now()-timedelta(seconds=901)).isoformat())
+                        feedback.save()
+                    elif action == "recover":
+                        value = data.get("soc_percent")
+                        if type(value) not in (int,float) or not 0 <= value <= 100:
+                            raise web.HTTPBadRequest(text="SYNTHETIC SoC required")
+                        values["ev_soc"] = (value,"%")
+                    elif action == "counter" and type(data.get("available")) is bool:
+                        active_fault = None if data["available"] else "progress"
+                    elif action == "connect" and type(data.get("connected")) is bool:
+                        values["connected"] = ("on" if data["connected"] else "off",None)
+                    elif action == "complete":
+                        manual = application.ev_progress.feedback.state.get("manual",{})
+                        if not manual.get("enabled"):
+                            raise web.HTTPBadRequest(text="Confirm a SYNTHETIC manual reference first")
+                        remaining = max(0,manual["quantity_kwh"]-manual["delivered_kwh"])
+                        values["ev_total_kwh"] = (values["ev_total_kwh"][0]+remaining/manual["efficiency"]*1000,"Wh")
+                    else:
+                        raise web.HTTPBadRequest(text="Unknown SYNTHETIC feedback fixture action")
+                    return web.json_response({"synthetic":True,"action":action})
+                server_app.router.add_post('/synthetic/feedback', feedback_preview)
             if routing_fixture:
                 application.journeys = Journeys(application, router=RefereeJourneyRouter(
                     GoogleRoutesClient("synthetic-routing-key", allow_requests=True)))
@@ -581,9 +613,13 @@ if __name__ == "__main__":
                         help="Record a SYNTHETIC rejected decision for diagnostic/export UI checks")
     parser.add_argument("--deadline-margin-fixture", action="store_true",
                         help="Show a SYNTHETIC deadline-margin warning; display evidence only, requires --serve")
+    parser.add_argument("--feedback-fixture", action="store_true",
+                        help="Enable local-only SYNTHETIC vehicle feedback/manual-reference preview controls")
     parser.add_argument("--input-fault", choices=("quarter", "stale", "unavailable", "read_failure", "charger", "progress"),
                         help="Inject old metadata, unavailability or HA read failure after local verification")
     arguments = parser.parse_args()
+    if arguments.feedback_fixture and not arguments.serve:
+        parser.error("--feedback-fixture requires --serve")
     if arguments.profiles_fixture and not arguments.serve:
         parser.error("--profiles-fixture requires --serve")
     if arguments.input_fault and not arguments.serve:
@@ -601,4 +637,4 @@ if __name__ == "__main__":
                     ev_fault_fixture=arguments.ev_fault_fixture,
                     planner_failure_fixture=arguments.planner_failure_fixture,
                     profiles_fixture=arguments.profiles_fixture, deadline_margin_fixture=arguments.deadline_margin_fixture,
-                    port=arguments.port))
+                    feedback_fixture=arguments.feedback_fixture, port=arguments.port))

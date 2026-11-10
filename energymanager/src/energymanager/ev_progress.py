@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .domain import Capabilities, Goal, Observation, Policy, instant
+from .ev_feedback import EVFeedback
 from .live_inputs import Reading
 from .store import Store
 
@@ -16,6 +17,8 @@ class EVProgress:
 
     def __init__(self, store: Store) -> None:
         self.store = store
+        self.feedback = EVFeedback(store)
+        self.automatic_observation: Observation | None = None
         self.state: dict[str, Any] = store.get("ev_progress", {})
 
     def update(self, observation: Observation, counter: Reading | None, source: str,
@@ -24,8 +27,14 @@ class EVProgress:
         valid = (counter is not None and counter.issue(at) is None
                  and isinstance(counter.value, float) and counter.value >= 0)
         reported = o.ev_kwh if o.ev_state_known else None
+        new_report = self.feedback.changed_vehicle(o, policy)
+        if new_report:
+            s["report_changed_at"] = at.isoformat()
         fresh_soc = (reported is not None and o.ev_observed_at is not None
                      and -5 <= (at - o.ev_observed_at).total_seconds() <= policy.measurement_max_age_seconds)
+        changed_at = instant(s["report_changed_at"]) if s.get("report_changed_at") else None
+        fresh_soc = fresh_soc or (o.ev_observed_at is None and reported is not None and changed_at is not None
+                                  and 0 <= (at - changed_at).total_seconds() <= policy.measurement_max_age_seconds)
         previous_reported = s.get("reported_kwh")
         if not o.connected:
             if "away_since" not in s:
@@ -39,7 +48,7 @@ class EVProgress:
             s["reconcile_after"] = away.isoformat()
             s["uncertain"] = True
         if s.get("unknown_return"):
-            fresh_soc = fresh_soc and o.ev_observed_at is not None and o.ev_observed_at >= instant(s["reconcile_after"])
+            fresh_soc = fresh_soc and (new_report or o.ev_observed_at is not None and o.ev_observed_at >= instant(s["reconcile_after"]))
         initializing = "estimated_kwh" not in s
         if initializing and reported is not None:
             s.update(estimated_kwh=reported, reported_kwh=reported, credited_kwh=0.0,
@@ -92,20 +101,20 @@ class EVProgress:
                      and (reported < reference or previous_reported is not None and reported < previous_reported))
         changed_return = (s.get("unknown_return") and soc_changed
                           and reported != s.get("away_soc_reference_kwh", reference))
-        untimed_change = o.ev_observed_at is None and (lower_soc or changed_return)
+        untimed_change = o.ev_observed_at is None and (lower_soc or changed_return or new_report)
         timed_change = (fresh_soc and o.ev_observed_at is not None and (soc_changed or s.get("unknown_return"))
                         and (s.get("vehicle_at") is None
                              or o.ev_observed_at > instant(s["vehicle_at"])))
-        if o.connected and (timed_change or untimed_change):
+        if o.connected and (timed_change or untimed_change or new_report):
             assert reported is not None
             before = next((r for r in reversed(history)
                            if o.ev_observed_at is not None and instant(r["at"]) <= o.ev_observed_at), None)
             after = next((r for r in history
                           if o.ev_observed_at is not None and instant(r["at"]) >= o.ev_observed_at), None)
             aligned = before is not None and after is not None and before["kwh"] == after["kwh"]
-            rebase = valid and (aligned or lower_soc or s.get("unknown_return")
+            rebase = valid and (aligned or new_report or lower_soc or s.get("unknown_return")
                                or reported > s["estimated_kwh"])
-            vehicle_only = fresh_soc and not valid and (lower_soc or s.get("unknown_return")
+            vehicle_only = fresh_soc and not valid and (new_report or lower_soc or s.get("unknown_return")
                                                        or reported > s["estimated_kwh"])
             if rebase or vehicle_only:
                 # With unknown/unaligned timing, omit any overlapping delivery up to
@@ -159,7 +168,7 @@ class EVProgress:
         cause = (None if usable else "post_trip" if s.get("unknown_return") else
                  "counter_stalled" if s.get("counter_stalled") else "counter_unmapped" if not source else
                  "vehicle_baseline" if "estimated_kwh" not in s else "counter_unavailable")
-        valid_at = usable_at if meter_usable else o.ev_observed_at if fresh_soc else None
+        valid_at = usable_at if meter_usable else (o.ev_observed_at or changed_at) if fresh_soc else None
         if meter_usable and moving_at is not None and valid_at is not None:
             valid_at = min(valid_at, moving_at)
         view = {"source": basis, "usable": usable, "issue": issue, "cause": cause,
@@ -178,8 +187,8 @@ class EVProgress:
                 "reconciliation_basis": s.get("reconciliation_basis")}
         self.store.put("ev_progress", s)
         known = usable and (("estimated_kwh" in s and not s.get("unknown_return")) or fresh_soc)
-        return replace(o, ev_kwh=energy, ev_state_known=known,
-                       ev_progress=view)
+        self.automatic_observation = replace(o, ev_kwh=energy, ev_state_known=known, ev_progress=view)
+        return self.feedback.update(o, self.automatic_observation, counter, source, c, policy, goals)
 
 
 def progress_warning(observation: Observation, at: datetime, goals: tuple[Goal, ...],
@@ -188,27 +197,38 @@ def progress_warning(observation: Observation, at: datetime, goals: tuple[Goal, 
     progress = observation.ev_progress
     if progress is None:
         return None
-    if (progress.get("usable") and progress.get("valid_until")
+    incident = progress.get("feedback_incident")
+    if (not incident and progress.get("usable") and progress.get("valid_until")
             and at <= instant(progress["valid_until"])):
         return None
     counter_source = progress.get("configured_entity_id", progress.get("entity_id"))
     cause = progress.get("cause") or ("post_trip" if progress.get("reconciliation_required") else
         "counter_stalled" if progress.get("counter_stalled") else "counter_unmapped" if not counter_source
         else "counter_unavailable")
-    vehicle_cause = cause in ("post_trip", "vehicle_baseline")
+    if incident:
+        cause = incident["cause"] if incident["cause"] in ("post_trip", "counter_stalled", "counter_unmapped", "counter_unavailable") else "vehicle_feedback"
+    manual = progress.get("manual") or {}
+    if manual.get("enabled") and not progress.get("usable"):
+        cause = ("counter_stalled" if progress.get("counter_stalled") else
+                 "counter_unavailable" if progress.get("counter_issue") else "manual_reference")
+    vehicle_cause = cause in ("post_trip", "vehicle_baseline", "vehicle_feedback", "manual_reference")
     source = vehicle_source if vehicle_cause else counter_source
     title, action = {
         "counter_unmapped": ("EV progress sensor not selected", "Select go-e Total energy · eto in Measurements, save and restart."),
         "counter_unavailable": ("EV charging progress unavailable", "Restore the selected total-energy sensor with declared Wh/kWh units, or a genuinely fresh vehicle SoC."),
         "counter_stalled": ("EV energy counter is not advancing", "Check the selected total-energy sensor and its updates while charging; restore measured progress."),
         "post_trip": ("Vehicle energy needs reconciliation", "Restore a changed post-trip vehicle SoC with a usable total-energy counter, or a genuinely fresh vehicle sample; reconnect the vehicle if it is still away."),
+        "vehicle_feedback": ("Vehicle feedback needs attention", "Restore a changed valid vehicle SoC, or confirm an actual current Manual SoC and the next goal in the EV tab."),
+        "manual_reference": ("Manual SoC needs a new reference", "Check the counter and confirm the actual current SoC and next goal in the EV tab."),
         "vehicle_baseline": ("Vehicle energy baseline unavailable", "Restore a valid vehicle SoC to establish the total-energy reference."),
     }[cause]
     affected = {goal.id: {"id": goal.id, "revision": goal.revision, "title": goal.title,
                           "deadline": goal.deadline.isoformat()}
                 for goal in goals if goal.deadline > at}
-    return {"kind": "ev_progress", "id": "ev-progress:" + cause + ":" + (source or "vehicle"),
-            "cause": cause, "title": title, "text": "EV charging is paused; task progress is retained and ESS remains independent.",
+    return {"kind": "ev_progress", "id": "ev-feedback:" + incident["id"] if incident else "ev-progress:" + cause + ":" + (source or "vehicle"),
+            "cause": cause, "title": title, "text": ("The confirmed manual goal may continue under normal guards; vehicle feedback remains unresolved."
+                                       if (progress.get("manual") or {}).get("enabled") and progress.get("usable") else
+                                       "EV charging is paused; task progress is retained and ESS remains independent."),
             "action": action, "entity_id": source,
             "source_issue": None if vehicle_cause else progress.get("counter_issue"),
             "vehicle_observed_at": progress.get("vehicle_observed_at"),

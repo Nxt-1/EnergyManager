@@ -564,3 +564,27 @@ backward physical bounds, bounded wider search, cautious80% future-PV certificat
 execution fallback and margin warnings. Dense unavailable-slot bookkeeping is
 retained after explicit fixing showed no presolve gain. See the maintained
 [architecture](ARCHITECTURE.md#ev-planning-candidates-and-deadline-safeguard-ev-a005--arch-026-461).
+
+## ARCH-028 — Unreliable EV feedback and manual charging recovery
+
+Recorded:10November2026. Status: **Implemented in4.6.10 (EV-A010); offline verified, installation unverified**.
+
+Detect insufficient SoC response to measured charging, contradictory new battery
+readings and insufficient return evidence. The user accepts a mobile alert and a
+persistent in-app warning; keep ESS and other independent functions working. They
+propose manual actual-SoC input to anchor best-effort counter-measured charging during
+upstream feedback failure. An EV-tab manual-SoC switch, confirmed activation when
+offered after an issue and invalidation on unplugging are agreed. User also accepted
+manual authority for the next charging goal, with age reminders unable to interrupt
+it and no automatic renewal to later goals. Automatic recovery with a notification
+on new valid vehicle readings is agreed; matching the estimate is not a gate. A
+changed valid SoC compared with the previous vehicle report is sufficient evidence.
+Initial3percentage-point delivery plus15minute update grace is accepted, subject to
+verification. Reference age is displayed in the EV tab; request refresh only when
+another charge needs a new reference, with no periodic age-only phone reminders.
+Scope/UI and completion criteria are in the maintained architecture. The user
+explicitly authorized implementation handoff on10November: "You have permission to
+hand it off". Do not treat a charger counter as indefinite actual battery feedback or
+remove progress tracking without a decision. Confirmed and proposed details are
+separated in ARCHITECTURE.md under EV-A010. Standing ready-release permission applies;
+live installation access/operation remains unauthorized.

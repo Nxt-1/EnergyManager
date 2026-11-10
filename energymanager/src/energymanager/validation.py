@@ -275,7 +275,7 @@ def validate(
         withdrawal_prefix.append(withdrawal_prefix[-1] + interval.withdrawal_kwh)
         grid_total += f["grid_ev"] * interval.hours * c.ev_efficiency
     for t in range(n + 1):
-        check(flows["ev_energy"][t] <= c.ev_capacity_kwh + TOL, f"EV capacity {t}")
+        check(flows["ev_energy"][t] <= s.ev_ceiling_kwh + TOL, f"EV capacity/manual authority {t}")
         check(
             flows["ess_solar"][t] + flows["ess_grid"][t] <= c.ess_capacity_kwh - c.ess_min_kwh + TOL,
             f"ESS capacity {t}",

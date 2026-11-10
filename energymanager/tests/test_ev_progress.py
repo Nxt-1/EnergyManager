@@ -76,7 +76,7 @@ def test_resets_source_changes_and_bad_units_preserve_credit_without_inventing_g
     store.close()
 
 
-def test_vehicle_reconciliation_requires_real_time_and_counter_alignment(tmp_path):
+def test_changed_vehicle_report_corrects_stock_with_aligned_or_conservatively_omitted_overlap(tmp_path):
     store = Store(tmp_path / "progress.sqlite")
     progress = EVProgress(store)
     update(progress, 0, 100)
@@ -89,7 +89,7 @@ def test_vehicle_reconciliation_requires_real_time_and_counter_alignment(tmp_pat
     assert o.ev_kwh == pytest.approx(23.29)
     # Do not add that increment to a repeated SoC, or align a sample across delivery.
     o = update(progress, 20, 100.4, soc=23.3, vehicle_at=AT + timedelta(seconds=17))
-    assert o.ev_kwh == pytest.approx(23.38) and o.ev_progress["uncertain"]
+    assert o.ev_kwh == pytest.approx(23.3) and o.ev_progress["uncertain"]
     store.close()
 
 
@@ -261,8 +261,10 @@ def test_lower_untimed_soc_waits_for_counter_while_repeated_old_values_cannot_re
     progress = EVProgress(store)
     update(progress, 0, 100)
     lower = update(progress, 5, None, soc=7.956)
-    assert not lower.ev_state_known and lower.ev_progress["reconciliation_required"]
-    assert not update(progress, 10, None, soc=7.956).ev_state_known
+    # EV-A010 treats the genuinely changed valid report as new source evidence;
+    # its receipt watchdog is bounded and does not fabricate vehicle sample time.
+    assert lower.ev_state_known and lower.ev_observed_at is None
+    assert update(progress, 10, None, soc=7.956).ev_state_known
     recovered = update(progress, 15, 100.5, soc=7.956)
     assert recovered.ev_state_known and recovered.ev_kwh == 7.956
     update(progress, 20, 100.5, soc=7.956, connected=False)

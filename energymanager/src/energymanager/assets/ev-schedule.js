@@ -5,6 +5,7 @@ import {
 import {journeyEnergyKwh, powerText} from './display.js';
 import {evControlActivityModel, evStatusMarkup} from './ev-status.js';
 import {hasTextSelection} from './text-selection.js';
+import {ManualSoC} from './manual-soc.js';
 
 const hour = 3600000;
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -127,6 +128,7 @@ export function evSchedule(state) {
 }
 
 function goalStatus(goal, progressUsable) {
+  if (goal.status === 'manual_reference_required') return 'Manual reference covers another goal';
   if (goal.status === 'unknown_return_state') return 'Return SoC unknown';
   if (goal.status === 'progress_unavailable') return progressUsable ? 'Awaiting recalculation' : 'Progress unavailable';
   if (goal.shortfall_kwh > 0.001) return `${number(goal.shortfall_kwh)} kWh shortfall`;
@@ -138,6 +140,7 @@ export class EVSchedulePage {
   constructor(root, actions) {
     this.root = root;
     this.entities = actions.entities;
+    this.manual = new ManualSoC(root, body => actions.manual(body), () => this.updateStatus(this.state));
     this.selectedDate = null;
     this.phaseChanging = false;
     this.phaseError = null;
@@ -205,6 +208,7 @@ export class EVSchedulePage {
       .filter(button => button.getAttribute(focusAttribute) === focusValue) : [];
     const focusIndex = matchingButtons.indexOf(focused);
     this.state = state;
+    this.manual.state = state;
     const schedule = evSchedule(state);
     const zone = state.policy.timezone;
     const clock = instant => {
@@ -325,12 +329,13 @@ export class EVSchedulePage {
 
   updateStatus(state) {
     this.state = state;
+    this.manual.state = state;
     const card = this.root.querySelector('#ev-live-status');
     if (!card) return;
     this.progressExpanded = card.querySelector('[data-ev-progress]')?.open ?? this.progressExpanded;
     const focused = this.root.getRootNode().activeElement;
     const focusAttribute = card.contains(focused) ?
-      ['data-ev-phase', 'data-ev-history', 'data-ha-entities', 'data-ev-progress-summary'].find(name => focused.hasAttribute(name)) : null;
+      ['data-ev-phase', 'data-ev-history', 'data-ha-entities', 'data-ev-progress-summary', 'data-ev-manual-value', 'data-ev-manual-toggle', 'data-ev-manual-confirm', 'data-ev-manual-cancel'].find(name => focused.hasAttribute(name)) : null;
     const focusValue = focusAttribute ? focused.getAttribute(focusAttribute) : null;
     card.innerHTML = evStatusMarkup(state, this);
     this.updateActivity();

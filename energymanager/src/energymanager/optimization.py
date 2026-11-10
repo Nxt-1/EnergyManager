@@ -182,7 +182,7 @@ class JointModel:
             "dc_invert",
         ):
             m.variable(name, n, c.grid_connection_kw + c.dc_charge_kw)
-        ev = m.variable("ev_energy", n + 1, c.ev_capacity_kwh)
+        ev = m.variable("ev_energy", n + 1, s.ev_ceiling_kwh)
         solar = m.variable("ess_solar", n + 1, c.ess_capacity_kwh - c.ess_min_kwh)
         grid = m.variable("ess_grid", n + 1, c.ess_capacity_kwh - c.ess_min_kwh)
         for name in (

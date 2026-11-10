@@ -1,5 +1,35 @@
 # Current requirements and decisions
 
+- 10 November2026, EV-A010 unreliable SoC feedback: user accepts detection of
+  unchanged SoC despite sufficient measured charging, materially contradictory new
+  SoC and missing battery evidence after a return. Report suspected unreliable
+  feedback through one mobile alert plus a persistent in-app warning. Pause automatic
+  EV work when no trustworthy reference is available; retain task/evidence and keep
+  ESS and other independent functions working. User selects manual current-SoC input
+  in the EV tab through a slider-style switch, with counter-based best-effort charging.
+  On an issue, activation may be offered automatically but requires confirmation.
+  Unplugging invalidates the reference. A several-hour timeout is suggested, but the
+  user raises sleeping/offline nonresponse: requesting another reading must not
+  routinely leave an already confirmed charge incomplete. No12hour hard cutoff was
+  accepted. The user subsequently accepted manual authorization for the next charging
+  goal, with a separate age reminder unable to interrupt it. Unplug invalidation and
+  normal guards remain; do not automatically renew to later goals/repeated top-ups.
+  User selects automatic recovery when new valid vehicle readings appear, with a
+  recovery notification. Do not require matching estimated/manual SoC; correct
+  measurements can legitimately contradict the estimate and must not be blocked by
+  it. Reconcile without double credit. A changed valid vehicle-reported SoC is
+  sufficient practical new-report evidence, compared with the last vehicle report
+  rather than the manual/counter estimate. No extra sample agreement is required.
+  User accepted an initial stuck-reading threshold of3percentage points of estimated
+  battery gain from measured delivery, followed by15minutes without a changed report.
+  This remains installation-unverified. User accepted showing reference age in the
+  EV tab and requesting a refresh only when another charge needs a new reference,
+  without periodic age-only phone reminders. EV-A010 scope/completion criteria are
+  implemented in4.6.10 as specified in ARCHITECTURE.md. The user subsequently authorized the implementation
+  handoff: "You have permission to hand it off". This covers EV-A010 implementation,
+  verification and release under standing ready-release permission, with no live
+  installation access, real notifications, hardware operation or deployment.
+
 - 10 November2026, EV-A008 stock follow-up: user authorized handing the confirmed
   17% versus retained50.1% discrepancy and export to the existing EV implementation
   chat for this scoped correction. Reconcile all observed returns, including
