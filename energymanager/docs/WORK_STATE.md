@@ -470,12 +470,178 @@ updates before incorporating them into the V4.5 implementation branch; discuss t
 next V4.5 task in the architecture chat and start implementation only when authorized.
 No application task, commit or publication is implied by this setup record.
 
-### EV planner — V4.6 / EV-A002–EV-A011
+### EV planner — V4.6 / EV-A002–EV-A013
 
 - **Architecture chat:** EV Task optimization achritecture, local ID
   `01a18e54-5380-7703-b13d-8044baa8a7ac`.
 - **Implementation chat:** EV task optimization implementation, local ID
   `01a1b64b-a1fe-74d2-a393-afe7ed1aeb39`.
+- **EV-A012/EV-A013 scheduled implementation authorized,11November2026:** after
+  finalizing both packages, user requested "Schedule both of those for implementation
+  in 3 hours". The one-time scheduled start implement-ev-a012-and-ev-a013 targeted the registered
+  implementation chat01a1b64b-a1fe-74d2-a393-afe7ed1aeb39 (local), with its authorized
+  start at2026-11-11T16:23:57Z /17:23:57Brussels. A012 first, then A013; verify combined
+  behavior and deliver a ready release through existing workflows, incorporating latest
+  main in version order and preserving concurrent drafts. This explicit authorization
+  supersedes earlier discussion-only/no-handoff labels below for these scopes. No
+  immediate cross-chat message or application implementation started in architecture;
+  scheduled prompt contains the reviewable scopes, evidence, exclusions and release
+  gates. No live HA/database, real notifications, hardware operation or deployment.
+- **EV-A012/A013 implementation complete locally (4.6.12,11November2026):**
+  Scheduled user authorization verified; isolated `codex/ev-a012-a013` incorporates
+  main/origin4.6.11/5b06141 and preserves concurrent shared drafts. A012 trusts changed
+  valid vehicle stock and requests recalculation without blanket execution revocation.
+  Completed quantity cannot revive; source/fault/Off/peak/expiry guards remain. Preserved
+  incident/hash replay through observation, controller and fake go-e keeps16A/one phase
+  through baseline5→6/+66.6Wh with no stop/start/phase request; initial ledger/task are
+  reconstructed and later physical failure causation remains unproven. A013 uses
+  phase-first joint references, finish-first then current suffixes, certified necessary
+  phase fallback and one carried EUR0.02 comparison/cash ledger at matching useful stock.
+  Timeout retains only independently valid prior authority, with ordinary expiry.
+  Full865Python pass243.61s; final56focused integration cases pass77.28s
+  after profile-boundary/completion guards.122frontend, Ruff/mypy64modules, JS syntax,
+  CLI, normal/routed fake E2E and wheel/sdist92runtime comparisons/isolated import pass.
+  Six controlled full-horizon replacements independently audit in15.66–27.31s; two
+  archive counterfactuals remain inconclusive without a replacement (archived_bounce 72.82s/Time limit reached, archived_nov05 94.77s/unverified).
+  Joint ESS cases cover both financial boundaries and PV displaced from useful ESS;
+  repeated updates, pending ACK and guarded handover are exercised through fake writes.
+  Details: VERIFICATION.md and ignored `artifacts/ev-a012-a013-state.json`. Ready for
+  authorized integration/publication; remote outcomes will be recorded only in ignored
+  state/final reports. No live HA/database, notifications, hardware or deployment.
+
+- **EV-A012 — historical architecture/research,11November2026 (implemented above):** user brought
+  the charging-errors chat's prepared package into this architecture chat to finalize
+  scope and authorization. Preserved incident hash verified against the supplied
+  SHA25604d018b0c1259b5f3f216f92df11aea67417189491135557a6130212b0f07e02.
+  Current Application.observe/changed path confirms baseline-only unconditional
+  revocation/protective dispatch: at11:05:43local, connected/usable remains true,
+  stock+66.6Wh, baseline5→6, generation872→873, stop14s after1p start. Software trigger
+  established; causal contribution to the later3p no-delivery remains unproven.
+  ARCHITECTURE.md now contains bounded scope and full completion criteria: independent
+  task/permission recheck, continuity through recalculation/pending sequencing, normal
+  endpoint completion, no extra authority or double credit, retained50.1→17% return
+  regression and all true stop guards. No planner/phase/watchdog/retry/reboot expansion.
+  EV-A011 is still active in the registered implementation chat; do not silently amend
+  that task. The user declined handoff while seeking a clearer explanation and then
+  clarified: trust changed valid vehicle SoC without matching the estimate. The proposed
+  fix must avoid unconditional baseline revocation and retain ordinary live task
+  checks, not introduce a special SoC-agreement/stop-and-revalidate stage. Next: continue
+  the design discussion before requesting authorization again. No application code changed,
+  new handoff sent or live operation performed for A012.
+  **Periodic-adjustment question (11November, read-only):** user asks whether charging
+  a little ahead/behind can cause immediate power changes at each5minute replan, before
+  giving further design thoughts. Current service has a300s periodic wait between
+  planning requests; actual adoption depends on calculation/event timing. Fast control
+  follows accepted interval currents/phases, and a new accepted plan may replace the
+  active dispatch after the committed-prefix handover. Latest measured stock feeds
+  remaining-work planning. There is no blanket hold-current-until-task-end invariant.
+  A003 removed direct pauses for being ahead of a slot's forecast; normal live source/
+  peak response remains independent. Positive rate changes over0.5kW have the existing
+  sustained-deviation smoothing, but that is not a general stop/phase/replacement lock.
+  Active continuation review is bounded and can remain unverified on timeout. Thus
+  replanning can change power/phase/pause, but is not automatically triggered by each
+  pacing discrepancy and does not prove the cause of every historical interruption.
+  This incident's baseline-only stop occurs before replacement admission. Keep A012
+  in discussion; do not silently expand it into running-session policy/planner changes.
+  **User's tail-first proposal:** preserve a running task's accepted profile through
+  routine update cycles, absorbing needed changes at its tail to avoid needless current/
+  phase changes. User notes that large deferred corrections can jeopardize completion.
+  User clarified the preferred order: finish-time changes first when feasible, then
+  power/phase edits in the final portion, working backward only as far as needed.
+  This preserves the earlier accepted profile, not a newly imposed constant current.
+  Pending engineering/policy details: calculate/check the adjusted tail now under real
+  deadline/source/peak/availability constraints; intervene earlier when necessary;
+  preserve immediate live protection/endpoint stops. User then allowed earlier changes
+  for a clearly better solar/cost opportunity even when tail-first completion is feasible.
+  Compare whole-system benefit on matching inputs with normal source/peak authority,
+  physical interruption losses and existing shared financial allowance; no new monetary
+  threshold is selected. Benefit qualification, timeout behavior and model representation
+  remain open. No implementation, fixed dwell
+  or authority expansion is authorized by the confirmed design direction.
+  **Offline tail study authorized (11November):** user said Go ahead to multi-example
+  stability/deadline/cost/runtime comparison. No application implementation authorized.
+  Ignored helper `artifacts/ev-tail-research/study.py` uses current released planner
+  and a conditioned suffix search sharing its original120s wall deadline, with full
+  physical/source/rolling audits and the shared cash/comparison allowance. Controlled
+  fixtures are explicitly synthetic168h/max5min; ESS converters disabled and only one
+  active EV requirement to isolate running-profile behavior. Do not present these as
+  installation evidence or full integrated candidate-stage performance. Completed six
+  controlled cases, one alternative phase constraint and two archive-derived replays:
+  - +66.6Wh: three late rate changes become none; keep12A and finish96.52s sooner.
+    Combined11.77s. Baseline delivered3.75Wh more; the0.00127EUR saving is not a
+    matched-energy gain.
+  - -207Wh: keep12A and extend finish5min; three rate changes become none, identical
+    delivered energy/cost. Combined31.17s.
+  - -414Wh/two-hour deadline: move first change from minute5 to90, then increase
+    current in the final30min. Same energy/cost and deadline met; combined14.29s.
+  - -1.5kWh/two-hour deadline: strict suffix search delays first change from2.25min
+    to35min but introduces a phase switch at50min. Same energy/cost, combined20.25s.
+    Experimental same-phase constraint permits an earlier current-only change at
+    minute10, no phase switch/restart; combined19.19s. It delivers3.45Wh less than
+    baseline, so its0.00117EUR saving is not a matched-energy economic gain. This
+    exposed a priority choice. The user subsequently confirmed current adjustment
+    must always be preferred over a phase switch, even if the current-only change
+    must start earlier. Record as pending architecture, not implemented behavior.
+  - Forecast house demand0.6→2.6kW: later prefixes infeasible under peak constraints;
+    retain the released plan's early adjustment, combined18.04s. Separate FastControl
+    probe reduces EV2.76→2.30kW on a synthetic load step without changing plan/phase.
+    This is not an Application.observe reconciliation replay or actuator-path proof.
+  - Early5kW PV opportunity: finish-only plan costs0.363EUR more and fails existing
+    rolling comparisons; allow early changes and retain released baseline. Combined
+    70.79s. ESS is disabled here, so this does not prove whole-installation PV benefit.
+  All selected controlled flows meet required service, physical/source/rolling audits
+  and the same4.95kW incurred peak. Trials include existing operational polishing:
+  raw economic-only prototype churn is preserved in labelled initial reports and is
+  not a final policy result. Suffix cuts are sampled, not an exact latest-change proof.
+  The two original archived exports retain full forecast/goals/ESS and receive a
+  synthetic+66.6Wh update. Neither found an accepted alternative: released planning
+  used96.29/97.30s and remaining attempts hit infeasibility/time limits; keep valid
+  baseline. Nov5 total120.16s slightly exceeded the120s nominal deadline, including
+  model/validation overhead; Nov8 total111.73s. These are inconclusive for improvement,
+  not evidence that no feasible tail exists. Legacy exports lack modern execution
+  context, adding a physical-transition confound to current replays.
+  Saved local evidence: artifacts/ev-tail-research/{study.py,summary.json}, per-case
+  inputs/baselines/selected flows and reports. summarize.py independently re-audits
+  every selected flow and fixes archive metrics to start from observed phase, rather
+  than assuming phase1 (Nov8 has one actual transition, not two). Helper Ruff checks
+  pass. No application files changed; no baseline-stop fix implemented/replayed.
+  **Phase priority confirmed:** finish-time-only correction first, then current-only
+  correction in the existing phase, working backward as necessary; phase switching
+  only if current-only correction cannot meet required service/hard constraints and
+  permissions. A cheaper phase-changing candidate or longer unchanged prefix cannot
+  override a feasible current-only correction. Existing live protections remain.
+  **Timeout fallback confirmed:** without a checked replacement, keep existing accepted
+  instructions while independently valid; preserve expiry, updated remaining work,
+  completion stops and live protection. Timeout alone cannot cause a stop or establish
+  that phase switching is necessary. No indefinite authority or budget extension.
+  Candidate admission/handover must retain normal independent checks within the same
+  total budget; the sequential research helper is not the integration specification.
+  **Economic qualification confirmed:** use the existing shared0.02EUR envelope,
+  retaining tail-first when
+  its checked whole-system comparison/cash outcomes fit that envelope relative to the
+  same-phase alternative; allow earlier adjustment if they do not. No additional
+  per-update allowance or phase-switch exception. Compare matching service/delivery
+  and whole-system value; delivering less energy is not itself an economic gain.
+  **Architecture ready:** retain narrow A012 for baseline-only execution revocation;
+  companion EV-A013 covers the broader running-task planning/admission preference.
+  ARCHITECTURE contains both scopes and offline completion criteria. No remaining
+  user policy question for these packages; implementation choices/verification remain.
+  Next concrete action is handoff of these reviewable scopes if the user requests it.
+  The authorized offline comparison is complete; design agreement does not authorize
+  application implementation.
+- **EV-A013 — running-task tail-first adjustments,11November2026, implemented in4.6.12; historical architecture scope:** companion to narrow EV-A012. Prefer
+  finish-only changes, then same-phase current changes from the tail backward, then
+  phase changes only when necessary for required service under hard constraints.
+  Earlier current-only changes outrank later phase switches. Preserve immediate live
+  protection and normal authority expiry. Economic earlier-change exception uses the
+  existing shared0.02EUR whole-plan envelope without accumulation. Timeout retains
+  independently valid instructions and cannot establish phase-switch necessity.
+  Implement after/integrated with A012, preserving its ledger/reconciliation regressions.
+  Offline completion criteria include full joint ESS/EV cases, guarded actuator-path
+  handover, independent source/peak/service/economic checks and integrated runtime
+  inside the existing total budget. See architecture and A012 evidence above; no
+  application implementation has occurred in architecture. The scheduled request above
+  supplies explicit start/handoff authorization; design acknowledgements alone did not.
 - **EV-A011 implementation complete locally (4.6.11,11November2026):**
   Scoped presentation/interaction work on `codex/ev-a011`, based on released
   4.6.10/6ab71f6. One full beside-sensors diagnosis, matching stacked header controls,

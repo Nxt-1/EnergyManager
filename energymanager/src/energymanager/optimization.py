@@ -654,33 +654,39 @@ class JointModel:
         s, m = self.snapshot, self.linear
         p, o, n = s.policy, s.observation, len(s.intervals)
         v = m.variables
-        prefix = m.variable("rolling_cash_prefix", n + 1, lower=-INF)
-        m.equality([(prefix[0], 1)])
-        for t, interval in enumerate(s.intervals):
-            m.equality(
-                [
-                    (prefix[t + 1], 1),
-                    (prefix[t], -1),
-                    *[
-                        (v[name][t], -interval.hours * p.import_eur_kwh)
-                        for name in ("grid_ev", "grid_house", "grid_store")
-                    ],
-                    (v["export"][t], interval.hours * p.export_eur_kwh),
+        if "rolling_cash_prefix" in v:
+            prefix = v["rolling_cash_prefix"]
+            averages = {key:v[f"rolling_quarter_{key}"][0] for key in self.quarters}
+        else:
+            prefix = m.variable("rolling_cash_prefix", n + 1, lower=-INF)
+            m.equality([(prefix[0], 1)])
+            for t, interval in enumerate(s.intervals):
+                m.equality(
+                    [
+                        (prefix[t + 1], 1),
+                        (prefix[t], -1),
+                        *[
+                            (v[name][t], -interval.hours * p.import_eur_kwh)
+                            for name in ("grid_ev", "grid_house", "grid_store")
+                        ],
+                        (v["export"][t], interval.hours * p.export_eur_kwh),
+                    ]
+                )
+            averages = {}
+            for key, slots in self.quarters.items():
+                average = m.variable(f"rolling_quarter_{key}", 1)[0]
+                averages[key] = average
+                terms = [
+                    (v[name][t], -s.intervals[t].hours * 4)
+                    for t in slots
+                    for name in ("grid_ev", "grid_house", "grid_store")
                 ]
-            )
-        averages: dict[str, int] = {}
-        for key, slots in self.quarters.items():
-            average = m.variable(f"rolling_quarter_{key}", 1)[0]
-            averages[key] = average
-            terms = [
-                (v[name][t], -s.intervals[t].hours * 4)
-                for t in slots
-                for name in ("grid_ev", "grid_house", "grid_store")
-            ]
-            m.equality([(average, 1)] + terms, o.quarter_import_kwh * 4 if slots[0] == 0 else 0)
+                m.equality([(average, 1)] + terms, o.quarter_import_kwh * 4 if slots[0] == 0 else 0)
         zone = ZoneInfo(p.timezone)
         initial_month = s.intervals[0].start.astimezone(zone).strftime("%Y-%m")
         for start, interval in enumerate(s.intervals):
+            if start in self.rolling_metadata:
+                continue
             if origins is not None and start not in origins:
                 continue
             end_time = interval.start + timedelta(hours=24)

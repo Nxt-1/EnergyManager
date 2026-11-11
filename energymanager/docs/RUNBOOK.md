@@ -1,5 +1,25 @@
 # Run, configure, review and roll back
 
+## Running EV stock corrections (4.6.12 / EV-A012–A013)
+
+A changed valid vehicle SoC replaces estimated stock and updates remaining work.
+Valid connected charging and pending charger acknowledgement continue during ordinary
+recalculation. Reaching the authorized endpoint stops work; later lower stock cannot
+renew a completed task's old allowance. Unknown/unusable progress, disconnect, explicit
+fault, Hardware Off, revoked permissions, expiry and live peak danger retain their stops.
+
+Replacement planning first changes the finish, then current from the tail backward in
+the current phase. It checks future service and cautious PV now. A phase switch requires
+same-phase required-service infeasibility. Earlier current changes may improve whole
+EV/ESS/household economics outside the existing shared EUR0.02 comparison/cash envelope;
+more EV PV alone is insufficient and updates do not renew that allowance. A timeout
+leaves existing instructions only while independently valid, with normal expiry and
+endpoint/peak protection. It grants no extra time, quantity or phase permission.
+
+Offline regressions: `python -m pytest -q tests/test_stock_continuity.py tests/test_running_task.py`.
+These use labelled synthetic ledgers and fake endpoints; frozen incident/research exports
+remain supporting evidence. No live installation check or retry/reboot feature is included.
+
 ## Manual SoC recovery (4.6.11 / EV-A010–A011)
 
 When EV feedback is unavailable or suspected stuck, restore its sources or open
@@ -94,8 +114,9 @@ A changed lower valid SoC with a usable eto counter rebases stock once; timing s
 unknown when the source supplies no physical timestamp. Uncertain overlap is omitted,
 and only subsequent delivery is credited to the corrected stock. The existing
 uncertainty indicator remains visible. Without usable evidence, reconcile the source;
-do not reset the ledger or mark the requirement fulfilled. EV authority is revoked
-for recalculation when the stock baseline changes; ESS remains independent.
+do not reset the ledger or mark the requirement fulfilled. Disconnect/unknown return
+still revokes old authority. From4.6.12 a usable connected stock correction requests
+recalculation while independently valid work continues; ESS remains independent.
 
 This changes stock accounting only. Existing charger faults and permissions still
 apply; restarting/retrying hardware is not part of this recovery policy.

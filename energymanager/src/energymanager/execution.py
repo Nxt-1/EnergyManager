@@ -72,14 +72,73 @@ def task_target(plan: dict[str, Any], at: datetime) -> float | None:
     return float(f["ev_energy"][t + 1])
 
 
+def running_context(snapshot: Snapshot, plan: dict[str, Any] | None, phase: int) -> dict[str, Any] | None:
+    """Freeze the running accepted profile as preference evidence, never new authority."""
+    at = snapshot.intervals[0].start
+    if not plan or not snapshot.observation.connected or not snapshot.observation.ev_state_known:
+        return None
+    source = dispatch_source(plan, at)
+    target = task_target(source, at)
+    if target is None or snapshot.observation.ev_kwh >= target - 1e-6:
+        return None
+    first = next(t for t, i in enumerate(source["intervals"]) if instant(i["start"]) <= at < instant(i["end"]))
+    last = first
+    f = source["flows"]
+    while last + 1 < len(source["intervals"]) and f["one"][last + 1] + f["three"][last + 1] > .5:
+        last += 1
+    old_end = instant(source["intervals"][last]["end"])
+    goals = [g for g in snapshot.goals if g.deadline >= old_end and g.target(snapshot.capabilities, snapshot.policy) >= target - .02]
+    goal = min(goals, key=lambda g: g.deadline) if goals else None
+    deadline = min(goal.deadline if goal else old_end, snapshot.intervals[-1].end)
+    task_key = sha256(encode({"goal":goal.id if goal else None,"revision":goal.revision if goal else None,
+        "deadline":deadline,"target":goal.target(snapshot.capabilities,snapshot.policy) if goal else target}).encode()).hexdigest()
+    previous_allowance = plan.get("running_allowance") or source.get("running_allowance") or {}
+    if previous_allowance.get("task_key") == task_key:
+        spent = previous_allowance["spent_eur"]
+    else:
+        # Older releases already had this whole-plan envelope but no per-task
+        # ledger. Never buy a second allowance when upgrading a running task.
+        spent = snapshot.policy.polish_tolerance_eur if "polish_reference_summary" in source else 0.0
+    profile = []
+    remaining = target - snapshot.observation.ev_kwh
+    finish = None
+    for t, item in enumerate(source["intervals"]):
+        left, right = max(at, instant(item["start"])), min(deadline, instant(item["end"]))
+        if left >= right:
+            continue
+        amps_one, amps_three = round(f["amps_one"][t]), round(f["amps_three"][t])
+        profile.append({"start":left.isoformat(), "end":right.isoformat(), "one":amps_one, "three":amps_three})
+        if t <= last and finish is None:
+            power = sum(f[name][t] for name in ("grid_ev", "pv_ev", "solar_dis_ev"))
+            gain = power * (right-left).total_seconds()/3600 * snapshot.capabilities.ev_efficiency
+            if power > 1e-7 and remaining <= gain + 1e-8:
+                finish = left + timedelta(hours=remaining/power/snapshot.capabilities.ev_efficiency)
+            remaining -= gain
+    if finish is None and remaining > 0:
+        power = (f["amps_one"][last] + 3*f["amps_three"][last])*snapshot.capabilities.voltage/1000
+        if power > 0:
+            finish = old_end + timedelta(hours=remaining/power/snapshot.capabilities.ev_efficiency)
+    return {"plan_id":source["id"], "phase":phase, "target_kwh":target,
+            "goal_id":goal.id if goal else None, "goal_revision":goal.revision if goal else None,
+            "deadline":deadline.isoformat(), "old_end":old_end.isoformat(), "profile":profile,
+            "finish_at":finish.isoformat() if finish and at < finish <= deadline else None,
+            "allowance":{"task_key":task_key,"spent_eur":spent}}
+
+
 def freeze_execution(snapshot: Snapshot, plan: dict[str, Any] | None,
                      charger: dict[str, Any], *, conditional_valid: bool = True) -> Snapshot:
     """Commit the accepted trajectory, rather than extending the current command."""
     start = snapshot.intervals[0].start
     ready = max(start, instant(charger.get("ready_at", start.isoformat())))
     initial_phase = int(charger.get("phase", snapshot.observation.ev_phases))
+    running = running_context(snapshot, plan, initial_phase)
     end = max(ready, start + timedelta(seconds=snapshot.policy.planning_budget_seconds + 15)) if plan else ready
     boundaries = {start, end, ready}
+    if running and running["finish_at"]:
+        boundaries.add(instant(running["finish_at"]))
+    if running:
+        for item in running["profile"]:
+            boundaries.update((instant(item["start"]), instant(item["end"])))
     if plan:
         source_plan = plan
         while source_plan:
@@ -160,7 +219,7 @@ def freeze_execution(snapshot: Snapshot, plan: dict[str, Any] | None,
                    execution={"protocol": 1, "phase_switch_seconds": PHASE_SWITCH_SECONDS,
                               "initial_phase": initial_phase, "ready_at": ready.isoformat(),
                               "commitment_until": end.isoformat(), "commitments": commitments,
-                              "charger": charger})
+                              "charger": charger, "running_task":running})
 
 
 def wait_events(snapshot: Snapshot, modes: list[int]) -> list[tuple[int, float]]:

@@ -1,5 +1,55 @@
 # EnergyManager 4 verification
 
+## 4.6.12 — EV stock continuity and running corrections (EV-A012/A013)
+
+Based on released4.6.11/5b06141. All fixtures, stores, HA/actuator endpoints and commands
+below are local/synthetic. Preserved installation exports are read-only evidence.
+
+- Full865Python cases pass243.61s; after final completion/profile-boundary guards,
+  56focused controller/publication/execution/policy cases pass77.28s.122frontend
+  cases pass410.4ms; Ruff, mypy64modules, CLI4.6.12 and every packaged JS syntax pass.
+  No frontend assets changed; this release makes no new browser/physical commissioning claim.
+- Original incident SHA25604d018b0c1259b5f3f216f92df11aea67417189491135557a6130212b0f07e02
+  remains unchanged. Replay uses its before/after stock/timestamps/counter evidence with
+  an explicitly reconstructed initial ledger and accepted16A/50% task. Observation→
+  controller→fake go-e stays16A/one phase through9.5274→9.594kWh and baseline5→6,
+  preserves2.6532kWh historical credit, and writes no force-off/start/phase command.
+  The incident established the prior software stop trigger; it does not establish the
+  cause of the later physical failure. See ignored a012-incident-replay.json/script.
+- Up/down stock, repeated reports/no double credit, estimated50.1% versus actual17%
+  after driving, manual bounds/recovery, completed-task tombstones, conditional advance,
+  distinct future tasks and pending ACK/generation continuity pass. Fake actuator checks
+  cover completion, unknown/disconnect, revoked authority, peak protection, expiry and
+  checked replacement handover. Existing explicit fault/Off/stale/source guards pass.
+- Six preserved controlled seven-day inputs (ESS disabled) yield audited integrated
+  replacements in15.66–27.31s within120s. Ahead/behind change finish only; tight deadline
+  changes current from90min; the phase-priority case changes current from10min and
+  avoids the research prototype's later phase switch; household load brings current
+  changes to2.25min; solar uses an earlier same-phase economic exception. All retain
+  required service, zero phase changes and zero new starts. Exact currents, stock,
+  costs, peak, audits and released-planner baseline comparisons are retained in ignored
+  a012-a013-comparison.json, with original ev-tail-research bytes unchanged. Surplus
+  rounding Wh are reported, not claimed as economic savings.
+- Full joint ESS/EV fixtures check both sides of EUR0.02 at equal23.4kWh useful EV
+  stock. Low-price tail regret is aboutEUR0.00822 and remains finish-only; the higher
+  price opportunity is aboutEUR0.03289 and permits earlier current. A separate valued-ESS
+  case rejects PV-to-EV transfer that displaces more useful stored supply. Task-keyed
+  spent/remaining allowance survives repeated planning and thin handover; no new
+  tolerance is added per candidate/update. Phase tests distinguish genuine infeasibility
+  from required-reference and joint-support timeouts; cautious proof identity is audited.
+- Archive-derived counterfactuals remain inconclusive: archived_bounce 72.82s/Time limit reached, archived_nov05 94.77s/unverified.
+  Neither yields a checked replacement; no phase necessity is inferred from timeout.
+  Prior authority is neither renewed nor extended. This is not an installation result
+  or a claim that all full-horizon joint searches find a replacement inside the budget.
+- Configured fake E2E25.731s/2019intervals/max control3.228ms; routed55.818s/2023intervals/
+  max2.774ms pass with four fake service calls each, two calendar imports and six fake
+  route queries in the routed run. Wheel/sdist4.6.12 build and all92runtime files match
+  source bytes; isolated wheel imports/version pass. Local Docker is unavailable.
+
+Exact-head CI/image publication outcomes follow in the ignored release checkpoint and
+final paired-chat/user report, without an optional verification-only commit. No live
+HA/database access, real notification, hardware operation or installation deployment.
+
 ## 4.6.11 — EV-page cleanup (EV-A011,11November2026)
 
 Based on released4.6.10/6ab71f6. All endpoints, meters, faults, actuator calls and

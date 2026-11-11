@@ -84,7 +84,7 @@ def test_read_watchdog_updates_operational_warning_without_a_new_observation(tmp
     store.close()
 
 
-def test_stock_reconciliation_revokes_old_ev_authority_and_requests_one_replan(tmp_path):
+def test_usable_stock_reconciliation_keeps_authority_and_requests_one_replan(tmp_path):
     from types import SimpleNamespace
     store = Store(tmp_path / 'synthetic.sqlite')
     s = tiny()
@@ -99,7 +99,7 @@ def test_stock_reconciliation_revokes_old_ev_authority_and_requests_one_replan(t
     app.observe(sample(5, soc=7.956))
     assert app.observation.ev_kwh == 7.956 and app.observation.ev_state_known
     assert app.revision == revision + 1 and app.requested.is_set()
-    assert not app.ev_valid and app.ess_valid
+    assert app.ev_valid and app.ess_valid
     assert app.accepted == {'id': 'SYNTHETIC preserved result'}
     assert any(e['kind'] == 'invalidation' and e['body']['reason'] == 'ev_stock_reconciled' for e in store.events())
     app.observe(sample(10, soc=7.956))

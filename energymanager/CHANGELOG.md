@@ -1,3 +1,11 @@
+## 4.6.12 — EV stock continuity and running-task corrections
+
+- Accept changed valid vehicle SoC and replan remaining work while preserving valid charging and pending charger acknowledgements.
+- Keep completed work completed and retain normal source, fault, peak, permission and expiry stops.
+- Prefer finish changes, then same-phase current changes from the tail; permit a phase switch only after required-service infeasibility is established.
+- Allow earlier current changes for checked whole-system benefit outside the existing shared EUR0.02 envelope, carried across updates.
+- Fit replacement search and independent checks inside the existing solve budget. Verified offline with synthetic/fake endpoints; no installation deployment.
+
 ## 4.6.11 — EV page cleanup
 
 - Keep one full diagnosis beside the original car/sensor display, with a brief global banner and independent fault/countdown evidence retained.

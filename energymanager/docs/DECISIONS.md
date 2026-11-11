@@ -1,5 +1,55 @@
 # Current requirements and decisions
 
+- 11 November2026, EV-A012/EV-A013 scheduled implementation authorized: user requested
+  "Schedule both of those for implementation in 3 hours" after finalizing both scopes.
+  Schedule one start in the registered EV implementation chat, approximately17:24Brussels
+  today: A012 first, then A013, with offline verification and ready-release publication
+  under standing release permission. Automation implement-ev-a012-and-ev-a013 targets
+  chat01a1b64b-a1fe-74d2-a393-afe7ed1aeb39. This supersedes the earlier no-authorization
+  status for these scopes only; no live installation access or operation is authorized.
+
+- 11 November2026, EV-A012 prepared scope: user brought the established baseline-
+  reconciliation interruption from the EV charging errors chat here to finalize the
+  work package and authorization. Preserve a still-valid task through usable stock
+  corrections and normal recalculation, with updated remaining quantity and independent
+  goal/source/peak checks. Preserve endpoint completion, real unknown/disconnect/fault/
+  Off/revoked-permission stops, lower post-driving stock correction and no double credit.
+  The software interruption trigger is established; later physical charging-failure
+  causation is not. Separate from active EV-A011 and retry/reboot work. Architecture
+  discussion continues: the user declined handoff pending understanding, then clarified
+  that changed valid vehicle SoC must be trusted regardless of the estimate. No SoC
+  agreement/magnitude gate or special blocking revalidation is intended; use normal
+  task/source/peak guards and update remaining energy. The issue is revocation after
+  accepting a new reference, not the discrepancy itself. Implementation/handoff authorization was supplied later by the scheduled request above.
+  Further design direction: preserve the earlier accepted running profile and absorb
+  routine corrections at the tail. User prefers shortening/extending the finish first;
+  if constraints prevent that, adjust power/phases from the tail backward only as far
+  as necessary. Deadline feasibility must be checked before deferring execution changes;
+  normal live protection and endpoint completion remain immediate. User also permits
+  earlier profile changes for clearly better solar/cost opportunities even when the
+  tail-first plan can meet the deadline. Routine small corrections remain tail-first;
+  the user subsequently confirmed current adjustment must always be preferred over
+  phase switching for running-task corrections. Prefer an earlier feasible current-
+  only adjustment over a later phase switch; unchanged-prefix length or a cheaper
+  phase-changing candidate does not override that priority. Phase switching remains
+  available when current-only adjustment cannot meet required service under hard
+  constraints and permissions. Finish-time-only adjustment remains the first choice;
+  the earlier solar/cost exception does not bypass the phase-preservation priority.
+  Timeout fallback confirmed: if no checked replacement is available, keep existing
+  instructions running only while independently valid, with normal expiry, updated
+  remaining quantity, peak protection and completion stops. Timeout alone is neither
+  a reason to stop valid charging nor evidence that phase switching is necessary.
+  No authority extension or solve-budget increase is granted. Economic qualification
+  confirmed: use the existing shared0.02EUR whole-plan comparison/cash envelope. Keep
+  tail-first within that envelope relative to the feasible earlier same-phase option;
+  permit earlier current adjustment when outside it, comparing matching required
+  service/useful delivery and whole-system value. Do not accumulate another allowance
+  per update or candidate. Implementation packages are separated: EV-A012 fixes the
+  baseline-revocation defect; EV-A013 implements the running-task planning preference,
+  with independent offline verification and bounded admission/handover. Architecture
+  is ready for both; the subsequent scheduled request above supplies implementation/
+  handoff authorization. Implemented together in4.6.12 with offline verification; no installation deployment.
+
 - 11 November2026, EV-A011 EV-page cleanup: user selects the second preview,
   Beside sensors. Show its full diagnosis by default without an expander; the global
   banner stays brief. Stack Hardware control and Manual SoC with the same typography

@@ -13,6 +13,7 @@ from .domain import Snapshot, json_data
 from .optimization import JointModel
 from .reservations import reservations
 from .validation import TOL
+from .running_task import phase_lock
 
 
 def cautious_model(snapshot: Snapshot, checkpoint: int, terminal_house: float = 0.0,
@@ -93,9 +94,15 @@ def deadline_certificate(snapshot: Snapshot, reference: dict[str, list[float]], 
     record: dict[str, Any] = {"status": "unverified", "scope": scope, "margin": .2, "attempts": [],
                               "withdrawals": [{"at": i.start.isoformat(), "kwh": i.withdrawal_kwh}
                                               for i in s.intervals[:k] if i.withdrawal_kwh > 0]}
+    running = (s.execution or {}).get("running_task")
+    if running:
+        record["phase_preference"] = "same_phase"
+    opposite = "three" if running and running["phase"] == 1 else "one"
+    reference_changes_phase = bool(running and any(reference[opposite][t] > .5
+        for t, interval in enumerate(s.intervals) if interval.start < goal.deadline))
     if reference["ev_energy"][k] + TOL < goal.target(c, s.policy):
         return {**record, "status": "nominal_shortfall"}
-    if not any(i.pv_ac_kw > 0 or i.pv_dc_kw > 0 for i in s.intervals):
+    if not reference_changes_phase and not any(i.pv_ac_kw > 0 or i.pv_dc_kw > 0 for i in s.intervals):
         # No uncertain generation: retain the already checked coherent reference,
         # including its held/partial slots, rather than inventing a bursty new task.
         flows = {name: list(values) for name, values in reference.items()}
@@ -158,6 +165,9 @@ def deadline_certificate(snapshot: Snapshot, reference: dict[str, list[float]], 
             outcome["context"] = cautious
         return outcome
 
+    if running:
+        phase_lock(model,running["phase"],running["deadline"])
+        record["phase_preference"] = "same_phase"
     best = solve(model, 0)
     if not best["feasible"]:
         # A restricted witness cannot prove general infeasibility. Release future
@@ -166,7 +176,17 @@ def deadline_certificate(snapshot: Snapshot, reference: dict[str, list[float]], 
             context = s
             reserve = {"solar_house_kwh": 0.0}
             model = cautious_model(context, k, service=service)
+            if running:
+                phase_lock(model,running["phase"],running["deadline"])
             best = solve(model, 0)
+            if running and not best["feasible"] and best["status"] == "Infeasible" and deadline-monotonic() > .35:
+                # Only a global same-phase required-service failure, after releasing
+                # future reserve restrictions, permits the phase-changing witness.
+                record["phase_preference"] = "necessary_phase"
+                record["phase_necessity"] = {"status":"Infeasible", "phase":running["phase"],
+                    "deadline":running["deadline"], "input_digest":context.digest, "service":service or {}}
+                model = cautious_model(context,k,service=service)
+                best = solve(model,0)
             if not best["feasible"] and best["status"] == "Infeasible":
                 record["status"] = "margin_shortfall"
         if not best["feasible"]:

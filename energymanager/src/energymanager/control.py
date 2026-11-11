@@ -110,11 +110,19 @@ class FastControl:
         grid_requested = False
         execution_key = ((plan or {}).get("execution_id", (plan or {}).get("id")), self.deadline_execution.active)
         if self.ev_task and (self.ev_task["execution_key"] != execution_key and progress_usable
-                             or at >= instant(self.ev_task["deadline"])
-                             or o.ev_kwh >= self.ev_task["target"] - 1e-6):
+                             or at >= instant(self.ev_task["deadline"])):
             self.ev_task = None
+        if self.ev_task and o.ev_kwh >= self.ev_task["target"] - 1e-6:
+            self.ev_task["completed"] = True
         if plan and position is not None:
             f = plan["flows"]
+            if (self.ev_task and self.ev_task.get("completed")
+                    and at >= instant(self.ev_task["scheduled_end"]) and f["one"][position]+f["three"][position] > .5):
+                start = position
+                while start and f["one"][start-1]+f["three"][start-1] > .5:
+                    start -= 1
+                if instant(plan["intervals"][start]["start"]) >= instant(self.ev_task["scheduled_end"]):
+                    self.ev_task = None  # A distinct future task already present in the accepted instructions.
             eligible = [
                 g
                 for g in plan["goals"]
@@ -172,6 +180,8 @@ class FastControl:
             dc_reserved = f["dc_store"][position]
             if self.ev_task and at >= instant(self.ev_task["scheduled_end"]):
                 planned_ev = 0.0
+            if self.ev_task and self.ev_task.get("completed"):
+                planned_ev = 0.0
             if planned_ev > 1e-6:
                 task_end = position
                 while task_end + 1 < len(plan["intervals"]) and (
@@ -199,7 +209,7 @@ class FastControl:
                 self.ev_task = {"plan_id": plan["id"], "execution_key": execution_key,
                                 "target": target, "deadline": expiry, "scheduled_end": end_at,
                                 "power": planned_ev, "phases": phases, "grid": grid_requested}
-            elif self.ev_task and plan["intervals"][position]["available"]:
+            elif self.ev_task and not self.ev_task.get("completed") and plan["intervals"][position]["available"]:
                 # Finish this task's remaining quantity after a late physical response.
                 # A later goal never raises this saved endpoint; a replacement is reviewed
                 # in the frozen planner and resets the task identity above.
@@ -208,7 +218,7 @@ class FastControl:
                 carried_grid = self.ev_task["grid"]
             if self.ev_task:
                 task_target = self.ev_task["target"]
-                task_complete = o.ev_kwh >= task_target - 1e-6
+                task_complete = bool(self.ev_task.get("completed")) or o.ev_kwh >= task_target - 1e-6
                 if task_complete:
                     planned_ev = 0.0
                 else:
@@ -262,6 +272,7 @@ class FastControl:
             and position is not None
             and ev_valid
             and conditional_valid
+            and not task_complete
             and o.connected
             and o.ev_state_known
         ):
@@ -381,7 +392,7 @@ class FastControl:
             amps = 0
         prepare_phase = bool(plan and plan.get("execution") and position is not None
             and f["one"][position] + f["three"][position] > .5 and task_target is not None
-            and o.ev_kwh < task_target - 1e-6 and not amps and ev_valid and o.ev_state_known
+            and not task_complete and o.ev_kwh < task_target - 1e-6 and not amps and ev_valid and o.ev_state_known
             and o.ev_phase_known and o.connected and progress_usable and manual_allowed and (forecast_fresh or eligible)
             and (conditional_valid or eligible or grid_requested or carried_grid))
         ev = amps * phases * c.voltage / 1000

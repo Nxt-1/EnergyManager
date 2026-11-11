@@ -82,6 +82,17 @@ def validate_certificate(certificate: dict[str, Any]) -> list[str]:
             errors.append("Cautious grid work precedes its certified activation")
         if certificate["reservations"] != reservations(context, flows):
             errors.append("Cautious reservation ledger mismatch")
+        running = (nominal.execution or {}).get("running_task")
+        if running:
+            opposite = "three" if running["phase"] == 1 else "one"
+            changed = any(flows[opposite][t] > .5 for t, interval in enumerate(nominal.intervals)
+                          if interval.start < instant(running["deadline"]))
+            proof = certificate.get("phase_necessity", {})
+            if changed and (certificate.get("phase_preference") != "necessary_phase"
+                    or proof.get("status") != "Infeasible" or proof.get("phase") != running["phase"]
+                    or proof.get("deadline") != running["deadline"] or proof.get("input_digest") != nominal.digest
+                    or proof.get("service") != certificate.get("service", {})):
+                errors.append("Cautious phase change lacks matching required-service infeasibility evidence")
         return errors
     except (KeyError, TypeError, ValueError, IndexError) as exc:
         return [f"Invalid cautious certificate: {type(exc).__name__}"]

@@ -22,6 +22,7 @@ from .appliance_plan import plan_evidence, resolved_power
 from .solar_capture import SolarCapture
 from .optimization import JointModel
 from .manual_planning import additional_instructions, advisory_context, completion_context
+from .running_task import phase_lock, review_running
 from .validation import TOL, accounting, rolling_comparison_errors, validate
 from .reservations import reservations
 from .session_attribution import attribute_ev_sessions
@@ -44,6 +45,15 @@ class Planner:
         self.active_reserve = 0.0
         self.guard_reserve = 0.0
         self.coherent_scope: dict[str, Any] = {}
+        self.running_phase_lock = False
+        self.running_phase_necessity: dict[str, Any] = {}
+
+    def model(self, snapshot: Snapshot, **options: Any) -> JointModel:
+        model = JointModel(snapshot, **options)
+        running = (snapshot.execution or {}).get("running_task")
+        if self.running_phase_lock and running:
+            phase_lock(model, running["phase"], running["deadline"])
+        return model
 
     def remaining(self) -> float:
         reserved = self.solar_reserve + self.continuity_reserve + self.active_reserve + self.guard_reserve + (self.validation_seconds + self.solver_overrun) * 1.25
@@ -540,7 +550,7 @@ class Planner:
             return {"status": "not_applicable"}
         if self.remaining() < .4:
             return {"status": "unverified", "reason": "Advisory construction consumed remaining budget"}
-        model = JointModel(context)
+        model = self.model(context)
         allowance = min(3.0, self.remaining() * .5)
         if allowance < .2:
             return {"status": "unverified", "reason": "No remaining advisory solve budget"}
@@ -574,7 +584,7 @@ class Planner:
                 if allowance < .3:
                     break
                 trial = replace(snapshot,appliance={**task,**change})
-                model = JointModel(trial)
+                model = self.model(trial)
                 candidate = model.run(allowance)
                 if candidate["feasible"] and not validate(trial,candidate["flows"]):
                     evidence = plan_evidence(trial,candidate["flows"])
@@ -605,14 +615,19 @@ class Planner:
         self.reference_flows = None
         self.guard_reserve = 0.0
         self.coherent_scope = {}
-        self.active_reserve = min(6., max(0., self.deadline - monotonic()) * .08) if snapshot.observation.ev_power_kw > .1 else 0.
+        self.active_reserve = (min(30., max(0., self.deadline - monotonic()) * .28)
+                               if (snapshot.execution or {}).get("running_task") else
+                               min(6., max(0., self.deadline - monotonic()) * .08) if snapshot.observation.ev_power_kw > .1 else 0.)
         self.stages = []
         s = snapshot
+        self.running_phase_lock = bool((s.execution or {}).get("running_task"))
+        self.running_phase_necessity = {}
         service: dict[str, float] = {}
         permission_proposals: list[dict[str, Any]] = []
         reasons: list[dict[str, Any]] = []
         required_support = False
-        reference_model = JointModel(s)
+        same_phase_support_infeasible = False
+        reference_model = self.model(s)
         reference_seed = self.starting_point(reference_model)
         reference = self.run_model(
             "required_reference",
@@ -628,8 +643,9 @@ class Planner:
                                        reference_seed)
         if not reference["feasible"] and reference["status"] == "Infeasible" and self.remaining() > 3:
             # A late EV window can need ESS household support to avoid a larger necessary peak.
-            support_model = JointModel(s, grid_ess=True)
+            support_model = self.model(s, grid_ess=True)
             support = self.run_model("required_ess_support", support_model, min(5, self.remaining() * 0.15))
+            same_phase_support_infeasible = support["status"] == "Infeasible"
             higher = replace(
                 s,
                 appliance={**s.appliance,"approved_peak_kw":s.capabilities.grid_connection_kw} if s.appliance else None,
@@ -643,7 +659,7 @@ class Planner:
                     for g in s.goals
                 ),
             )
-            alternative_model = JointModel(higher)
+            alternative_model = self.model(higher)
             alternative = self.run_model(
                 "required_support_counterfactual",
                 alternative_model,
@@ -671,13 +687,25 @@ class Planner:
                             "text": "ESS household support restores the required EV goal while avoiding a larger necessary peak within 24 hours; losses and both inventories are included.",
                         }
                     )
+        if not reference["feasible"] and reference["status"] == "Infeasible" and self.running_phase_lock:
+            # The required reference and eligible joint ESS support were searched
+            # in the current phase family first. Price/optional capture cannot
+            # introduce a phase switch; unfinished searches never reach this path.
+            running = (s.execution or {})["running_task"]
+            self.running_phase_necessity = {"status":"Infeasible", "phase":running["phase"],
+                "deadline":running["deadline"], "input_digest":s.digest, "service":{},
+                "joint_support_infeasible":same_phase_support_infeasible}
+            self.running_phase_lock = False
+            reference_model = self.model(s)
+            reference = self.run_model("required_reference_necessary_phase", reference_model,
+                min(10.,self.remaining()*.3), self.starting_point(reference_model))
         if not reference["feasible"]:
             if reference["status"] != "Infeasible":
                 return self.failure(
                     snapshot, reference["status"],
                     "Required schedule search ended without a feasible candidate; previous instructions continue only while valid"
                 )
-            relaxed = JointModel(s, relaxed_service=True)
+            relaxed = self.model(s, relaxed_service=True)
             physical = self.run_model(
                 "travel_feasibility",
                 relaxed,
@@ -703,7 +731,7 @@ class Planner:
                         for i in snapshot.intervals
                     )
                     trial = replace(snapshot, intervals=effective)
-                    relaxed = JointModel(trial, relaxed_service=True)
+                    relaxed = self.model(trial, relaxed_service=True)
                     physical = self.run_model(
                         f"conditional_travel:{trip.id}",
                         relaxed,
@@ -756,7 +784,7 @@ class Planner:
                 for g in tiers
                 if s.intervals[0].start <= g.deadline <= s.intervals[-1].end
             }
-            reference_model = JointModel(s, service=service)
+            reference_model = self.model(s, service=service)
             reference = self.run_model(
                 "best_effort_economics",
                 reference_model,
@@ -791,7 +819,7 @@ class Planner:
             )
             trial = replace(s, goals=tuple(diagnostic_goal if g.id == goal.id else g for g in s.goals))
             diagnostic_service = {**service, goal.id: goal.target(s.capabilities, s.policy)}
-            permission_model = JointModel(trial, service=diagnostic_service)
+            permission_model = self.model(trial, service=diagnostic_service)
             permission_result = self.run_model(
                 f"permission_diagnostic:{goal.id}",
                 permission_model,
@@ -832,7 +860,7 @@ class Planner:
             for t in range(len(s.intervals))
         ]
         if self.remaining() > 1:
-            normal_model = JointModel(
+            normal_model = self.model(
                 s,
                 optional=True,
                 service=service,
@@ -920,7 +948,7 @@ class Planner:
                         }
                     )
         if self.remaining() > 1:
-            candidate_model = JointModel(s, optional=True, service=service, grid_ess=required_support)
+            candidate_model = self.model(s, optional=True, service=service, grid_ess=required_support)
             candidate_model.add_optional_peak_limits(reference_flows)
             candidate = self.run_model(
                 "exceptional_opportunity_probe",
@@ -962,7 +990,7 @@ class Planner:
                     diagnostic_ceilings = [s.capabilities.ev_capacity_kwh] * len(s.intervals)
                     for t in range(0, right):
                         diagnostic_ceilings[t] = ceilings[t]
-                    diagnostic = JointModel(
+                    diagnostic = self.model(
                         s,
                         optional=True,
                         service=service,
@@ -1000,7 +1028,7 @@ class Planner:
                         ceilings[t] if t in rejected else s.capabilities.ev_capacity_kwh
                         for t in range(len(s.intervals))
                     ]
-                    candidate_model = JointModel(
+                    candidate_model = self.model(
                         s, optional=True, service=service, ceilings=final_ceilings, grid_ess=required_support
                     )
                     candidate_model.add_optional_peak_limits(reference_flows)
@@ -1027,7 +1055,7 @@ class Planner:
             i.house_kw - i.pv_ac_kw > max(s.policy.billing_floor_kw, s.observation.monthly_peak_kw)
             for i in s.intervals[: min(288, len(s.intervals))]
         ):
-            support_model = JointModel(s, optional=selected_model.optional, service=service, grid_ess=True)
+            support_model = self.model(s, optional=selected_model.optional, service=service, grid_ess=True)
             for t, interval in enumerate(s.intervals):
                 future_peak = any(
                     j.house_kw - j.pv_ac_kw > max(s.policy.billing_floor_kw, s.observation.monthly_peak_kw)
@@ -1074,7 +1102,7 @@ class Planner:
                         identity, s.forecast_id, peak.start, s.capabilities.grid_connection_kw, "granted"
                     )
                     trial = replace(s, peak_permissions=s.peak_permissions + (grant,))
-                    expanded_model = JointModel(
+                    expanded_model = self.model(
                         trial, optional=selected_model.optional, service=service, grid_ess=True
                     )
                     expanded = self.run_model(
@@ -1158,7 +1186,7 @@ class Planner:
         planning_status = economic_status
         source_certificate = False
         if self.remaining() > 0.5:
-            source_model = JointModel(
+            source_model = self.model(
                 s,
                 optional=True,
                 service=service,
@@ -1242,7 +1270,15 @@ class Planner:
                     source_certificate = source_result["status"] == "Optimal"
         self.active_reserve = 0.0
         before_active = selected
-        selected, active_review = self.review_active_continuation(selected_model, selected, before_score, before_cash)
+        if (s.execution or {}).get("running_task"):
+            reviewed, active_review = review_running(self, selected_model, selected, before_score, before_cash)
+            if reviewed is None:
+                failed = self.failure(snapshot, "unverified", "Running-task phase-preserving replacement unverified; prior execution retains only its existing authority")
+                failed["running_task_review"] = active_review
+                return failed
+            selected = reviewed
+        else:
+            selected, active_review = self.review_active_continuation(selected_model, selected, before_score, before_cash)
         if selected is not before_active:
             source_certificate = False
         guard_budget, self.guard_reserve = self.guard_reserve, 0.0
@@ -1254,6 +1290,9 @@ class Planner:
                                 "seconds": deadline_guard.get("seconds", 0), "scope": deadline_guard.get("scope")})
         output = self.output(snapshot, s, selected, reference, service, reasons, exceptional_windows)
         output["active_continuation_review"] = active_review
+        output["running_task_review"] = active_review if (s.execution or {}).get("running_task") else {"status":"not_applicable"}
+        if active_review.get("allowance"):
+            output["running_allowance"] = active_review["allowance"]
         output["coherent_candidate"] = self.coherent_scope
         output["deadline_guard"] = deadline_guard
         output["reference_fingerprint"] = sha256(encode(reference["flows"]).encode()).hexdigest()

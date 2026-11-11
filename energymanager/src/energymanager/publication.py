@@ -85,7 +85,8 @@ def admit(
 def execution_source(plan: dict[str, Any], at: datetime) -> dict[str, Any]:
     """Retain only dispatch evidence; do not nest obsolete calculations indefinitely."""
     keys = ("id", "execution_id", "intervals", "flows", "goals", "sessions", "reservations", "reasons",
-            "conditional_tasks", "forecast_at", "deadline_guard", "execution", "peak_permissions")
+            "conditional_tasks", "forecast_at", "deadline_guard", "execution", "peak_permissions",
+            "running_allowance", "polish_reference_summary")
     source = {key: deepcopy(plan[key]) for key in keys if key in plan}
     handover = plan.get("execution_handover")
     if handover and at < instant(handover["until"]):

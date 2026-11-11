@@ -1797,8 +1797,10 @@ or treated as untimed change evidence. Without either usable reconciliation path
 retain stock/credit as diagnostic evidence, expose reconciliation required and keep
 EV unknown/unavailable; a goal must not be reported met from that retained stock.
 
-A persisted stock-baseline revision invalidates prior EV authority and requests
-recalculation once, even if availability stays known. ESS authority remains independent.
+From4.6.12/EV-A012 a usable connected stock-baseline revision requests recalculation
+once while preserving independently valid EV work and pending sequencing. Unknown
+state, disconnect/return and permission changes retain their ordinary invalidations;
+a baseline change alone is not revocation. ESS authority remains independent.
 Frozen decisions are evidence and are not rewritten. Existing watchdog, source,
 quantity, peak, charger-fault and permission guards remain. No retry/reboot policy,
 notification-policy change or live operation belongs to this correction.
@@ -2088,6 +2090,231 @@ Programmatic estimates, untouched blur and completion produce no request. Pendin
 edits are read-only and errors retain the human draft without automatic retry.
 Turning off discards an unfinished edit and removes manual authority normally.
 All A010 planning, source, endpoint, notification and recovery rules are unchanged.
+
+### EV continuity through stock reconciliation (EV-A012/EV-A013, 4.6.12)
+
+On11November2026 the user brought the charging-errors chat's diagnosed interruption
+into the EV-planning architecture chat to finalize a separate work package and its
+implementation authorization. Preserve EV-A011's already authorized UI scope. After
+finalizing the design, the user explicitly requested implementation of both EV-A012
+and EV-A013 in three hours. One-time scheduled start is11November2026 at approximately
+17:24Europe/Brussels in the registered EV implementation chat. This authorizes these
+scopes and their offline verification/release, not immediate execution in architecture.
+
+Evidence: preserved `artifacts/ev-error-investigation/incident-2026-11-11/incident.json`,
+SHA256 `04d018b0c1259b5f3f216f92df11aea67417189491135557a6130212b0f07e02`.
+At11November11:05:43Europe/Brussels, Ford SoC changes19.5→20.5%, counter-derived stock
+9.5274→9.594kWh (+66.6Wh), baseline_revision5→6 and command generation872→873.
+Connection and usable battery state remain true; target is about23.4kWh/50%.
+Historical4.6.11 Application.observe calls changed('ev_stock_reconciled',ev=True), revoking EV
+execution and requesting protective dispatch/replanning. This establishes the
+software interruption trigger14seconds after one-phase start. Earlier three-phase
+delivery and later failed three-phase restart are incident context, not proof that
+the interruption caused the later failure. Ford notification wording, archived
+PAUSED and go-e error0 must remain distinguished from an explicit observed Ford FAULT.
+
+Implemented correction (4.6.12):
+
+- User clarification: a changed valid vehicle-reported SoC is authoritative; assume
+  the vehicle's changing readings are correct. Do not compare it with expected/
+  estimated SoC to decide whether it is trustworthy or permit continued operation.
+  No agreement tolerance, magnitude-based stop, additional matching-sample requirement
+  or special stop-and-revalidate stage is wanted. Comparing successive vehicle
+  reports to recognize a changed value remains distinct from comparing to an estimate.
+  The bug is unconditional revocation after accepting a new reference, not the
+  numerical discrepancy itself. Basic source/value validity and ordinary execution
+  guards remain; a trustworthy new SoC replaces the provisional estimate.
+- Separate a change to the usable battery-stock reference from permission to keep
+  executing the current task. Update current stock/remaining work and request normal
+  recalculation; do not revoke all EV execution solely for a baseline_revision change.
+- Continue the ordinary current-task checks against its goal/revision, remaining
+  quantity, source/conditional permissions, live peak envelope and applicable physical
+  guards; these are not an SoC-agreement test or a new blocking validation phase.
+  Preserve execution and pending valid charger sequencing while those checks
+  pass, including during replacement calculation. A generation/identity update must
+  not manufacture a stop/start or reset valid pending acknowledgement/wait state.
+  Do not require a new economic proof on current readings or repair frozen plan flows.
+- If the corrected state already meets the current task/goal endpoint, stop normally.
+  Do not treat ordinary progress over a slot forecast as task completion. Do not
+  recreate a completed task, replenish its delivered-energy allowance or grant extra
+  work/source/peak authority merely because the stock baseline changes. Genuine task/
+  permission changes still require existing checked replacement/authority handling.
+- Preserve unusable/unknown-state, disconnect/return, explicit fault, hardware-Off,
+  source/permission revocation and protective-peak stops. A lower post-driving SoC
+  must still replace stale retained high inventory, request recalculation and obey
+  return reconciliation; continuity is not permission to execute old pre-trip work.
+  Preserve the charging ledger, conservative overlap handling and no-double-credit
+  rules. ESS and other independent functions remain independent.
+
+Companion work package EV-A013 — running-task tail adjustments (implemented in4.6.12): the user wants routine post-update corrections
+absorbed at the end of a running task instead of immediately changing current/power/
+phases. Their clarified preference order is to shorten/extend the finish when constraints
+allow; otherwise adjust power/phases in the tail, working backward only as far as
+necessary. Moving the end alone is preferable to changing the tail's settings.
+The goal is to keep the earlier accepted profile stable, without assuming constant
+current throughout it. The user identifies the risk that deferring a large correction
+can leave too little time before the deadline.
+This broader replacement-planning policy is distinct from the established baseline-
+revocation defect; do not silently implement it under that narrow correction.
+
+Confirmed planning behavior: calculate the tail adjustment immediately
+but execute the changed portion at the tail. First consider shortening/extending the finishing portion
+within actual availability, source/peak permissions and deadline safeguards; continue
+the accepted prefix while valid. Determine now whether the tail can absorb the
+correction under normal constraints, including the existing cautious-PV contract.
+Bring necessary changes forward when holding the profile would jeopardize required
+service; do not wait until the tail to discover insufficient time. A sudden household
+load/peak threat or source/fault/permission failure remains an immediate live-control
+case, not a deferred tail adjustment. An already reached authorized endpoint still
+stops immediately. If finishing-time changes cannot fit, prefer the smallest necessary
+suffix of changed current/phase instructions; holding an earlier prefix cannot excuse
+missing required service or violating availability/source/peak constraints. The user
+confirmed that current adjustment must always be preferred over a phase switch for
+running-task corrections. After finish-time-only adjustment, seek a feasible correction
+within the current phase configuration, working backward through current changes as
+needed. An earlier current-only change takes priority over a later phase switch; the
+unchanged-prefix length and a cheaper phase-changing candidate cannot reverse that
+priority. Consider a phase switch only when current-only adjustment cannot meet required
+service within applicable hard constraints and permissions. This is a running-task
+preference, not an absolute phase lock when the current phase cannot serve the task.
+The user also permits earlier profile changes for a clearly better solar/cost opportunity,
+even when a tail-first solution can meet the deadline. Routine small corrections
+remain tail-first; feasibility is not the only permitted reason to change earlier.
+Assess claimed benefit with the existing whole-system economic/source comparisons
+on matching updated inputs, accounting for phase/restart delivery losses and existing
+permissions. More PV sent to the EV alone does not establish a net benefit if it
+displaces useful ESS/household supply. The user confirmed the existing shared0.02EUR
+whole-plan comparison/cash envelope as the qualification for earlier economic changes:
+retain tail-first if its checked outcomes are within that envelope of the feasible
+earlier same-phase alternative; allow earlier current adjustment when they exceed it.
+Compare matching updated inputs, required service and useful delivery, accounting for
+terminal inventory/value rather than treating reduced delivered energy as a saving.
+Use the existing reference/envelope once; do not reset or stack another0.02EUR per
+candidate or update. Phase preservation takes priority over this economic exception.
+No new allowance, fixed dwell/lock or enlarged permission is created. Exact model
+representation and allocation of the existing bounded solve time are implementation
+details; they must satisfy these contracts. Design agreement alone did not authorize implementation; the later scheduled request did.
+
+Timeout fallback (user confirmed): if calculation ends without a checked replacement,
+continue the existing accepted instructions only while they remain independently valid
+against updated remaining work, goal/source/peak permissions and normal execution
+expiry. Keep live peak protection and endpoint stops active. A calculation timeout
+alone must not interrupt valid charging, authorize a phase switch or count as proof
+that a same-phase correction is infeasible. This does not extend an old task's end,
+renew authority or permit indefinite execution. Admit replacements only after normal
+independent checks and guarded handover; invalid/expired instructions still stop under
+existing rules. Keep the existing total calculation budget, including validation and
+handover overhead; the offline sequential prototype is not the required integration.
+
+Historical offline research (11November; preceding integrated implementation): six controlled synthetic cases and
+an additional phase-preserving variant support finish-only and tail adjustments for
+small corrections, while peak constraints and a material solar opportunity require
+earlier changes. A larger deficit exposes a policy tradeoff: the latest tested suffix
+uses a phase switch, whereas an earlier current-only change meets the same deadline.
+The user subsequently confirmed that current adjustment always takes priority over a
+phase switch, including when the current change must happen earlier. Conditioned
+searches after the released planner took11.77–70.79s
+in controlled cases; these are not integrated-stage benchmarks. Two full archive-derived
+counterfactual updates found no accepted alternative in the remaining budget and retain
+the baseline; their outcomes are inconclusive. See WORK_STATE for measured results,
+quantity differences, audit evidence and limitations. The phase-priority requirement
+above was subsequently implemented in4.6.12; no solve-budget increase or implementation
+authorization follows from this experiment or design agreement.
+
+Completion criteria for the narrow baseline-continuity correction:
+
+1. Offline replay the incident's usable connected +66.6Wh correction through the
+   observation/service, task controller and fake go-e actuator paths. No force-off,
+   stop/start, spurious phase request or restarted sequencing timer may be caused
+   solely by baseline5→6; keep the same valid one-phase work through recalculation.
+   Preserve the raw incident/hash and label any reconstructed initial ledger/state.
+2. Exercise corrections upward/downward below the active endpoint, corrections to/
+   above completion, repeated old reports and successive genuine updates. Count
+   delivery once, update remaining work and preserve task/goal/manual quantity bounds.
+3. Verify replacement-plan admission/handover, pending start/ACK, asynchronous command
+   generation, replan delay/failure and normal expiry. Continue only while current
+   instructions remain independently usable; never extend authority indefinitely.
+4. Retain the4.6.9 regression: retained50.1% versus actual17% after driving must correct
+   stock and schedule the unmet50% goal, without continuing invalid pre-trip authority
+   or double-crediting charger energy. Preserve A010 manual/recovery semantics and
+   the authorized A011 UI interaction changes when integrated.
+5. Confirm unavailable/stale progress or input, unknown return, disconnect, explicit
+   fault, hardware-Off, revoked goal/source/conditional/peak permission and real peak
+   danger still stop/curtail as required. Verify actual fake actuator calls, not only
+   a positive computed command. Run existing proportionate release/integration checks.
+
+EV-A013 scope and completion criteria (separate from narrow EV-A012):
+
+1. Integrate finish-first, same-phase current-tail correction and necessary phase
+   fallback into replacement planning/admission, preserving the accepted earlier
+   profile where feasible. Evaluate future deadline feasibility now. An end-time
+   extension needs a checked replacement; timeout cannot extend old execution authority.
+2. Demonstrate the small-ahead, small-behind and tight-deadline outcomes with labelled
+   offline fixtures. Verify earlier current adjustment takes priority over a later
+   phase switch when both can serve the goal, and allow a necessary phase switch when
+   same-phase delivery cannot meet required service under hard constraints. Distinguish
+   certified infeasibility from unfinished search; timeout is not necessity evidence.
+3. Exercise whole-system solar/cost exceptions on matching service/delivery with ESS
+   enabled, the shared0.02EUR envelope, physical transition losses and current source/
+   peak permissions. Verify both sides of the financial boundary and that repeated
+   updates cannot accumulate extra allowance or bypass phase priority.
+4. Preserve immediate load/quarter-peak protection, endpoint completion and invalid/
+   revoked-authority stops. Verify guarded plan replacement through controller/fake
+   actuator calls, including pending sequencing, failed/delayed calculation and expiry;
+   no stop/start or phase timer reset solely because a valid plan was recalculated.
+5. Compare the integrated approach against the released planner on multiple controlled
+   cases and archived counterfactuals, including full joint ESS/EV cases. Record service,
+   continuity, current/phase/restart counts, cost, independent audits and total runtime.
+   Retain frozen evidence and inconclusive outcomes. Fit candidate search, independent
+   validation and handover preparation inside the existing total budget; the research
+   helper's sequential extra solves and slight120s overrun are not accepted behavior.
+   Preserve the current horizon/resolution, physical guards and unrelated objectives.
+
+Package split: EV-A012 fixes baseline-only execution revocation and its regressions;
+EV-A013 implements the broader running-task planning preference above. They may be
+implemented sequentially, with EV-A012 as the foundation. Agreement on requirements
+alone did not authorize implementation; the user's subsequent explicit scheduled
+implementation request authorizes both. No new policy question remains for these
+scopes; routine implementation choices and offline verification remain work.
+
+Narrow EV-A012 boundaries: offline fixtures/fake endpoints only; no planner redesign, new phase
+preference/dwell, watchdog relaxation, solve-budget increase, retry/reboot feature,
+notification-policy redesign, live HA/database access, real notifications, hardware
+operation or installation deployment. Keep frozen snapshots/results and independent
+audits intact. Implementation follows EV-A011 integration/release order and preserves
+latest concurrent shared drafts. EV-A013 adds only the explicitly specified running-task
+planning/admission preference; the other exclusions also apply to it. The user declined
+the original premature handoff and has since finalized the policy through discussion.
+The subsequent scheduled implementation request authorizes handoff/start of both
+packages in the registered implementation chat at the agreed time; implemented in4.6.12.
+
+Implementation contract (4.6.12): usable connected baseline changes increment the
+input revision and request recalculation without revoking EV execution. Unknown state,
+return/disconnect and explicit permission changes retain their existing invalidations.
+Controller completion is retained as task evidence, including across restart; lower
+stock cannot revive its old quantity, conditional advance or phase preparation. A
+distinct future task already in the accepted plan retains its own normal authority.
+Completed work supplies no positive frozen commitment to a replacement calculation.
+
+The frozen execution context carries the full accepted integer-current profile and
+its partial boundaries, task/goal endpoint, deadline, current phase and updated finish
+event. Required, optional and economic references first use the current phase family;
+unfinished same-phase/ESS-support searches never establish phase necessity. The
+replacement stage checks finish-only, then bounded suffixes of current adjustments,
+using complete joint source/ESS/household models and independent arithmetic checks.
+The cautious deadline witness also preserves phase unless a global same-phase
+required-service model is infeasible; admission checks its scope and proof identity.
+
+An earlier same-phase comparison uses matching required service and useful EV stock,
+with whole-plan cash and terminal inventory value. A quantity-preserving current seed
+only guides the search and must pass the full joint model/audit. One task-keyed ledger
+carries spent comparison/cash tolerance through replacement and thin handover sources;
+retained future premium is revalued, not purchased again. Candidate count and repeated
+updates never renew EUR0.02. A running plan from an older release without that ledger
+conservatively treats the pre-existing envelope as already spent. No allowance is
+refunded. Search, model construction, audits and handover preparation share the existing
+wall deadline. Failure/timeout returns no replacement; prior instructions keep only
+their independently valid remaining quantity, permissions and existing expiry.
 
 ### Shared progress warnings and independent grid projection (EV-A009, 4.6.8)
 

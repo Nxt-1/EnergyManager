@@ -297,6 +297,8 @@ class Application:
                    else {"phase": self.observation.ev_phases,
                          "ready_at": (at + timedelta(seconds=30 if self.observation.ev_power_kw < .1 else 0)).isoformat()})
         old = self.accepted if self.ev_valid and self.accepted and "flows" in self.accepted else None
+        if self.controller.ev_task and self.controller.ev_task.get("completed"):
+            old = None  # A completed task cannot reappear as frozen positive delivery after a stock correction.
         if old and self.controller.deadline_execution.active:
             old = self.controller.deadline_execution.select(old, self.observation, at, self.ev_valid)
         return freeze_execution(prepared, old, charger, conditional_valid=self.conditional_valid)
@@ -911,7 +913,9 @@ class Application:
         elif (observation.ev_progress and previous.ev_progress
               and observation.ev_progress.get("baseline_revision", 0)
                   != previous.ev_progress.get("baseline_revision", 0)):
-            self.changed("ev_stock_reconciled", ev=True)
+            # A valid new stock reference changes remaining work, not the accepted
+            # task's permission. Live guards and endpoint checks still apply now.
+            self.changed("ev_stock_reconciled", ev=not observation.ev_state_known)
         elif (observation.ev_progress and previous.ev_progress
               and (observation.ev_progress.get("manual") or {}).get("status")
                   != (previous.ev_progress.get("manual") or {}).get("status")):
