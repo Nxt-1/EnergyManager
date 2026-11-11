@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from typing import Any
 import asyncio
 import json
 import socket
@@ -289,11 +290,28 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                     return web.json_response({"synthetic": True, "available": data["available"]})
                 server_app.router.add_post('/synthetic/progress', progress_fixture)
             if serve and feedback_fixture:
+                manual_api = {"delay": 0.0, "fail": False}
+
+                @web.middleware
+                async def synthetic_manual_api(request: web.Request, handler: Any) -> web.StreamResponse:
+                    if request.method == "POST" and request.path == "/api/ev/manual-soc":
+                        await asyncio.sleep(float(manual_api["delay"]))
+                        if manual_api["fail"]:
+                            return web.json_response({"error":"SYNTHETIC manual reference rejection"}, status=503)
+                    return await handler(request)
+
+                server_app.middlewares.append(synthetic_manual_api)
+
                 async def feedback_preview(request: web.Request) -> web.Response:
                     nonlocal active_fault
                     data = await request.json()
                     action = data.get("action")
-                    if action == "problem":
+                    if action == "manual_api":
+                        delay = data.get("delay", 0)
+                        if type(delay) not in (float, int) or not 0 <= delay <= 10 or type(data.get("fail")) is not bool:
+                            raise web.HTTPBadRequest(text="SYNTHETIC manual API delay/failure required")
+                        manual_api.update(delay=float(delay), fail=data["fail"])
+                    elif action == "problem":
                         # Explicitly synthetic prior delivery/grace history, for UI
                         # previews only. Deterministic detector tests prove its maths.
                         feedback = application.ev_progress.feedback

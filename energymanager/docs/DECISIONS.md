@@ -1,5 +1,18 @@
 # Current requirements and decisions
 
+- 11 November2026, EV-A011 EV-page cleanup: user selects the second preview,
+  Beside sensors. Show its full diagnosis by default without an expander; the global
+  banner stays brief. Stack Hardware control and Manual SoC with the same typography
+  and colour. Manual mode reveals only the SoC field; entering a valid value counts
+  as confirmation, superseding the separate A010 confirmation button. The field also
+  displays updated system estimates; automatic updates must not act as human input
+  or renew manual authority. Keep original car/sensor layout and existing bounded
+  fallback/charger/source/peak/recovery rules. User approved the revised preview and
+  explicitly authorized: "Good, hand it off for implementation". Authorization covers
+  scoped EV-A011 implementation/verification and release under standing ready-release
+  permission, with no live installation access, real notifications, hardware operation
+  or deployment. Implemented in4.6.11; offline verified.
+
 - 10 November2026, EV-A010 unreliable SoC feedback: user accepts detection of
   unchanged SoC despite sufficient measured charging, materially contradictory new
   SoC and missing battery evidence after a return. Report suspected unreliable

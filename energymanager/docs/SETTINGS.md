@@ -1,9 +1,10 @@
 # Settings and hardware control
 
-## Manual EV reference (4.6.10)
+## Manual EV reference (4.6.11)
 
 Manual SoC is confirmed on the EV page, not an installation configuration override.
-Enter an actual current reading and confirm the displayed existing goal. It persists
+Enter an actual current reading and press Enter or leave the edited field to
+confirm the existing next charging goal. Switching on alone grants no authority. It persists
 only for that goal/revision/target/deadline, using the selected cumulative go-e meter
 and configured charging efficiency. No age cutoff or automatic later-goal renewal
 exists. Unplug/reset/source change requires confirmation again. Meter/fault/peak and

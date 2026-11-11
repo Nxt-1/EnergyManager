@@ -396,7 +396,7 @@ export async function mountApplication(root, options = {}) {
     $('charger-status').textContent = chargerMessage ? `EV · ${chargerMessage}` : '';
     const faultText = evFaultText(fault, state.policy.timezone);
     $('ev-fault-banner').hidden = !faultText;
-    $('ev-fault-banner').innerHTML = faultText ? `<strong>${esc(faultText)}</strong><p>Phone alert: ${esc(notificationText(fault.notification))} · Reboot attempts: ${fault.reboot_attempts}/1</p><button data-incident="${esc(fault.id)}">Incident details & logs</button>${fault.status === 'unresolved' ? ` <button data-ack-incident="${esc(fault.id)}">Acknowledge after diagnosis</button>` : ''}` : '';
+    $('ev-fault-banner').innerHTML = faultText ? `<strong>${['pending','rebooting','verifying'].includes(fault.status) ? 'EV recovery in progress' : 'EV charging needs attention'}</strong><button data-incident="${esc(fault.id)}">Incident details & logs</button>${fault.status === 'unresolved' ? ` <button data-ack-incident="${esc(fault.id)}">Acknowledge after diagnosis</button>` : ''}` : '';
     $('app-version').textContent = ` ${state.version}`;
     if (!options.native) document.title = `EnergyManager · ${state.version}`;
     $('dashboard').hidden = ['settings', 'ev', 'profiles'].includes(page);

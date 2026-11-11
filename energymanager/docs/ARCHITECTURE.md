@@ -1996,6 +1996,99 @@ outside fast control and uses persisted incident/request keys for deduplication.
 Offline acceptance and runtime limits are recorded in VERIFICATION.md. Installation
 behavior and threshold calibration remain unverified; no live deployment was done.
 
+### EV page presentation cleanup (EV-A011, 4.6.11)
+
+On11November2026 the user reports that the EV page's accumulated additions obscure
+the original combined car/sensor display, which they want preserved. They want a
+less prominent manual-SoC switch with adjacent text near Hardware control on, rather
+than the current full-width strip. They also question repeated error information
+across the global banner, state label, verdict and controller card, and find the
+Progress sources presentation messy. Apply the established minimal-text and actual
+HA source-action preference. Preserve notification, recovery, charger/control and
+bounded manual authority rules; the user explicitly changes the manual confirmation
+interaction below, superseding A010's separate reference/goal confirmation button.
+
+The user selects Beside sensors, the second preview. Place the single detailed
+diagnosis beside the drawing, above the sensor list, showing all its information by
+default with no diagnosis expander. Keep the global banner brief. Preserve distinct
+actual sensor readings and useful live controller transition/timer information without
+repeating the same full fault in several in-card blocks. Put optional structured
+Battery source details behind a compact info affordance; no always-visible progress
+paragraph. Keep reported vehicle readings distinct from estimated/manual values and
+retain genuine mapped sensor actions.
+
+Stack Hardware control and Manual SoC in the header, using the same font family,
+size, weight and text colour. Keep the manual switch visually small. When enabled,
+reveal only an editable SoC field with percent unit: no form heading, goal summary,
+Confirm/Cancel buttons or separate manual-reference summary in that control area.
+The user's valid value entry itself confirms the reference for the existing bounded
+next-goal fallback; enabling the switch with no value does not grant charging authority.
+Commit a human edit on Enter or field blur, not on each partly typed digit. This is
+the routine input interaction used in the revised preview, not a new confirmation step.
+
+While manual mode is active the same field displays the counter-derived current
+estimate. Backend/automatic display updates must never be mistaken for new user
+entries, re-anchor progress, renew manual authority or repeatedly purchase the goal.
+Preserve a focused edit draft during updates; apply the newest estimate again when
+editing ends. Validate values and the goal/revision at commit without inventing a
+manual reference from old automatic data. Original vehicle SoC stays a genuine sensor
+reading. Initial manual reference, current estimate, source and age remain distinguishable
+in optional source details, without additional default control-area prose. Existing
+unplug invalidation, single-goal bounds, live guards and changed-report recovery remain.
+
+The task-owned ev-page-cleanup.html preview now presents this selected layout with
+always-visible diagnosis, stacked matching controls and entry-to-apply manual field.
+It is a presentation prototype, not application code. On11November2026 the user
+approved it and explicitly authorized handoff: "Good, hand it off for implementation".
+The registered V4.6 implementation counterpart may implement/verify this scoped
+package and complete release under standing ready-release permission. Incorporate
+latest main in version order (4.6.10/6ab71f6 at preparation), preserving concurrent
+shared drafts, A010 and unrelated EV/appliance behavior. No live HA/database access,
+real notification sending, hardware operation or installation deployment is authorized.
+
+Completion checks: both native and standalone dashboards at desktop/mobile widths;
+the approved beside-sensors layout, complete diagnosis visible without an expander,
+brief global banner and no repeated incident explanation across in-card blocks.
+Retain distinct raw sensor states, legitimate controller steps/countdowns and existing
+fault-history/source actions. Hardware control retains its existing meaning; do not
+introduce a new actuator control merely to match typography. Manual controls have
+matching stacked text styles, a small switch and only the percent field when enabled.
+Enabling with a blank field, tabbing through an untouched field or a programmatic
+estimate update must submit no reference/authority. A valid human edit commits once
+on Enter or blur (Enter followed by blur must not double-submit); reject invalid/
+out-of-range/nonfinite input. Preserve a focused draft and keyboard/touch use across
+polls, re-render and API latency/failure; reject stale goal/revision/source contexts.
+Changed automatic feedback during editing must not be undone by a late blur commit.
+Automatic field updates must not reset delivery, renew the completed goal, select a
+later goal or trigger another charge. Verify edits and estimate updates, pending/
+completed manual work, unplugging, automatic recovery and A010 source/quantity/peak/
+charger guards. Keep source provenance/age in optional details, with actual HA sensor
+actions and no fake measured sensor for the editable estimate. Use synthetic/fake
+endpoints and the existing proportionate release gates; do not ship preview-only
+data, design controls or simulated source actions. No new planning, notification,
+retry/reboot or economic policy belongs to EV-A011.
+
+Implemented in4.6.11. The header indicator remains read-only. Its manual control
+uses a separate class from calendar manual goals; no calendar style is repurposed.
+One diagnosis sits above actual sensors beside the original illustration, with
+incident reason, onset/detection, measured delivery, recovery and notification state
+visible. Independent progress faults and genuine controller steps/countdowns stay
+visible; raw sensor readings/history and incident history are retained. The global
+banner is brief. Battery's info control opens structured source details, with timing/
+uncertainty further optional; manual/estimated values have no invented HA history.
+
+The number field commits a human edit once on Enter/blur, with `confirmed=true` and
+the captured existing next-goal bounds. `/api/ev/manual-soc` also requires
+`reference_context` from `ev_manual.context`. It checks goal/source/reference identity,
+counter segment, connection and capacity/efficiency before accepting an entry.
+Ordinary counter advances do not stale a draft. Changed vehicle feedback, reset/source
+or goal context invalidates a late edit, including one delayed in HTTP. The field DOM
+survives polling and focused edits; full calendar rendering waits until editing ends.
+Programmatic estimates, untouched blur and completion produce no request. Pending
+edits are read-only and errors retain the human draft without automatic retry.
+Turning off discards an unfinished edit and removes manual authority normally.
+All A010 planning, source, endpoint, notification and recovery rules are unchanged.
+
 ### Shared progress warnings and independent grid projection (EV-A009, 4.6.8)
 
 On9November2026 the user requested one implementation work package for the two

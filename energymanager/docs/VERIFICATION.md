@@ -1,5 +1,53 @@
 # EnergyManager 4 verification
 
+## 4.6.11 — EV-page cleanup (EV-A011,11November2026)
+
+Based on released4.6.10/6ab71f6. All endpoints, meters, faults, actuator calls and
+notification destinations below are labelled synthetic/local. No live source was used.
+
+- Final844Python cases pass174.56s;122frontend cases pass409.6ms.58focused feedback/
+  fault/native cases pass4.73s. Ruff, mypy63modules, CLI4.6.11 and all asset JS syntax
+  pass. Existing A010 endpoint/refinement/advisory, source/recovery/peak/charger and
+  independent grid/ESS/appliance regressions remain unchanged and pass.
+- Human edits commit once on Enter/blur; partial digits, opening a blank switch,
+  untouched blur, programmatic estimates and completion submit none. Context tests
+  reject changed goals, counter source/segment and changed-report recovery while
+  accepting ordinary counter advances. Failure retains a draft without blur retry;
+  switching off cannot first commit a dirty draft. Diagnostics preserve independent
+  progress faults and real step/countdown data with one fault explanation.
+- Native/standalone desktop1360px and mobile390px were inspected.320px standalone
+  header has matching client/scroll width253px (no overflow); typography matches
+  system font/12px/500/text colour for both header rows. Diagnosis is always visible
+  above the sensor list, beside the unchanged drawing on desktop and below on mobile.
+  Actual native reported-SoC history opens `sensor.ev_soc`; optional sources fit the
+ 390px screen (panel14.47–344.47px). No invented manual history entity or preview-only
+  data/design controls are included in production assets.
+- Browser blank switch and typing17% grant no authority until Enter/blur. One human
+  entry establishes a scoped reference while a separate persisted synthetic delivery
+  incident remains unresolved. An8second synthetic HTTP rejection preserves19% input,
+  keyboard focus/read-only pending state and truthful accessible error; the backend
+  remains at17%, and untouched blur does not retry. A new human18% edit succeeds.
+  Counter completion updates the field to50%/30kWh without changing its reference ID,
+  entered18% baseline or19.2kWh delivery ledger, and commands zero EV power.
+- During a focused20% draft, changed vehicle57% recovery exits manual mode and
+  corrects stock to34.2kWh. Late blur rejects the stale edit; reference ID, recovered
+  status and delivery history stay intact, and the independent delivery fault stays
+  active.101% validation and unplugging leave no inferred reference; invalid manual
+  state displays a blank field. Healthy/fault/recovery/countdown and source
+  states were exercised; a rendered13second countdown remains beside fault evidence.
+  No console warnings/errors were observed in the final owned tabs. HA built-ins
+  and preview display scenarios remain simulated. Owned tabs/servers were closed.
+- Configured fake E2E25.724s/2019intervals/max control4.134ms passes; independent fault
+  preview normal checks25.426s/max4.240ms also pass. Routed fake E2E55.836s/2023intervals/
+  max4.094ms passes, two calendar imports/six local route queries. Each normal/routed
+  check performs four fake service calls; cancellation, admission and genuine mapped
+  usable-counter assertions remain enabled. Synthetic manual API delay/failure is
+  available only with the local `--serve --feedback-fixture` test option.
+- Wheel/sdist4.6.11 build; all91runtime files match source bytes in both. Isolated
+  wheel import/version passes. Exact-head CI/container/publication outcomes are
+  recorded subsequently only in ignored `artifacts/ev-a011-state.json` and final
+  paired-chat/user reports. No local Docker or installation deployment is claimed.
+
 ## 4.6.10 — Unreliable feedback and bounded manual recovery (EV-A010,11November2026)
 
 Based on released4.6.9/fd6d4a9. All measurements, counters, notification destinations,

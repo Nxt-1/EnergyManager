@@ -1,3 +1,11 @@
+## 4.6.11 — EV page cleanup
+
+- Keep one full diagnosis beside the original car/sensor display, with a brief global banner and independent fault/countdown evidence retained.
+- Stack matching Hardware control and small Manual SoC controls; apply a human SoC edit on Enter or blur without a separate form.
+- Display current manual estimates without renewing authority; preserve focused drafts and reject stale goal/source/recovery edits.
+- Move structured Battery source/reference/counter details behind its info control, retaining actual HA history actions.
+- Preserve A010 charging/recovery rules. Verified offline on both dashboards and desktop/mobile; installation deployment remains separate.
+
 ## 4.6.10 — Explicit recovery from unreliable EV feedback
 
 - Detect suspected stuck battery feedback from measured charging and show one actionable incident, while ESS continues.

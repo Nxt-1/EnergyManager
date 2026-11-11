@@ -145,9 +145,22 @@ export class EVSchedulePage {
     this.phaseChanging = false;
     this.phaseError = null;
     this.activityTimer = setInterval(() => this.updateActivity(), 1000);
+    root.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && this.sourcesOpen) {
+        this.sourcesOpen = false;
+        this.updateStatus(this.state);
+        this.root.querySelector('[data-ev-sources="open"]')?.focus();
+      }
+    });
     root.addEventListener('click', async event => {
       const button = event.target.closest('button');
       if (!button) return;
+      if (button.dataset.evSources) {
+        this.sourcesOpen = button.dataset.evSources === 'open' && !this.sourcesOpen;
+        this.updateStatus(this.state);
+        this.root.querySelector(`[data-ev-sources="${this.sourcesOpen ? 'close' : 'open'}"]`)?.focus();
+        return;
+      }
       try {
         if (button.dataset.evPhase !== undefined && !this.phaseChanging && actions.phase) {
           const option = button.dataset.evPhase;
@@ -197,7 +210,12 @@ export class EVSchedulePage {
 
   render(state) {
     const calendarExpanded = this.root.querySelector('.calendar-sync')?.open;
-    this.progressExpanded = this.root.querySelector('[data-ev-progress]')?.open ?? this.progressExpanded;
+    if (this.manual.focused || this.manual.busy) {
+      this.deferredRender = true;
+      this.updateStatus(state);
+      return;
+    }
+    this.deferredRender = false;
     const scroller = this.root.querySelector('.ev-calendar-scroll');
     const scrollLeft = scroller?.scrollLeft || 0;
     const active = this.root.getRootNode().activeElement;
@@ -208,7 +226,7 @@ export class EVSchedulePage {
       .filter(button => button.getAttribute(focusAttribute) === focusValue) : [];
     const focusIndex = matchingButtons.indexOf(focused);
     this.state = state;
-    this.manual.state = state;
+    this.manual.update(state);
     const schedule = evSchedule(state);
     const zone = state.policy.timezone;
     const clock = instant => {
@@ -329,15 +347,26 @@ export class EVSchedulePage {
 
   updateStatus(state) {
     this.state = state;
-    this.manual.state = state;
+    this.manual.update(state);
     const card = this.root.querySelector('#ev-live-status');
     if (!card) return;
-    this.progressExpanded = card.querySelector('[data-ev-progress]')?.open ?? this.progressExpanded;
+    this.sourceTechnicalExpanded = card.querySelector('[data-ev-source-technical]')?.open ?? this.sourceTechnicalExpanded;
     const focused = this.root.getRootNode().activeElement;
     const focusAttribute = card.contains(focused) ?
-      ['data-ev-phase', 'data-ev-history', 'data-ha-entities', 'data-ev-progress-summary', 'data-ev-manual-value', 'data-ev-manual-toggle', 'data-ev-manual-confirm', 'data-ev-manual-cancel'].find(name => focused.hasAttribute(name)) : null;
+      ['data-ev-phase', 'data-ev-history', 'data-ha-entities', 'data-ev-sources', 'data-ev-manual-value', 'data-ev-manual-toggle'].find(name => focused.hasAttribute(name)) : null;
     const focusValue = focusAttribute ? focused.getAttribute(focusAttribute) : null;
-    card.innerHTML = evStatusMarkup(state, this);
+    if (this.deferredRender && !this.manual.focused && !this.manual.busy) {
+      this.render(state);
+      return;
+    }
+    // Keep the header/input nodes alive during polling, typing and HTTP latency.
+    // Replacing a focused number field loses touch/keyboard editing state.
+    const fresh = document.createElement('div');
+    fresh.innerHTML = evStatusMarkup(state, this);
+    const body = card.querySelector('.ev-status-body');
+    if (body) body.replaceWith(fresh.querySelector('.ev-status-body'));
+    card.querySelector('.ev-header-control > span:last-child').textContent = state.demo ? 'Demo' : state.control_enabled ? 'On' : 'Off';
+    this.manual.sync();
     this.updateActivity();
     if (focusAttribute) card.querySelector(`[${focusAttribute}="${focusValue}"]`)?.focus({preventScroll:true});
   }

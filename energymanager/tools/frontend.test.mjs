@@ -251,7 +251,7 @@ test('EV faults and recovery stay visible above power flow; detail text is escap
   const markup = evStatusMarkup(state);
   assert.match(markup, /&lt;img src=x onerror=alert\(1\)&gt;/);
   assert.doesNotMatch(markup, /<img/);
-  assert.doesNotMatch(markup, /ev-device-details|<details|per-phase currents unavailable/);
+  assert.doesNotMatch(markup, /ev-device-details|<details[^>]*data-ev-diagnosis|per-phase currents unavailable/);
   state.ev_incident.status = 'unresolved';
   assert.equal(evStatusModel(state).status, 'Fault · attention needed');
   state.ev_incident.status = 'acknowledged';
@@ -299,7 +299,7 @@ test('EV sidebar retains raw diagnostics without the removed details foldout and
   assert.match(markup,/Allowed \(on\)/);
   assert.match(markup,/Device status age \(s\)[\s\S]*1234/);
   assert.match(markup,/HA read[\s\S]*Device frame/);
-  assert.doesNotMatch(markup,/<details|ev-device-details|per-phase currents unavailable/);
+  assert.doesNotMatch(markup,/ev-device-details|per-phase currents unavailable/);
   state.now='2026-10-25T12:01:00Z';
   markup=evStatusMarkup(state,{phaseChanging:true,phaseError:'<SYNTHETIC error>'});
   assert.match(markup,/Unverified · 2/);
@@ -347,11 +347,11 @@ test('EV progress distinguishes the reported vehicle sample and actual total-ene
     counter_kwh:100.125,entity_id:'sensor.synthetic_eto',reported_kwh:22.932,
     vehicle_observed_at:null,counter_at:state.now,credited_kwh:.318,uncertain:true,source:'go-e total energy'};
   let markup = evStatusMarkup(state,{entities:{ev_soc:'sensor.synthetic_soc'}});
-  assert.match(markup,/Estimated charge ≈ 23.25 kWh/);
-  assert.match(markup,/go-e total[\s\S]*data-ha-entities="sensor.synthetic_eto"/);
-  assert.match(markup,/Reported vehicle: 22.93 kWh · Vehicle sample: Unknown/);
-  assert.match(markup,/Estimated battery gain credited: 0.318 kWh/);
-  assert.match(evStatusMarkup(state,{progressExpanded:true}),/<details data-ev-progress open>/);
+  assert.match(markup,/Estimated SoC[\s\S]*23.3 kWh/);
+  assert.match(markup,/Charging counter[\s\S]*data-ha-entities="sensor.synthetic_eto"/);
+  assert.match(markup,/Vehicle reported[\s\S]*Vehicle sample/);
+  assert.match(markup,/Historical credited gain[\s\S]*0.318 kWh/);
+  assert.match(evStatusMarkup(state,{sourcesOpen:true}),/role="dialog" aria-label="Battery sources" >/);
   assert.doesNotMatch(markup,/Progress unavailable/);
   state.now = '2099-01-01T00:00:00Z';
   markup = evStatusMarkup(state);
@@ -2045,83 +2045,112 @@ test('recorder status failure and recovery update only the indicator while prese
 
 import {ManualSoC, manualSoCMarkup, manualConfirmationGoal} from '../src/energymanager/assets/manual-soc.js';
 const manualFixture = () => ({now:'2026-11-10T20:00:00Z',policy:{timezone:'Europe/Brussels'},
-  ev_manual:{reference:null,reference_age_seconds:null,next_goal:{id:'synthetic-next',revision:2,
+  capabilities:{ev_capacity_kwh:46.8},observation:{ev_progress:{estimated_kwh:23.4}},
+  ev_manual:{context:'synthetic-context',reference:null,reference_age_seconds:null,next_goal:{id:'synthetic-next',revision:2,
     title:'SYNTHETIC morning <target>',target_percent:50,target_kwh:23.4,deadline:'2026-11-11T06:00:00Z'}}});
 
-test('manual switch offers blank actual input and an explicit goal without turning a cached SoC into a reference', () => {
-  const state=manualFixture(), draft={open:true,value:'',busy:false,error:null};
-  const html=manualSoCMarkup(state,draft);
-  assert.match(html,/role="switch"/);
-  assert.match(html,/Not active/);
-  assert.match(html,/value=""/);
-  assert.match(html,/SYNTHETIC morning &lt;target&gt;/);
-  assert.match(html,/50.0%/);
-  assert.match(html,/07:00/);
-  assert.match(html,/Confirm reference & goal/);
-  assert.doesNotMatch(html,/data-ha-entities|Awaiting measured reconnection|12.hour/);
-});
-
-test('confirmed manual reference displays long nonblocking age and completion distinctly from vehicle SoC', () => {
+test('compact manual switch reveals only a blank percent field, never a cached reference or confirmation form', () => {
   const state=manualFixture();
-  state.ev_manual.reference={enabled:true,soc_percent:17,status:'completed'};
-  state.ev_manual.reference_age_seconds=120000;
-  const html=manualSoCMarkup(state,{value:'',busy:false,error:null});
-  assert.match(html,/Entered 17.0%/);
-  assert.match(html,/33 h 20 min ago/);
-  assert.match(html,/complete · estimated/);
-  assert.match(html,/Confirm new reference/);
-  assert.doesNotMatch(html,/expired|hard cutoff/i);
+  const html=manualSoCMarkup(state,{open:true,value:'',dirty:false});
+  assert.match(html,/role="switch"/);assert.match(html,/value=""/);
+  assert.doesNotMatch(html,/Confirm|Cancel|goal|Entered|Progress sources|ev-manual-entry|12.hour/);
 });
 
-test('opening/dismissing manual entry sends nothing; explicit entry confirms exact displayed goal and preserves failed drafts', async () => {
+function manualEditor(submit=async()=>{}) {
   const handlers=new Map(), calls=[];
-  const root={addEventListener:(name,handler)=>handlers.set(name,handler)};
-  let fail=false;
-  const draft=new ManualSoC(root,async body=>{calls.push(body);if(fail)throw new Error('POST ev/manual-soc: Synthetic stale goal');},()=>{});
-  draft.state=manualFixture();
-  const change=checked=>handlers.get('change')({target:{matches:s=>s==='[data-ev-manual-toggle]',checked}});
-  const click=selector=>handlers.get('click')({target:{closest:s=>s===selector?{}:null}});
-  await change(true);
-  assert.equal(draft.open,true);assert.equal(calls.length,0);
-  await click('[data-ev-manual-confirm]');
-  assert.match(draft.error,/actual current SoC/);assert.equal(calls.length,0);
-  await click('[data-ev-manual-cancel]');
-  assert.equal(draft.open,false);assert.equal(calls.length,0);
-  await change(true);
-  handlers.get('input')({target:{matches:()=>true,value:'17'}});
-  fail=true;
-  await click('[data-ev-manual-confirm]');
-  assert.equal(draft.value,'17');assert.equal(draft.open,true);assert.match(draft.error,/stale goal/);assert.doesNotMatch(draft.error,/POST ev/);
-  fail=false;
-  await click('[data-ev-manual-confirm]');
-  assert.deepEqual(calls.at(-1),{enabled:true,confirmed:true,soc_percent:17,goal_id:'synthetic-next',
-    goal_revision:2,deadline:'2026-11-11T06:00:00Z',target_kwh:23.4});
-  assert.equal(draft.value,'');
-  draft.state.ev_manual.reference={enabled:true};
-  await change(false);
-  assert.deepEqual(calls.at(-1),{enabled:false});
+  const root={addEventListener:(name,fn)=>handlers.set(name,fn)};
+  const editor=new ManualSoC(root,async body=>{calls.push(body);await submit(body);},()=>{});
+  editor.update(manualFixture());
+  const target={matches:()=>true,value:'',checked:true};
+  const focus=()=>handlers.get('focusin')({target});
+  const input=value=>{target.value=value;handlers.get('input')({target});};
+  const blur=relatedTarget=>handlers.get('focusout')({target,relatedTarget});
+  const enter=()=>handlers.get('keydown')({target,key:'Enter',preventDefault(){}});
+  return {editor,calls,target,focus,input,blur,enter,change:checked=>handlers.get('change')({target:{...target,checked}})};
+}
+
+test('one human Enter commit plus blur sends one bounded request; partial digits and untouched blur send none', async () => {
+  let finish;const {editor,calls,focus,input,blur,enter,change}=manualEditor(()=>new Promise(resolve=>{finish=resolve}));
+  await change(true);focus();blur();assert.equal(calls.length,0);
+  focus();input('1');input('17');assert.equal(calls.length,0);
+  enter();blur();assert.equal(calls.length,1);
+  assert.deepEqual(calls[0],{enabled:true,confirmed:true,soc_percent:17,goal_id:'synthetic-next',goal_revision:2,
+    target_kwh:23.4,deadline:'2026-11-11T06:00:00Z',reference_context:'synthetic-context'});
+  finish();await new Promise(resolve=>setImmediate(resolve));
+  blur();assert.equal(calls.length,1);assert.equal(editor.dirty,false);
 });
 
+test('polling estimates, completion and untouched focus/blur cannot re-anchor a manual reference or select a later goal', () => {
+  const {editor,calls,focus,blur}=manualEditor();
+  const state=manualFixture();state.ev_manual.reference={enabled:true,status:'active',soc_percent:17};
+  state.observation.ev_progress.estimated_kwh=9.36;
+  editor.update(state);focus();blur();
+  assert.match(manualSoCMarkup(state,editor),/value="20"/);
+  state.ev_manual.reference.status='completed';state.observation.ev_progress.estimated_kwh=23.4;
+  editor.update(state);focus();blur();
+  assert.match(manualSoCMarkup(state,editor),/value="50"/);assert.equal(calls.length,0);
+});
 
-test('manual confirmation selects the next goal that the entered actual SoC needs', () => {
-  const state=manualFixture(), first=state.ev_manual.next_goal;
+test('focused dirty input survives updates but recovery or stale goal/source context blocks a later blur', async () => {
+  const {editor,calls,focus,input}=manualEditor();focus();input('19');
+  const updated=structuredClone(editor.state);updated.observation.ev_progress.estimated_kwh=20;
+  editor.update(updated);assert.equal(editor.value,'19');
+  assert.match(manualSoCMarkup(updated,editor),/value="19"/);
+  updated.ev_manual.context='recovered-source-or-edited-goal';
+  editor.update(updated);await editor.commit();
+  assert.equal(calls.length,0);assert.match(editor.error,/changed/);assert.equal(editor.dirty,false);
+});
+
+test('invalid entries and API failures are accessible; failure preserves a draft without retrying an untouched blur', async () => {
+  const {editor,calls,focus,input}=manualEditor(async()=>{throw new Error('POST ev/manual-soc: SYNTHETIC uncertain response');});
+  focus();input('101');await editor.commit();assert.equal(calls.length,0);
+  assert.match(manualSoCMarkup(editor.state,editor),/role="alert"/);
+  input('17');await editor.commit();assert.equal(calls.length,1);assert.equal(editor.value,'17');
+  assert.match(manualSoCMarkup(editor.state,editor),/value="17"/);assert.match(editor.error,/uncertain response/);
+  await editor.commit();assert.equal(calls.length,1);
+  input('18');await editor.commit();assert.equal(calls.length,2);
+});
+
+test('manual off intent stays off while pending without changing existing authority before the reply', async () => {
+  let finish;const {editor,change,calls}=manualEditor(()=>new Promise(resolve=>{finish=resolve}));
+  editor.state.ev_manual.reference={enabled:true,status:'active'};
+  const pending=change(false);
+  assert.deepEqual(calls,[{enabled:false}]);
+  assert.doesNotMatch(manualSoCMarkup(editor.state,editor),/data-ev-manual-toggle checked/);
+  assert.match(manualSoCMarkup(editor.state,editor),/Saving…/);
+  finish();await pending;
+});
+
+test('only an actual human higher entry can choose the next unmet goal', () => {
+  const state=manualFixture(),first=state.ev_manual.next_goal;
   state.ev_manual.goals=[first,{...first,id:'synthetic-later',target_percent:70,target_kwh:32.76}];
-  assert.equal(manualConfirmationGoal(state,'').id,first.id);
   assert.equal(manualConfirmationGoal(state,'49').id,first.id);
   assert.equal(manualConfirmationGoal(state,'50').id,'synthetic-later');
-  assert.equal(manualConfirmationGoal(state,'100').id,first.id); // Explicit zero-delivery scope is valid.
+  assert.equal(manualConfirmationGoal(state,'100').id,first.id);
 });
 
-test('pending manual switch-off shows off intent while retaining an explicit wait state', async () => {
-  let finish;
-  const state=manualFixture();
-  state.ev_manual.reference={enabled:true,status:'active',soc_percent:17};
-  const draft=new ManualSoC({addEventListener(){}},async()=>{},()=>{});
-  const pending=draft.send({enabled:false},()=>new Promise(resolve=>{finish=resolve}),()=>{});
-  const html=manualSoCMarkup(state,draft);
-  assert.match(html,/Turning manual mode off/);
-  assert.doesNotMatch(html,/data-ev-manual-toggle\s+checked/);
-  assert.doesNotMatch(html,/data-manual-reference/);
-  finish();await pending;
-  assert.equal(draft.intent,null);
+test('switching manual mode off discards a dirty edit instead of committing it first', async () => {
+  const {editor,calls,focus,input,blur,change}=manualEditor();
+  editor.state.ev_manual.reference={enabled:true,status:'active'};
+  focus();input('20');
+  blur({matches:selector=>selector==='[data-ev-manual-toggle]'});
+  await change(false);
+  assert.deepEqual(calls,[{enabled:false}]);
+});
+
+test('one full beside-sensors diagnosis retains independent evidence and real countdowns without duplicate fault cards', () => {
+  const state=syntheticEVStatus();
+  state.ev_incident={id:'synthetic-fault',status:'unresolved',reason:'SYNTHETIC delivery stopped',
+    detected_at:state.now,started_at:state.now,reboot_allowed:false,reboot_attempts:0,notification:'delivered'};
+  state.charger.activity={stage:'fault',as_of:state.now,label:'Delivery fault',detail:'SYNTHETIC delivery stopped'};
+  state.display_issues=[{kind:'ev_progress',title:'SYNTHETIC independent feedback fault',action:'Restore actual SoC',text:'ESS continues'}];
+  let html=evStatusMarkup(state);
+  assert.equal((html.match(/SYNTHETIC delivery stopped/g)||[]).length,1);
+  assert.match(html,/ev-sensor-side[\s\S]*aria-label="EV diagnosis"[\s\S]*ev-diagnostic-readings/);
+  assert.match(html,/SYNTHETIC independent feedback fault/);
+  assert.doesNotMatch(html,/ev-state-label|ev-status-verdict|ev-controller-error|<details[^>]*diagnosis/);
+  state.charger.activity={stage:'settling',as_of:state.now,label:'Restart hold',detail:'Wait before starting',
+    until:new Date(Date.parse(state.now)+30000).toISOString(),duration_seconds:30,timer:'Hold'};
+  html=evStatusMarkup(state);
+  assert.match(html,/Restart sequence/);assert.match(html,/role="timer"/);assert.match(html,/30/);
 });

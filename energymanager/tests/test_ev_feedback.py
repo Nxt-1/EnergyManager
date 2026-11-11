@@ -224,7 +224,7 @@ def test_real_planner_and_controller_enforce_one_manual_goal_and_keep_ess_indepe
     app.now = lambda: AT
     app.observe(sample(soc=7.956))
     item = app.manual_view(AT)["next_goal"]
-    app.manual_soc({"enabled":True, "confirmed":True, "soc_percent":49,
+    app.manual_soc({"enabled":True, "confirmed":True, "soc_percent":49, "reference_context":app.manual_view(app.now())["context"],
         "goal_id":g.id, "goal_revision":g.revision, "deadline":g.deadline.isoformat(), "target_kwh":item["target_kwh"]})
     prepared = app.build_snapshot()
     result = Planner().plan(prepared)
@@ -315,7 +315,7 @@ def test_manual_api_requires_explicit_current_reference_and_current_goal_confirm
     app.now = lambda: AT
     app.observe(sample())
     g = app.manual_view(AT)["next_goal"]
-    body = {"enabled":True, "confirmed":True, "soc_percent":17, "goal_id":g["id"],
+    body = {"enabled":True, "confirmed":True, "soc_percent":17, "reference_context":app.manual_view(app.now())["context"], "goal_id":g["id"],
             "goal_revision":g["revision"], "deadline":g["deadline"], "target_kwh":g["target_kwh"]}
     for invalid in ({"enabled":True}, {**body,"confirmed":False}, {**body,"soc_percent":None},
                     {**body,"soc_percent":True}, {**body,"soc_percent":101}, {**body,"goal_revision":999}):
@@ -327,9 +327,41 @@ def test_manual_api_requires_explicit_current_reference_and_current_goal_confirm
     assert not app.ev_valid
     assert not app.manual_soc({"enabled":False})["reference"]["enabled"]
     assert not app.observation.ev_state_known  # An old vehicle value cannot acquire manual authority.
-    zero = {**body,"soc_percent":100}
+    zero = {**body,"soc_percent":100,"reference_context":app.manual_view(app.now())["context"]}
     assert app.manual_soc(zero)["reference"]["quantity_kwh"] == 0
     assert app.observation.ev_kwh == s.capabilities.ev_capacity_kwh
+    store.close()
+
+
+@pytest.mark.parametrize("change", ["goal", "source", "recovered", "counter_reset"])
+def test_human_manual_draft_context_rejects_late_commits_after_goal_source_or_recovery_changes(tmp_path, change):
+    store = Store(tmp_path / "synthetic-draft.sqlite")
+    s = replace(tiny(), observation=sample())
+    ha = SimpleNamespace(entities={"ev_total_kwh":"sensor.synthetic_eto"},
+                         inputs=SimpleNamespace(readings={"ev_total_kwh":meter(0, 100)}))
+    app = Application(store, snapshot=s, ha=ha, demo=False)
+    app.now = lambda: AT
+    app.observe(sample())
+    view = app.manual_view(AT)
+    g = view["next_goal"]
+    body = {"enabled":True, "confirmed":True, "soc_percent":17, "reference_context":view["context"],
+            "goal_id":g["id"], "goal_revision":g["revision"], "deadline":g["deadline"], "target_kwh":g["target_kwh"]}
+    # Ordinary metered delivery changes the estimate, not the edit's source identity.
+    ha.inputs.readings["ev_total_kwh"] = meter(0, 100.1)
+    app.observe(sample())
+    assert app.manual_view(AT)["context"] == view["context"]
+    if change == "goal":
+        app.revision += 1
+    elif change == "source":
+        ha.entities["ev_total_kwh"] = "sensor.synthetic_replacement"
+    elif change == "counter_reset":
+        ha.inputs.readings["ev_total_kwh"] = meter(0, 1)
+        app.observe(sample())
+    else:
+        app.observe(sample(soc=7.956))
+    with pytest.raises(ValueError, match="context changed"):
+        app.manual_soc(body)
+    assert not app.ev_progress.feedback.state.get("manual")
     store.close()
 
 
@@ -348,7 +380,7 @@ async def test_manual_http_boundary_validation_and_confirmed_state_use_local_fak
     monkeypatch.setattr(app, "start", no_worker)
     monkeypatch.setattr(app, "close", no_worker)
     g = app.manual_view(AT)["next_goal"]
-    body = {"enabled":True, "confirmed":True, "soc_percent":17, "goal_id":g["id"],
+    body = {"enabled":True, "confirmed":True, "soc_percent":17, "reference_context":app.manual_view(app.now())["context"], "goal_id":g["id"],
             "goal_revision":g["revision"], "deadline":g["deadline"], "target_kwh":g["target_kwh"]}
     async with TestClient(TestServer(create_web(app))) as client:
         resource = await client.get("/manual-soc.js")

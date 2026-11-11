@@ -470,12 +470,29 @@ updates before incorporating them into the V4.5 implementation branch; discuss t
 next V4.5 task in the architecture chat and start implementation only when authorized.
 No application task, commit or publication is implied by this setup record.
 
-### EV planner — V4.6 / EV-A002–EV-A010
+### EV planner — V4.6 / EV-A002–EV-A011
 
 - **Architecture chat:** EV Task optimization achritecture, local ID
   `01a18e54-5380-7703-b13d-8044baa8a7ac`.
 - **Implementation chat:** EV task optimization implementation, local ID
   `01a1b64b-a1fe-74d2-a393-afe7ed1aeb39`.
+- **EV-A011 implementation complete locally (4.6.11,11November2026):**
+  Scoped presentation/interaction work on `codex/ev-a011`, based on released
+  4.6.10/6ab71f6. One full beside-sensors diagnosis, matching stacked header controls,
+  structured optional Battery sources and human-only Enter/blur confirmation replace
+  the accumulated duplicate/strip/form presentation. The original car and sensor
+  actions remain. Captured API context rejects stale goal/source/reset/recovery edits;
+  polling, untouched blur and completed estimates cannot renew manual authority.
+  Independent faults and live step/countdown evidence remain; A010 policy is intact.
+  Final844Python174.56s,122frontend409.6ms,58focused4.73s, Ruff/mypy63modules,
+  JS syntax, normal/routed fake E2E, wheel/sdist91byte comparisons and isolated import
+  pass. Native/standalone desktop/mobile (including320px header fit), pending/error,
+  focused draft, completion, unplug and recovery races were verified synthetically.
+  Latest pending A012 and other shared drafts were consulted and remain separate;
+  no A012 behavior is implemented. Verification details: VERIFICATION.md; resumable
+  local/remote evidence: ignored `artifacts/ev-a011-state.json`. Ready-release
+  integration/publication remains to be completed. No live access or deployment.
+
 - **EV-A010 — unreliable vehicle feedback and manual recovery (4.6.10,11November2026):**
   Explicit user handoff verified in the registered architecture chat. Implemented on
   `codex/ev-a010`, based on released4.6.9/fd6d4a9, incorporating its stock correction

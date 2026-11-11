@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+from hashlib import sha256
 import aiohttp
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -20,7 +21,7 @@ from .ev_progress import EVProgress, progress_warning
 from .execution import freeze_execution
 from .demo_plant import DemoPlant
 from .forecasts import demo_snapshot
-from .store import Store
+from .store import Store, encode
 from .notifications import Notifications
 from .measured_peaks import MeasuredPeaks
 from .deadline_warnings import DeadlineWarnings, retain_checked_fallback
@@ -929,7 +930,16 @@ class Application:
         choices = [{**json_data(g), "target_kwh":g.target(self.snapshot.capabilities, self.policy),
                     "target_percent":g.target(self.snapshot.capabilities, self.policy) / self.snapshot.capabilities.ev_capacity_kwh * 100}
                    for g in goals]
-        return {"reference": manual, "goals":choices, "next_goal":choices[0] if choices else None,
+        # Stable through ordinary counter advances; changed reference, goals or source
+        # context invalidates a human draft without treating display updates as edits.
+        context = sha256(encode({"revision": self.revision,
+            "manual": {k: (manual or {}).get(k) for k in ("id", "enabled", "status")},
+            "vehicle_kwh": self.ev_progress.feedback.state.get("vehicle_kwh"),
+            "segments": self.ev_progress.state.get("segments"), "connected": self.observation.connected,
+            "counter_source": self.ha.entities.get("ev_total_kwh", "") if self.ha else "",
+            "capacity": self.snapshot.capabilities.ev_capacity_kwh,
+            "efficiency": self.snapshot.capabilities.ev_efficiency}).encode()).hexdigest()
+        return {"reference": manual, "context": context, "goals":choices, "next_goal":choices[0] if choices else None,
                 "refresh": self.ev_progress.feedback.state.get("refresh"),
                 "reference_age_seconds": max(0, (at - instant(manual["entered_at"])).total_seconds()) if manual else None}
 
@@ -942,8 +952,10 @@ class Application:
                 raise ValueError("Manual SoC off does not accept a reference")
             self.ev_progress.feedback.disable()
         else:
-            if set(data) != {"enabled", "confirmed", "soc_percent", "goal_id", "goal_revision", "target_kwh", "deadline"} or data["confirmed"] is not True:
+            if set(data) != {"enabled", "confirmed", "soc_percent", "goal_id", "goal_revision", "target_kwh", "deadline", "reference_context"} or data["confirmed"] is not True:
                 raise ValueError("Enter current SoC and explicitly confirm the displayed next goal")
+            if data["reference_context"] != self.manual_view(at)["context"]:
+                raise ValueError("EV reference context changed; review current feedback and enter a new value")
             value = data["soc_percent"]
             if type(value) not in (int, float) or not math.isfinite(value) or not 0 <= value <= 100:
                 raise ValueError("Enter the actual current SoC between 0 and 100%")

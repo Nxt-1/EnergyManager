@@ -1,13 +1,18 @@
 # Run, configure, review and roll back
 
-## Manual SoC recovery (4.6.10 / EV-A010)
+## Manual SoC recovery (4.6.11 / EV-A010–A011)
 
 When EV feedback is unavailable or suspected stuck, restore its sources or open
 EV → Manual SoC. Turning on the switch opens a blank entry; enter the actual current
-battery percentage and review the next existing goal's target/deadline. Only
-**Confirm reference & goal** grants bounded manual authority. Cancel grants none.
-There must be a usable go-e total-energy counter. Reported vehicle SoC stays separate;
+battery percentage, then press Enter or leave the field. That human edit confirms
+the existing next charging goal under its current target/deadline. A blank field or
+untouched blur grants no authority. There must be a usable go-e total-energy counter. Reported vehicle SoC stays separate;
 the manual estimate is not a new HA entity or measured battery confirmation.
+The field follows the counter-derived estimate while manual mode is active; those
+automatic updates cannot confirm a new reference or renew completed work. A focused
+dirty draft survives polling. Invalid/stale edits and API failures show an inline
+error; review current feedback and enter again. Battery's info control opens
+structured sources, reference/age and counter history; technical timing is optional.
 
 Confirmed work survives waiting, pauses, recalculation, restart and reference age.
 It stops at its estimated requirement within meter/control resolution and never

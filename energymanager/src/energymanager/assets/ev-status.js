@@ -19,6 +19,30 @@ export function progressWarningMarkup(issue, state, {native = false} = {}) {
 const numeric = value => value !== null && value !== undefined && value !== '' &&
   Number.isFinite(Number(value)) ? Number(value) : null;
 
+export function evDiagnosisMarkup(state, model = evStatusModel(state), activity = evControlActivityMarkup(state)) {
+  const incident = !state.demo && state.ev_incident;
+  const active = incident && !['recovered', 'acknowledged'].includes(incident.status);
+  const control = evControlActivityModel(state);
+  const progress = (state.display_issues || []).filter(issue => issue.kind === 'ev_progress');
+  const stamp = value => value ? evIncidentTime(value, state.policy?.timezone || 'UTC') : '—';
+  const field = (label, value) => `<div><dt>${esc(label)}</dt><dd>${esc(powerText(String(value ?? '—')))}</dd></div>`;
+  const reason = active ? incident.reason : model.reason;
+  // A fault-stage controller card repeats the incident. Preserve any different
+  // controller evidence here; genuine sequence steps/timers keep their live view.
+  const faultActivity = control?.stage === 'fault';
+  return `<section class="ev-diagnosis" aria-label="EV diagnosis">
+    <strong>${esc(active ? 'EV charging stopped' : model.status)}</strong>
+    ${reason ? `<p>${esc(powerText(reason))}</p>` : ''}
+    ${active ? `<dl>${field('Detected', stamp(incident.detected_at))}${field('Began', stamp(incident.started_at))}
+      ${field('Delivery at detection', Number.isFinite(incident.observation?.ev_power_kw) ? `${watts(incident.observation.ev_power_kw)} W` : null)}
+      ${field('Recovery', `${incident.status} · ${incident.reboot_attempts ?? 0}/1 reboot attempts${incident.reboot_allowed === false ? ' · automatic reboot not eligible' : ''}`)}
+      ${field('Phone alert', incident.notification === 'delivered' ? 'Sent to Home Assistant' : incident.notification)}</dl>` : ''}
+    ${faultActivity && control.detail && ![reason, model.charger?.control].includes(control.detail) ? `<p><strong>Controller:</strong> ${esc(powerText(control.detail))}</p>` : ''}
+    ${progress.map(issue => `<div class="ev-diagnosis-source"><strong>${esc(issue.title)}</strong><p>${esc(issue.action)}</p><p>${esc(issue.text)}</p>${issue.source_issue ? `<p>${esc(issue.source_issue)}</p>` : ''}</div>`).join('')}
+    ${!faultActivity && (!active || control?.step >= 0 || control?.seconds !== null && control?.seconds !== undefined) ? activity : ''}
+  </section>`;
+}
+
 export function evMeasuredPower(state) {
   const fresh = at => {
     const age = (Date.parse(state.now) - Date.parse(at)) / 1000;
@@ -201,15 +225,22 @@ export function evStatusMarkup(state, interaction = {}) {
     ['HA read', time(model.charger?.at), null], ['Device frame', time(model.charger?.device_at), null]
   ];
   const progress = state.observation?.ev_progress;
-  const progressUsable = progress?.usable && Date.parse(state.now) <= Date.parse(progress.valid_until);
-  const progressMarkup = progress ? `<div class="ev-progress-status">
-    <span title="Estimated stored energy using the configured charging efficiency; distinct from reported vehicle SoC.">Estimated charge ≈ ${Number(progress.estimated_kwh).toFixed(2)} kWh</span>
-    <span> · go-e total ${historyReading(progress.counter_kwh === null ? '— kWh' : `${Number(progress.counter_kwh).toFixed(3)} kWh`,
-      [progress.entity_id], {native:!!interaction.entities,demo:model.demo,label:'go-e Total energy'})}</span>
-    ${!progressUsable ? '<span class="error" role="status"> · Progress unavailable · EV paused</span>' : progress.uncertain ? '<span title="Baseline or measurement timing remains uncertain; credited progress is retained."> ◐</span>' : ''}
-    <details data-ev-progress${interaction.progressExpanded ? ' open' : ''}><summary data-ev-progress-summary="true">Progress sources</summary><p>Reported vehicle: ${progress.reported_kwh === null ? '—' : Number(progress.reported_kwh).toFixed(2)} kWh · Vehicle sample: ${progress.vehicle_observed_at ? esc(time(progress.vehicle_observed_at)) : 'Unknown'}<br>
-    Counter read: ${esc(time(progress.counter_at))} · Estimated battery gain credited: ${Number(progress.credited_kwh).toFixed(3)} kWh · ${esc(progress.source)}${progress.uncertain ? ' · Unaligned or missing energy remains uncertain.' : ''}</p></details>
-    </div>` : '';
+  const percent = energy => Number.isFinite(energy) && state.capabilities?.ev_capacity_kwh > 0 ?
+    `${number(energy / state.capabilities.ev_capacity_kwh * 100)}%` : '—';
+  const manual = state.ev_manual?.reference;
+  const sources = `<div class="ev-source-panel" role="dialog" aria-label="Battery sources" ${interaction.sourcesOpen ? '' : 'hidden'}>
+    <strong>Battery sources</strong><button type="button" data-ev-sources="close" aria-label="Close battery sources">×</button>
+    <dl><div><dt>Vehicle reported</dt><dd>${historyValue('ev_soc', `${number(model.soc)} %`, 'Reported vehicle SoC', 'source-vehicle')}</dd></div>
+    <div><dt>Estimated SoC</dt><dd>${percent(progress?.estimated_kwh)} · ${Number.isFinite(progress?.estimated_kwh) ? `${number(progress.estimated_kwh)} kWh` : '—'} (estimate)</dd></div>
+    <div><dt>Active reference</dt><dd>${manual?.enabled ? `Manual · entered ${number(manual.soc_percent)}% · ${esc(time(manual.entered_at))} · ${Math.floor((state.ev_manual.reference_age_seconds || 0) / 60)} min ago · ${esc(manual.status)}` : esc(progress?.source || 'Vehicle feedback')}${!manual?.enabled && manual?.status === 'recovered' ? ' · automatic feedback restored' : ''}</dd></div>
+    <div><dt>Charging counter</dt><dd>${progress ? historyReading(Number.isFinite(progress.counter_kwh) ? `${Number(progress.counter_kwh).toFixed(3)} kWh` : 'Unavailable',
+      [progress.entity_id], {native:!!interaction.entities,demo:model.demo,label:'go-e Total energy'}) : 'Unavailable'}</dd></div></dl>
+    <details data-ev-source-technical${interaction.sourceTechnicalExpanded ? ' open' : ''}><summary>Timing &amp; uncertainty</summary><dl>
+    <div><dt>Vehicle sample</dt><dd>${esc(time(progress?.vehicle_observed_at))}</dd></div>
+    <div><dt>Counter read</dt><dd>${esc(time(progress?.counter_at))}</dd></div>
+    <div><dt>Historical credited gain</dt><dd>${Number.isFinite(progress?.credited_kwh) ? Number(progress.credited_kwh).toFixed(3) : '—'} kWh</dd></div>
+    <div><dt>Quality</dt><dd>${esc(progress?.counter_issue || (!progress?.usable || Date.parse(state.now) > Date.parse(progress.valid_until) ? 'Progress unavailable · EV paused' : progress?.uncertain ? 'Unaligned or missing energy remains uncertain.' : progress?.source || 'Unavailable'))}</dd></div>
+    </dl></details></div>`;
   const manualMarkup = interaction.manual ? manualSoCMarkup(state, interaction.manual) : '';
   const diagnostics = model.diagnostics.map(field => {
     const raw = field.key === 'connected' ? null : model.states[field.key];
@@ -217,12 +248,8 @@ export function evStatusMarkup(state, interaction = {}) {
       `Unverified · ${raw}` : field.key === 'charge_allowed' && raw ? `${field.text} (${raw})` : field.text;
     return `<div data-ev-field="${field.key}" class="ev-reading-${field.tone}"><dt>${field.key === 'connected' ? connectionIcon(model.connected) : '<i aria-hidden="true"></i>'}${field.label}</dt><dd>${historyValue(field.key, esc(text), field.label)}</dd></div>`;
   }).join('');
-  return `<div class="ev-status-heading"><h2>EV &amp; charger</h2><span class="ev-control-badge">${model.demo ? 'Synthetic demo' : model.controlled ? 'Hardware control on' : 'Hardware control off'}</span></div>
+  return `<div class="ev-status-heading"><h2>EV &amp; charger</h2><div class="ev-header-controls"><div class="ev-header-control"><span>Hardware control</span><span>${model.demo ? 'Demo' : model.controlled ? 'On' : 'Off'}</span></div>${manualMarkup}</div></div>
     <div class="ev-status-body ev-tone-${model.tone}">
-      <div class="ev-state-label"><i></i><strong>${esc(model.status)}</strong></div>
-      ${!activity || ['fault', 'warning'].includes(model.tone) ? `<div class="ev-status-verdict"><strong>${esc(model.summary)}</strong>${model.reason ? `<p class="ev-status-reason">${esc(powerText(model.reason))}</p>` : ''}</div>` : ''}
-      ${activity}
-      ${progressMarkup}${manualMarkup}
       <div class="ev-combined-layout">
       <div class="ev-flow ${model.flowing ? 'ev-flowing' : ''}">
         <svg aria-hidden="true" viewBox="0 0 500 150" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -238,11 +265,11 @@ export function evStatusMarkup(state, interaction = {}) {
         </svg>
         <div class="ev-annotation ev-on-current"><span>Current limit</span><strong>${historyValue('current', `${number(model.current)} <small>A</small>`, 'Current limit', 'current-limit')}</strong></div>
         <div class="ev-annotation ev-on-power"><span>Measured power</span><strong>${historyValue('ev_kw', `${watts(model.power)} <small>W</small>`, 'Measured power')}</strong></div>
-        <div class="ev-annotation ev-on-battery"><span>Battery</span><strong>${historyValue('ev_soc', `${number(model.soc)} <small>%</small>`, 'Battery state of charge')}</strong></div>
+        <div class="ev-annotation ev-on-battery"><span class="ev-battery-label">Battery <button type="button" class="ev-source-info" data-ev-sources="open" aria-label="Battery sources" aria-expanded="${!!interaction.sourcesOpen}">ⓘ</button></span>${sources}<strong>${historyValue('ev_soc', `${number(model.soc)} <small>%</small>`, 'Battery state of charge')}</strong></div>
         <div class="ev-annotation ev-on-phase"><span>Phase mode · ${historyValue('phase', selectedPhaseText, 'Phase mode', 'phase-mode')}</span><div class="ev-phase-options" role="group" aria-label="Charger phase mode" title="One-time charger change; EnergyManager may overwrite it. Auto is the charger's own phase mode and can leave EV control waiting for a fixed phase readback.">${buttons}</div>${interaction.phaseChanging ? '<small role="status">Sending…</small>' : ''}</div>
         <div class="ev-annotation ev-on-request" title="EnergyManager command intent; no HA sensor history. Not confirmed charger output. Hardware control must be on to apply requests."><span>Controller request</span><strong>${watts(model.requestedPower)} <small>W</small></strong></div>
       </div>
-      <dl class="ev-diagnostic-readings">${diagnostics}<div><dt>Current setting</dt><dd>${historyValue('current', `${esc(model.states.current ?? '—')} A${!model.healthy ? ' · unverified' : ''}`, 'Current setting', 'current-setting')}</dd></div>${extraFields.map(([label, value, key]) => `<div><dt>${label}</dt><dd class="ev-reading-${label === 'Device frame' && model.healthy ? 'good' : 'neutral'}">${key ? historyValue(key, esc(value ?? '—'), label, 'detail-' + key) : `<span title="EnergyManager ${label === 'HA read' ? 'input read' : 'validated device frame'} timestamp; no HA sensor history.">${esc(value ?? '—')}</span>`}${!model.healthy ? ' · unverified' : ''}</dd></div>`).join('')}</dl>
+      <div class="ev-sensor-side">${evDiagnosisMarkup(state, model, activity)}<dl class="ev-diagnostic-readings">${diagnostics}<div><dt>Current setting</dt><dd>${historyValue('current', `${esc(model.states.current ?? '—')} A${!model.healthy ? ' · unverified' : ''}`, 'Current setting', 'current-setting')}</dd></div>${extraFields.map(([label, value, key]) => `<div><dt>${label}</dt><dd class="ev-reading-${label === 'Device frame' && model.healthy ? 'good' : 'neutral'}">${key ? historyValue(key, esc(value ?? '—'), label, 'detail-' + key) : `<span title="EnergyManager ${label === 'HA read' ? 'input read' : 'validated device frame'} timestamp; no HA sensor history.">${esc(value ?? '—')}</span>`}${!model.healthy ? ' · unverified' : ''}</dd></div>`).join('')}</dl></div>
       </div>
       ${interaction.phaseError ? `<p class="error" role="alert">${esc(interaction.phaseError)}</p>` : ''}
       ${model.requestedPhases && model.requestedPhases !== model.phase ? `<p class="subtle">Requested phase mode: ${model.requestedPhases} φ · awaiting readback</p>` : ''}
