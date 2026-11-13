@@ -5,7 +5,7 @@
 All history, databases, endpoints and downloads here are labelled synthetic/local. No live
 HA/database, hardware, real notification or installation deployment was accessed.
 
-- Ten focused Python tests pass, covering exact legacy/zlib bytes and digests, independent
+- Eleven focused Python tests pass, covering exact legacy/zlib bytes and digests, independent
   ZIP member hashes, recording/observation-time selection and deduplication, all stored
   dispositions, full horizons, accepted/boundary/predecessor context, gaps, missing context,
   corrupt/sensitive records, unknown schema/kinds/fields, empty periods, source immutability,
@@ -22,10 +22,10 @@ HA/database, hardware, real notification or installation deployment was accessed
   `checkpoints/arch-030/native-browser-download.json`.
 - Synthetic contention fixture: 2,000,000 events over seven days, 60 decision archives with
   425,095 decoded bytes per snapshot, a 510,914,560-byte source and concurrent commits.
-  Export produced 30,138,301 bytes in 49.30 s; peak process memory was 128,307,200 bytes.
-  API maximum was 36.1 ms during export (17.4 ms baseline). Actual fake-actuator control
-  ran 49 ticks, maximum 1.044 s (1.028 s baseline), passing the 1.1 s gate at 1 s configured
-  cadence. 998 concurrent commits completed; source revision stayed unchanged, no export-
+  Export produced 30,142,895 bytes in 51.01 s; peak process memory was 130,723,840 bytes.
+  API maximum was 38.0 ms during export (20.5 ms baseline). Actual fake-actuator control
+  ran 51 ticks, maximum 1.043 s (1.026 s baseline), passing the 1.1 s gate at 1 s configured
+  cadence. 1,017 concurrent commits completed; source revision stayed unchanged, no export-
   induced replan occurred, and 2,000,000 selected source events were counted independently.
   This establishes synthetic contention behavior, not installation performance.
 - Configured and routed local fake-HA E2E runs pass, including real full-horizon planning,

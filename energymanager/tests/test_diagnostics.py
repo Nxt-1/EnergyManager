@@ -323,3 +323,21 @@ def test_valid_digest_does_not_make_an_unknown_snapshot_schema_valid_replay(tmp_
         assert {row['id'] for row in omissions} == {'accepted', 'corrupt'}
     manager.release(job['id'])
     manager.executor.shutdown()
+
+
+def test_boundary_decision_uses_full_timestamp_precision(tmp_path):
+    source = tmp_path / 'synthetic.sqlite'
+    store = Store(source)
+    for identity, at in (('before', '2026-10-22T23:59:59.999999Z'), ('selected', '2026-10-23T00:00:00.000001Z')):
+        store.record(tiny(), {'id': identity}, 'accepted')
+        store.connection.execute('UPDATE decisions SET at=? WHERE id=?', (at, identity))
+    store.connection.commit()
+    store.close()
+    manager = Diagnostics(source, 'UTC')
+    manager.initialize()
+    manager.start('dataset', {'start': '2026-10-23T00:00:00Z', 'end': '2026-10-24T00:00:00Z'})
+    job = wait(manager)
+    assert job['state'] == 'ready', job
+    assert job['coverage']['boundary']['accepted_decision'] == 'before'
+    assert job['coverage']['boundary']['accepted_decision_included']
+    manager.executor.shutdown()

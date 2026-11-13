@@ -9,7 +9,7 @@
 - **Branch/release:** `codex/arch-030-diagnostics`, managed worktree
   `C:/Users/Arne/.codex/worktrees/arch-030-diagnostics/EnergyManager`, based on
   main `a3dcc37` / application 4.7.0; preparing 4.7.1.
-- **State:** implementation and scoped verification complete: ten backend cases,
+- **State:** implementation and scoped verification complete: eleven backend cases,
   126 frontend cases, static checks, synthetic contention and standalone/native browser
   downloads pass. Final full Windows run has one pre-existing planner assertion failure,
   also reproduced on main; no scheduler change. Normal full Linux CI on the actual

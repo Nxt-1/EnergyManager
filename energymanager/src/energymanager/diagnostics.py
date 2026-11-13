@@ -377,7 +377,7 @@ class Diagnostics:
             'selection': {'start': iso(start) if start is not None else None, 'end': iso(end) if end is not None else None,
                           'interval': '[start,end)', 'events': 'recording time OR valid observation time; source sequence deduplicated',
                           'samples': 'own timestamp', 'decisions': 'recording time, complete original horizon',
-                          'ordering': 'events by source sequence; samples by own timestamp; decisions by recording time/id'},
+                          'ordering': 'events by source sequence; samples by own timestamp; decisions by deterministic identity traversal with referenced predecessors'},
             'limitations': ['Stored counts do not establish continuity.', 'Overwritten state and unavailable forecast revisions are excluded.',
                             'Historical evidence does not establish complete counterfactual replay.',
                             'Producer versions are unknown unless present in original records.',
@@ -471,8 +471,15 @@ class Diagnostics:
                         latest[kind] = (observed, row['sequence'])
             # Only event identities are retained; boundary bodies are read again below.
             baseline = None
+            baseline_key = (-math.inf, '')
             if start is not None:
-                baseline = db.execute("SELECT id,at FROM decisions WHERE disposition='accepted' AND julianday(at)<julianday(?) ORDER BY julianday(at) DESC,id DESC LIMIT 1", (iso(start),)).fetchone()
+                # SQLite julianday rounds sub-millisecond boundaries. Compare the
+                # original offset-aware instants so [start,end) remains exact here too.
+                for candidate in db.execute("SELECT id,at FROM decisions WHERE disposition='accepted'"):
+                    progress()
+                    at = timestamp(candidate['at'])
+                    if at is not None and at < start and (at, candidate['id']) > baseline_key:
+                        baseline, baseline_key = candidate, (at, candidate['id'])
             baseline_at = timestamp(baseline['at']) if baseline else None
             coverage['boundary'] = {'applicable': start is not None, 'accepted_decision': baseline['id'] if baseline else None,
                                     'missing_accepted_baseline': baseline is None, 'context_events': 0,
