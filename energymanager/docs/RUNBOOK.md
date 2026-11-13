@@ -1,5 +1,81 @@
 # Run, configure, review and roll back
 
+## Development coordination and current work state
+
+Use ARCHITECTURE.md for behavior/contracts, DECISIONS.md for confirmed rationale and
+BACKLOG.md for deferred intent. Read the architecture overview and contracts relevant
+to the task, its current WORK_STATE.md entry and supporting sections as needed. Expand
+investigation when dependencies or uncertainty warrant it; do not routinely read the
+entire specification, backlog, journal or unchanged files at every turn/resumption.
+
+Each release stream can have paired architecture/implementation chats through its
+patch releases, with several streams active concurrently. Architecture prepares scope
+and completion criteria; implementation delivers explicitly authorized tasks. The
+user chooses when to create/start implementation chats. Continuing architecture work
+produces proposed follow-ups or explicit authorized amendments, not silent changes
+to the scope already being built.
+
+Registered pairs may directly exchange questions/replies and trigger responses within
+existing work. Verify the destination identity, link the task and record its durable
+resolution. Architecture can clarify existing decisions; new behavior, changed
+requirements or expanded scope return to the user. Continue independent authorized
+work while waiting. Registration, design agreement, backlog entries and old checkpoints
+do not authorize a new implementation task or live installation access.
+
+WORK_STATE.md is a current coordination view, not an append-only journal. Maintain
+entries in place, using only the ownership, authorization, dependency, status, blocker,
+next action and evidence links needed to continue current work. Not every entry needs
+the same fields. A completed result stays only while it affects an active dependency;
+an old unresolved question stays if still relevant. There are no age/word quotas.
+Do not copy requirements, long research narratives, test logs or release histories
+into the state file. Before pruning, ensure lasting requirements/rationale/evidence
+have a maintained home; preserve unique uncommitted notes in labelled external history.
+Committed past states remain in Git. Archives are evidence, not current instructions.
+
+Keep application releases ordered on main. Newer implementation incorporates earlier
+releases, resolves conflicts and verifies the combined behavior before publication.
+Approved design/coordination documents may reach main first, with pending behavior
+labelled. Reconcile latest shared main records and announced pending drafts with branch
+copies; preserve unrelated changes rather than overwriting them with older copies.
+Use the current Git state and referenced delivery checkpoint instead of replaying
+superseded NEXT instructions. Record subsequent remote results externally and in the
+final reply; avoid optional verification-only commits after successful publication.
+
+## Verification sequence and stopping rules
+
+Before starting an isolated implementation, put the approved shared workflow baseline
+on main within the user's publishing authorization and branch from it. Keep separate
+pending design drafts out of that baseline. Existing branches reconcile the latest
+shared instructions before integration; do not replace newer records with old copies.
+
+During development, use focused checks. Before expensive full-suite, contention,
+packaging or release runs, review the implementation against the agreed behavior and
+acceptance criteria, including relevant failure paths and boundary cases. Use the
+existing task/checkpoint if a brief acceptance map is useful; do not create another
+specification or review document. Resolve identified gaps before starting release gates.
+After a relevant correction, repeat affected checks and required release gates rather
+than restarting unrelated investigation. A passing run does not cover later source edits.
+
+Keep heavy benchmarks separate from tests with strict solver/time budgets so resource
+contention does not obscure failures. When a failure appears unrelated to the change,
+compare it early with unchanged main using the same environment and confirmed imports.
+Once a controlled baseline reproduces it, preserve the case/result and stop unrelated
+repair work. Expand only for new evidence or actual regression risk. Existing mandatory
+CI and publication checks on the integrated revision remain required; a baseline failure
+is not permission to skip or weaken them.
+
+Use supported browser timeouts and short, bounded waits. If a download stalls, inspect
+job/browser/file status before retrying; separate starting the download from checking
+completion where the tool supports it. Avoid repeatedly invoking a long blocking save.
+When browser-download acceptance is required, verify the actual saved artifact once
+complete, retaining compact hash/result evidence. Do not repeat a successful interaction
+unless a relevant change affects it. Keep full build/test output in external run logs
+and return concise results or the relevant failure excerpt to the chat.
+
+Finish when the authorized outcome and required checks pass. Do not add optional
+features, extra rounds of review or broader cleanup solely to continue polishing.
+Report genuine remaining limitations and hand off unresolved policy choices explicitly.
+
 ## Local development workspace and completion-based cleanup
 
 Keep the repository for versioned project files. Local development storage defaults to
