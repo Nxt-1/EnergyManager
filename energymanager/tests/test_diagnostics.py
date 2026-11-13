@@ -302,3 +302,24 @@ def test_disk_reserve_failure_during_packaging_removes_partial_zip(tmp_path, mon
     assert job['state'] == 'failed' and 'disk reserve' in job['stage']
     assert not (manager.root / job['id']).exists() and not manager.artifacts
     manager.executor.shutdown()
+
+
+def test_valid_digest_does_not_make_an_unknown_snapshot_schema_valid_replay(tmp_path):
+    source = tmp_path / 'synthetic.sqlite'
+    fixture(source)
+    with sqlite3.connect(source) as db:
+        raw = '{}'
+        db.execute('UPDATE decisions SET snapshot=?,digest=? WHERE id=?',
+                   (raw, hashlib.sha256(raw.encode()).hexdigest(), 'accepted'))
+    manager = Diagnostics(source, 'UTC')
+    manager.initialize()
+    manager.start('dataset', {'start': '2026-10-23T00:00:00Z', 'end': '2026-10-24T00:00:00Z'})
+    job = wait(manager)
+    assert job['state'] == 'ready', job
+    with zipfile.ZipFile(manager.acquire(job['id'], 'dataset')) as archive:
+        rows = [json.loads(line) for line in archive.read('decisions.jsonl').splitlines()]
+        assert 'accepted' not in {row['id'] for row in rows}
+        omissions = [json.loads(line) for line in archive.read('decision-omissions.jsonl').splitlines()]
+        assert {row['id'] for row in omissions} == {'accepted', 'corrupt'}
+    manager.release(job['id'])
+    manager.executor.shutdown()

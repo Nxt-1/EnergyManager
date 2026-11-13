@@ -5,7 +5,7 @@
 All history, databases, endpoints and downloads here are labelled synthetic/local. No live
 HA/database, hardware, real notification or installation deployment was accessed.
 
-- Nine focused Python tests pass, covering exact legacy/zlib bytes and digests, independent
+- Ten focused Python tests pass, covering exact legacy/zlib bytes and digests, independent
   ZIP member hashes, recording/observation-time selection and deduplication, all stored
   dispositions, full horizons, accepted/boundary/predecessor context, gaps, missing context,
   corrupt/sensitive records, unknown schema/kinds/fields, empty periods, source immutability,

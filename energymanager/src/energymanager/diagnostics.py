@@ -125,6 +125,30 @@ def decode_archive(value: str | bytes) -> bytes:
     return data
 
 
+def supported_snapshot(value: Any) -> bool:
+    """Recognize archived planning inputs without supplying defaults or rewriting bytes."""
+    required = {'id', 'revision', 'observation', 'forecast_at', 'forecast_id', 'intervals', 'goals',
+                'capabilities', 'policy'}
+    if not isinstance(value, dict) or not required <= set(value) or set(value) - {field.name for field in fields(Snapshot)}:
+        return False
+    if (not isinstance(value['observation'], dict) or timestamp(value['observation'].get('at')) is None
+            or timestamp(value['forecast_at']) is None or not isinstance(value['goals'], list)
+            or not isinstance(value['capabilities'], dict) or not isinstance(value['policy'], dict)):
+        return False
+    intervals = value['intervals']
+    if not isinstance(intervals, list) or not intervals:
+        return False
+    previous_end = None
+    for interval in intervals:
+        if not isinstance(interval, dict):
+            return False
+        start, end = timestamp(interval.get('start')), timestamp(interval.get('end'))
+        if start is None or end is None or start >= end or previous_end is not None and start != previous_end:
+            return False
+        previous_end = end
+    return True
+
+
 class Diagnostics:
     """One shared background worker and compact status; disk artifacts are never API state."""
 
@@ -528,7 +552,7 @@ class Diagnostics:
                     data, result_data = json.loads(snapshot), json.loads(result)
                     if sha256(snapshot).hexdigest() != row['digest']:
                         raise ValueError('digest')
-                    if not isinstance(data, dict) or not isinstance(result_data, dict) or set(data) - {field.name for field in fields(Snapshot)}:
+                    if not supported_snapshot(data) or not isinstance(result_data, dict):
                         raise ValueError('schema')
                     if not safe_content(data) or not safe_content(result_data):
                         raise ValueError('sensitive')
