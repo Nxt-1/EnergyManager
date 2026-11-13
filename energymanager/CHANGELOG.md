@@ -1,3 +1,12 @@
+## 4.7.1 — Browser planning dataset export
+
+- Add Diagnostics to the shared standalone and native HA dashboards: check history,
+  download coverage, select installation-local dates and prepare/download a consistent ZIP.
+- Preserve original planning snapshots/digests, results, selected events and samples,
+  with labelled boundary context, gaps, exclusions and completeness limitations.
+- Run capture/export outside control with cancellation, bounded resources, private
+  artifacts, protected downloads and 24-hour retention. No installation deployment.
+
 ## 4.7.0 — Local EV trips and Google Calendar editing
 
 - Own FullCalendar Standard workspace with read-only appointments, editable drives,

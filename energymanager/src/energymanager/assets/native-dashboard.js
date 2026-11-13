@@ -15,7 +15,7 @@ export function generateDashboard(config, manifest, connection) {
   const tag = `energymanager-view-${manifest.version.replaceAll('.', '-').toLowerCase()}`;
   if (!customElements.get(tag)) customElements.define(tag, class extends HTMLElement {
     setConfig(value) {
-      if (!['overview', 'planning', 'ev', 'profiles', 'settings'].includes(value.view)) throw new Error('Unknown EnergyManager view');
+      if (!['overview', 'planning', 'ev', 'profiles', 'settings', 'diagnostics'].includes(value.view)) throw new Error('Unknown EnergyManager view');
       if (this.config && (this.config.view !== value.view || this.config.addon !== value.addon)) this.stop();
       this.config = value;
       this.start();
@@ -87,6 +87,7 @@ export function generateDashboard(config, manifest, connection) {
           native: true,
           entities: manifest.entities,
           historySources: manifest.history_sources,
+          downloadUrl: path => `${runtime.base}api/${path}`,
           decisionDownloadUrl: id => `${runtime.base}api/decisions/${id}?download=1`,
           page: this.config.view,
           openTrip,
@@ -193,7 +194,7 @@ export function generateDashboard(config, manifest, connection) {
     views: [
       view('Overview', 'overview', 'mdi:home-lightning-bolt'),
       view('Planning', 'planning', 'mdi:chart-timeline-variant'),
-      view('EV', 'ev', 'mdi:car-electric'), view('Appliances', 'profiles', 'mdi:washing-machine'), view('Settings', 'settings', 'mdi:cog')
+      view('EV', 'ev', 'mdi:car-electric'), view('Appliances', 'profiles', 'mdi:washing-machine'), view('Diagnostics', 'diagnostics', 'mdi:database-export'), view('Settings', 'settings', 'mdi:cog')
     ]
   };
 }

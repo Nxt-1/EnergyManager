@@ -22,6 +22,7 @@ from .calendars import CalendarSync
 from .journeys import Journeys
 from .ev_faults import incident_report
 from .google_calendar import CalendarError
+from .diagnostics import Diagnostics
 
 
 def create_web(application: Application, *, configuration: ConfigurationFile | None = None) -> web.Application:
@@ -74,6 +75,43 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
 
     app = web.Application(middlewares=[boundary], client_max_size=64 * 1024)
     archive_readers = asyncio.Semaphore(2)
+    diagnostics = Diagnostics(application.store.path, application.policy.timezone)
+    diagnostics_cleanup: asyncio.Task[None] | None = None
+
+    async def diagnostics_status(request: web.Request) -> web.Response:
+        return web.json_response(diagnostics.status(), headers={"Cache-Control": "no-store"})
+
+    async def diagnostics_start(request: web.Request) -> web.Response:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError("A JSON object is required")
+        return web.json_response(diagnostics.start(request.match_info["kind"], body), headers={"Cache-Control": "no-store"})
+
+    async def diagnostics_action(request: web.Request) -> web.Response:
+        result = await asyncio.to_thread(diagnostics.action, request.match_info["id"], request.match_info["action"])
+        return web.json_response(result, headers={"Cache-Control": "no-store"})
+
+    async def diagnostics_download(request: web.Request) -> web.StreamResponse:
+        identity, member = request.match_info["id"], request.match_info["member"]
+        path = diagnostics.acquire(identity, member)
+        response = web.StreamResponse(headers={
+            "Cache-Control": "no-store", "Content-Type": "application/zip" if member == "dataset" else "application/json",
+            "Content-Disposition": f'attachment; filename="energymanager-{member}.{ "zip" if member == "dataset" else "json"}"',
+            "X-Content-Type-Options": "nosniff"})
+        try:
+            async with archive_readers:
+                stream = await asyncio.to_thread(path.open, 'rb')
+                try:
+                    response.content_length = await asyncio.to_thread(lambda: path.stat().st_size)
+                    await response.prepare(request)
+                    while chunk := await asyncio.to_thread(stream.read, 256 * 1024):
+                        await response.write(chunk)
+                    await response.write_eof()
+                finally:
+                    await asyncio.to_thread(stream.close)
+        finally:
+            diagnostics.release(identity)
+        return response
 
     async def trip_calendar(request: web.Request) -> web.Response:
         owner = application.trips
@@ -416,7 +454,7 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         if "version" in request.match_info and request.match_info["version"] != __version__:
             raise web.HTTPConflict(text="EnergyManager was updated. Reload the dashboard.")
         name = request.match_info.get("name", "index.html")
-        if name not in ("trip-calendar.js", "fullcalendar.global.min.js", "fullcalendar-luxon.global.min.js", "luxon.min.js",
+        if name not in ("diagnostics.js", "trip-calendar.js", "fullcalendar.global.min.js", "fullcalendar-luxon.global.min.js", "luxon.min.js",
                         "index.html", "app.js", "settings.js", "display.js", "date-time.js",
                         "datetime-picker.js", "ev-schedule.js", "style.css", "ha-card.js",
                         "application-view.js", "peak-display.js", "ha-history.js", "view.html", "native-dashboard.js", "native-dashboard.css",
@@ -454,6 +492,10 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
             web.post("/api/profiles/{action}", profiles),
             web.get("/api/profile-recordings/{id}", recording),
             web.post("/api/profile-recordings/{id}/{action}", recording),
+            web.get("/api/diagnostics", diagnostics_status),
+            web.post("/api/diagnostics/{kind}", diagnostics_start),
+            web.post("/api/diagnostics/{id}/{action}", diagnostics_action),
+            web.get("/api/diagnostics/{id}/download/{member}", diagnostics_download),
             web.get("/api/state", state),
             web.post("/api/ev/manual-soc", manual_soc),
             web.get("/api/daily-energy", energy),
@@ -485,10 +527,22 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         ]
     )
 
+    async def clean_diagnostics() -> None:
+        while True:
+            await asyncio.sleep(30)
+            await asyncio.to_thread(diagnostics.expire)
+
     async def start(app: web.Application) -> None:
+        nonlocal diagnostics_cleanup
+        await asyncio.to_thread(diagnostics.initialize)
+        diagnostics_cleanup = asyncio.create_task(clean_diagnostics())
         await application.start()
 
     async def stop(app: web.Application) -> None:
+        if diagnostics_cleanup:
+            diagnostics_cleanup.cancel()
+            await asyncio.gather(diagnostics_cleanup, return_exceptions=True)
+        await diagnostics.close()
         await application.close()
         application.store.close()
 

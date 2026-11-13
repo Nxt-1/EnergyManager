@@ -71,6 +71,57 @@ changes, chat activity and unique ignored evidence. Retain branches when retirin
 checkout. The 13 November migration inventory maps historical repository paths to
 their new locations under `checkpoints/storage-migration-2026-11-13/`.
 
+## Planning dataset through Diagnostics (4.7.1 / ARCH-030)
+
+Open **Diagnostics** in either the standalone or managed native HA dashboard. Select
+**Check available history**, review dates/counts/gaps/omissions, and optionally choose
+**Download coverage**. Opening the tab or polling status never scans the source database.
+Enter Start and End beside the installation timezone (end exclusive), or choose All
+available history. The initial range is the latest seven recorded days, clipped to history.
+Repeated DST times require an explicit occurrence; skipped times are invalid. Review the
+resolved UTC interval/duration before **Prepare dataset**. Cancel is available while busy.
+Reopening restores status and prepared dates. Ready shows actual ZIP size, interval,
+completeness findings, expiry and **Download dataset**. No SSH/console/database step is needed.
+
+The UTF-8 ZIP format is version 1: manifest and coverage JSON, events/samples/boundary
+context/decision index JSONL, plus byte-preserved original decision snapshot/result JSON.
+The manifest supplies hashes/counts/ranges, original input digests, capture bounds, schema
+fingerprint, exclusions and validation/completeness findings. Events are selected by recording
+time OR valid observation time; decisions by recording time with complete forecast horizons;
+samples by their own timestamps. Outside-window context is separately labelled. Missing
+metadata, forecasts, stocks and measurements are never reconstructed from current state.
+Legacy load samples have watts but absent source/quality metadata, exported as null.
+This historical evidence does not establish complete counterfactual replay or anonymization.
+Keep household operation datasets private; credentials/configuration/state/unrelated notices
+are excluded by the explicit export schema. Sensitive/unsupported original decisions are
+omitted with a reason instead of modifying their digest-bearing contents.
+
+One worker handles coverage or export; retries share its active job. Limits: 30 minutes,
+32 MiB per decoded record, 256 KiB packaging buffers, 4 MiB SQLite page cache, 100,000
+selected/referenced decisions, 1,000 event kinds, 2,000 omission categories and 36,600
+UTC daily buckets per series. Observed gaps use own timestamps and a 300-second threshold.
+Before starting, free space must cover three times source main+WAL bytes plus 256 MiB;
+retained artifacts already consume free space. Reserve checks continue during work; expansion,
+low disk or any limit fails clearly and removes partial files. Select another period after
+an empty/failing job; requests are never silently shortened.
+
+Completed artifacts remain private for 24 hours, with up to 16 retained artifacts. Earlier
+files remain downloadable/removable while a new job runs. Cleanup runs every 30 seconds;
+active downloads are protected. Explicit removal affects export artifacts only. Ready
+metadata restores unexpired completed files after restart; incomplete/orphaned files are
+removed and interrupted work is reported, not resumed. All routes use the existing local/
+authenticated-ingress boundary and discovered ingress base. Source capture uses SQLite's
+online backup on a separate read-only connection with a pinned read transaction; no source
+Store initialization, checkpoint, vacuum, stop/restart or control connection is used.
+
+Offline contention evidence can be reproduced with `python tools/diagnostics_benchmark.py`
+from energymanager in the prepared external environment. Its default creates a labelled
+synthetic two-million-event database; it never accepts an installation database. Output is
+external and includes size, duration, memory, API latency, actual fake-actuator control ticks,
+concurrent commits and an independently counted selection. A tick above 1.1 seconds at the
+1-second fixture cadence fails (100 ms scheduling tolerance). This is synthetic evidence,
+not an installation performance claim.
+
 ## EV trip calendar (4.7.0 / ARCH-022)
 
 With the new trip system enabled, every configured referee feed generates calculated

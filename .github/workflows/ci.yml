@@ -41,6 +41,7 @@ jobs:
 
       - name: Check dashboard JavaScript
         run: |
+          node --check energymanager/src/energymanager/assets/diagnostics.js
           node --check energymanager/src/energymanager/assets/trip-calendar.js
           node --check energymanager/src/energymanager/assets/app.js
           node --check energymanager/src/energymanager/assets/native-dashboard.js

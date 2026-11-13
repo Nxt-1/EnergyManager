@@ -1,3 +1,4 @@
+import {DiagnosticsPage} from '../src/energymanager/assets/diagnostics.js';
 import {sessionContributionMarkup, sessionPowerProfile, plannedPowerProfileMarkup, goalPowerProfileMarkup} from '../src/energymanager/assets/session-details.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -646,7 +647,7 @@ test('managed strategy generates actual HA cards and adopts new release layout w
   const manifest = {version: '4.2.0', demo: false, entities: {ev_soc: 'sensor.car', ess_soc: 'sensor.battery'}};
   const config = {type: 'custom:energymanager'};
   const layout = generateDashboard(config, manifest, {addon: 'synthetic_energy_manager', manifest});
-  assert.deepEqual(layout.views.map(view => view.path), ['overview', 'planning', 'ev', 'profiles', 'settings']);
+  assert.deepEqual(layout.views.map(view => view.path), ['overview', 'planning', 'ev', 'profiles', 'diagnostics', 'settings']);
   assert.ok(layout.views.every(view => view.sections.every(section => section.cards.every(card => card.type !== 'tile'))));
   assert.ok(layout.views.every(view => view.sections.every(section => section.cards.every(card => card.type !== 'history-graph'))));
   assert.ok(!JSON.stringify(layout).includes('iframe'));
@@ -2154,4 +2155,58 @@ test('one full beside-sensors diagnosis retains independent evidence and real co
     until:new Date(Date.parse(state.now)+30000).toISOString(),duration_seconds:30,timer:'Hold'};
   html=evStatusMarkup(state);
   assert.match(html,/Restart sequence/);assert.match(html,/role="timer"/);assert.match(html,/30/);
+});
+
+
+test('Diagnostics requires an explicit occurrence at repeated DST times and rejects skipped times', () => {
+  const controls = {start: {value: '2026-10-25T02:30'}, end: {value: '2026-10-25T04:00'}, 'start-fold': {value: ''}};
+  const page = {zone: 'Europe/Brussels', $: name => controls[name]};
+  assert.equal(DiagnosticsPage.prototype.range.call(page), null);
+  controls['start-fold'].value = '2026-10-25T01:30:00.000Z';
+  assert.deepEqual(DiagnosticsPage.prototype.range.call(page), {start: '2026-10-25T01:30:00.000Z', end: '2026-10-25T03:00:00.000Z'});
+  controls.start.value = '2026-03-29T02:30';
+  assert.equal(DiagnosticsPage.prototype.range.call(page), null);
+});
+
+test('Diagnostics preserves exact captured boundaries and uses discovered ingress download paths', () => {
+  const exactRange = {start: '2026-10-23T00:00:00.123Z', end: '2026-10-24T00:00:00.124Z'};
+  assert.equal(DiagnosticsPage.prototype.range.call({exactRange}), exactRange);
+  const anchor = {};
+  DiagnosticsPage.prototype.link.call({job: {id: 'opaque'}, $: () => anchor,
+    downloadUrl: path => `/api/hassio_ingress/synthetic/${path}`}, 'download', 'dataset');
+  assert.equal(anchor.href, '/api/hassio_ingress/synthetic/diagnostics/opaque/download/dataset');
+  assert.equal(anchor.download, 'energymanager-dataset.zip');
+});
+
+test('Diagnostics renders cancellation, expiry and failure without starting another scan', () => {
+  for (const state of ['cancelled', 'expired', 'failed', 'interrupted']) {
+    const controls = new Map();
+    const $ = key => {
+      if (!controls.has(key)) controls.set(key, {textContent: '', hidden: false, disabled: false, replaceChildren() {}});
+      return controls.get(key);
+    };
+    DiagnosticsPage.prototype.render.call({job: {state, stage: `Synthetic ${state}`}, artifacts: [], $, resolve() {}});
+    assert.equal($('status').textContent, `Synthetic ${state}`);
+    assert.equal($('download').hidden, true);
+    assert.equal($('cancel').hidden, true);
+    assert.equal($('check').disabled, false);
+  }
+});
+
+test('Diagnostics never drops a human action while status polling is in flight', async () => {
+  let release;
+  const calls = [], error = {};
+  const page = {$: () => error, render() {}};
+  const first = DiagnosticsPage.prototype.perform.call(page, () => new Promise(resolve => {
+    calls.push('poll'); release = () => resolve({timezone: 'UTC', job: null});
+  }));
+  await Promise.resolve();
+  const second = DiagnosticsPage.prototype.perform.call(page, async () => {
+    calls.push('human'); return {timezone: 'UTC', job: {state: 'running'}};
+  });
+  assert.deepEqual(calls, ['poll']);
+  release();
+  await Promise.all([first, second]);
+  assert.deepEqual(calls, ['poll', 'human']);
+  assert.equal(page.job.state, 'running');
 });

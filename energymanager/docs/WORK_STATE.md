@@ -1,5 +1,24 @@
 # EnergyManager work state
 
+## Planning review and ARCH-030 Diagnostics export
+
+- **Authorized:** the user requested implementation of ARCH-030 on 13 November 2026.
+  Scheduler research/prototypes, ARCH-029 and EV-A014 remain outside this mandate.
+- **Owner:** implementation chat `01a1d4da-e63d-7a20-8165-7a5f3bcf8b0e`, paired with
+  Planning review `01a1cc3a-ed08-7f50-9aba-20552446bce1` on local.
+- **Branch/release:** `codex/arch-030-diagnostics`, managed worktree
+  `C:/Users/Arne/.codex/worktrees/arch-030-diagnostics/EnergyManager`, based on
+  main `a3dcc37` / application 4.7.0; preparing 4.7.1.
+- **State:** implementation and scoped verification complete: nine backend cases,
+  126 frontend cases, static checks, synthetic contention and standalone/native browser
+  downloads pass. Final full Windows run has one pre-existing planner assertion failure,
+  also reproduced on main; no scheduler change. Normal full Linux CI on the actual
+  integrated release revision must pass before publication. No live access/deployment.
+- **Evidence/next:** external `checkpoints/arch-030/implementation.md`, stress report,
+  native download hashes and `planner-baseline-limitation.md`. Finish package/remote CI,
+  integrate in version order while preserving shared drafts, then publish 4.7.1.
+
+
 ## External development storage migration — 13 November 2026
 
 AUTHORIZED in Setup V2: external development storage, verified migration of local

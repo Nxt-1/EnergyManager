@@ -3741,6 +3741,200 @@ household value. At the deadline, on startup without a prior valid observation, 
 other critical-input failures, normal visible error/invalidation rules apply immediately.
 Recovery from a brief mismatch resumes the existing plan subject to every normal guard.
 
+## Diagnostics and data export
+
+### Planning dataset export (ARCH-030)
+
+Implemented in **4.7.1** after the user's 13 November 2026 authorization.
+The browser workflow replaces the proposed one-off CLI extraction route. It does not
+select a scheduler architecture or authorize prototype work. Verification and operational
+limits are in VERIFICATION.md and RUNBOOK.md; live installation behavior is unverified.
+
+#### Outcome and user workflow
+
+Add a top-level **Diagnostics** tab to both the standalone dashboard and the managed
+native HA dashboard, using the shared UI implementation. The initial feature is
+**Planning dataset**; existing EV diagnostics and decision/incident views need not move.
+The user must be able to obtain the dataset entirely through the browser, without
+SSH, Docker commands, filesystem paths or a database client.
+
+1. **Check available history** starts a background coverage job. Show its stage and
+   allow cancellation. Opening the tab or ordinary state polling must not start scans.
+2. Show available dates, counts by data type/event kind and decision disposition,
+   database size, coverage capture time and missing/unsupported data. Provide
+   **Download coverage** as a small JSON file, independently of any dataset export.
+3. Select a start and end in the installation timezone, shown beside the controls.
+   Default to the latest seven days with recorded data, clipped to available history;
+   the user can select a longer contiguous period or all available history. Clearly
+   show the resolved start/end and duration. Handle ambiguous/nonexistent DST times
+   explicitly. Use a half-open UTC interval [start,end) throughout the backend.
+4. **Prepare dataset** starts one background export. Show stages such as Preparing,
+   Reading history and Packaging; show record/byte progress when known, without an
+   invented percentage or ETA. Offer Cancel. Reopening the tab restores job status.
+5. When ready, show actual archive size, included dates and completeness warnings,
+   then **Download dataset** as one ZIP file. Empty periods and failures have clear
+   explanations and permit another selection. Do not silently shorten a request.
+
+Coverage counts describe stored records, not continuity. Include compact daily counts
+and observed gaps for measurement/observation series where timestamps permit them;
+report the gap threshold and timestamp basis. Preserve missing/unknown values rather
+than treating gaps as zero. Distinguish event recording time from body observation time.
+Never infer a complete historical forecast archive from overwritten current state.
+
+#### Dataset contract (format version 1)
+
+Use a ZIP with UTF-8 JSON/JSONL members, streamed from disk. CSV is not the primary
+format because observations, forecasts, execution context and decisions are nested.
+Include these logical components; implementation may choose member naming consistently:
+
+- `manifest.json`: format version, exporting application version, source SQLite schema
+  fingerprint, installation timezone, requested UTC/local range, capture metadata,
+  selection rules, per-member counts/ranges/SHA256, exclusions, validation failures
+  and explicit completeness limitations. Exporting version is not assumed to be the
+  version that produced historical records. Do not invent missing producer versions.
+- `coverage.json`: compact inventory and selected-period coverage from the export's
+  own consistent snapshot. The earlier UI coverage may differ as new data arrives;
+  identify each capture separately.
+- `events.jsonl`: observations, measurements, command intent, protective commands,
+  actuator outcomes, planning lifecycle, goal changes, permissions, hardware-control
+  changes and relevant EV progress/fault/recovery events. Retain source sequence,
+  kind, recording timestamp and supported payload fields, including measurement
+  timestamps, units, quality, source identity and actual command outcome where stored.
+  Command intent must remain distinguishable from service success and physical delivery.
+- Decision index and per-decision snapshot/result JSON: all stored dispositions in
+  the selected recording-time interval, including rejected attempts. Preserve full
+  input horizon, forecasts as used, goals, permissions, capabilities/policy, execution
+  context, result, disposition, identity and original input digest. Support both old
+  text and zlib archives. Retain original decoded JSON bytes for digest-bearing
+  snapshots; do not round floats or rewrite their serialization. Verify the original
+  digest and record corrupt/unsupported evidence as an explicit omission, not valid replay.
+- Time-selected `load_samples` and `background_samples`, preserving native resolution,
+  units, source and quality. Inventory other tables but exclude unrelated appliance
+  recordings/configuration from this first planning export, stating those exclusions.
+- Separately labelled **boundary context**: latest accepted decision before start,
+  latest available pre-start observation/measurement context, and recorded goal,
+  permission and execution changes needed to interpret the boundary. Include changes
+  between that baseline and start, and follow referenced predecessor decisions when
+  needed for retained execution profiles. Deduplicate by source identity. If no
+  baseline exists, report that gap; do not substitute today's state for historical state.
+
+Select events by recording time, additionally including measurements/observations
+whose own valid observation time is in range even if recorded outside it. Deduplicate
+and label this reason. Samples use their own timestamp; decision snapshots retain
+their complete horizon, not a date-trimmed forecast. Invalid timestamps are counted
+and reported. Boundary records are clearly outside the requested evaluation period.
+Document these rules so a downstream reader can reproduce selection and ordering.
+
+The archive is historical evidence, not a claim of complete counterfactual replay.
+Report absent initial runtime state, unavailable forecast revisions, missing fields
+and unresolved references. Do not reconstruct forecasts from future actuals, invent
+measurements or impose historical EV/ESS stocks on alternative scheduling outcomes.
+
+#### Consistency, execution and access
+
+Use the SQLite online backup API through a separate read-only source connection to
+obtain a consistent private temporary snapshot, then query/package that snapshot.
+Do not initialize `Store` on the source, copy only the active main database file,
+stop/restart the app, checkpoint/vacuum the live database or share its control-loop
+connection. Capture timestamps bound the backup operation; do not claim that its
+snapshot necessarily represents the instant the user clicked. Inspect the captured
+schema and support known older records, reporting unsupported schemas explicitly.
+
+Run backup, scans, decompression, hashing and compression outside the asyncio/control
+loop, with bounded memory and incremental I/O. Use one shared active diagnostics job
+at a time; duplicate/retried requests must not create competing jobs. Coverage is also
+a job. Job status contains only compact metadata, never the dataset. Export does not
+use a solver slot, request a replan or change operational state. Separate worker
+execution alone is not proof of acceptable resource contention: verify under load.
+
+Check temporary-disk headroom for the full snapshot plus output, including retained
+artifacts, before starting; enforce a documented reserve while writing. Bound runtime
+and work buffers, and make cancellation effective during backup, scans and packaging.
+Choose and document engineering resource limits during implementation, without adding
+user tuning controls. If space/time limits are exceeded, fail clearly and remove
+partial files; never produce a silently truncated success. Keep completed artifacts
+for24hours, show their expiry, and allow explicit removal of export artifacts only.
+Protect active downloads from expiry cleanup. Clean failed/cancelled jobs immediately
+and orphaned files after restart; report interrupted jobs rather than resuming blindly.
+
+All job/status/coverage/download/cancel/delete routes must use the existing
+same-origin/local-or-authenticated-ingress access boundary and native ingress-base
+discovery. Use opaque job IDs, fixed managed temporary paths and no-store attachment
+responses. Do not accept arbitrary file paths, SQL or database names from the browser.
+The archive and intermediate snapshot stay private; only the filtered archive is
+downloadable. No upload, import, restore or remote sharing is included.
+
+Use an explicit export schema for event kinds/fields. Exclude credentials, tokens,
+installation configuration files, raw external HTTP payloads and unrelated notification
+content; do not dump the `state` table or unrestricted event bodies. Coverage lists
+unknown/excluded kinds and counts. Review legacy free-text errors for embedded secrets.
+Preserve planning-relevant identifiers, timestamps and numerical evidence rather than
+claiming anonymization. If a historical decision contains sensitive unsupported content,
+exclude it with an explicit reason; never redact a snapshot while presenting its old
+digest as valid. Include a short UI note that datasets contain household operation data.
+
+#### Implementation starting points and completion criteria
+
+Current integration points: `web.py` owns access and decision-download routes;
+`store.py` defines archive encoding and SQLite schema; `dashboard.py` and shared
+dashboard assets own standalone/native navigation. Add a dedicated diagnostics/export
+component rather than growing control-loop responsibilities. Concrete route names and
+worker layout are implementation choices. Update the runbook with the browser-only
+workflow, archive format, retention and limitations; record checks in VERIFICATION
+and the task checkpoint. Follow the repository's code-writer and release instructions.
+
+Complete when offline verification demonstrates:
+
+- From either dashboard, Check history → select dates → Prepare → Download yields a
+  usable archive; desktop/mobile layouts, cancellation, errors, reopening, expiry and
+  native ingress download are exercised. No console step is required.
+- Deterministic fixtures cover multiple days, all dispositions, compressed/legacy
+  decisions, pre-window accepted context and mutations, forecast horizons, late/out-of-
+  order events, gaps, empty periods, DST boundaries, corrupt records and absent context.
+  Counts, selection, member hashes and original snapshot digests verify independently.
+- A synthetic multi-day database with millions of events, concurrent writes and
+  realistically sized decision archives yields consistent evidence without bulk memory
+  loading. Record dataset/disk sizes, duration, peak memory, API responsiveness and
+  control-tick delay with/without export. Fail the check if configured control cadence
+  is missed because of diagnostics; do not claim installation performance from fixtures.
+- Low disk, worker failure, restart, duplicate jobs, cancellation and simultaneous
+  download/cleanup leave no corrupt ready artifact or unmanaged temporary files.
+  Unauthorized access, path manipulation and planted secrets in current/legacy data
+  are checked. Unknown schemas/kinds and omissions remain visible in coverage/manifest.
+- Fake HA/actuator tests establish no export-induced commands, notifications, replans,
+  source writes or authority changes, while existing control remains operational.
+  Existing relevant backend/frontend and release checks pass.
+
+Out of scope: Influx integration/migration (ARCH-029), a general database browser,
+automatic recurring exports, new historical collection, scheduler changes, prototype
+comparison, live installation verification and deployment. The13November2026 request
+authorizes the registered chat to implement this package and deliver a ready release
+under repository rules; it does not authorize these excluded activities.
+
+#### Engineering limits and retained artifacts (4.7.1)
+
+Diagnostics owns a separate worker, private read-only source connection and pinned read
+transaction for SQLite online backup. This prevents continuous WAL writes from restarting
+the capture indefinitely. Control/planning connections and operational authority are unchanged.
+All selection, validation, omission, retention and browser contracts above apply.
+
+One active job, 30-minute runtime, 32 MiB decoded-record limit, 256 KiB packaging buffers,
+4 MiB SQLite page cache and a 256 MiB free-disk reserve bound the worker. Initial headroom
+is three times main-database plus WAL bytes, plus that reserve; retained files already
+consume reported free space. Expansion can exceed this estimate, so reserve checks continue
+while backing up/scanning/packaging and fail with cleanup rather than truncate output.
+Additional catalog bounds are 100,000 selected/referenced decisions, 1,000 event kinds,
+2,000 omission categories, 36,600 daily buckets per series and 16 completed artifacts.
+Exceeding a bound fails visibly; there is no automatic shortening or user tuning control.
+
+Completed artifacts remain available for 24 hours, including across validated restart.
+New jobs preserve earlier artifacts; the UI lists their downloads and removal controls.
+Expiry cleanup runs every 30 seconds and skips active downloads; expired links reject
+immediately. Incomplete/orphaned jobs are removed after restart and reported interrupted,
+never resumed. Only filtered ZIP/coverage attachments are exposed, never private snapshots.
+Daily counts use UTC dates and series gaps use valid own observation/sample timestamps
+with a 300-second threshold; recording times remain separately preserved.
+
 ## Maintaining the architecture and continuing work
 
 Keep this document current when an agreed requirement, formula, component contract or

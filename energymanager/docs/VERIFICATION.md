@@ -1,5 +1,46 @@
 # EnergyManager 4 verification
 
+## 4.7.1 — Diagnostics planning dataset (ARCH-030)
+
+All history, databases, endpoints and downloads here are labelled synthetic/local. No live
+HA/database, hardware, real notification or installation deployment was accessed.
+
+- Nine focused Python tests pass, covering exact legacy/zlib bytes and digests, independent
+  ZIP member hashes, recording/observation-time selection and deduplication, all stored
+  dispositions, full horizons, accepted/boundary/predecessor context, gaps, missing context,
+  corrupt/sensitive records, unknown schema/kinds/fields, empty periods, source immutability,
+  access/path rejection, duplicate jobs, cancellation, worker failure, runtime/disk limits,
+  restart/retention and simultaneous download/expiry protection. A reserve failure during
+  packaging removes the partial ZIP. No export-induced events/authority mutation occurs.
+- 126 frontend cases pass; the native strategy includes Diagnostics and shared controls.
+  DST repeated times require an occurrence and skipped times reject; exact captured bounds,
+  discovered ingress paths, expired/failed/cancelled views and human actions during polling
+  have regression coverage. Browser checks exercise standalone coverage/ZIP download,
+  native Check history → All available → Prepare → Download, cancellation, reopening and
+  restart restoration, plus desktop/mobile layout. The actual native browser-saved ZIP is
+  30,158,031 bytes; every member hash verifies independently. Compact evidence is external
+  `checkpoints/arch-030/native-browser-download.json`.
+- Synthetic contention fixture: 2,000,000 events over seven days, 60 decision archives with
+  425,095 decoded bytes per snapshot, a 510,914,560-byte source and concurrent commits.
+  Export produced 30,138,301 bytes in 49.30 s; peak process memory was 128,307,200 bytes.
+  API maximum was 36.1 ms during export (17.4 ms baseline). Actual fake-actuator control
+  ran 49 ticks, maximum 1.044 s (1.028 s baseline), passing the 1.1 s gate at 1 s configured
+  cadence. 998 concurrent commits completed; source revision stayed unchanged, no export-
+  induced replan occurred, and 2,000,000 selected source events were counted independently.
+  This establishes synthetic contention behavior, not installation performance.
+- Configured and routed local fake-HA E2E runs pass, including real full-horizon planning,
+  independent control, cancellation/adoption and persistence/recovery. Ruff and mypy pass;
+  wheel/source package verification is recorded in the external checkpoint.
+- **Known local limitation:** the final full Windows run passed 902 and failed the existing
+  running-task allowance/handover assertion `second['valid']` under its 16 s solver budget.
+  An explicit import of unchanged main source reproduces that assertion with previews
+  stopped. The earlier full run passed 900; do not describe the final local suite as green.
+  No scheduler behavior/tests were changed. Exact assertion, baseline/environment and
+  solver evidence: external `checkpoints/arch-030/planner-baseline-limitation.md`.
+  Normal full Linux CI on the actual integrated release revision remains the release gate;
+  subsequent remote results belong in the external checkpoint and final delivery report.
+
+
 ## 4.7.0 — Local EV trip calendar (ARCH-022)
 
 Based on released4.6.12/1befc16. All new stores, OAuth/Calendar/Places/Routes endpoints,

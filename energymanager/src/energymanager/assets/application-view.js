@@ -1,3 +1,4 @@
+import {DiagnosticsPage} from './diagnostics.js';
 import {ApplianceProfilesPage} from './appliance-profiles.js';
 import {
   SettingsPage
@@ -112,6 +113,7 @@ export async function mountApplication(root, options = {}) {
   const measured = (content, key, label, className = 'history-reading') => historyReading(content, sourceIds(key),
     {native: options.native, demo: state.demo, label, className});
   const profilesPage = new ApplianceProfilesPage($('profiles-panel'), api, lifecycle.signal, {native: options.native});
+  const diagnosticsPage = new DiagnosticsPage($('diagnostics-panel'), api, lifecycle.signal, options.downloadUrl);
   const settingsPage = new SettingsPage($('settings-panel'), api, lifecycle.signal);
   const dateTimePicker = new DateTimePicker(() => state.policy.timezone, () => state.now, root);
   const evPage = new EVSchedulePage($('ev-panel'), {
@@ -402,15 +404,17 @@ export async function mountApplication(root, options = {}) {
     $('ev-fault-banner').innerHTML = faultText ? `<strong>${['pending','rebooting','verifying'].includes(fault.status) ? 'EV recovery in progress' : 'EV charging needs attention'}</strong><button data-incident="${esc(fault.id)}">Incident details & logs</button>${fault.status === 'unresolved' ? ` <button data-ack-incident="${esc(fault.id)}">Acknowledge after diagnosis</button>` : ''}` : '';
     $('app-version').textContent = ` ${state.version}`;
     if (!options.native) document.title = `EnergyManager · ${state.version}`;
-    $('dashboard').hidden = ['settings', 'ev', 'profiles'].includes(page);
+    $('dashboard').hidden = ['settings', 'ev', 'profiles', 'diagnostics'].includes(page);
+    $('diagnostics-panel').hidden = page !== 'diagnostics';
+    diagnosticsPage.setVisible(page === 'diagnostics');
     $('profiles-panel').hidden = page !== 'profiles';
     profilesPage.timezone = state.policy.timezone;
     profilesPage.setVisible(page === 'profiles');
     $('ev-panel').hidden = page !== 'ev';
     $('settings-panel').hidden = page !== 'settings';
     $('native-setup').hidden = !!options.native || page !== 'settings';
-    for (const name of ['overview', 'planning', 'ev', 'profiles', 'settings']) {
-      $(name).setAttribute('aria-selected', String(page === name));
+    for (const name of ['overview', 'planning', 'ev', 'profiles', 'settings', 'diagnostics']) {
+      $(name === 'diagnostics' ? 'diagnostics-tab' : name).setAttribute('aria-selected', String(page === name));
     }
     $('connection').textContent = (state.provenance.startsWith('SYNTHETIC') ? 'SYNTHETIC · ' : '') + (state.status === 'planning' ? '● Calculating · control responsive' : state
       .status === 'ready' ? '● Plan ready' : '● ' + state.status);
@@ -418,7 +422,7 @@ export async function mountApplication(root, options = {}) {
       `${state.control_enabled ? 'Hardware control enabled' : 'Hardware control disabled'} / Forecasts and planned costs are estimates.`;
     (options.native ? root.host : document.body).classList.toggle('planning', page === 'planning');
     $('live').hidden = !!options.hideLive;
-    if (page === 'settings' || page === 'profiles') return;
+    if (['settings', 'profiles', 'diagnostics'].includes(page)) return;
     if (page === 'ev') {
       evPage.render(state);
       if (pendingTrip) {
@@ -752,7 +756,7 @@ export async function mountApplication(root, options = {}) {
     render();
     if (name === 'settings') settingsPage.show();
   }
-  for (const name of ['overview', 'planning', 'ev', 'profiles', 'settings']) $(name).onclick = () => showPage(name);
+  for (const name of ['overview', 'planning', 'ev', 'profiles', 'settings', 'diagnostics']) $(name === 'diagnostics' ? 'diagnostics-tab' : name).onclick = () => showPage(name);
   $('back').onclick = () => {
     graphCursor.cancelNavigation();
     pointerHeld = false;
@@ -952,7 +956,7 @@ export async function mountApplication(root, options = {}) {
   };
   $('history-list').onclick = openDecision;
   $('approvals').addEventListener('click', openDecision, {signal: lifecycle.signal});
-  if (!options.native) page = ['#planning', '#ev', '#profiles', '#settings'].includes(location.hash) ? location.hash.slice(1) : 'overview';
+  if (!options.native) page = ['#planning', '#ev', '#profiles', '#settings', '#diagnostics'].includes(location.hash) ? location.hash.slice(1) : 'overview';
   await refresh(true);
   if (page === 'settings') await settingsPage.show();
   const timer = setInterval(refresh, 2000);
