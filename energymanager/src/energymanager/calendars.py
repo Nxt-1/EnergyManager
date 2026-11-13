@@ -100,7 +100,7 @@ async def fetch_calendar(url: str) -> bytes:
     raise ValueError("Calendar redirected too many times")
 
 
-def parse_calendar(body: bytes, now: datetime, timezone: str) -> tuple[list[dict[str, Any]], int]:
+def parse_calendar(body: bytes, now: datetime, timezone: str, *, finite: bool = False) -> tuple[list[dict[str, Any]], int]:
     """Expand timed occurrences for 90 days; all-day entries have no departure time."""
     if len(body) > MAX_BYTES or not body.lstrip().startswith(b"BEGIN:VCALENDAR"):
         raise ValueError("The link did not return an iCalendar feed")
@@ -131,12 +131,12 @@ def parse_calendar(body: bytes, now: datetime, timezone: str) -> tuple[list[dict
             skipped += 1
             if skipped > 1000:
                 raise ValueError("Calendar contains too many all-day occurrences")
-            if at > end.date():
+            if not finite and at > end.date():
                 break
             continue
         at = at.replace(tzinfo=zone) if at.tzinfo is None else at
         at = at.astimezone(UTC)
-        if at >= end:
+        if not finite and at >= end:
             break
         if at + timedelta(days=1) <= now or str(component.get("STATUS", "")) == "CANCELLED":
             continue
@@ -154,6 +154,32 @@ def parse_calendar(body: bytes, now: datetime, timezone: str) -> tuple[list[dict
     if len(set(identities)) != len(identities):
         raise ValueError("Calendar contains duplicate event identities")
     return events, skipped
+
+
+def parse_known_calendar(body: bytes, now: datetime, timezone: str) -> tuple[list[dict[str, Any]], int]:
+    """All finite source matches; unending rules expand only the rolling source window."""
+    if len(body) > MAX_BYTES or not body.lstrip().startswith(b"BEGIN:VCALENDAR"):
+        raise ValueError("The link did not return an iCalendar feed")
+    calendar = Calendar.from_ical(body)
+    unbounded = set()
+    for event in calendar.walk("VEVENT"):
+        rule: Any = event.get("RRULE", {})
+        if rule and not any(rule.get(key) for key in ("COUNT", "UNTIL")):
+            unbounded.add(str(event.get("UID")))
+    finite_calendar, rolling_calendar = Calendar(), Calendar()
+    for key, value in calendar.items():
+        finite_calendar[key] = value
+        rolling_calendar[key] = value
+    for component in calendar.subcomponents:
+        if component.name != "VEVENT":
+            finite_calendar.add_component(component)
+            rolling_calendar.add_component(component)
+        else:
+            target = rolling_calendar if str(component.get("UID")) in unbounded else finite_calendar
+            target.add_component(component)
+    known, skipped = parse_calendar(finite_calendar.to_ical(), now, timezone, finite=True)
+    rolling, ignored = parse_calendar(rolling_calendar.to_ical(), now, timezone)
+    return known + rolling, skipped + ignored
 
 
 class CalendarSync:
@@ -192,9 +218,11 @@ class CalendarSync:
                 try:
                     body = await fetch_calendar(source["url"])
                     events, skipped = await asyncio.to_thread(
-                        parse_calendar, body, self.application.now(), self.application.policy.timezone)
+                        parse_known_calendar if self.application.trips.data["enabled"] else parse_calendar,
+                        body, self.application.now(), self.application.policy.timezone)
                     self.cache[identity] = {"events": events, "skipped": skipped, "error": None,
                                             "last_success": self.application.now().isoformat(),
+                                            "all_known": self.application.trips.data["enabled"],
                                             "fingerprint": sha256(source["url"].encode()).hexdigest()}
                 except (aiohttp.ClientError, TimeoutError, ValueError, TypeError, KeyError, OverflowError):
                     # URLs may contain subscription secrets. Never expose exception URLs or feed bodies.
@@ -204,6 +232,32 @@ class CalendarSync:
 
     def reconcile(self) -> None:
         app = self.application
+        if app.trips.data["enabled"]:
+            canonical: dict[tuple[str,str],dict[str,Any]] = {}
+            complete = bool(self.sources)
+            for source in self.sources:
+                cached = self.cache.get(source["id"], {})
+                complete = complete and bool(cached.get("all_known")) and not cached.get("error")
+                for event in cached.get("events",[]):
+                    occurrence = (event["uid"],event.get("recurrence_id",""))
+                    legacy = "calendar-" + sha256(f"{source['id']}:{event['key']}".encode()).hexdigest()[:32]
+                    if occurrence not in canonical:
+                        canonical[occurrence] = {**event,"source_label":source["label"],"legacy_ids":[]}
+                    canonical[occurrence]["legacy_ids"].append(legacy)
+            app.trips.sources("referee",list(canonical.values()),bool(complete))
+            # Only legacy subscribed representations are retired. Manual/routed user
+            # goals remain untouched; the local drive store owns replacement goals.
+            replaced = {identity for key,match in app.trips.data["matches"].items() if not match.get("regenerate")
+                        for identity in match["event"].get("legacy_ids",["calendar-"+key])}
+            retained = tuple(goal for goal in app.goals if goal.id not in replaced)
+            if app.journeys:
+                app.journeys.retain_calendars(set(app.journeys.requests) - replaced)
+            if app.goals != retained:
+                app.goals = retained
+                app.store.put("goals", retained)
+                app.changed("calendar_drive_ownership", ev=True)
+            app.trips.project()
+            return
         old_goals = {goal.id: goal for goal in app.goals}
         managed: list[Goal] = []
         metadata = {}

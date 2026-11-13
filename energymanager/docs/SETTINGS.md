@@ -1,5 +1,20 @@
 # Settings and hardware control
 
+## EV calendar connection (4.7.0)
+
+EV → Calendar connection manages the Google OAuth web client, exact public callback/
+push URLs, authorization, dedicated writable EV calendar and visible read-only calendars.
+Trips, recurrence, mappings, tombstones and queued edits live in the application database.
+OAuth tokens/client secret remain server-side and are not returned by status/settings
+downloads. Blank secret retains the saved value; changing client/callback requires
+authorization again. Disconnect keeps local trips and Google events. Calendar switching
+is rejected rather than silently migrating or duplicating records. See RUNBOOK.md.
+
+Routes and Places use the existing Maps key; changing it permits required route retries
+without restart. Required API access, permissions and billing are installation facts,
+not established by saving the settings. Calendar uses separate OAuth authorization.
+No live or paid validation probe is automatic.
+
 ## Manual EV reference (4.6.11)
 
 Manual SoC is confirmed on the EV page, not an installation configuration override.

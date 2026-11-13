@@ -53,6 +53,7 @@ export async function mountApplication(root, options = {}) {
   let dailyEnergy = null, energyRequestedAt = 0, energyDay = null, energyLoading = false;
   const graphModels = {};
   let incidentReport = null;
+  let pendingTrip = options.openTrip;
   let selectedRange = null;
   let connectionError = null;
   const statePoller = new StatePoller(api);
@@ -112,7 +113,10 @@ export async function mountApplication(root, options = {}) {
     {native: options.native, demo: state.demo, label, className});
   const profilesPage = new ApplianceProfilesPage($('profiles-panel'), api, lifecycle.signal, {native: options.native});
   const settingsPage = new SettingsPage($('settings-panel'), api, lifecycle.signal);
+  const dateTimePicker = new DateTimePicker(() => state.policy.timezone, () => state.now, root);
   const evPage = new EVSchedulePage($('ev-panel'), {
+    api,
+    dateTimePicker,
     add: kind => openGoal(null, kind),
     edit: id => openGoal(state.goals.find(goal => goal.id === id)),
     goal: id => showGoalDetail(id),
@@ -141,7 +145,6 @@ export async function mountApplication(root, options = {}) {
       await refresh(true);
     }
   });
-  const dateTimePicker = new DateTimePicker(() => state.policy.timezone, () => state.now, root);
   dateTimePicker.bind($('goal-form').elements.deadline, 'Deadline / departure', true);
   dateTimePicker.bind($('goal-form').elements.return_at, 'Return time');
   dateTimePicker.bind($('goal-form').elements.arrival, 'Desired venue arrival');
@@ -418,6 +421,12 @@ export async function mountApplication(root, options = {}) {
     if (page === 'settings' || page === 'profiles') return;
     if (page === 'ev') {
       evPage.render(state);
+      if (pendingTrip) {
+        const intent = pendingTrip;
+        pendingTrip = null;
+        const drive = state.trip_calendar?.trips.find(item => item.id === intent.id && !item.deleted);
+        if (!intent.id || drive) evPage.tripCalendar.open(drive || null);
+      }
       planningActivity.render();
       return;
     }
@@ -576,6 +585,16 @@ export async function mountApplication(root, options = {}) {
   }
 
   function openGoal(goal, kind = 'manual') {
+    if (goal?.id?.startsWith('drive-') || !goal && kind === 'trip') {
+      const drive = state?.trip_calendar?.trips.find(item => 'drive-' + item.id === goal?.id);
+      if (options.native && options.navigate && page !== 'ev') {
+        options.navigate('ev', {id:drive?.id || null});
+        return;
+      }
+      if (page !== 'ev') showPage('ev');
+      evPage.tripCalendar.open(drive || null);
+      return;
+    }
     const routed = state?.routes?.items.find(item => item.id === goal?.id);
     if (goal?.calendar && !routed) { showGoalDetail(goal.id); return; }
     if (!state) return;
@@ -622,6 +641,11 @@ export async function mountApplication(root, options = {}) {
   }
 
   function showGoalDetail(id) {
+    if (id.startsWith('drive-')) {
+      const goal = state.goals.find(item => item.id === id);
+      if (goal) openGoal(goal);
+      return;
+    }
     const routed = state.routes?.items.find(item => item.id === id);
     if (routed) { openGoal(state.goals.find(item => item.id === id) || {id, title: routed.title, kind: 'trip', priority: routed.priority}); return; }
     const goal = state.goals.find(goal => goal.id === id) || state.schedule_goals.find(goal => goal.id === id);
@@ -783,7 +807,12 @@ export async function mountApplication(root, options = {}) {
   $('new-goal').onclick = () => openGoal();
   $('close-dialog').onclick = $('cancel-dialog').onclick = () => $('goal-dialog').close();
   $('close-detail').onclick = () => $('detail-dialog').close();
-  $('goal-form').elements.kind.onchange = toggleKind;
+  $('goal-form').elements.kind.onchange = () => {
+    const form = $('goal-form');
+    if (form.elements.kind.value === 'trip' && !form.elements.id.value) {
+      $('goal-dialog').close(); openGoal(null, 'trip');
+    } else toggleKind();
+  };
   $('goal-form').elements.destination.oninput = toggleKind;
   $('goal-form').elements.route_override.onchange = toggleKind;
   $('goal-form').onsubmit = async event => {

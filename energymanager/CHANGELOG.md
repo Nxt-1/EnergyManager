@@ -1,3 +1,15 @@
+## 4.7.0 — Local EV trips and Google Calendar editing
+
+- Own FullCalendar Standard workspace with read-only appointments, editable drives,
+  endpoint search, the shared date/time picker, weekly recurrence and independent reverse drives.
+- Durable local trip ownership, queued bidirectional Google changes, OAuth setup,
+  validated push/channel renewal and periodic reconciliation without requiring connectivity for local edits.
+- Separate referee outward/return legs, source-change regeneration, deletion suppression
+  and confirmed removal after source disappearance; existing referee withdrawals are replaced once.
+- Preserve manual times/km, last-good invalid-route projections, warning deduplication
+  and existing control gates. Planned absence continues until home return; observed home plug-in overrides it.
+- Calendar/account, billing, OAuth and reverse-proxy installation verification remain separate from offline release checks.
+
 ## 4.6.12 — EV stock continuity and running-task corrections
 
 - Accept changed valid vehicle SoC and replan remaining work while preserving valid charging and pending charger acknowledgements.

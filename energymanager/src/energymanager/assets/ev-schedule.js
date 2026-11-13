@@ -6,6 +6,7 @@ import {journeyEnergyKwh, powerText} from './display.js';
 import {evControlActivityModel, evStatusMarkup} from './ev-status.js';
 import {hasTextSelection} from './text-selection.js';
 import {ManualSoC} from './manual-soc.js';
+import {TripCalendarPage} from './trip-calendar.js';
 
 const hour = 3600000;
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -140,6 +141,7 @@ export class EVSchedulePage {
   constructor(root, actions) {
     this.root = root;
     this.entities = actions.entities;
+    this.tripCalendar = actions.tripCalendar || new TripCalendarPage(actions.api, actions.dateTimePicker);
     this.manual = new ManualSoC(root, body => actions.manual(body), () => this.updateStatus(this.state));
     this.selectedDate = null;
     this.phaseChanging = false;
@@ -188,7 +190,8 @@ export class EVSchedulePage {
               behavior: 'smooth'
             });
         }
-        if (button.dataset.evAdd) actions.add(button.dataset.evAdd);
+        if (button.dataset.evAdd === 'trip') this.tripCalendar.open();
+        else if (button.dataset.evAdd) actions.add(button.dataset.evAdd);
         if (button.dataset.evGoal) actions.goal(button.dataset.evGoal);
         if (button.dataset.evSession) actions.session(button.dataset.evSession);
         if (button.dataset.evEdit) actions.edit(button.dataset.evEdit);
@@ -209,8 +212,10 @@ export class EVSchedulePage {
   }
 
   render(state) {
+    const calendarScroll = [...this.tripCalendar.root?.querySelectorAll?.('.fc-scroller') || []]
+      .map(element => ({element, top:element.scrollTop, left:element.scrollLeft}));
     const calendarExpanded = this.root.querySelector('.calendar-sync')?.open;
-    if (this.manual.focused || this.manual.busy) {
+    if (this.manual.focused || this.manual.busy || this.tripCalendar.busy) {
       this.deferredRender = true;
       this.updateStatus(state);
       return;
@@ -334,6 +339,12 @@ export class EVSchedulePage {
       <div class="ev-calendar-scroll" tabindex="0" aria-label="Seven-day EV calendar; scroll horizontally for all hours"><div class="ev-calendar-days">${calendar}</div></div>
       <p class="subtle">Only the next 168 hours are shown. Away periods come from entered or subscribed calendar journeys. An unknown return stays away; no routine driving or charging away is assumed.</p></article>
       <aside class="card ev-agenda"><h2>${dateLabel(selectedDay.date)}</h2>${agenda || '<p class="empty">No journeys, requirements or planned charging in this part of the day.</p>'}<div class="actions"><button class="recalculate-button" data-ev-replan="true"><span class="recalculate-symbol" aria-hidden="true">↻</span> <span data-recalculate-label>Recalculate</span></button></div><p class="subtle">Charging uses the shared EV/ESS plan. Open an item for details.</p></aside></div>`;
+    this.root.querySelector('.ev-status').after(this.tripCalendar.root);
+    this.tripCalendar.update(state);
+    if (calendarScroll.length) requestAnimationFrame(() => calendarScroll.forEach(({element,top,left}) => {
+      element.scrollTop=top; element.scrollLeft=left;
+    }));
+    this.root.querySelector('.ev-layout').hidden = !!state.trip_calendar?.enabled;
     if (focusAttribute)[...this.root.querySelectorAll(`[${focusAttribute}]`)]
       .filter(button => button.getAttribute(focusAttribute) === focusValue)[focusIndex]?.focus({
         preventScroll: true
@@ -347,6 +358,7 @@ export class EVSchedulePage {
 
   updateStatus(state) {
     this.state = state;
+    this.tripCalendar.update(state);
     this.manual.update(state);
     const card = this.root.querySelector('#ev-live-status');
     if (!card) return;
@@ -355,7 +367,7 @@ export class EVSchedulePage {
     const focusAttribute = card.contains(focused) ?
       ['data-ev-phase', 'data-ev-history', 'data-ha-entities', 'data-ev-sources', 'data-ev-manual-value', 'data-ev-manual-toggle'].find(name => focused.hasAttribute(name)) : null;
     const focusValue = focusAttribute ? focused.getAttribute(focusAttribute) : null;
-    if (this.deferredRender && !this.manual.focused && !this.manual.busy) {
+    if (this.deferredRender && !this.manual.focused && !this.manual.busy && !this.tripCalendar.busy) {
       this.render(state);
       return;
     }
@@ -392,6 +404,7 @@ export class EVSchedulePage {
   }
 
   dispose() {
+    this.tripCalendar.dispose();
     clearInterval(this.activityTimer);
   }
 }

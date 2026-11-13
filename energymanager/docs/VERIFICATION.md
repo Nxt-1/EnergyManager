@@ -1,5 +1,60 @@
 # EnergyManager 4 verification
 
+## 4.7.0 — Local EV trip calendar (ARCH-022)
+
+Based on released4.6.12/1befc16. All new stores, OAuth/Calendar/Places/Routes endpoints,
+HA readings and notification destinations used for these checks are labelled synthetic
+or local. No private calendar, paid request, actual HA/database, phone receipt, hardware,
+reverse-proxy deployment or installation commissioning was accessed.
+
+- Full888 Python cases pass247.51s. Current calendar/routing/settings/API focused cases
+  pass164/6.75s; final58 calendar/route cases pass0.71s after readable Google-marker and
+  token/empty-response checks.122frontend cases pass398.8ms; Ruff, mypy72 modules and
+  CLI4.7.0 pass. New API tests verify ordinary appointments create no EV requirements,
+  same-origin mutation boundaries and public push channel/resource/token validation.
+- Durable tests cover escaped From lines and the readable v1 marker, direct distance-only
+  creation, manual km/Use calculated distance, Google-time edits becoming fixed, manual
+  conflict precedence, lost insert response/restart identity, stale acknowledgements,
+  correction last-good state, invalid tokens/full-read deletion recovery and authorization
+  episode deduplication. Real HTTP adapters run against disposable fake OAuth/Calendar
+  endpoints, including native weekly masters and mapped instance edit/delete.
+- Source/route tests cover two independent referee legs,1hour early arrival/2.5hour
+  return departure, all-known distant finite events, bounded unending source rules,
+  near-term traffic only, deletion suppression/source-change restoration, source removal
+  confirmation and preserved unrelated/manual requirements. Withdrawal totals are checked
+  through a planner snapshot; away-to-away absence and persisted actual-home-return
+  override are exercised. Exactly10minutes does not warn; greater duration warns once
+  per human edit, with fixed manual times and manual km retained on ordinary refresh.
+- Standalone and native HA-contract browser previews were inspected on desktop and
+  phone-sized views. Week/day defaults, switcher, read-only appointment click, drive
+  movement and start/end resize, unsaved range selection/origin suggestion, Places search,
+  distance-only/weekly save, shared24hour picker, draft retention and queued disconnect/
+  reconnect edits passed. Fixed polling interference/scroll restoration and exposed resize
+  handles. Browser warning/error logs were empty. Previews use fake providers and disposable
+  stores; physical touch and the actual HA/proxy/account remain unverified.
+- Configured4.7.0 fake E2E passes2019intervals in25.535s, maximum control3.275ms,
+  four fake service calls, including solver cancellation/replacement, publication,
+  meter progress, switch-off protection and archive recovery. The earlier routed run
+  passed2023intervals/60.955s/max5.652ms/two imports/six route queries/four fake calls.
+  A later routed fixture reached Required's time limit without a feasible candidate.
+  Its frozen synthetic input reproduces that result on released4.6.12 in47.323s:
+  an existing planner limitation, not evidence of a calendar/control regression or
+  a reason to weaken validation. Original planner/charger recovery policy is unchanged.
+- Bundled MIT assets: FullCalendar Standard6.1.20, matching Luxon3 plugin6.1.20 and
+  Luxon3.7.2, served locally with licenses. Source/package parity and final packaging
+  results: all106 runtime source/assets match the wheel, isolated4.7.0 imports/assets pass.
+  The final rebuild includes the current documents/source; remote outcomes follow separately.
+
+Runtime contracts/setup are maintained in ARCHITECTURE.md, SETTINGS.md and RUNBOOK.md.
+Final confirmed-policy checks:25 calendar/source/API cases pass0.74s, including
+routing-disabled and routing-enabled referee feeds replacing duplicate legacy goals.
+Final122frontend cases pass403.9ms; rebuilt wheel/sdist both match106 runtime files.
+
+The user confirmed13November that new-mode activation supersedes the legacy referee
+routing checkbox; current all-feeds routing now matches the confirmed policy.
+Exact-head remote CI/publication results belong in the ignored release checkpoint and
+paired-chat/final report, without an optional verification-only commit.
+
 ## 4.6.12 — EV stock continuity and running corrections (EV-A012/A013)
 
 Based on released4.6.11/5b06141. All fixtures, stores, HA/actuator endpoints and commands

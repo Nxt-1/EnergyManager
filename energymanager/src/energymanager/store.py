@@ -78,6 +78,12 @@ class Store:
                 (datetime.now(UTC).isoformat(), kind, encode(body)),
             )
 
+    def put_states(self, values: dict[str, Any]) -> None:
+        """Commit related current-state records as one crash-recoverable mutation."""
+        encoded = [(key, encode(value)) for key, value in values.items()]
+        with self.connection:
+            self.connection.executemany("INSERT OR REPLACE INTO state VALUES (?,?)", encoded)
+
     def events(self, limit: int = 100) -> list[dict[str, Any]]:
         rows = self.connection.execute(
             "SELECT at,kind,body FROM events ORDER BY sequence DESC LIMIT ?", (min(1000, max(1, limit)),)

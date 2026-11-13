@@ -503,14 +503,35 @@ or that the documented energy limit overrides forced charging on installed firmw
 A full HA/host outage and an explicit control-Off/fault must retain defined behavior.
 No live hardware testing or implementation of offline continuation is authorized here.
 
-## ARCH-022 — Revisit EV trip calendar integration and bidirectional sync
+## ARCH-022 — EV trip calendar editing and bidirectional synchronization
 
-Recorded: 2 November 2026. Status: **deferred**, requested by the user.
+Recorded: 2 November 2026. Status: **implemented in4.7.0; live installation verification remains separate**.
+Confirmed requirements developed 10–12 November; user assigned V4.7 on 12 November.
 
-Revisit the EV trip calendar integration to address its issues and limitations, and
-consider bidirectional synchronization with the source calendar. The specific issues,
-supported calendar services, synchronization behavior and conflict handling remain to
-be established with the user. This entry does not authorize implementation.
+Store trips primarily in EnergyManager's local database; Google Calendar is a
+bidirectionally synchronized visualization/editing frontend. Future statistics are an
+idea only, not part of this implementation scope.
+Use a user-created dedicated Google calendar with direct API synchronization, push
+updates and periodic reconciliation. Create trips through HA with endpoint search;
+edit/delete in either HA or Google Calendar. Support separate actual-drive events,
+recurrence, reverse-drive creation, fixed/manual timing and referee-derived drives.
+Allow optional km overrides and distance-only home round trips with an entered away
+period, including same-endpoint drives. Show non-car appointments alongside trips
+with dragging/resizing as the main placement workflow; form remains for details.
+Use our own calendar view with selectable Google calendars: ordinary appointments
+read-only, EV drives draggable/resizable with our detail editor. This supersedes embedding.
+Referee changes regenerate drives; disappeared matches require confirmed removal.
+Preserve manual overrides during normal traffic refresh, handle outages locally and
+notify only for agreed changes/warnings/action needs. The calendar/detail-editor concept
+has been reviewed; technical contracts and installation details remain. Implementation
+readiness reviewed and scoped V4.7 implementation authorized 12 November. No manual-trip
+migration, statistics feature or Google iframe required.
+
+The single maintained requirements, public feasibility findings, consolidated scope,
+completion criteria and unresolved contracts are in
+[ARCHITECTURE.md](ARCHITECTURE.md#ev-trip-calendar-editing-arch-022-v47-implementation).
+See DECISIONS.md for confirmation context and WORK_STATE.md for this chat's checkpoint.
+This entry does not authorize application changes, live access or deployment.
 
 ## ARCH-023 — Complete energy and power breakdown
 

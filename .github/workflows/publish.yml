@@ -44,6 +44,7 @@ jobs:
 
       - name: Check V4 entry point and assets
         run: |
+          node --check energymanager/src/energymanager/assets/trip-calendar.js
           python -m energymanager --version
           node --check energymanager/src/energymanager/assets/app.js
           node --check energymanager/src/energymanager/assets/native-dashboard.js

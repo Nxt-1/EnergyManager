@@ -959,6 +959,533 @@ changed-URL sources cannot resurrect old cached journeys. Demo mode never fetche
 configured calendars. The EV schedule still displays168hours; longer imported events
 remain available for subsequent planning windows. No automatic driving history is learned.
 
+### EV trip calendar editing (ARCH-022; V4.7 implementation)
+
+Confirmed13November2026: enabling the new trip system supersedes the old per-feed
+routing checkbox. All configured referee feeds generate calculated outward/return
+drives, including feeds with routing unchecked. The checkbox applies only to the legacy
+system. Ordinary selected Google context calendars remain strictly read-only.
+
+V4.7 implementation status (13 November 2026): the scoped local-drive, direct
+Google synchronization, recurrence/referee and own-calendar package is implemented
+for4.7.0 with local verification complete; remote CI/publication is recorded separately. The later
+12 November assignment supersedes chronological design-only/unassigned wording below.
+No installation account, billing, proxy or hardware verification is claimed.
+
+
+Confirmed 10 November 2026: improve creation, deletion and adjustment of EV trips
+through a dedicated EV trips calendar. Allow edits in both Google Calendar and
+EnergyManager with bidirectional synchronization. Explore only calendars visible in
+Google Calendar; provider compatibility and write permissions remain unestablished.
+Each event represents one actual drive, with outward and return as separate events.
+Event start/end represent departure and expected arrival. EnergyManager automatically
+creates outward and return drive events from referee appointments, calculating both
+ends from routing. Keep the existing arrival target of 60 minutes before match start;
+the pending return default is departure 2.5 elapsed hours after match start, superseding
+the shipped two-hour default only when this scope is implemented. The user can move,
+shorten or lengthen either generated drive event. If the source match changes time
+or location, regenerate its drives even if manually adjusted and inform the user that
+this happened. If the match disappears, ask whether to remove its drives; retain them
+and their planning requirements unless the user confirms removal. Routine route-only
+refreshes preserve manually overridden departure and arrival times. Notify the user
+when calculated drive duration exceeds the manually allotted event duration by more
+than 10 minutes; exactly 10 minutes does not trigger this warning. The warning does
+not automatically change the event times. Deliver manual-duration warnings and
+match-change notices through the existing EnergyManager phone notification destination
+and an in-app notice. Send the duration warning once per trip and keep it visible
+in-app while applicable; editing the trip again allows a new warning if the threshold
+is exceeded. Routine refreshes do not repeatedly notify for that same edit. Repetition
+of match-change notices and pending-confirmation presentation remain open.
+Manually created drives support any user-selected origin and destination, including
+drives between two places away from home; do not assume every leg starts or ends at
+home. Suggest the previous drive's destination as origin, falling back to home;
+the user can override this suggestion.
+
+Confirmed 11 November: normal trip creation takes place in EnergyManager's HA
+interface, with place search for both endpoints rather than requiring full typed
+addresses. Google Calendar also supports adjustment and deletion. Direct creation
+there remains an advanced option requiring the complete event syntax. Use the built-in
+event Location as destination and a readable From: line in the event description for
+the origin. HA writes that line automatically from the selected origin; direct creation
+in Google Calendar requires the user to supply it. Exact parsing/serialization details
+remain to be specified. Moving a drive manually changes only that drive. Leave other drives
+untouched even if this creates overlaps or an inconsistent location sequence; the
+user accepts responsibility for that manual adjustment. Changing a drive's destination
+in Google Calendar also preserves its event times. Recalculate distance and required
+energy for the new destination and apply the existing more-than-10-minute duration
+warning rule; do not automatically resize or move the event.
+
+Confirmed 12 November invalid endpoints: if a Google Calendar event has a missing or
+unrecognizable origin/destination, mark it as needing correction without inventing a
+route. For an existing trip, retain its last valid planning data until corrected.
+A new event without valid endpoints has no invented planning route or energy estimate.
+Send one notification to the existing phone destination per invalid edit, alongside
+the in-app correction status; repeated synchronization of that edit must not resend it.
+
+Deleting an automatically generated referee drive keeps it deleted while its match
+remains in the source calendar; ordinary synchronization must not recreate it. Provide
+an always-available Regenerate action per match, including when its drives have been
+deleted. Explicit regeneration restores missing drives and regenerates/updates that
+match's trips. A later source-match time or location change automatically regenerates
+both drives, including deliberately deleted ones, and notifies the user under the
+match-change policy. Deletion suppression applies only while that source match is
+unchanged; it does not prevent this automatic regeneration.
+
+Confirmed 11 November conflict policy: resolve competing HA/Google Calendar edits
+automatically, without asking the user to select a version. Prefer a manual edit over
+an automatic system adjustment when distinguishable; when both edits are manual,
+the most recent wins. The explicit source-match time/location change policy remains
+an exception: regenerate both drives and notify, even after manual edits or deletion.
+Technical detection, ordering and fallback details remain to be specified.
+
+Confirmed 11 November recurrence: support creating recurring drives in the HA
+interface. For edits and deletion offer This drive and This and following drives;
+leave past occurrences unchanged. This refines the earlier entire-series deletion
+request: no separate action to delete past drives is needed. Initial recurrence
+supports every N weeks on selected weekdays, with an optional end date.
+
+Confirmed 11 November HA trip timing: offer Depart at (calculate arrival), Arrive by
+(calculate departure), and fixed start and end times supplied by the user. Fixed times
+remain user-controlled and use the agreed duration-warning policy. Manually moving
+or resizing a drive in Google Calendar switches that occurrence to fixed times;
+the user can restore Depart at or Arrive by in HA.
+
+Confirmed 12 November event titles: default to Drive to [city], with destination
+city filled automatically. For distance-only drives without a destination, use
+Drive · [distance] km. An optional custom-title field was proposed but not confirmed.
+
+Confirmed 12 November distance entry: the HA trip form supports an optional distance
+in km, both to override automatic route distance and to describe a drive without a
+location or a round trip whose origin/destination are identical. An entered nonzero
+distance must not collapse to zero merely because endpoints coincide. Without locations,
+assume departure from home and return home; entered start/end define the away period.
+Distance-only drives require both start and end times; there is no route from which to
+calculate the missing time.
+This explicit distance-only mode is valid, unlike a malformed routed event with missing
+endpoints. Do not invent a route duration or a calculated-duration warning where no
+route is known. The Google Calendar representation of distance-only mode and overrides
+must be defined alongside From: serialization. A manually entered distance stays
+fixed during ordinary automatic route refreshes until the user explicitly chooses
+Use calculated distance. This does not change the agreed source-match regeneration
+exception for referee drives.
+
+Confirmed 11 November referee endpoints: generated referee drives always default
+to home -> match and match -> home. Do not infer chaining or merge trips based on
+other scheduled destinations. This is separate from the origin suggestion for manually
+created drives. The user combines trips manually by changing endpoints or deleting
+and creating/replacing drives.
+
+Confirmed 11 November synchronization outage behavior: if Google Calendar is
+temporarily unavailable, continue planning from the last synchronized trips and allow
+local HA edits. Show a visible synchronization status with pending changes, then
+synchronize after connectivity returns under the agreed conflict policies. A failed
+calendar read is not evidence that trips or source matches were deleted.
+
+Confirmed 11 November calendar setup: the user creates the dedicated EV trips
+calendar in Google Calendar and selects it in EnergyManager. EnergyManager does not
+need to create that calendar during setup.
+
+Confirmed 11 November reverse-drive action: offer Add reverse drive, creating a
+separate event with origin and destination swapped. Initially place it immediately
+after the original drive, with an option to place it immediately before instead.
+Initially copy the original drive's event duration; a separate reverse-route duration
+calculation is not required to place the event. The user can then move it or edit its
+times; no ongoing timing link is specified. For a recurring drive, also offer creation
+of a recurring reverse series using the same recurrence schedule, rather than only a
+single reverse occurrence. After creation, outward and reverse drives/series are
+independent: editing or deleting one does not change the other. The source-match
+regeneration rules for automatically generated referee trips remain separate.
+
+Confirmed 11 November home identity: use the existing HA Home location as the
+home reference for trip endpoints, with a Home shortcut in the trip editor.
+
+Confirmed 11 November planned availability: after a drive ends away from home,
+assume the car remains away and unavailable for home charging until a later drive
+returns it home. Actual observed plug-in at the configured home charger overrides
+that inferred absence; a missing planned return must not prevent home charging when
+the car is actually plugged in. Existing measurement, charger, permission and control
+safety gates still apply; this does not authorize hardware actions during development.
+
+Confirmed 11 November publication horizon: create calendar drives for all known
+referee matches, independently of the seven-day charging-planning horizon. Do not
+impose the proposed 90-day calendar publication cap. For distant matches, publish
+provisional departure/arrival times using estimated travel duration. Restrict ongoing
+traffic-based route refreshes to the next seven days; do not repeatedly update distant
+events with traffic estimates. No provisional-travel-time note is needed in the
+calendar event. Refine automatic times within that window while
+preserving manual timing overrides under the agreed rules. The initial distant-trip
+estimate method and bounded handling of unending source recurrence remain technical
+questions; all known matches does not specify infinite recurrence expansion.
+
+Confirmed 11 November normal-operation notifications: ordinary automatic traffic
+time updates and successful routine synchronization are silent. Do not notify merely
+because normal system operation occurred. Retain the explicitly agreed source-match
+change notices and duration warnings. Temporary calendar connection outages appear
+in sync status without a phone notification. Send a phone notification when user action
+is needed, such as reauthorizing calendar access.
+
+Confirmed 12 November migration scope: do not implement copying existing manual
+trips into the dedicated Google calendar for this initial integration. The user reports
+no manual trips at present, not a guarantee that none will exist at connection time.
+This does not authorize deleting or overwriting any existing manual trips.
+
+Confirmed 12 November referee planning ownership: when the new generated calendar
+drives are enabled, they replace the current referee-import trip entries in charging
+planning. The referee calendar remains the source for generation, not an additional
+set of energy withdrawals/away periods. Count each journey once; do not plan both
+the legacy imported round trip and the new drive events for the same match.
+
+Use EnergyManager's own FullCalendar Standard view as confirmed below. The reviewed
+combined calendar/detail editor is a reasonable starting layout; not every illustrative
+control is a product requirement. Remaining technical integration contracts are listed
+in the consolidated scope below. Release and implementation are unassigned;
+no application changes, provider access or external calendar writes are authorized.
+
+Confirmed 12 November storage ownership: EnergyManager's local database is the
+primary trip store, not merely an outage cache. Google Calendar is a synchronized
+visualization and editing frontend: changes, deletions and supported direct creations
+flow both ways under the agreed validation/conflict policies. Primary local storage
+does not mean silently overwriting manual Google edits. Planning and local trip
+management remain independent of Google connectivity. Retain local trip records for
+possible future statistics; statistics functionality and a historical retention/deletion
+policy are not authorized or settled by this choice. Disconnecting synchronization
+must not delete local trips. Leave already published Google events untouched on
+disconnection. Keep disconnect handling simple; the user expects reliable operation
+and wants an alert so a lost connection does not go unnoticed. Show disconnection in
+the existing in-app sync status/alert; retain the agreed phone policy for user-action
+failures rather than notifying for every transient outage. An intentional disconnect
+is not an unexpected failure. Calendar switching remains an unresolved setup detail.
+
+12 November UI clarification supersedes the form-first framing: the primary workspace
+must show ordinary non-car calendar appointments together with drives, allowing drives
+to be positioned around appointments by dragging and resizing start/end. Keep the form
+for editing trip details; selecting times in a separate form is not a sufficient primary
+workflow. No automatic Drive there/Drive home appointment action was confirmed.
+The earlier embed-first/fallback discussion is superseded by the final own-view choice
+below. Ordinary-calendar visibility is required and those appointments are read-only;
+this is architecture scope, not application implementation authorization.
+
+Targeted public-documentation check: Google's embed help and official embedded-calendar
+redesign announcement describe viewing/navigation/sharing, but establish no documented
+inline event drag/resize editing interface. This is insufficient to promise that feature;
+absence of documentation is not a tested proof that every authenticated embed forbids it.
+No private Google session or live calendar was accessed. A custom HA calendar using an
+existing library is a feasible fallback: FullCalendar documents dragging, resizing and
+touch support, with Standard under MIT. Its public-Google feed plugin is not a private
+calendar synchronization solution; use authenticated backend reads and local-trip writes
+under the existing direct API design. The user subsequently selected FullCalendar
+Standard; the embed findings are historical feasibility evidence.
+References: [Google embed update](https://workspaceupdates.googleblog.com/2024/09/update-look-and-feel-embedded-google-calendars.html),
+[drag/resize](https://fullcalendar.io/docs/event-dragging-resizing),
+[licensing](https://fullcalendar.io/license),
+[public Google feed scope](https://fullcalendar.io/docs/google-calendar).
+
+Confirmed default views: week on desktop and day on phones, with a view switcher.
+
+Confirmed 12 November calendar creation gesture: dragging/selecting an empty time
+range opens a new-drive detail editor with that range as fixed start/end times. The
+user supplies locations or distance before saving; selection alone does not save a
+trip. The combined calendar/detail-editor preview was accepted as a reasonable
+starting point, not approval of every illustrative control or implementation.
+
+Confirmed 12 November final view choice: build EnergyManager's own calendar view,
+replacing the earlier preference for a Google iframe. Let the user select which Google
+calendars appear; ordinary appointments are read-only context, while EV drives can be
+dragged/resized and opened in EnergyManager's detail form. Keep direct bidirectional
+Google synchronization and primary local trip storage. A cross-origin Google iframe
+cannot be modified by HA to replace its internal dialogs; no supported Google embed
+click/editor override was found. FullCalendar Standard is a candidate rendering and
+interaction library selected by the user as the basis for the next mockup and planned
+view. Use Standard features; no Premium dependency or purchase is agreed. Exact version
+and packaging remain implementation details. This remains design authorization
+only; no application implementation has been authorized.
+
+Confirmed integration choice: EnergyManager uses its own direct Google Calendar API
+connection with user authorization during setup. Keep normal trip controls in HA;
+do not rely on HA's Google calendar entity API for full synchronization. This design
+choice does not authorize implementation or live account access.
+
+Confirmed synchronization transport: Google Calendar push notifications are primary,
+with periodic incremental synchronization to reconcile missed notifications. Receive
+notices at a dedicated public HTTPS webhook through the user's existing domains/DNS
+and reverse proxy; exact domain, routing and receiver placement remain to be designed.
+Automatically renew expiring notification channels. A notice triggers fetching changes;
+it does not itself carry event contents. Fallback cadence remains an engineering detail.
+The user reports domains, DNS and a reverse proxy available, not a verified working
+webhook. No proxy modification or public endpoint deployment has been authorized here.
+
+#### Consolidated implementation scope and completion criteria — 12 November 2026
+
+Architecture preparation only. Release, implementation chat and application work remain
+unassigned/unauthorized. The requirements above are the maintained behavior contract;
+the following groups them into reviewable work, not separately authorized phases.
+
+1. Connection and synchronization: direct OAuth connection and selection of the user's
+   dedicated writable calendar; durable local trip state and queued edits; push receiver,
+   channel renewal and periodic incremental reconciliation; conflict resolution under
+   the confirmed manual/automatic/source-match precedence. Restart, duplicate notices,
+   missed notices and interrupted writes must not duplicate or resurrect drives.
+2. HA trip controls and calendar representation: searchable arbitrary endpoints with Home
+   and origin suggestions; departure/arrival/fixed modes; Location destination and From:
+   origin; independent reverse drives; weekly recurrence and occurrence/future actions.
+   Google edits/deletes update the same trip identity. Preserve unrelated description
+   content when maintaining the origin line. Use our own FullCalendar Standard view,
+   with selectable read-only appointment calendars and editable EV drives. Week is the
+   desktop default and day the phone default, with a switcher. Empty-range selection
+   opens an unsaved fixed-time drive in our editor. HA manual drag/resize, like Google
+   time edits, preserves the new times as fixed. Support optional km overrides and
+   distance-only home round trips with explicit start/end. No Google iframe or extra
+   Open in Calendar button is required.
+3. Referee generation: two home/match legs per known match; existing 60-minute early
+   arrival and new 2.5-hour return default; initial estimates beyond seven days and only
+   near-term traffic refresh; per-match Regenerate; source changes override edits and
+   deletion suppression, while disappearance requires confirmed removal. Replace the
+   legacy planning representation rather than counting both.
+4. Planning and feedback: distance/energy per actual drive; away-state continuity until
+   planned home return, overridden by observed home plug-in under existing control gates;
+   fixed manual timing; invalid endpoint last-good behavior; pending sync and correction
+   status; agreed phone/in-app notices and persisted deduplication. Normal operation silent.
+
+Completion evidence required for the eventual authorized implementation:
+
+- Deterministic fake/local calendar, routing, Places and HA fixtures demonstrate creation,
+  edits/deletion in both directions, manual conflict precedence, retry/restart idempotence,
+  Google-time edits switching to fixed timing, and destination edits retaining times.
+- Recurrence exceptions/future splits preserve past occurrences and stable identities;
+  reversed series remain independent. Calendar wall times handle installation timezone
+  and DST consistently with existing trip-time contracts.
+- Match changes regenerate both legs including deleted ones; ordinary refresh does not;
+  match disappearance retains drives until confirmed. No duplicate planning withdrawals
+  or away periods; existing unrelated/manual requirements survive activation.
+- More-than-10-minute warnings, invalid edits and source-change notices follow the agreed
+  channels/deduplication; test restart and repeated delivery. No normal-operation alerts.
+- Outage/recovery, expired authorization, invalid sync tokens and failed/partial writes
+  retain local evidence and pending edits; missing data is not deletion. Webhook notices
+  are validated and trigger reconciliation, never direct planning/hardware commands.
+- Desktop/mobile calendar and detail form are inspected with synthetic data: calendar
+  selection, read-only appointments, drive drag/resize at both ends, fixed-time changes,
+  unsaved range selection, explicit save/cancel and field validation. Calendar edits must
+  preserve unrelated form drafts and reject stale responses. Detail-editor timing controls
+  remain a keyboard alternative to gestures. No private embed test is needed for this design.
+- Explicit distance-only drives are valid without locations and require start/end plus
+  distance; same-endpoint drives do not collapse nonzero km. Manual km persist until
+  Use calculated distance. Missing/invalid endpoints in routed mode retain last-good
+  planning data and trigger one correction notice per invalid edit. Round-trip versus
+  one-way energy is counted once, using existing consumption/reserve rules.
+- Existing meaningful planning/control regressions pass; no new optimizer objective,
+  charger recovery policy or live installation operations are included in ARCH-022.
+
+Remaining contracts before coding (engineering details unless behavior changes): durable
+trip/source/occurrence identities and deletion markers; origin serialization, escaping and
+ambiguous place handling; manual-edit provenance/version ordering and conflict fallback;
+recurrence split behavior; endpoint receiver placement, OAuth callback/secrets, webhook
+validation, retries and reconciliation cadence; initial distant-route estimation and
+bounded treatment of unending source recurrence. Do not invent installation facts.
+
+Remaining user review: behavior tradeoffs genuinely exposed by unresolved contracts;
+release assignment and explicit implementation authorization. The combined calendar/
+detail-editor concept has been reviewed; no further general UI approval is prerequisite.
+Local trips survive disconnection and previously published Google events remain
+untouched. Calendar switching remains open; do not silently delete, duplicate or
+republish events when switching calendars.
+No migration of existing manual trips, inferred trip merging, new paid/live testing,
+reverse-proxy deployment or hardware operation is included by this preparation.
+
+#### V4.7 implementation assignment — 12 November 2026
+
+Following the readiness review, the user assigned ARCH-022 to V4.7 and requested a
+new implementation chat using GPT-6.1-sol/light (low). This supersedes earlier
+unassigned/unauthorized checkpoint wording for the scoped offline implementation.
+Implementation identity and progress are maintained in WORK_STATE.md. Live accounts,
+paid requests, proxy deployment, HA/database/hardware access remain separately gated.
+
+#### Implementation readiness review — 12 November 2026
+
+Outcome: agreed product behavior is ready for a scoped implementation handoff, but
+coding/release assignment and installation access are not authorized by this review.
+Reconciled obsolete embed wording and updated completion criteria for the own-calendar
+view, distance-only trips, manual km and calendar-created fixed times. The mockup is
+interaction evidence reviewed by the user, not a fully tested application or a complete
+implementation of recurrence, sync, routing, notifications or persistence.
+
+Technical design must precede the corresponding code: document event schema/round-trip
+serialization for origin, explicit distance-only mode, manual km and timing provenance;
+local/Google/source occurrence mappings and deletion markers; conflict ordering;
+recurrence splitting; source snapshot completeness; per-leg planning/availability and
+last-good projection. Stable Google IDs and idempotent writes must prevent loss or
+unwanted recreation across restart/retry, not be inferred from titles or matching times.
+Calendar background reads must never create EV requirements from ordinary appointments.
+
+All-known finite matches are published without a 90-day cap. Unending recurrences need
+a bounded representation/expansion strategy, not an invented finite end date or infinite
+paid lookups. If library/provider constraints force a user-visible limit, return that
+specific tradeoff to the user. Similarly, resolve a genuine policy conflict rather than
+silently weaken manual-edit, last-good, source-deletion or planning safety contracts.
+
+Installation-only prerequisites: exact OAuth client/callback, writable calendar/account,
+Places enablement and billing readiness, webhook domain/certificate/proxy destination.
+These facts are unknown, not blockers to fake/local implementation. Actual Google writes,
+paid requests, HA/database access, proxy deployment and hardware remain separately gated.
+Calendar switching is not a requirement to add migration/remote cleanup; preserve trips
+and defer any behavior expansion. No statistics feature or destructive archive cleanup.
+
+Suggested engineering sequence within a later authorized package: durable model/schema
+and fake provider adapter; single-drive/recurrence planning; bidirectional sync and
+referee lifecycle; HA calendar/editor and feedback; combined offline regression and
+packaging. This ordering does not create release milestones or authorize partial release.
+No application tests were run for this documentation review; Git whitespace checks only.
+
+#### Public-documentation feasibility review — 11 November 2026
+
+Research only; no application changes, account access, paid requests or live testing.
+Findings are capability evidence and recommendations, not new confirmed requirements.
+
+- Google Calendar API supports event creation and recurring series, incremental sync,
+  and conditional writes using etags. These provide the building blocks for two-way
+  synchronization and conflict detection, not an automatic implementation of our policy.
+  Use OAuth consent/offline access; the existing Routes API key does not authorize
+  calendar access. A selectable writable calendar needs writer/owner access; visibility
+  in Google Calendar alone does not imply permission to modify it.
+- Google push requires an HTTPS receiver and renewable notification channels. The user
+  selected push with periodic reconciliation using their reverse proxy; endpoint reachability
+  and configuration remain unverified.
+- Follow-up source review of HA release 2026.11.1: the calendar platform exposes
+  REST event reads and WebSocket create/delete/update commands, gated by entity features.
+  Google's entity advertises and implements create/delete, but not update. Its mapped
+  events include iCalendar UID and recurring-instance ID; they omit Google etag,
+  updated timestamp and extended properties. Creation returns success without the
+  created event identity. Therefore the existing exposed integration is insufficient
+  for the agreed full synchronization/conflict requirements. Recommend direct Calendar
+  API access rather than delete/recreate emulation or reading HA's private token store.
+  The user subsequently confirmed direct Calendar API access. The installed HA
+  version has not been inspected.
+  Evidence: [Google entity,2026.11.1](https://github.com/home-assistant/core/blob/2026.11.1/homeassistant/components/google/calendar.py),
+  [calendar API,2026.11.1](https://github.com/home-assistant/core/blob/2026.11.1/homeassistant/components/calendar/__init__.py),
+  [event model,2026.11.1](https://github.com/home-assistant/core/blob/2026.11.1/homeassistant/components/calendar/entity.py).
+- Places Autocomplete (New) supports partial place names/addresses and selected place
+  IDs, so both endpoint search fields are feasible without full address typing.
+  It requires Places API enablement, appropriate credentials, billing and attribution;
+  existing Routes configuration alone does not establish readiness. Session tokens and
+  minimal detail fields can bound usage. No exact usage cost has been established.
+- Google documents an embeddable calendar with visibility restricted to people it is
+  shared with; making it public is not inherently required. HA supports iframe/webpage
+  embedding. This does not establish reliable Google sign-in in HA Companion webviews
+  or blocked-cookie contexts, nor supported inline drag/edit in the standard embed.
+  Google's recommended embed dimensions are at least 500 by 500, another phone-layout
+  concern. Private browser/mobile behavior and editing remain unverified.
+- Historical embed follow-up is superseded by the 12 November own-calendar choice.
+  Google iframe testing is no longer an implementation completion criterion. The user
+  still does not want a separate Open in Calendar button.
+
+Official references: [Calendar sync](https://developers.google.com/workspace/calendar/api/guides/sync),
+[conditional writes](https://developers.google.com/workspace/calendar/api/guides/version-resources),
+[recurrence](https://developers.google.com/workspace/calendar/api/guides/recurringevents),
+[calendar selection/access](https://developers.google.com/workspace/calendar/api/v3/reference/calendarList/list),
+[OAuth](https://developers.google.com/identity/protocols/oauth2/web-server),
+[push](https://developers.google.com/workspace/calendar/api/guides/push),
+[HA Google Calendar](https://www.home-assistant.io/integrations/google/),
+[Places search](https://developers.google.com/maps/documentation/places/web-service/place-autocomplete),
+[Places billing](https://developers.google.com/maps/documentation/places/web-service/usage-and-billing),
+[Google embed](https://support.google.com/calendar/answer/41207?hl=en),
+[HA webpage dashboard](https://www.home-assistant.io/dashboards/dashboards/).
+
+This pending direction does not replace the shipped import/routing contracts.
+
+#### V4.7 engineering contracts — implementation in progress, 12 November 2026
+
+HA-created trips use random UUID hex identities; direct Google creations use a stable calendar/provider hash; Google event IDs use that identity with
+an `em` prefix (Google base32hex-compatible). Provider IDs are never derived from
+mutable titles/times. Tombstones retain identities and source revision suppression.
+Every local mutation and its pending publication are committed in one SQLite state
+transaction. Acknowledgement removes a pending mutation only if its revision still
+matches; late responses cannot acknowledge a newer local edit.
+
+Event wire format v1 uses Location as destination and exactly one readable `From: `
+line, with its value encoded as a JSON string (Unicode, quotes and newlines round-trip).
+Other description lines are retained verbatim. Private extended properties use an
+`em_` prefix: schema=1, trip=identity, mode=routed|distance_only,
+km=decimal override (absent means calculated), timing=depart|arrive|fixed,
+revision=local integer. Distance-only has no route endpoints, requires finite positive
+km and explicit start/end, and projects one home-to-home absence. Routed events must
+have both endpoints; malformed edits retain their last-good planning projection.
+Google manual time changes become fixed, regardless of stale timing metadata.
+
+Conflict order: source time/location regeneration wins, otherwise manual beats
+automatic, otherwise later UTC edit timestamp wins. Equal timestamps use Google
+before HA as deterministic tie-break; unchanged provider etags are ignored. A pending
+local manual edit cannot be lost to an older provider echo. Provider updates use etag
+preconditions; on conflict fetch and resolve before retry. Stable IDs make interrupted
+inserts discoverable rather than creating duplicates. Explicit disconnect keeps local
+records and queue, performs no remote deletion. Calendar switching with existing
+binding is rejected pending a separately agreed switching policy.
+
+Weekly recurrence stores a master rule and stable original wall-date occurrence keys
+in installation timezone, plus occurrence exceptions/tombstones. This-and-following
+splits at the selected original occurrence, retaining prior identities/history. Reverse
+series has a new identity and no mutable relationship. Expand only requested view or
+planning intervals; finite referee appointments outside those intervals remain known
+and publishable. Source refresh records completeness: failure/partial reads never imply
+absence. Unbounded source rules retain masters and expand rolling view/planning windows.
+
+Google push only schedules reconciliation after channel ID, resource ID and random
+channel-token validation. Reconcile at least every five minutes, renew channels before
+expiry, and replace invalid sync tokens with a complete read before inferring deletion.
+OAuth secrets/tokens stay server-side in local storage and are excluded from exports;
+setup URLs/domains are supplied installation configuration, never inferred.
+
+V4.7 recurrence transport refinement: recurring drives publish a Google weekly master,
+with individually mapped provider occurrences for exceptions. Local materialization is
+bounded by requested calendar/planning windows; the remote master retains its unending
+RRULE rather than acquiring an invented end date. Future edits split masters at the
+original local occurrence date and preserve prior occurrence identities. Instance mapping
+uses the provider instances API and originalStartTime, never a guessed provider ID.
+OAuth uses expiring one-time state and PKCE; the proxy exposes only the exact callback
+and validated push paths. Places uses autocomplete session tokens terminated by place
+selection; keys stay server-side. The local source snapshot distinguishes complete
+all-known finite reads from old 90-day caches and failed reads. Actual home return is
+retained as a planning watermark so a later disconnect cannot resurrect old absences.
+
+
+13 November verification refinements: trip/outbox/provider markers commit atomically.
+Arrival routing retains the existing bounded exact-departure check and 60-second
+traffic slack; unstable estimates retain last-good planning data. Successful planning
+projection has its own revision, so an invalid requested edit does not renew or revoke
+unchanged planning quantities. Routine near-term routes refresh every four hours;
+failures back off from five minutes to four hours, with explicit refresh or a changed
+Maps key allowing an immediate retry. Finite matches have no 90-day publication cap;
+unending source recurrences retain their rules and use a rolling 90-day source window.
+Local weekly masters publish native Google RRULEs; materialized occurrences use
+provider originalStartTime mappings, and future splits retain past records. Skipped
+wall-clock occurrences are omitted under recurrence rules rather than moved. Human
+date/time entry uses the existing shared picker and explicit repeated-hour selection.
+Calendar switching and migration remain outside this release.
+
+
+#### V4.7 advanced Google editor syntax — 13 November 2026
+
+The normal Google editor cannot edit private extended properties. The supported
+readable description marker is `EnergyManager: {"v":1,"mode":"distance_only","km":65,"timing":"fixed"}`.
+For routed drives use mode `routed`, optional km override (null means calculated),
+Location destination and one JSON-quoted `From: "origin"` line. This reserved marker
+round-trips mode/km/timing in the ordinary editor and takes precedence over the private
+mirror. New routed events may omit the marker and default to fixed times/no km override.
+Unknown/malformed markers need correction and retain last-good planning data. Existing
+Google time or destination edits retain their supplied times as fixed; restore automatic
+timing in HA. Other description text is retained. Local identity/revision remain private
+provider metadata; the description never grants planning or hardware authority.
+
+Native Overview/Planning trip actions carry a short-lived in-memory intent scoped
+to the add-on while switching to the EV card, then open that local drive's editor.
+No pending edit is applied by navigation. Compact Places search results display
+Google Maps attribution next to their provider results.
+
+V4.7 source identity refinement: duplicate subscriptions of the same iCalendar UID
+and recurrence occurrence have one canonical referee match and retain all associated
+legacy planning IDs for replacement. Independent UIDs stay independent, even at the
+same time/place. Feed order is the deterministic source precedence for duplicate UID
+copies; complete aggregate reads are needed before inferring source disappearance.
+This preserves existing feed duplicate suppression without inferring trip merging.
+
 ### Google Maps routing (4.4.0)
 
 Route selected subscribed calendars and manual journeys with a destination. Each calendar

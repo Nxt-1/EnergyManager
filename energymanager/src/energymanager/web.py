@@ -8,6 +8,7 @@ from importlib.resources import files
 from typing import Any
 from urllib.parse import urlsplit
 
+import aiohttp
 from aiohttp import web
 
 from .domain import instant, json_data
@@ -20,6 +21,7 @@ from .graph_history import graph_history
 from .calendars import CalendarSync
 from .journeys import Journeys
 from .ev_faults import incident_report
+from .google_calendar import CalendarError
 
 
 def create_web(application: Application, *, configuration: ConfigurationFile | None = None) -> web.Application:
@@ -30,6 +32,22 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
             application.calendars = CalendarSync(application, configuration.started_values.get("calendars"))
     @web.middleware
     async def boundary(request: web.Request, handler: Any) -> web.StreamResponse:
+        # These two exact endpoints are the only proxy-exposed exceptions. OAuth
+        # validates one-time state; push validates its channel/resource/token tuple.
+        if request.path == "/api/ev/calendar/push" and request.method == "POST":
+            sync = application.trips.sync
+            if sync is None or not sync.webhook(dict(request.headers)):
+                raise web.HTTPForbidden()
+            return web.Response(status=204)
+        if request.path == "/api/ev/calendar/callback" and request.method == "GET":
+            oauth = application.trips.oauth
+            if oauth is None:
+                raise web.HTTPServiceUnavailable()
+            try:
+                await oauth.callback(request.query.get("state", ""), request.query.get("code", ""))
+            except (ValueError, CalendarError, aiohttp.ClientError, TimeoutError):
+                return web.Response(text="Authorization failed or expired. Return to EnergyManager and try again.", status=400)
+            return web.Response(text="Calendar authorized. Return to EnergyManager to select your calendars.")
         peer = request.transport.get_extra_info("peername") if request.transport else None
         ingress = (
             peer
@@ -51,9 +69,108 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
             return await handler(request)
         except (ValueError, TypeError, KeyError, StopIteration) as exc:
             return web.json_response({"error": str(exc)}, status=400)
+        except CalendarError as exc:
+            return web.json_response({"error": str(exc)}, status=503)
 
     app = web.Application(middlewares=[boundary], client_max_size=64 * 1024)
     archive_readers = asyncio.Semaphore(2)
+
+    async def trip_calendar(request: web.Request) -> web.Response:
+        owner = application.trips
+        if request.method == "GET":
+            start, end = instant(request.query["start"]), instant(request.query["end"])
+            owner.expand(start, end)
+            owner.wake.set()
+            context: list[dict[str, Any]] = []
+            if owner.sync and owner.sync.state["connected"]:
+                try:
+                    for calendar in owner.data["selected"]:
+                        if calendar == owner.trips.state["binding"]:
+                            continue
+                        events = await owner.sync.client.window(calendar, start.isoformat(), end.isoformat())
+                        context.extend({"id": calendar + ":" + item["id"], "title": item.get("summary", "Appointment"),
+                                        "start": item["start"].get("dateTime", item["start"].get("date")),
+                                        "end": item["end"].get("dateTime", item["end"].get("date")), "editable": False}
+                                       for item in events if item.get("status") != "cancelled")
+                    owner.data["context"] = {"start": start.isoformat(), "end": end.isoformat(), "events": context}
+                    owner.save()
+                except (CalendarError, aiohttp.ClientError, TimeoutError):
+                    owner.sync.status = "unavailable"
+                    cached = owner.data.get("context", {})
+                    context = cached.get("events", []) if isinstance(cached, dict) else []
+            return web.json_response({**owner.status(), "context": context}, headers={"Cache-Control": "no-store"})
+        data = await request.json()
+        if not isinstance(data,dict):
+            raise ValueError("Use a JSON object for calendar actions")
+        action = data.get("action")
+        if action == "setup":
+            if not owner.oauth:
+                raise ValueError("Calendar service is starting")
+            owner.oauth.configure(data)
+        elif action == "authorize":
+            if not owner.oauth:
+                raise ValueError("Calendar service is starting")
+            return web.json_response({"url": owner.oauth.begin()})
+        elif action == "calendars":
+            if not owner.sync:
+                raise ValueError("Calendar service is starting")
+            calendars = await owner.sync.client.calendars()
+            return web.json_response({"calendars": [{key: item.get(key) for key in ("id", "summary", "accessRole")}
+                                                     for item in calendars]})
+        elif action == "connect":
+            if not owner.sync:
+                raise ValueError("Calendar service is starting")
+            calendars = await owner.sync.client.calendars()
+            if not any(item["id"] == data["calendar"] and item["accessRole"] in ("owner", "writer") for item in calendars):
+                raise ValueError("Select a writable dedicated EV calendar")
+            selected = data.get("selected", [])
+            if (not isinstance(selected, list) or len(selected) > 20 or
+                    any(not any(item["id"] == key for item in calendars) for key in selected)):
+                raise ValueError("Choose visible Google calendars")
+            owner.data["selected"] = selected
+            owner.sync.connect(data["calendar"])
+            owner.enable()
+        elif action == "disconnect":
+            if owner.sync:
+                owner.sync.disconnect()
+        elif action == "sync":
+            owner.force_routes = True
+            owner.wake.set()
+        elif action == "match":
+            owner.match_action(data["id"], data["operation"])
+        elif action == "dismiss":
+            owner.trips.state["notices"][data["key"]]["dismissed"] = True
+            owner.trips.save()
+        else:
+            raise ValueError("Unknown trip calendar action")
+        return web.json_response(owner.status())
+
+    async def drives(request: web.Request) -> web.Response:
+        identity = request.match_info.get("id")
+        data = await request.json()
+        if not isinstance(data,dict):
+            raise ValueError("Use a JSON object for a drive")
+        owner = application.trips
+        if request.method == "DELETE":
+            owner.delete(identity or "", data.get("scope", "occurrence"))
+            return web.json_response({"deleted": True})
+        if request.path.endswith("/reverse"):
+            result = owner.reverse(identity or "", bool(data.get("before")), bool(data.get("recurring")))
+        else:
+            result = owner.upsert(data, identity)
+        return web.json_response(result, status=201)
+
+    async def places(request: web.Request) -> web.Response:
+        data = await request.json()
+        if not isinstance(data,dict):
+            raise ValueError("Use a JSON object for place search")
+        client = application.trips.places()
+        try:
+            result = (await client.select(data["id"], data["token"]) if "id" in data
+                      else await client.search(data["text"], data["token"]))
+        except (RuntimeError, aiohttp.ClientError, TimeoutError) as exc:
+            return web.json_response({"error": str(exc) if isinstance(exc, RuntimeError) else "Place search unavailable"}, status=503)
+        return web.json_response({"result": result})
 
     async def settings(request: web.Request) -> web.Response:
         if configuration is None:
@@ -67,9 +184,13 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
                 if (not isinstance(body, dict) or not isinstance(body.get("revision"), str)
                         or not isinstance(body.get("values"), dict)):
                     raise ValueError("A settings revision and field values are required")
+                routing_before = configuration.routing_settings()
                 result = await asyncio.to_thread(configuration.save, body["revision"], body["values"])
                 if application.journeys:
                     application.journeys.apply_settings(configuration.routing_settings())
+                if routing_before != configuration.routing_settings():
+                    application.trips.force_routes = True
+                    application.trips.wake.set()
                 application.store.event("configuration_saved", {
                     "revision": result["revision"], "fields": sorted(body["values"]),
                     "restart_required": result["restart_required"],
@@ -295,7 +416,8 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         if "version" in request.match_info and request.match_info["version"] != __version__:
             raise web.HTTPConflict(text="EnergyManager was updated. Reload the dashboard.")
         name = request.match_info.get("name", "index.html")
-        if name not in ("index.html", "app.js", "settings.js", "display.js", "date-time.js",
+        if name not in ("trip-calendar.js", "fullcalendar.global.min.js", "fullcalendar-luxon.global.min.js", "luxon.min.js",
+                        "index.html", "app.js", "settings.js", "display.js", "date-time.js",
                         "datetime-picker.js", "ev-schedule.js", "style.css", "ha-card.js",
                         "application-view.js", "peak-display.js", "ha-history.js", "view.html", "native-dashboard.js", "native-dashboard.css",
                         "native-live.js", "graph-history.js", "graph-cursor.js", "dashboard-client.js", "planning-activity.js",
@@ -318,6 +440,15 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
 
     app.add_routes(
         [
+            web.post("/api/ev/calendar/push", trip_calendar),
+            web.get("/api/ev/calendar/callback", trip_calendar),
+            web.get("/api/ev/calendar", trip_calendar),
+            web.post("/api/ev/calendar", trip_calendar),
+            web.post("/api/ev/drives", drives),
+            web.post("/api/ev/drives/{id}", drives),
+            web.delete("/api/ev/drives/{id}", drives),
+            web.post("/api/ev/drives/{id}/reverse", drives),
+            web.post("/api/ev/places", places),
             web.get("/api/profiles", profiles),
             web.get("/api/profiles/{machine}/{program}", averaged_profile),
             web.post("/api/profiles/{action}", profiles),

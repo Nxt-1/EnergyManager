@@ -101,7 +101,7 @@ export class DateTimePicker {
 
   open(input) {
     this.input = input;
-    const departure = [...this.fields].find(([, field]) => field.required)?.[0].value;
+    const departure = [...this.fields].find(([field, metadata]) => metadata.required && field.form === input.form)?.[0].value;
     this.draft = input.value || departure || localDateTime(this.now(), this.zone());
     this.selectedInstant = input.dataset.instant;
     this.month = this.draft.slice(0, 7);

@@ -1209,8 +1209,9 @@ test('journey route failures render an escaped reason and clear it after success
   const scroller = {scrollLeft: 0};
   const root = {hidden: true, innerHTML: '', addEventListener() {}, contains: () => false,
     getRootNode: () => ({activeElement: null}),
-    querySelector: selector => selector === '.ev-calendar-scroll' ? scroller : null};
-  const page = new EVSchedulePage(root, {entities: {}});
+    querySelector: selector => selector === '.ev-calendar-scroll' ? scroller :
+      selector === '.ev-status' ? {after(){}} : selector === '.ev-layout' ? {} : null};
+  const page = new EVSchedulePage(root, {entities: {}, tripCalendar: {root:{},busy:false,update(){},dispose(){}}});
   const state = {...syntheticEVStatus(), ...syntheticSchedule(), accepted: null};
   Object.assign(state.policy, {arrival_reserve_km: 30, consumption_kwh_per_100km: 18});
   state.schedule_goals = state.schedule_goals.map(goal => ({distance_km: 44, target_soc_percent: 50, ...goal}));

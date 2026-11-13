@@ -1,8 +1,19 @@
 # EnergyManager 4
 
-Version **4.6.7**, the main Energy Manager application. One joint seven-day EV/ESS MILP
+Version **4.7.0**, the main Energy Manager application. One joint seven-day EV/ESS MILP
 feeds independent responsive control. The application includes configured input/actuator
 boundaries, persisted goals/approvals/decisions and Overview/Planning/EV/Appliances pages.
+
+## EV trip calendar
+
+EV includes an editable drive calendar alongside selected read-only Google appointments.
+Trips belong to the local database and remain editable offline; Google Calendar is a
+bidirectional editing frontend. Select a range or add a drive, choose endpoints/Home or
+enter a distance-only home round trip, then save. Weekly recurrence, occurrence/future
+edits and independent reverse drives are supported. Referee appointments generate two
+separate drives; source changes regenerate them, while disappeared matches ask before removal.
+OAuth and webhook setup are under Calendar connection; see [the runbook](docs/RUNBOOK.md).
+No real account, billing, proxy, installation or hardware verification is implied by offline tests.
 
 ## Planned power in task details
 

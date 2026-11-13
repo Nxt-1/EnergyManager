@@ -8,6 +8,7 @@ import {hasTextSelection} from './text-selection.js';
 import {historySources, genuineEntities} from './ha-history.js';
 
 const runtimes = new Map();
+const tripIntents = new Map();
 
 export function generateDashboard(config, manifest, connection) {
   runtimes.set(connection.addon, connection);
@@ -79,14 +80,20 @@ export function generateDashboard(config, manifest, connection) {
           }
           return result;
         };
+        const pendingTrip = tripIntents.get(this.config.addon);
+        const openTrip = this.config.view === 'ev' && pendingTrip && Date.now()-pendingTrip.at < 60000 ? pendingTrip : null;
+        if (this.config.view === 'ev') tripIntents.delete(this.config.addon);
         const controller = await mountApplication(root, {
           native: true,
           entities: manifest.entities,
           historySources: manifest.history_sources,
           decisionDownloadUrl: id => `${runtime.base}api/decisions/${id}?download=1`,
           page: this.config.view,
+          openTrip,
           api,
-          navigate: name => {
+          navigate: (name, intent) => {
+            if (intent) tripIntents.set(this.config.addon, {...intent,at:Date.now()});
+            else if (name !== 'ev') tripIntents.delete(this.config.addon);
             const dashboard = location.pathname.split('/').filter(Boolean)[0];
             history.pushState(null, '', `/${dashboard}/${name}`);
             window.dispatchEvent(new Event('location-changed'));

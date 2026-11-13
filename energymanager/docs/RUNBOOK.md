@@ -1,5 +1,87 @@
 # Run, configure, review and roll back
 
+## EV trip calendar (4.7.0 / ARCH-022)
+
+With the new trip system enabled, every configured referee feed generates calculated
+outward/return drives. Its old routing checkbox applies only to the legacy system.
+Ordinary selected Google calendars remain read-only context.
+
+Open EV → Trip calendar. Select an empty range to open an unsaved fixed-time drive,
+or choose Add drive. Select both endpoints with place search/Home, or use Distance only
+with positive km and explicit departure/arrival. Save explicitly. Dragging and resizing
+either end switches that occurrence to fixed times. Use the shared 24-hour picker for
+keyboard entry and repeated-clock selection. Depart at and Arrive by calculate the
+other time; a manual km override remains until Use calculated distance is chosen.
+Weekly recurrence supports selected weekdays/every N weeks/end date. This drive edits
+one occurrence; This and following drives splits future work while retaining past records.
+Reverse drives/series are independent and can begin before or after the original.
+
+The local database owns drives, including pending edits during outages. Disconnect
+keeps local trips and previously published Google events. Switching the bound calendar
+is rejected pending a separate migration policy. Existing manual journeys are retained
+and are not migrated. New referee legs replace the legacy planning entries once their
+replacement routes are available, so driving energy is counted once.
+
+Installation setup uses the installation's actual account/domain/API details, which have
+not been verified by offline tests:
+
+1. Enable Calendar API and configure a Google web OAuth client. Under Calendar connection,
+   enter client ID/secret, exact authorized redirect URI and public HTTPS push URI.
+   Blank secret retains its saved value; a changed client/callback requires authorization again.
+2. Forward the chosen public URLs through the existing reverse proxy to only
+   `/api/ev/calendar/callback` (GET) and `/api/ev/calendar/push` (POST), preserving query
+   parameters and Google's channel/resource/token headers. Do not expose the remaining API.
+   A valid public HTTPS receiver is required. This release does not deploy/change a proxy.
+3. Authorize Google, return to EnergyManager, Load calendars, select the user-created
+   dedicated writable EV calendar and the read-only appointment calendars, then Connect.
+4. Configure the existing Maps key with Routes/Places access and appropriate billing.
+   Saving settings is not a successful provider check. Search/select endpoints to resolve
+   them; autocomplete session tokens end at selection. No paid validation probe is run.
+
+Validated push notices trigger reads, never control. Channels renew before expiry;
+incremental reconciliation runs at least every five minutes while connected. Partial/
+failed reads do not imply deletion; invalid sync tokens require a complete replacement
+read. Routes refresh within seven days; failures back off from five minutes to four
+hours. Sync or a changed Maps key permits an immediate retry. Normal traffic refreshes
+and transient outages are silent on the phone. Reauthorization/setup failures, invalid
+drive edits, source changes and more-than-ten-minute duration warnings use the existing
+notification destination with durable deduplication. Exactly ten minutes does not warn.
+
+All known finite referee matches get Home→match and match→Home drives: arrival sixty
+minutes before the match, return departure2.5hours after its start. Distant matches use
+traffic-unaware estimates. Source time/location changes regenerate both legs, including
+deleted/manual ones; ordinary refresh does not resurrect them. Regenerate is available
+per match. Source disappearance retains drives until removal is confirmed. Planned
+away-to-away absence lasts until a home return; observed home plug-in overrides it only
+under existing measurement, charger, permission and control gates.
+
+Advanced Google creation uses Location as destination and a description such as:
+
+```text
+From: "Home"
+EnergyManager: {"v":1,"mode":"routed","km":null,"timing":"fixed"}
+```
+
+For distance-only home round trips omit endpoints/From and use
+`EnergyManager: {"v":1,"mode":"distance_only","km":65,"timing":"fixed"}` with explicit
+start/end. Positive km is an override; null means calculated in routed mode. JSON quoting
+escapes origin quotes/newlines. Other description text is retained. Malformed events
+need correction and retain last-good planning data. Google time/destination edits keep
+their times fixed; restore automatic timing in HA.
+
+Offline verification, from this checkout with its src on PYTHONPATH:
+
+```powershell
+python -m pytest -q tests/test_trip_events.py tests/test_trip_sync.py tests/test_trip_calendar.py tests/test_calendar_http.py tests/test_trip_api.py
+python tools/trip_calendar_preview.py --port 8104
+python tools/native_dashboard_preview.py --backend http://127.0.0.1:8104/ --port 8105
+```
+
+The trip preview uses disposable stores and fake/local providers and deliberately does
+not solve a plan. Use `python tools/offline_e2e.py --routing-fixture` for configured
+full-horizon planning/control. No private calendar, paid API, actual HA/database, phone,
+hardware, proxy change or deployment is authorized by these checks. Live setup remains unverified.
+
 ## Running EV stock corrections (4.6.12 / EV-A012–A013)
 
 A changed valid vehicle SoC replaces estimated stock and updates remaining work.

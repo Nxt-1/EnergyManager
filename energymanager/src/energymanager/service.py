@@ -29,6 +29,7 @@ from .worker import PlanningWorker, WorkerExited
 from .hardware import HardwareControl
 from .calendars import CalendarSync
 from .journeys import Journeys
+from .trip_calendar import TripCalendar
 from .ev_faults import EVFaults
 from .daily_estimates import DailyEstimates
 from .plan_recovery import PlanRecovery
@@ -103,6 +104,7 @@ class Application:
         self.configuration_error: str | None = None
         self.journeys: Journeys | None = None
         self.calendars: CalendarSync | None = None
+        self.trips = TripCalendar(self)
         self.calendar_items: dict[str, dict[str, Any]] = {}
         self.ev_faults: EVFaults | None = None
         self.daily_estimates = DailyEstimates(self)
@@ -121,6 +123,7 @@ class Application:
         )
 
     async def start(self) -> None:
+        self.trips.start()
         self.daily_estimates.start()
         if self.hardware:
             self.hardware.start()
@@ -146,6 +149,7 @@ class Application:
 
     async def close(self) -> None:
         self.shutdown = True
+        await self.trips.close()
         await self.measured_peaks.close()
         await self.deadline_warnings.close()
         await self.appliance_profiles.close()
@@ -774,7 +778,7 @@ class Application:
 
     def upsert_goal(self, data: dict[str, Any]) -> Goal:
         old = next((g for g in self.goals if g.id == data.get("id")), None)
-        if (str(data.get("id", "")).startswith(("calendar-", "journey-"))
+        if (str(data.get("id", "")).startswith(("calendar-", "journey-", "drive-"))
                 or self.journeys and data.get("id") in self.journeys.requests):
             raise ValueError("Use the routed journey editor for managed trips")
         if old and old.id.startswith("calendar-"):
@@ -805,6 +809,9 @@ class Application:
         return new
 
     def delete_goal(self, identity: str) -> None:
+        if identity.startswith("drive-"):
+            self.trips.delete(identity[6:])
+            return
         if self.journeys and identity in self.journeys.requests and not identity.startswith("calendar-"):
             self.journeys.delete(identity)
             return
@@ -922,6 +929,7 @@ class Application:
             self.changed("manual_goal_scope_changed", ev=True)
 
         self.archive_finished_goals(self.now(), observed=observation)
+        self.trips.project()
 
     def ev_requirements(self, at: datetime) -> tuple[Goal, ...]:
         requirements = {g.id: g for g in daily_goals(at, at + timedelta(hours=168), self.policy, self.goals)}
@@ -1091,6 +1099,7 @@ class Application:
             "schedule_goals": [{**json_data(goal), **({"calendar": self.calendar_items[goal.id]}
                                 if goal.id in self.calendar_items else {})} for goal in (*current_goals, *requirements)],
             "calendars": self.calendars.status() if self.calendars else [],
+            "trip_calendar": self.trips.status(),
             "routes": self.journeys.status() if self.journeys else {"items": []},
             "accepted": self.accepted,
             "ev_plan_valid": self.ev_valid,

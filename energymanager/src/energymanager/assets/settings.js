@@ -199,8 +199,9 @@ class CalendarLinks extends HTMLElement {
     const routing = element('input');
     routing.type = 'checkbox';
     routing.checked = entry.routing === true;
-    routing.setAttribute('aria-label', 'Calculate journeys with Google Maps');
-    routingLabel.append(routing, document.createTextNode('Google Maps journeys'));
+    routing.setAttribute('aria-label', 'Calculate Google Maps journeys in the legacy trip system');
+    routingLabel.append(routing, document.createTextNode('Google Maps journeys (legacy system only)'));
+    routingLabel.title = 'The new trip calendar always calculates referee drives, regardless of this option.';
     row.append(label, url, remove, routingLabel);
     this.rows.append(row);
   }

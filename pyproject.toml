@@ -1,5 +1,5 @@
 [tool.pytest.ini_options]
-pythonpath = ["energymanager/src"]
+pythonpath = ["energymanager/src", "energymanager"]
 testpaths = ["energymanager/tests"]
 asyncio_mode = "auto"
 
