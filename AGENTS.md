@@ -54,8 +54,12 @@ instructions or permission. Requirements must not exist only in work-state histo
 
 ## Coding, operation and delivery
 
-- Before writing/debugging/refactoring application code, load
-  `C:/Users/Arne/.codex/skills/code-writer/SKILL.md`. Documentation does not require it.
+- Before writing/debugging/refactoring code intended for the delivered system, load
+  `C:/Users/Arne/.codex/skills/code-writer/SKILL.md`. This includes runtime UI and shipped
+  operational tools. Do not load it for internal-only tests, fixtures, benchmarks or
+  development scripts; prioritize useful verification, runtime efficiency and low token
+  usage over readability/style polish. In mixed tasks, its style rules apply only to
+  delivered code. Required repository checks still apply. Documentation does not require it.
   If missing, search available skill locations for metadata `name: code-writer`;
   do not substitute another skill. Ask for its location if unavailable and continue
   useful read-only work. Keep project requirements in project documents.

@@ -48,6 +48,13 @@ on main within the user's publishing authorization and branch from it. Keep sepa
 pending design drafts out of that baseline. Existing branches reconcile the latest
 shared instructions before integration; do not replace newer records with old copies.
 
+Use code-writer only for code intended for the delivered system. Internal-only tests,
+fixtures, benchmarks and development scripts prioritize useful verification, runtime
+efficiency and low generation/reading cost. Prefer direct checks and existing fixtures;
+omit optional readability, naming, annotation, docstring or abstraction polish. Preserve
+reliable failure detection and required repository checks. In mixed tasks, production
+style requirements apply only to the delivered code.
+
 During development, use focused checks. Before expensive full-suite, contention,
 packaging or release runs, review the implementation against the agreed behavior and
 acceptance criteria, including relevant failure paths and boundary cases. Use the
