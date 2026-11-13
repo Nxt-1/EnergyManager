@@ -1,5 +1,76 @@
 # Run, configure, review and roll back
 
+## Local development workspace and completion-based cleanup
+
+Keep the repository for versioned project files. Local development storage defaults to
+`~/.codex/project-data/EnergyManager`, or `ENERGYMANAGER_DEV_HOME` when explicitly set.
+The default respects `CODEX_HOME` when set. This is a project convention; do not put
+original evidence in disposable Codex-managed worktrees. Use `evidence/` for original
+incident exports/backups, `research/` for investigations, `checkpoints/` for local
+release records, `runs/` for synthetic output, `environments/` and `cache/` for tools,
+and `history/` for preserved local history. Existing manual checkouts may live in
+`checkouts/`; create new isolated work using Codex-managed worktrees outside Git.
+The ignored machine-local `.codex/config.toml` grants the approved external directory
+as an additional workspace-write root for trusted project sessions. `.worktreeinclude`
+copies that local config to new managed worktrees. Saved configuration applies when
+a session loads it; an already running session retains its current permission snapshot.
+
+Prepared Windows environment (Python 3.13, pinned runtime/dev locks):
+
+```powershell
+$dev = Join-Path $env:USERPROFILE '.codex/project-data/EnergyManager'
+$py = Join-Path $dev 'environments/py313/Scripts/python.exe'
+$env:ENERGYMANAGER_DEV_HOME = $dev
+$env:PYTHONDONTWRITEBYTECODE = '1'
+$env:PYTHONPATH = (Resolve-Path 'energymanager/src').Path
+$env:RUFF_CACHE_DIR = Join-Path $dev 'cache/ruff'
+$env:MYPY_CACHE_DIR = Join-Path $dev 'cache/mypy'
+$env:UV_CACHE_DIR = Join-Path $dev 'cache/uv'
+& $py -m energymanager --version
+& $py -m pytest -q -p no:cacheprovider --basetemp (Join-Path $dev 'runs/pytest-current')
+& $py -m ruff check energymanager/src energymanager/tests energymanager/tools
+& $py -m mypy energymanager/src/energymanager
+```
+
+Use a unique pytest basetemp per concurrent task, not `pytest-current` in concurrent
+chats. `PYTHONPATH` must select the checkout being tested; a shared dependency environment
+does not select another checkout's source automatically. On a fresh machine, create an
+external environment with Python 3.13 and install `energymanager/requirements.lock` and
+`energymanager/requirements-dev.lock`; keep interpreter and dependency paths outside Git.
+
+From `energymanager/`, `python tools/offline_e2e.py` and
+`python tools/benchmark.py --case mixed --budget 120` create unique external runs and
+print their paths. `--artifacts-dir` overrides their external parent directory.
+Each run contains its synthetic databases/configuration and report. Tools no longer
+overwrite tracked `docs/offline-e2e.json` or benchmark reports; explicitly promote a
+compact verified report into tracked evidence when appropriate. CI uses the same
+external defaults without a machine-specific path. Use explicit external `--data`,
+`--config`, `--solve` and replay `--output` paths for local application runs. Build with
+`--outdir` outside Git; setuptools may create temporary build metadata in the checkout,
+which must be removed after the build completes.
+
+Successful disposable output can be removed after verification is recorded and any
+required publication succeeds. For failures, first preserve the minimal reproduction,
+inputs and diagnostic conclusions; then remove the remaining temporary output. Keep
+that diagnostic evidence until the issue/fix is resolved and verified. Original
+installation backups and user-supplied evidence need explicit deletion approval.
+Active/paused work is protected. There are no 7-day/30-day retention timers.
+
+```powershell
+python tools/dev_workspace.py path
+python tools/dev_workspace.py complete RUN_ID --record EXTERNAL_CHECKPOINT --reason 'Verification recorded; publication complete or not required'
+python tools/dev_workspace.py cleanup
+python tools/dev_workspace.py cleanup --apply
+```
+
+Completion requires the run owner to have exited and its retained record to exist
+outside `runs/`. Cleanup checks ownership, completion, record hash and directory links;
+preview is the default. Legacy material without run ownership records stays protected
+until explicitly classified. Worktree retirement separately checks integration, current
+changes, chat activity and unique ignored evidence. Retain branches when retiring a
+checkout. The 13 November migration inventory maps historical repository paths to
+their new locations under `checkpoints/storage-migration-2026-11-13/`.
+
 ## EV trip calendar (4.7.0 / ARCH-022)
 
 With the new trip system enabled, every configured referee feed generates calculated
@@ -327,7 +398,7 @@ Offline only, from `energymanager/`:
 python tools/offline_e2e.py --serve --deadline-margin-fixture
 python tools/native_dashboard_preview.py
 # Separate terminal, private archived or labelled synthetic snapshot:
-python tools/verify_ev_replay.py PATH_TO_SNAPSHOT --output artifacts/ev-replay.json --budget 120
+python tools/verify_ev_replay.py PATH_TO_SNAPSHOT --output EXTERNAL_RUN_DIRECTORY/ev-replay.json --budget 120
 ```
 
 The warning fixture is explicitly synthetic display evidence, not an infeasibility
@@ -679,7 +750,7 @@ persistence, real solver cancellation/reaping and latest-only adoption, fake har
 guards and fake notifications. Existing --calendar-fixture covers legacy subscriptions.
 All endpoints are fake/local; do not use a real key or installation for agent verification.
 When reusing another checkout's editable interpreter, point PYTHONPATH to this worktree's
-src and use a unique pytest --basetemp under ignored artifacts/. Keep preview ports and
+src and use a unique pytest --basetemp under the external workspace's runs/. Keep preview ports and
 databases separate. A public release is distinct from installing/operating the HA app.
 
 ## Local use
@@ -895,10 +966,11 @@ after the baseline E2E; it changes only the local fake charger status.
 Use Python3.13 (also tested on3.12 during development). Run from `energymanager/`:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.lock -r requirements-dev.lock
-.\.venv\Scripts\python.exe -m pip install --no-deps -e .
-.\.venv\Scripts\python.exe -m energymanager --port 8100 --budget 120
+$dev = Join-Path $env:USERPROFILE '.codex/project-data/EnergyManager'
+$py = Join-Path $dev 'environments/py313/Scripts/python.exe'
+$env:PYTHONPATH = (Resolve-Path 'src').Path
+$env:PYTHONDONTWRITEBYTECODE = '1'
+& $py -m energymanager --port 8100 --budget 120 --data (Join-Path $dev 'runs/demo/energymanager.sqlite3')
 ```
 
 Open http://127.0.0.1:8100/ . Overview shows measured/synthetic and planned powers,
@@ -921,29 +993,29 @@ Cancel keeps the previous value. Clear removes an optional return. During a repe
 DST hour select the first or second occurrence; nonexistent local times cannot be saved.
 Morning SoC targets alone do not imply driving or a battery withdrawal.
 
-This workspace's prepared environment is `.venv313/Scripts/python.exe`. Dependencies
+The prepared external environment is described at the top of this runbook. Dependencies
 are isolated, not registered system-wide. `requirements.lock` and `requirements-dev.lock`
 contain the tested exact Windows3.13 resolution; Linux wheels/container must be checked
-on the target host. The command above installs a source editable package; the built
-wheel under `dist/` supports a separate installation without repository imports.
+on the target host. Explicit PYTHONPATH selects the checkout; a built wheel in the
+external package directory supports a separate installation without repository imports.
 
 ```powershell
-.\.venv313\Scripts\python.exe -m pytest -q
-.\.venv313\Scripts\python.exe -m ruff check src tests tools
-.\.venv313\Scripts\python.exe -m mypy src/energymanager
+& $py -m pytest -q -p no:cacheprovider --basetemp (Join-Path $dev 'runs/pytest-current')
+& $py -m ruff check --no-cache src tests tools
+& $py -m mypy --cache-dir (Join-Path $dev 'cache/mypy') src/energymanager
 node --check src/energymanager/assets/app.js
 node --test tools/frontend.test.mjs
-.\.venv313\Scripts\python.exe tools/offline_e2e.py
-.\.venv313\Scripts\python.exe tools/benchmark.py --case mixed --budget 120
-.\.venv313\Scripts\python.exe tools/benchmark.py --case winter --budget 120
-.\.venv313\Scripts\python.exe tools/benchmark.py --case permission --budget 120
-.\.venv313\Scripts\python.exe -m build --no-isolation
+& $py tools/offline_e2e.py
+& $py tools/benchmark.py --case mixed --budget 120
+& $py tools/benchmark.py --case winter --budget 120
+& $py tools/benchmark.py --case permission --budget 120
+& $py -m build --no-isolation --outdir (Join-Path $dev 'runs/package')
 ```
 
 Run benchmarks sequentially, with the dev server stopped. Real HiGHS results depend on
 machine and timing; inspect per-stage incumbents/bounds and validation, not only the
-last solver status. Raw synthetic evidence is written under ignored `artifacts/` and
-compact reports under `docs/`. No coarse distant horizon is used.
+last solver status. Raw synthetic evidence and compact reports go to a unique external
+run directory. Promote selected reports into docs explicitly. No coarse distant horizon is used.
 
 Frozen replay accepts a snapshot or exported `{snapshot,result}` decision, verifies an
 available input checksum, and produces fresh evidence. `--budget` explicitly sets the
@@ -951,7 +1023,7 @@ replay budget; matching the original value preserves that policy field. Solver t
 limits can change incumbents; replay does not promise bit-identical optimization.
 
 ```powershell
-.\.venv313\Scripts\python.exe -m energymanager --fixture artifacts/release-mixed.json --solve artifacts/replay.json --budget 120
+& $py -m energymanager --fixture EXTERNAL_BENCHMARK_RUN/release-mixed.json --solve (Join-Path $dev 'runs/replay.json') --budget 120
 ```
 
 ## Main-project version 4 update
@@ -1204,9 +1276,9 @@ capacities where the archive did not record them; the chart explicitly labels th
 Offline browser verification only, from `energymanager/`:
 
 ```powershell
-.\.venv313\Scripts\python.exe tools/offline_e2e.py --serve --history-fixture
+& $py tools/offline_e2e.py --serve --history-fixture
 # In a second terminal, after8102 is ready:
-.\.venv313\Scripts\python.exe tools/native_dashboard_preview.py
+& $py tools/native_dashboard_preview.py
 ```
 
 Open localhost8102 for standalone, or localhost8103/native-preview for the labelled

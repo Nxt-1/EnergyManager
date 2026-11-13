@@ -11,6 +11,8 @@ from datetime import timedelta
 from pathlib import Path
 from time import monotonic
 
+from dev_workspace import create_run
+
 from energymanager.domain import Goal, Policy, encode
 from energymanager.forecasts import demo_snapshot
 from energymanager.planner import Planner
@@ -21,7 +23,10 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--case", choices=("mixed", "winter", "permission"), default="mixed")
     parser.add_argument("--budget", type=float, default=120)
+    parser.add_argument("--artifacts-dir", type=Path, help="External parent for the unique synthetic run directory")
     args = parser.parse_args()
+    run_directory = create_run("benchmark-" + args.case, args.artifacts_dir)
+    print(f"SYNTHETIC run output: {run_directory}", flush=True)
     policy = replace(Policy(), planning_budget_seconds=args.budget)
     s = demo_snapshot(policy=policy, season="winter" if args.case == "winter" else "mixed")
     if args.case == "permission":
@@ -44,8 +49,7 @@ def main() -> None:
     )
     assert (s.intervals[-1].end - s.intervals[0].start).total_seconds() == 168 * 3600
     assert max(i.hours for i in s.intervals) <= 5 / 60 + 1e-9
-    artifact = Path("artifacts") / f"release-{args.case}.json"
-    artifact.parent.mkdir(exist_ok=True)
+    artifact = run_directory / f"release-{args.case}.json"
     artifact.write_text(encode({"snapshot": s, "result": result}), encoding="utf-8")
     report = {
         "case": args.case,
@@ -67,7 +71,7 @@ def main() -> None:
         "permissions": result.get("permission_proposals", []),
         "minimum_grid_certified": result.get("minimum_grid_certified", False),
     }
-    output = Path("docs") / f"benchmark-{args.case}.json"
+    output = run_directory / f"benchmark-{args.case}.json"
     output.write_text(json.dumps(report, indent=2, allow_nan=False), encoding="utf-8")
     print(json.dumps({k: v for k, v in report.items() if k != "stages"}, indent=2), flush=True)
     raise SystemExit(1 if errors or elapsed > args.budget + 0.5 else 0)

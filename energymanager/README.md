@@ -81,21 +81,23 @@ require restart; key changes apply immediately. Each trip independently returns 
 
 ## Local deterministic demo
 
-From this directory, use Python 3.13:
+From this directory, use an external Python 3.13 environment (see the
+[development workspace runbook](docs/RUNBOOK.md#local-development-workspace-and-completion-based-cleanup)):
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.lock -r requirements-dev.lock
-.\.venv\Scripts\python.exe -m pip install --no-deps -e .
-.\.venv\Scripts\python.exe -m energymanager --version
-.\.venv\Scripts\python.exe -m energymanager --port 8100 --budget 120
+$dev = Join-Path $env:USERPROFILE '.codex/project-data/EnergyManager'
+$py = Join-Path $dev 'environments/py313/Scripts/python.exe'
+$env:PYTHONPATH = (Resolve-Path 'src').Path
+$env:PYTHONDONTWRITEBYTECODE = '1'
+& $py -m energymanager --version
+& $py -m energymanager --port 8100 --budget 120 --data (Join-Path $dev 'runs/demo/energymanager.sqlite3')
 ```
 
 Open [Overview and Planning](http://127.0.0.1:8100/). Solver work runs in a separate
 process while dry-run control continues. All demo measurements, forecasts, capacities
 and tariffs are synthetic assumptions. Demo planning/control never uses installation
 inputs or databases. Settings can read HA's entity list to prepare the real configuration.
-Default local state is `runtime/energymanager-v4.sqlite3`.
+The command explicitly stores local state outside the checkout.
 
 The **EV** tab shows a seven-day calendar and daily agenda for entered journeys,
 expected away periods, morning/manual SoC targets and accepted charging sessions.
@@ -106,13 +108,13 @@ the [native dashboard guide](../energymanager-dashboard/README.md). Install its 
 strategy once; later add-on updates deliver the dashboard layout/cards on HA page reload.
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m ruff check src tests tools
-.\.venv\Scripts\python.exe -m mypy src/energymanager
+& $py -m pytest -q -p no:cacheprovider --basetemp (Join-Path $dev 'runs/pytest-current')
+& $py -m ruff check --no-cache src tests tools
+& $py -m mypy --cache-dir (Join-Path $dev 'cache/mypy') src/energymanager
 node --check src/energymanager/assets/app.js
-.\.venv\Scripts\python.exe tools/offline_e2e.py
-.\.venv\Scripts\python.exe -m energymanager --solve artifacts/decision.json --budget 120
-.\.venv\Scripts\python.exe -m build --no-isolation
+& $py tools/offline_e2e.py
+& $py -m energymanager --solve (Join-Path $dev 'runs/decision.json') --budget 120
+& $py -m build --no-isolation --outdir (Join-Path $dev 'runs/package')
 ```
 
 `--fixture` accepts an immutable snapshot for `--solve`. `--config` selects explicit

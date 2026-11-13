@@ -1,5 +1,16 @@
 # Current requirements and decisions
 
+- 13 November 2026, local development storage: the user approved moving private
+  evidence, research, checkpoints, generated output, environments/caches and local
+  history outside the Dropbox Git checkout, under the external Codex project-data
+  workspace. New worktrees use Codex-managed locations; existing manual checkouts
+  are preserved/retired through Git-aware operations. Cleanup depends on recorded
+  verification/publication or extraction of failed-run diagnostic evidence, not
+  arbitrary retention periods. Protect active/paused work, unresolved reproductions
+  and original installation/user-supplied evidence; originals need explicit deletion
+  permission. Preserve compact evidence and unmerged branches. See RUNBOOK.md and
+  the 13 November WORK_STATE.md checkpoint for operational locations and migration.
+
 - 11 November2026, EV-A012/EV-A013 scheduled implementation authorized: user requested
   "Schedule both of those for implementation in 3 hours" after finalizing both scopes.
   Schedule one start in the registered EV implementation chat, approximately17:24Brussels

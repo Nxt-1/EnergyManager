@@ -13,24 +13,27 @@ been promoted into it; there is one active application. Home Assistant retains t
 
 ## Run locally
 
-From the repository root, use Python 3.13:
+From the repository root, use an external Python 3.13 environment:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.\.venv\Scripts\python.exe -m energymanager --version
-.\.venv\Scripts\python.exe -m energymanager --port 8100
+$dev = Join-Path $env:USERPROFILE '.codex/project-data/EnergyManager'
+$py = Join-Path $dev 'environments/py313/Scripts/python.exe'
+$env:PYTHONPATH = (Resolve-Path 'energymanager/src').Path
+$env:PYTHONDONTWRITEBYTECODE = '1'
+& $py -m energymanager --version
+& $py -m energymanager --port 8100 --data (Join-Path $dev 'runs/demo/energymanager.sqlite3')
 ```
 
-Open [Overview and Planning](http://127.0.0.1:8100/). In this prepared workspace the
-existing interpreter is `energymanager/.venv313/Scripts/python.exe`.
+Open [Overview and Planning](http://127.0.0.1:8100/). See the
+[runbook](energymanager/docs/RUNBOOK.md#local-development-workspace-and-completion-based-cleanup)
+for external environment setup, caches, verification and completion-based cleanup.
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m ruff check energymanager/src energymanager/tests energymanager/tools
-.\.venv\Scripts\python.exe -m mypy energymanager/src/energymanager
+& $py -m pytest -q -p no:cacheprovider --basetemp (Join-Path $dev 'runs/pytest-current')
+& $py -m ruff check --no-cache energymanager/src energymanager/tests energymanager/tools
+& $py -m mypy --cache-dir (Join-Path $dev 'cache/mypy') energymanager/src/energymanager
 node --test energymanager/tools/frontend.test.mjs
-.\.venv\Scripts\python.exe -m build --no-isolation energymanager
+& $py -m build --no-isolation --outdir (Join-Path $dev 'runs/package') energymanager
 ```
 
 - [Architecture](energymanager/docs/ARCHITECTURE.md)

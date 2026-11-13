@@ -3755,8 +3755,9 @@ version-specific handoff or another duplicate architecture specification.
 A new chat starts by reading this document, the decision log and relevant supporting
 references, then compares the latest checkpoint with actual files and Git state.
 Project files carry the requirements; do not assume automatic access to another chat's
-history. The ignored `gpt/architecture/Implementation_Checkpoint.md` may contain newer
-local/remote evidence in this workspace, but a fresh clone must not depend on it.
+history. Local checkpoints and preserved former `gpt/` history now live in the
+external development workspace described in RUNBOOK.md. A fresh clone must not
+depend on those local files; current requirements remain in tracked documents.
 
 Use the user's code-writer skill for application changes. Do not write code without
 explicit user authorization; screenshots and questions alone are discussion. Once
@@ -3766,8 +3767,8 @@ do not access live HA/databases, operate hardware, send real phone notices or de
 without separate authorization. Offline verification is not physical commissioning.
 
 The runbook contains environment setup, tests, builds, configured offline preview and
-rollback procedures. The prepared interpreter in this workspace is
-`energymanager/.venv313/Scripts/python.exe`; `python tools/offline_e2e.py --serve` from
+rollback procedures. The external prepared interpreter and development-output paths
+are documented in RUNBOOK.md; `python tools/offline_e2e.py --serve` from
 `energymanager/` provides a synthetic preview on localhost:8102 with a real seven-day
 solve. Check current tests/package/CI rather than assuming an earlier release's results.
 

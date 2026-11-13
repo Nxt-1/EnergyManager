@@ -11,8 +11,9 @@ from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import monotonic
-from uuid import uuid4
 from unittest.mock import patch
+
+from dev_workspace import create_run
 
 import aiohttp
 from aiohttp import web
@@ -51,7 +52,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
               history_fixture: bool = False, calendar_fixture: bool = False, routing_fixture: bool = False,
               ev_fault_fixture: bool = False, planner_failure_fixture: bool = False,
               profiles_fixture: bool = False, deadline_margin_fixture: bool = False,
-              feedback_fixture: bool = False, port: int = 8102) -> None:
+              feedback_fixture: bool = False, port: int = 8102, artifacts_dir: Path | None = None) -> None:
     issued = datetime.now(UTC)
     calls = []
     weather_queries = []
@@ -223,8 +224,9 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
             web.post("/core/api/services/{domain}/{service}", service),
         ]
     )
-    Path("artifacts").mkdir(exist_ok=True)
-    stem = Path("artifacts") / f"e2e-{uuid4().hex}"
+    run_directory = create_run("e2e", artifacts_dir)
+    stem = run_directory / "fixture"
+    print(f"SYNTHETIC run output: {run_directory}", flush=True)
     async with TestServer(fake) as endpoint:
         config = json.loads(Path("configuration.example.json").read_text(encoding="utf-8"))
         config["home_assistant_url"] = str(endpoint.make_url("/api"))
@@ -514,7 +516,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
                         "cloned accepted archive regains authority with no solver, provider or actuator call",
                     ],
                 }
-                Path("docs/offline-e2e.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+                (run_directory / "offline-e2e.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
                 print(json.dumps(report, indent=2), flush=True)
                 if serve:
                     if deadline_margin_fixture:
@@ -615,6 +617,7 @@ async def run(*, serve: bool = False, preview_fault: str | None = None,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--artifacts-dir", type=Path, help="External parent for the unique synthetic run directory")
     parser.add_argument("--port", type=int, default=8102, help="Local synthetic preview port")
     parser.add_argument("--serve", action="store_true", help="Keep synthetic verification UI on localhost:8102")
     parser.add_argument("--profiles-fixture", action="store_true",
@@ -655,4 +658,5 @@ if __name__ == "__main__":
                     ev_fault_fixture=arguments.ev_fault_fixture,
                     planner_failure_fixture=arguments.planner_failure_fixture,
                     profiles_fixture=arguments.profiles_fixture, deadline_margin_fixture=arguments.deadline_margin_fixture,
-                    feedback_fixture=arguments.feedback_fixture, port=arguments.port))
+                    feedback_fixture=arguments.feedback_fixture, port=arguments.port,
+                    artifacts_dir=arguments.artifacts_dir))

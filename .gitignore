@@ -14,6 +14,9 @@ venv/
 # Local GPT investigation files (synced through Dropbox).
 /gpt/
 
+# Machine-local external workspace paths; copied into trusted Codex worktrees.
+/.codex/config.toml
+
 # Local V4 development outputs.
 .venv*/
 /runtime/

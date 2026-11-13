@@ -1,5 +1,51 @@
 # EnergyManager work state
 
+## External development storage migration — 13 November 2026
+
+AUTHORIZED in Setup V2: external development storage, verified migration of local
+evidence/history/output, retirement of nine integrated worktrees, preservation and
+relocation of ev-a002/V4.7, external environments/caches, tooling and instructions,
+and commit/push. User replaced proposed retention timers with completion-based rules:
+verified/published success or extracted failure evidence permits disposable cleanup;
+original installation/user-supplied evidence requires explicit deletion permission.
+
+MIGRATED: external root `C:/Users/Arne/.codex/project-data/EnergyManager` now holds
+original incident/planner evidence in `evidence/`, investigations in `research/`, former
+`gpt/` history and legacy artifacts/runtime in `history/`. The detailed old/new mapping,
+hash inventory, verification and preserved pre-existing document snapshots are in
+`checkpoints/storage-migration-2026-11-13/`. Recorded readable-file hashes matched; old
+access-restricted files/directories were preserved by same-volume relocation without
+changing their access controls. Unclassified legacy runs remain protected rather than
+being deleted based on age or filenames. Some restricted cache remnants also remain.
+
+Nine clean integrated worktrees were retired, their branches retained and unique
+ignored artifacts preserved under `history/retired-worktrees/`: ev-a003-005, ev-a006,
+ev-a007, ev-a008, ev-a009, ev-a010, ev-a011, ev-a012-a013 and ev-progress-return.
+Current retained checkout locations override historical paths below:
+
+- `codex/ev-a002`: `C:/Users/Arne/.codex/project-data/EnergyManager/checkouts/ev-a002`;
+  two commits not in main are preserved; no new task/integration authorization implied.
+- `codex/v4.7-ev-calendar`: `C:/Users/Arne/.codex/project-data/EnergyManager/checkouts/v4-7`;
+  main and checkout were at released4.7.0 (`b55ae6b`), implementation chat idle. Both
+  retained checkouts kept their HEAD and working/untracked Git state during relocation.
+- External Python3.13 interpreter: `environments/py313/Scripts/python.exe` under the
+  project-data root. Pinned dependencies were reinstalled; superseded in-repository
+  environments/caches were removed or their restricted remnants preserved externally.
+- Machine-local ignored `.codex/config.toml` adds only the approved project-data path
+  to workspace-write roots; `.worktreeinclude` carries it into new trusted worktrees.
+  Existing sessions may retain their previously loaded permission snapshot.
+
+VERIFIED: pip check/imports,6 storage/cleanup tests including a Windows junction,
+Ruff and mypy72 modules pass. Fake-only E2E25.465s/2019intervals/max4.076ms/four fake
+calls passes with all generated files/reports outside Git. Cleanup preview protects
+active/incomplete/unowned output; tests verify recorded completion, retained report
+hashes, original evidence protection and linked-path rejection. Repository footprint
+is88.2MiB after migration (including Git), compared with the earlier7.67GiB inventory.
+No application runtime code/version changed and no live installation was accessed.
+NEXT: final scoped review/commit/push and CI check; preserve the four unrelated
+pre-existing shared-document diffs. Remote outcomes belong in the external checkpoint
+and final response, without a separate verification-only commit.
+
 ## Release coordination
 
 Workflow agreed in Setup V2 on 1 November 2026; see the root [AGENTS.md](../../AGENTS.md)

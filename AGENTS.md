@@ -28,8 +28,9 @@ may have updated the workspace.
 
 Do not create a new architecture specification or handoff document for each release
 or chat. Preserve superseded evidence in Git history and labelled historical records.
-The `gpt/` tree is ignored local history; current requirements must remain in tracked
-project documents. Historical prompts and draft restrictions do not override later
+Local history (formerly the ignored `gpt/` tree) belongs in the external development
+workspace; current requirements must remain in tracked project documents.
+Historical prompts and draft restrictions do not override later
 confirmed decisions or authorize new work. Explicit current user instructions take
 precedence; ask about genuine unresolved policy conflicts.
 
@@ -90,6 +91,33 @@ precedence; ask about genuine unresolved policy conflicts.
   share file updates automatically: consult the latest shared records on main and
   reconcile relevant updates before acting or integrating; do not overwrite newer
   decisions or another release's progress with an older branch copy.
+
+## Local development storage and cleanup
+
+- Keep source, tests, reproducible fixtures, configuration templates and maintained
+  documentation in Git. Store private evidence, research, run output and checkpoints
+  under `ENERGYMANAGER_DEV_HOME`, defaulting to
+  `$CODEX_HOME/project-data/EnergyManager` (or `~/.codex/project-data/EnergyManager`).
+  Original incident evidence belongs in `evidence/`, outside disposable runs/worktrees.
+- Use Codex-managed worktrees for new isolated implementation work. Consult current
+  WORK_STATE.md for existing checkout locations; never recreate nested worktrees under
+  repository `artifacts/`. Historical paths map through the external migration manifest.
+- Use the external Python environment and explicit source path described in RUNBOOK.md.
+  Put pytest temporary data, build/install output, previews and tool caches outside Git.
+  E2E and benchmark tools create unique external runs by default; avoid historical
+  copies of tools that still use repository-relative output paths.
+- Cleanup is based on completion, not elapsed days. After successful verification and
+  required publication, retain compact results and remove disposable run output. After
+  a failed run, extract and retain minimal diagnostic/reproduction evidence before
+  deleting temporary output. Preserve that evidence until the issue/fix is resolved
+  and verified. Original installation backups/user-supplied evidence require explicit
+  user permission for deletion. Active and paused work remains protected.
+- Retire worktrees after their work is integrated and verified and unique ignored
+  evidence is preserved. Recheck activity, Git state and resolved paths before removal;
+  retain branches with unmerged commits and never follow directory links for cleanup.
+- `python tools/dev_workspace.py cleanup` previews eligible owned synthetic runs.
+  Record completion and retained evidence before using `cleanup --apply`. Automatic
+  age-based pruning and blanket deletion of legacy artifacts are not authorized.
 
 ## Required coding skill
 
