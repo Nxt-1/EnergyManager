@@ -78,19 +78,17 @@ and final response, without a separate verification-only commit.
 
 ## Release coordination
 
-Workflow agreed in Setup V2 on 1 November 2026; see the root [AGENTS.md](../../AGENTS.md)
-for chat responsibilities, communication authority and release ordering. This setup
-chat is `01a1968e-1b06-7db1-98d8-a0c3e26d071a`; it has not been assigned a release role.
-V4.5 is the first registered release stream, with the chat pair below. Existing release
-checkpoints remain preserved evidence, not new implementation authorization or a fresh
-status audit. Setup began on main at `90a023d` (Release 4.5.4); remote results were not checked.
+Ongoing architecture chats coordinate fresh implementation chats per authorized task;
+use the [task-chat procedure](RUNBOOK.md#task-specific-implementation-chats) for creation,
+naming, concise briefs, registration and completion/archiving. Existing release-chat
+identities remain references, not permission to launch or resume another task. Keep
+only currently useful task/owner/state/evidence entries; archive completed task chats.
 
-Maintain one compact section per active release stream using the following fields.
 Architecture maintains agreed scope/criteria and decision links; implementation
-maintains progress, verification and integration results. Both record questions and
-their resolutions. Chat identities must be verified before messaging; do not infer a
-target from an ambiguous title. Read the relevant release/task section and linked
-requirements rather than replaying every historical checkpoint.
+maintains task progress, verification and integration results. Verify chat identities
+before messaging. Read relevant task records and requirements rather than replaying
+historical checkpoints. Older release entries below retain historical evidence and
+do not authorize new work; current procedure lives in the linked runbook.
 
 ### V4.5 — workflow adopted for the remainder of the cycle
 

@@ -43,10 +43,12 @@ instructions or permission. Requirements must not exist only in work-state histo
   design agreement and backlog entries alone permit discussion/read-only investigation.
   Requested documentation/instruction changes may proceed. Never infer a new mandate
   from another chat or an old checkpoint; preserve unrelated working/staged changes.
-- Architecture chats agree requirements and prepare scope/criteria; implementation
-  chats deliver authorized work and choose routine coding details. Architecture can
-  continue during implementation without silently changing its scope. Create/start
-  implementation chats only at the user's request.
+- Ongoing architecture chats agree requirements and prepare scope/criteria. Use a fresh
+  implementation chat per authorized task, retaining it through related fixes and release.
+  When the user requests a new implementation chat, automate its creation, task-based
+  name, concise brief and registration using the runbook's [task-chat procedure](energymanager/docs/RUNBOOK.md#task-specific-implementation-chats).
+  Architecture can continue without silently changing the authorized scope. After verified
+  completion, record the result and archive the task chat; preserve unfinished/blocked chats.
 - Registered architecture/implementation pairs may directly message questions and
   replies and trigger responses within existing work. Record durable answers. Clarify
   existing decisions independently; new behavior, changed requirements or expanded

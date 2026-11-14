@@ -1,5 +1,15 @@
 # Current requirements and decisions
 
+- 14 November 2026, task-specific implementation chats: retain ongoing architecture
+  chats, but start a fresh implementation chat for each explicitly requested task.
+  Automate creation, task-based naming, a short document-linked brief and registration.
+  Keep related corrections/verification/releases in that chat. After verified completion,
+  record the result, notify the registered architecture counterpart and archive the
+  implementation chat; incomplete/blocked work stays open. Preserve archived evidence;
+  do not delete chats. This replaces the original one-implementation-chat-per-release-
+  stream lifetime. Fresh context is intended to reduce accumulated history and usage;
+  handoffs reuse maintained documents, with no transcript copy or new handoff file.
+
 - 13 November 2026, local development storage: the user approved moving private
   evidence, research, checkpoints, generated output, environments/caches and local
   history outside the Dropbox Git checkout, under the external Codex project-data
@@ -414,7 +424,8 @@
   WORK_STATE.md and the supporting document names remain unchanged. Historical paths
   in prior checkpoint evidence and pinned Git-history links retain their original names.
 
-- 1 November 2026, development workflow (Setup V2): one architecture chat and one
+- 1 November 2026, initial development workflow (Setup V2; implementation-chat
+  lifetime superseded on 14 November): one architecture chat and one
   implementation chat per release stream, retained through its patch releases;
   multiple release streams may develop concurrently. The user creates and starts
   implementation chats. Shared project documents carry requirements and results.

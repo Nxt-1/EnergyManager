@@ -19,12 +19,13 @@ to the task, its current WORK_STATE.md entry and supporting sections as needed. 
 investigation when dependencies or uncertainty warrant it; do not routinely read the
 entire specification, backlog, journal or unchanged files at every turn/resumption.
 
-Each release stream can have paired architecture/implementation chats through its
-patch releases, with several streams active concurrently. Architecture prepares scope
-and completion criteria; implementation delivers explicitly authorized tasks. The
-user chooses when to create/start implementation chats. Continuing architecture work
-produces proposed follow-ups or explicit authorized amendments, not silent changes
-to the scope already being built.
+Architecture chats remain ongoing by topic/release stream and may coordinate several
+task-specific implementation chats. Each authorized task starts in a fresh chat and
+keeps that chat through related corrections, verification and delivery, even if it
+produces more than one patch version. Several tasks/streams may run concurrently.
+The user chooses when to start a new implementation chat; the administration follows
+the procedure below. Later architecture changes are follow-ups or explicit authorized
+amendments, not silent changes to work already being built.
 
 Registered pairs may directly exchange questions/replies and trigger responses within
 existing work. Verify the destination identity, link the task and record its durable
@@ -51,6 +52,42 @@ copies; preserve unrelated changes rather than overwriting them with older copie
 Use the current Git state and referenced delivery checkpoint instead of replaying
 superseded NEXT instructions. Record subsequent remote results externally and in the
 final reply; avoid optional verification-only commits after successful publication.
+
+### Task-specific implementation chats
+
+The user's request, for example "Start a new implementation chat for [task]", authorizes
+creating and starting that scoped chat. Design agreement/backlog entries alone do not.
+Automate these steps within the ordinary task flow; no recurring polling task is needed:
+
+1. Create a fresh chat in the EnergyManager project and follow the existing isolation
+   rules. Use the configured model/reasoning defaults unless the user specifies them.
+   Do not fork the old implementation history. If creation is pending, wait for that
+   creation rather than issue a duplicate request.
+2. Name it **Implementation — [short task name]**. Include a release number only when
+   assigned; the task, not an assumed version, determines its identity.
+3. Supply a concise initial brief with the explicit authorization/scope, relevant
+   architecture/backlog section links, acceptance criteria, architecture-chat identity,
+   dependencies and starting-state constraints that matter. Refer to existing documents;
+   do not copy transcripts, whole specifications, old logs or create another handoff file.
+4. Register the actual title, chat ID/host, architecture counterpart and current task
+   ownership in WORK_STATE.md. Add branch/release, state, next action and evidence only
+   as useful. Keep one current task record; update it rather than append a journal.
+5. Keep the same chat for related fixes, retries, verification and release. Starting a
+   different task requires a new user request; do not launch unrelated follow-ups.
+6. When the authorized outcome and required verification/integration/publication are
+   complete, save a concise completion report and evidence links, reconcile the shared
+   task record and report completion to the registered architecture counterpart. Then
+   archive the completed implementation chat using the app tool. This is standing
+   authorization for that completion message and archiving, not permanent deletion.
+   Keep incomplete, failed, paused, blocked or decision-pending chats open. Worktree
+   retirement remains subject to its separate cleanup checks; retain required evidence.
+
+Keep completed chat identities in current state only while useful to active work;
+archived chats and Git/external evidence retain the history. New tasks read the relevant
+shared contracts/current state rather than replaying old implementation chats. Chat
+creation/naming/registration and archiving need no repeated approval once this scoped
+start/completion procedure applies; new work and installation access retain their own
+existing authorization boundaries.
 
 ## Verification sequence and stopping rules
 
