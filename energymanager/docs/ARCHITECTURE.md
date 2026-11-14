@@ -871,7 +871,7 @@ or that the estimate has been validated as representative of the installation.
 - HA connects automatically through Supervisor. Keep connection-address options,
   notification webhooks and the Commissioning tab out of the normal GUI. Phone notices
   use the optional selected HA notify entity or mobile-app action.
-- The single Overview hardware switch applies immediately and persists its requested
+- The master Overview hardware switch applies immediately and persists its requested
   state separately from installation JSON. Saving installation settings still requires
   restart. The control and migration boundaries below remain mandatory.
 
@@ -3490,13 +3490,89 @@ reason. Older releases need one fresh4.4.11 calculation to obtain the metadata; 
 migration reconstructs missing settings identity. Recovery state/plan/revision is a backend
 projection for current EV session display, never browser command authority.
 
-The shutdown EV stop and ESS setpoint clear remain. Continuing charging through offline
+The shutdown ESS setpoint clear remains; EV stop is allowed only while EV hands-off is not selected. Continuing charging through offline
 updates is separately deferred (ARCH-021) until an independent device-side bound is verified.
 A new accepted plan replaces recovery atomically through the existing adoption transaction.
 Restart withholds recorded authority until these fresh startup checks complete. Actuator failures remain explicit events; repeated
 failure backs off and non-delivery latches EV stopping. A solver-parent watchdog prevents
 orphan workers after service loss. None of this authorizes executing elapsed commands,
 ignoring a genuine safety stop or bypassing a goal/permission revision.
+
+### EV-specific hands-off control (4.7.2)
+
+Work package requested on14November2026; the user subsequently authorized handoff to
+V4.7 EV calendar implementation for scoped implementation. This is independent of the pending ordinary
+retry package and replacement EV optimization model.
+
+**Outcome and UI.** Replace the read-only Hardware control On/Off indicator in the
+EV tab with a labelled switch using the Manual SoC switch's visual and interaction
+pattern. It controls EV automation only. Off means EnergyManager observes the car and
+charger but sends no commands to either. Switching off must leave the hardware exactly
+as it is: no stop, current/phase/force change, simulated unplug or reboot. This enables
+charging directly through the go-e controls while ESS automation continues.
+
+**Authority and persistence.** The existing Overview hardware switch remains the
+master permission; effective EV authority additionally requires this EV switch and
+all existing execution guards. Turning the EV switch on cannot enable the master.
+Persist the EV requested state in SQLite, separately from Manual SoC and installation
+JSON. A missing EV preference defaults to on to preserve existing master-controlled
+behavior; a saved off state survives restart and reconnect. Show requested and
+effective state accurately when the master is off or readiness blocks execution.
+
+Off is an unconditional EV write veto, including normal control, peak protection,
+fault stops, recovery/reboots, phase-change sequencing, one-time EV UI actions,
+master-off handling and application startup/shutdown. Continue ESS's existing master
+switch and protective behavior. Do not route EV-off through the existing combined
+stop operation. EnergyManager must not claim EV peak protection or deadline delivery
+while it has no EV authority; the user controls the external charging session.
+
+Revoke queued EV work at takeover and guard every subsequent service dispatch,
+including each step after an await. A request already dispatched to HA cannot be
+recalled: expose a pending transition until existing EV dispatch has settled, then
+confirm hands-off. Do not claim this rolls back an already accepted hardware action.
+Cancel internal pending retries/phase resumes without clearing persisted incidents,
+goals, progress or manually supplied SoC. No hardware reset or compensating write.
+Re-enabling evaluates current fresh observations and the then-valid plan through
+existing safeguards; never replay a pre-takeover pending command.
+
+**Observation and planning boundary.** Continue available telemetry, counter-derived
+progress, history, fault observation and planning. Separate observed hardware faults
+from automatic non-delivery supervision: an unexecuted plan is not an acknowledged
+charging request and must not create retries, reboot attempts or false command-failure
+incidents. Retain genuine existing incident evidence. Manual SoC remains independent.
+Account for actual externally controlled EV consumption in live ESS/grid balancing;
+do not credit hypothetical EV curtailment as an available actuator response. Existing
+plans may remain visible as advisory intentions, clearly distinguished from applied
+control. No MILP redesign, new scheduling policy or external-controller orchestration.
+
+**Implementation starting points.** The existing EV heading is rendered by
+`assets/ev-status.js`; reuse the accessible switch interaction from
+`assets/manual-soc.js` across native and standalone views. Add persisted EV state and
+an immediate validated API beside the existing master-control path in `hardware.py`,
+`web.py` and `service.py`. Audit `GuardedActuator.write`, `apply_serial`, `stop` and
+`reboot_ev` in `control.py`, plus direct EV service calls and fault/phase endpoints.
+An early return around the whole actuator would incorrectly disable ESS. Update
+SETTINGS.md's single-switch wording and the current master-authority contract when
+implementing; this section defines the new exception to EV stop-on-master-off.
+
+**Acceptance and scope.** Use deterministic fixtures and fake HA endpoints to prove:
+
+1. Taking over during charging issues zero new EV writes and preserves settings;
+   ESS setpoints can still change. Observations and actual energy accounting continue.
+2. Off vetoes ordinary starts/stops, phase/current changes, protective/fault paths,
+   UI EV actions and recovery/reboot paths. No stale phase-resume/retry escapes across
+   an in-flight await; an already-dispatched request is reported honestly.
+3. Master-off and shutdown while EV-off leave the EV untouched, while retaining ESS
+   stop behavior. Restart restores EV-off before any possible EV write.
+4. Re-enable requires master permission, fresh readings and current valid authority;
+   fault/availability guards remain effective and old pending work is not replayed.
+5. The switch works with keyboard/touch in native and standalone desktop/mobile views,
+   survives refresh, handles API failure and distinguishes requested/effective state.
+   Existing Manual SoC behavior and incident evidence remain intact.
+
+This is a bounded UI/API/persistence and dispatch-guard patch, not a charger-error fix.
+No live HA/database access, hardware experiment, deployment or automatic-retry changes
+are authorized by this implementation assignment.
 
 ### EV charging supervision and incident recovery (4.3.2)
 
@@ -3682,7 +3758,7 @@ the editor. Validated edits preserve unknown fields, create a dated backup and r
 the file atomically; revision conflicts prevent overwriting concurrent edits. File I/O
 runs outside the control event loop. Saving affects the next explicit restart, not the
 active installation settings. The Overview hardware switch applies immediately and
-persists in SQLite; turning it off revokes in-flight writes, stops EV charging and clears
+persists in SQLite; turning it off revokes in-flight writes, stops EV charging only when its own switch permits writes, and clears
 the ESS setpoint. Enabling checks saved/runtime settings, entity availability and fresh
 critical measurements. Restart waits for these checks before resuming a saved on state.
 Incomplete saved settings keep the editor available without planning or command authority.

@@ -143,6 +143,23 @@ export class EVSchedulePage {
     this.entities = actions.entities;
     this.tripCalendar = actions.tripCalendar || new TripCalendarPage(actions.api, actions.dateTimePicker);
     this.manual = new ManualSoC(root, body => actions.manual(body), () => this.updateStatus(this.state));
+    root.addEventListener('change', async event => {
+      if (!event.target.matches('[data-ev-control-toggle]') || this.evControlBusy) return;
+      this.evControlBusy = true;
+      this.evControlError = null;
+      const enabled = event.target.checked;
+      this.evControlIntent = enabled;
+      this.updateStatus(this.state);
+      try {
+        await actions.evControl(enabled);
+      } catch (error) {
+        this.evControlError = error.message || 'EV control could not be saved. Check its current state.';
+      } finally {
+        this.evControlBusy = false;
+        this.evControlIntent = null;
+        this.updateStatus(this.state);
+      }
+    });
     this.selectedDate = null;
     this.phaseChanging = false;
     this.phaseError = null;
@@ -377,7 +394,13 @@ export class EVSchedulePage {
     fresh.innerHTML = evStatusMarkup(state, this);
     const body = card.querySelector('.ev-status-body');
     if (body) body.replaceWith(fresh.querySelector('.ev-status-body'));
-    card.querySelector('.ev-header-control > span:last-child').textContent = state.demo ? 'Demo' : state.control_enabled ? 'On' : 'Off';
+    const toggle = card.querySelector('[data-ev-control-toggle]');
+    if (toggle) {
+      toggle.checked = this.evControlIntent ?? state.ev_control?.requested !== false;
+      toggle.disabled = !!(state.demo || !state.ev_control || this.evControlBusy || state.ev_control.changing);
+    }
+    const message = card.querySelector('[data-ev-control-message]');
+    if (message) message.textContent = this.evControlError || (this.evControlBusy ? 'Saving…' : state.ev_control?.reason || '');
     this.manual.sync();
     this.updateActivity();
     if (focusAttribute) card.querySelector(`[${focusAttribute}="${focusValue}"]`)?.focus({preventScroll:true});

@@ -34,6 +34,7 @@ class Command:
 class FastControl:
     def __init__(self, capabilities: Capabilities, policy: Policy, task: dict[str, Any] | None = None) -> None:
         self.c = capabilities
+        self.ev_enabled = True
         self.p = policy
         self.deviation_since: datetime | None = None
         self.last_ev_kw = 0.0
@@ -58,6 +59,7 @@ class FastControl:
         conditional_valid: bool = True,
     ) -> Command:
         c, p, o = self.c, self.p, observation
+        ev_valid = ev_valid and self.ev_enabled
         while plan and plan.get("execution_handover") and at < instant(plan["execution_handover"]["until"]):
             handover = plan["execution_handover"]
             ev_valid = ev_valid and handover["ev_valid"]
@@ -263,6 +265,8 @@ class FastControl:
             direct_dc_ac + max(0.0, o.ess_kwh - floor) * c.ac_discharge_efficiency / period_h,
         )
         net_house = o.house_kw - o.pv_ac_kw
+        if not self.ev_enabled:
+            net_house += o.ev_power_kw
         # Basic ESS mode remains useful without a plan; no forecast-driven grid precharge.
         ev = planned_ev if o.connected and ev_valid else 0.0
         if not o.ev_state_known:
@@ -312,7 +316,7 @@ class FastControl:
                         ev, min(residual_pv, (task["target_ev_kwh"] - o.ev_kwh) / c.ev_efficiency / period_h)
                     )
                     conditional = True
-        projection = self.peak.project(o, at, plan, position, limit, ev)
+        projection = self.peak.project(o, at, plan, position, limit, ev, self.ev_enabled)
         headroom = projection.import_kw
         self.estimated_quarter_kwh = projection.prefix_kwh
         self.peak_evidence = {"at": at.isoformat(), "prefix_kwh": projection.prefix_kwh,
@@ -320,7 +324,7 @@ class FastControl:
                               "task_target_kwh": task_target, "plan_id": plan["id"] if plan else None,
                               "unavoidable_kwh": projection.unavoidable_kwh,
                               "ev_limit_kw": projection.ev_kw, "import_limit_kw": projection.import_kw}
-        desired_ess = net_house + o.ev_power_kw
+        desired_ess = net_house + (o.ev_power_kw if self.ev_enabled else 0)
         if desired_ess < 0:
             charge_headroom = min(
                 c.ac_charge_kw,
@@ -358,7 +362,8 @@ class FastControl:
             physical_discharge = min(
                 c.ac_discharge_kw, emergency_dc + c.battery_discharge_kw * c.ac_discharge_efficiency,
                 emergency_dc + max(0.0, o.ess_kwh - c.ess_min_kwh) * c.ac_discharge_efficiency / period_h)
-            ess = min(max(0, net_house + max(ev, o.ev_power_kw) - headroom), physical_discharge)
+            external = max(ev, o.ev_power_kw) if self.ev_enabled else 0
+            ess = min(max(0, net_house + external - headroom), physical_discharge)
         elif ev > 0 and abs(ev - self.last_ev_kw) > 0.5 and self.last_ev_kw > 0:
             if self.deviation_since is None:
                 self.deviation_since = at
@@ -398,13 +403,14 @@ class FastControl:
         ev = amps * phases * c.voltage / 1000
         # Recompute ESS after EV reductions; never intentionally export stored energy.
         if ess > 0:
-            ess = min(ess, max(0, net_house + o.ev_power_kw))
+            ess = min(ess, max(0, net_house + (o.ev_power_kw if self.ev_enabled else 0)))
         if not ess_valid and not emergency:
             ess = basic_ess
         self.last_ev_kw = ev
         self.last_tick = at
         self.last_import_kw = max(0, net_house + ev - ess)
         reason = (
+            "EV hands-off; advisory plan only, ESS balancing continues" if not self.ev_enabled else
             "Charger phase information unavailable; EV paused, ESS balancing continues"
             if not o.ev_phase_known
             else "EV paused: charging progress unavailable" if not progress_usable
@@ -464,6 +470,9 @@ class GuardedActuator:
         charger: GoEReadings | None = None,
     ) -> None:
         self.client, self.entities, self.c, self.enabled = client, entities, capabilities, enabled
+        self.ev_enabled = True
+        self.ev_epoch = 0
+        self.dispatch_ev_epoch = 0
         self.generation = generation
         self.on_write = on_write
         self.command_generation = 0
@@ -490,15 +499,17 @@ class GuardedActuator:
 
     async def reboot_ev(self, entity: str, permitted: Callable[[], bool], before_press: Callable[[], None]) -> None:
         """Stop first; persist the single attempt before a generation-guarded button press."""
+        epoch = self.ev_epoch
         async with self.lock:
             generation = self.generation() if self.generation else self.command_generation
-            if not self.enabled or not permitted():
+            if not self.enabled or not self.ev_enabled or epoch != self.ev_epoch or not permitted():
                 raise StaleDispatch("EV recovery was revoked")
             await self.client.service("select", "select_option", {"entity_id": self.entities["force"], "option": "1"})
             if self.on_write:
                 self.on_write({"generation": generation, "domain": "select", "service": "select_option",
                                "entity_id": self.entities["force"], "option": "1", "reason": "EV recovery stop before reboot"})
-            if not self.enabled or not permitted() or self.generation and self.generation() != generation:
+            if (not self.enabled or not self.ev_enabled or epoch != self.ev_epoch or not permitted()
+                    or self.generation and self.generation() != generation):
                 raise StaleDispatch("EV recovery was revoked after stop")
             before_press()
             await self.client.service("button", "press", {"entity_id": entity})
@@ -510,6 +521,8 @@ class GuardedActuator:
     async def write(self, domain: str, service: str, key: str, value_key: str, value: Any) -> None:
         if not self.enabled or self.generation and self.generation() != self.command_generation:
             raise StaleDispatch()
+        if key != "ess_setpoint" and (not self.ev_enabled or self.dispatch_ev_epoch != self.ev_epoch):
+            raise StaleDispatch("EV control was revoked")
         await self.client.service(domain, service, {"entity_id": self.entities[key], value_key: value})
         if self.on_write:
             self.on_write(
@@ -525,16 +538,19 @@ class GuardedActuator:
 
     async def stop(self, generation: int, *, at: datetime | None = None) -> None:
         """Stop EV charging and clear the ESS setpoint after ordinary writes are revoked."""
+        epoch = self.ev_epoch
         self.enabled = False
         if self.goe_control:
             self.goe_control.reset()
-            self.goe_control.disabled_stop_at = at or datetime.now(UTC)
+            self.goe_control.disabled_stop_at = (at or datetime.now(UTC)) if self.ev_enabled else None
         errors = []
         async with self.lock:
             for domain, service, key, value_key, value in (
                 ("select", "select_option", "force", "option", "1"),
                 ("number", "set_value", "ess_setpoint", "value", 0),
             ):
+                if key != "ess_setpoint" and (not self.ev_enabled or epoch != self.ev_epoch):
+                    continue
                 try:
                     await self.client.service(domain, service, {"entity_id": self.entities[key], value_key: value})
                     if self.on_write:
@@ -559,6 +575,7 @@ class GuardedActuator:
         if not self.enabled or command.generation != generation:
             return
         self.command_generation, self.command_plan = command.generation, command.plan_id
+        self.dispatch_ev_epoch = self.ev_epoch
         if not all(self.entities.get(name) for name in ("force", "phase", "current", "ess_setpoint")):
             raise ValueError("Incomplete actuator mapping")
         if self.fault_until and command.at < self.fault_until and (command.current_a or command.prepare_phase):
@@ -572,6 +589,8 @@ class GuardedActuator:
             await self.write(
                 "number", "set_value", "ess_setpoint", "value", round(-command.ess_kw * 1000 / 10) * 10
             )
+            if not self.ev_enabled or self.dispatch_ev_epoch != self.ev_epoch:
+                return
             if self.goe_control:
                 await self.goe_control.apply(command, observation)
                 return

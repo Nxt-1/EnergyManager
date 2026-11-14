@@ -98,6 +98,8 @@ def configured_application(path: Path, store: Store, *, weather_url: str = FOREC
         on_write=lambda body: store.event("actuator_service", body),
         charger=GoEReadings(data.get("actuators", {}), data.get("ev_diagnostics", {}), p.measurement_max_age_seconds),
     )
+    application.actuator.ev_enabled = store.get("ev_control_enabled", True) is True
+    application.controller.ev_enabled = application.actuator.ev_enabled
     application.ev_faults = EVFaults(application, data.get("actuators", {}).get("ev_reboot", ""),
                                      data.get("ev_diagnostics", {}))
     return application

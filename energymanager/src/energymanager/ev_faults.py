@@ -83,7 +83,7 @@ class EVFaults:
 
     def permitted(self) -> bool:
         charger = self.actuator.charger
-        return (self.actuator.enabled and self.fresh() and self.app.observation.ev_power_kw < .1
+        return (self.actuator.enabled and self.actuator.ev_enabled and self.fresh() and self.app.observation.ev_power_kw < .1
                 and (charger is None or charger.reboot_issue(self.app.now()) is None and charger.code("force") == 1))
 
     def unresolved(self, reason: str) -> None:
@@ -102,6 +102,8 @@ class EVFaults:
             await asyncio.sleep(1)
 
     async def step(self) -> None:
+        if not self.actuator.ev_enabled:
+            return
         self.check_disabled_stop()
         incident = self.current
         if not incident or incident["status"] in CLOSED:
@@ -131,7 +133,11 @@ class EVFaults:
                     self.unresolved("A reboot was already attempted within the last 30 minutes")
                     return
                 assert self.app.ha is not None
+                epoch = self.actuator.ev_epoch
                 button = await self.app.ha.entity_state(self.reboot_entity)
+                if (epoch != self.actuator.ev_epoch or not self.actuator.ev_enabled
+                        or incident["status"] != "pending"):
+                    return
                 if str(button.get("state", "unavailable")) == "unavailable":
                     self.unresolved("The configured charger reboot button is unavailable")
                     return

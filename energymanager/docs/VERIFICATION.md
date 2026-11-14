@@ -1,5 +1,19 @@
 # EnergyManager 4 verification
 
+## 4.7.2 — EV hands-off
+
+Offline: full912 tests pass254.95s; final34 hands-off/persistence/API/race cases pass
+1.63s, including mid-dispatch reboot cancellation and equivalent external-load balancing.
+126frontend tests pass403.5ms; Ruff/mypy73 pass. Desktop/narrow synthetic browser
+pointer/keyboard and refresh persistence pass. Native uses the same component and guarded
+phase API; physical touch and real HA remain unverified. Standard configured fake E2E
+2019intervals/25.507s/max control4.334ms/four fake calls passes. Wheel/sdist108 runtime
+files match, isolated4.7.2 import passes. Logs/package remain in the external workspace
+under runs/ev-hands-off-*. Routed fake E2E passes2023intervals55.766s/max2.816ms/two imports/six route queries.
+Remote outcomes are recorded separately.
+No actual HA/database, hardware, real notification or deployment was accessed.
+
+
 ## 4.7.1 — Diagnostics planning dataset (ARCH-030)
 
 All history, databases, endpoints and downloads here are labelled synthetic/local. No live

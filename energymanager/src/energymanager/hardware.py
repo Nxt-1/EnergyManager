@@ -1,4 +1,4 @@
-"""One persisted, immediate hardware switch; planning and measurement continue while off."""
+"""Persisted master and EV authority; observation and planning remain independent."""
 
 from __future__ import annotations
 
@@ -18,6 +18,10 @@ class HardwareControl:
     def __init__(self, application: Application, configuration: ConfigurationFile) -> None:
         self.application, self.configuration = application, configuration
         self.requested = application.store.get("hardware_control_enabled", False) is True
+        self.ev_requested = application.store.get("ev_control_enabled", True) is True
+        self.ev_changing = False
+        self.ev_lock = asyncio.Lock()
+        self.ev_epoch = 0
         self.lock = asyncio.Lock()
         self.epoch = 0
         self.error: str | None = None
@@ -25,6 +29,56 @@ class HardwareControl:
 
     def start(self) -> None:
         self.task = asyncio.create_task(self.resume())
+
+    def ev_state(self) -> dict[str, Any]:
+        readiness = self.readiness_reason()
+        effective = (self.ev_requested and not self.ev_changing and readiness is None
+                     and bool(getattr(self.application.actuator, "enabled", False)))
+        return {"requested": self.ev_requested, "enabled": effective, "changing": self.ev_changing,
+                "reason": ("EV commands are settling" if self.ev_changing else
+                           "Hands-off: observe only; plans are advisory" if not self.ev_requested else
+                           readiness or (None if effective else "Master hardware control is off"))}
+
+    async def set_ev_requested(self, enabled: bool) -> dict[str, Any]:
+        app = self.application
+        self.ev_epoch += 1
+        epoch = self.ev_epoch
+        # Persist before acknowledging; revocation itself is synchronous before the first await.
+        if not enabled:
+            self.ev_requested = False
+            app.controller.ev_enabled = False
+            if isinstance(app.actuator, GuardedActuator):
+                app.actuator.ev_enabled = False
+                app.actuator.ev_epoch += 1
+            if app.ev_faults and app.ev_faults.current and app.ev_faults.current["status"] in (
+                    "pending", "rebooting", "verifying"):
+                app.ev_faults.unresolved("EV hands-off selected; automatic recovery cancelled")
+        app.store.put("ev_control_enabled", enabled)
+        self.ev_requested = enabled
+        self.ev_changing = True
+        try:
+            async with self.ev_lock:
+                if isinstance(app.actuator, GuardedActuator):
+                    async with app.actuator.lock:
+                        if epoch != self.ev_epoch:
+                            return self.ev_state()
+                        actuator = app.actuator
+                        actuator.ev_epoch += 1
+                        actuator.last = actuator.phase = None
+                        actuator.target_phase = actuator.awaiting_phase = None
+                        actuator.stopped_at = actuator.zero_since = actuator.resume_after = None
+                        actuator.charging_since = None
+                        if actuator.goe_control:
+                            actuator.goe_control.reset()
+                        actuator.ev_enabled = enabled
+                self.ev_requested = enabled
+                app.controller.ev_enabled = enabled
+                app.changed("ev_control_enabled" if enabled else "ev_control_disabled", ev=True)
+                app.store.event("ev_control", {"requested": enabled})
+        finally:
+            if epoch == self.ev_epoch:
+                self.ev_changing = False
+        return self.ev_state()
 
     async def close(self) -> None:
         if self.task:

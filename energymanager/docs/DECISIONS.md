@@ -1424,3 +1424,12 @@ per-feed routing checkbox behavior. All configured referee feeds generate calcul
 outward/return drives even if their legacy routing flag is false. Label the checkbox
 as legacy-only; preserve it for installations using the old system. Ordinary selected
 Google context calendars remain read-only and generate no EV requirements.
+
+
+## 14 November2026 — EV-specific hands-off authority
+
+User authorized V4.7 implementation of the EV charging-errors architecture package:
+a separate persisted EV write veto, no stop/reset on takeover, ESS under the existing
+master. Observe actual charging and faults; cancel automatic queued work without
+deleting evidence. Native phase actions share the backend gate. No ordinary retry,
+MILP replacement or live installation operation is included.

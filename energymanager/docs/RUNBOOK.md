@@ -1,5 +1,16 @@
 # Run, configure, review and roll back
 
+## EV hands-off control (4.7.2)
+
+Use Hardware control in the EV heading to hand charging over to go-e/external controls.
+Off sends no stop/reset and blocks all EV writes, including native phase actions,
+recovery, master-off and shutdown. Wait until the pending-dispatch message settles.
+An already-dispatched request cannot be recalled. ESS remains under the Overview
+master. Re-enable does not turn that master on or bypass fresh input/authority guards.
+The preference survives restart independently of Manual SoC; off plans are advisory.
+Verify only against fake/local endpoints unless installation operation is separately authorized.
+
+
 ## Development coordination and current work state
 
 Use ARCHITECTURE.md for behavior/contracts, DECISIONS.md for confirmed rationale and

@@ -203,6 +203,8 @@ class GoEControl:
             return {"as_of": at.isoformat(), "stage": stage, "label": label, "detail": detail,
                     "until": until.isoformat() if until else None, "duration_seconds": seconds, "timer": timer}
 
+        if not a.ev_enabled:
+            return activity("disabled", "EV hands-off", "Observation only; charging is externally controlled.")
         if not a.enabled:
             return activity("disabled", "Automatic EV control off")
         if a.delivery_fault:

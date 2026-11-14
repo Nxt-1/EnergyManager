@@ -134,7 +134,14 @@ export async function mountApplication(root, options = {}) {
       pointerUntil = 0;
       await refresh(true);
     },
-    phase: options.setPhase,
+    evControl: async enabled => {
+      await api('ev/control', 'POST', {enabled});
+      await refresh(true);
+    },
+    phase: options.setPhase ? async option => {
+      await api('ev/control/phase', 'POST', {option});
+      await refresh(true);
+    } : null,
     entities: options.native ? options.entities : null,
     sync: async () => {
       await api('calendars/sync', 'POST', {});

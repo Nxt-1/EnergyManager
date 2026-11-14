@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -27,7 +27,12 @@ class LivePeak:
         self.prefix_kwh = 0.0
 
     def project(self, o: Observation, at: datetime, plan: dict[str, Any] | None,
-                position: int | None, limit: float, requested_ev: float) -> PeakProjection:
+                position: int | None, limit: float, requested_ev: float,
+                ev_controllable: bool = True) -> PeakProjection:
+        if not ev_controllable:
+            # External charging is demand throughout the projection, not curtailment capacity.
+            o = replace(o, house_kw=o.house_kw + o.ev_power_kw, ev_power_kw=0)
+            requested_ev = 0
         quarter = at.replace(minute=at.minute // 15 * 15, second=0, microsecond=0)
         end = quarter + timedelta(minutes=15)
         measured_import = max(0.0, o.house_kw + o.ev_power_kw - o.pv_ac_kw - o.ess_power_kw)
@@ -68,7 +73,7 @@ class LivePeak:
                 household_energy += (right - left).total_seconds() / 3600 * max(0.0, net)
                 f = plan["flows"]
                 net += max(0.0, f["grid_store"][t])
-                ev = requested_ev if t == position else sum(f[name][t] for name in
+                ev = 0 if not ev_controllable else requested_ev if t == position else sum(f[name][t] for name in
                                                             ("grid_ev", "pv_ev", "solar_dis_ev"))
                 shape.append(((right - left).total_seconds() / 3600, net, max(0.0, ev)))
         covered = sum(row[0] for row in shape)

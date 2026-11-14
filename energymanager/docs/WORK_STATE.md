@@ -1,3 +1,16 @@
+## Active V4.7 follow-up — EV hands-off
+
+Authorized14November through EV charging-errors architecture01a1b5ee-a26d-7481-8cfe-f160c58f7efc.
+Managed checkout C:/Users/Arne/.codex/worktrees/ev-hands-off/EnergyManager; baseline99ad72f/4.7.1.
+Scoped preference/API/UI, EV dispatch epochs, ESS independence, supervision gate,
+backend native phase and external-load peak accounting implemented. Full912 tests
+254.95s pass; final34 acceptance cases1.63s,126frontend403.5ms, Ruff/mypy73 pass.
+Desktop/narrow synthetic browser keyboard/pointer/persistence pass. Standard fake E2E
+2019intervals25.507s/max4.334ms passes; wheel/sdist108 parity/isolated4.7.2 import pass.
+Routed fake E2E2023intervals55.766s/max2.816ms passes.
+No live operations. Next: scoped integration/release. Evidence under
+~/.codex/project-data/EnergyManager/runs/ev-hands-off-*.
+
 # EnergyManager work state
 
 ## Planning review and ARCH-030 Diagnostics export

@@ -254,9 +254,9 @@ displayed in EUR/W/month (a saved 4 EUR/kW/month appears as 0.004 EUR/W/month).
 Energy, battery capacity and energy tariffs retain kWh units. These are display/input
 conversions only: existing files need no migration, and unchanged numbers are preserved.
 
-## One immediate hardware switch
+## Immediate hardware authority switches
 
-Overview contains the only Hardware control switch. It applies immediately and saves
+Overview contains the master Hardware control switch. It applies immediately and saves
 its requested state in the V4 SQLite database, without restarting or rewriting the
 installation JSON. Planning and measurements continue while it is off.
 
@@ -374,3 +374,18 @@ Hardware control remains a separate authority switch. No usable reviewed program
 means no optimized scheduling; use Start now and record to collect one. Background
 coverage and mapping provenance are reported in forecast status, using the seven-day
 constant model described in FORECASTING.md.
+
+
+### EV hands-off control (4.7.2)
+
+The EV heading has a separate Hardware control switch, styled like Manual SoC.
+Off retains observation, history, actual progress and advisory planning, but vetoes all
+EV/car/charger writes, including stops, recovery, native phase actions, master-off and
+shutdown. Charger settings stay untouched; ESS remains available under the master.
+Actual external EV demand stays in ESS/grid balancing; curtailment is not assumed.
+
+Requested state persists separately in SQLite; absent defaults on, saved off survives
+restart. On cannot enable the master or bypass fresh inputs, valid authority or faults.
+Pending dispatch settles before hands-off is confirmed; accepted HA writes cannot be
+recalled. Cancel queued recovery/phase work without deleting incidents, goals, progress
+or Manual SoC. Failed persistence is reported; restore storage before relying on restart.

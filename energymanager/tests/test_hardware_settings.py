@@ -385,3 +385,118 @@ async def test_incomplete_saved_settings_keep_the_editor_available_without_plann
         assert result.status == 200
         assert (await result.json())["restart_required"]
         assert application.accepted is None and not store.decisions()
+
+
+async def test_ev_hands_off_preserves_ess_and_master_stop(installation):
+    app, editor, control, _, calls = installation
+    await control.set_requested(True)
+    original = editor.path.read_bytes()
+    await control.set_ev_requested(False)
+    assert calls == [] and app.actuator.enabled
+    assert app.store.get("ev_control_enabled") is False
+    assert not control.ev_state()["requested"]
+    command = Command(app.revision, None, app.now(), 3, 13, 1, 1, 5, "Synthetic hands-off")
+    await app.actuator.apply(command, app.revision, app.observation)
+    assert calls and all(row["entity_id"] == "number.ess_setpoint" for row in calls)
+    calls.clear()
+    await control.set_requested(False)
+    assert calls == [{"service": "set_value", "entity_id": "number.ess_setpoint", "value": 0}]
+    assert editor.path.read_bytes() == original
+    restored = configured_application(editor.path, app.store)
+    assert not restored.actuator.ev_enabled and not restored.controller.ev_enabled
+
+
+async def test_ev_takeover_during_service_wait_revokes_next_write(installation):
+    app, _, control, _, calls = installation
+    await control.set_requested(True)
+    started, release = asyncio.Event(), asyncio.Event()
+    original = app.actuator.client.service
+    async def delayed(domain, service, data):
+        await original(domain, service, data)
+        started.set()
+        await release.wait()
+    app.actuator.client.service = delayed
+    command = Command(app.revision, None, app.now(), 3, 13, 1, 1, 5, "Synthetic await boundary")
+    applying = asyncio.create_task(app.actuator.apply(command, app.revision, app.observation))
+    await started.wait()
+    off = asyncio.create_task(control.set_ev_requested(False))
+    await asyncio.sleep(0)
+    assert not app.actuator.ev_enabled and control.ev_state()["changing"]
+    release.set()
+    await asyncio.gather(applying, off)
+    assert all(row["entity_id"] == "number.ess_setpoint" for row in calls)
+    assert not control.ev_state()["changing"]
+
+
+async def test_ev_off_cancels_queued_enable_and_does_not_replay(installation):
+    app, _, control, _, calls = installation
+    await control.set_requested(True)
+    await app.actuator.lock.acquire()
+    enable = asyncio.create_task(control.set_ev_requested(True))
+    await asyncio.sleep(0)
+    disable = asyncio.create_task(control.set_ev_requested(False))
+    await asyncio.sleep(0)
+    app.actuator.lock.release()
+    await asyncio.gather(enable, disable)
+    assert not app.actuator.ev_enabled and not control.ev_requested
+    assert all(row["entity_id"] == "number.ess_setpoint" for row in calls)
+    assert app.store.get("ev_control_enabled") is False
+    assert not app.actuator.goe_control.pending
+
+
+def test_hands_off_ev_is_external_load_not_curtailment():
+    from energymanager.control import FastControl
+    from energymanager.forecasts import demo_snapshot
+    snapshot = demo_snapshot()
+    policy = replace(snapshot.policy, control_enabled=True)
+    o = replace(snapshot.observation, house_kw=1, ev_power_kw=4, pv_ac_kw=0, pv_dc_kw=0,
+                ess_kwh=10, ess_power_kw=0, quality="measured")
+    external = FastControl(snapshot.capabilities, policy)
+    external.ev_enabled = False
+    baseline = FastControl(snapshot.capabilities, policy)
+    a = external.tick(o, o.at, None, 1)
+    b = baseline.tick(replace(o, house_kw=5, ev_power_kw=0), o.at, None, 1, ev_valid=False)
+    assert a.ev_kw == 0
+    assert a.ess_kw == pytest.approx(b.ess_kw)
+    assert external.peak_evidence["unavoidable_kwh"] == pytest.approx(baseline.peak_evidence["unavoidable_kwh"])
+
+
+async def test_ev_control_api_rejects_writes_while_hands_off(installation):
+    from energymanager.web import create_web
+    app, editor, _, _, calls = installation
+    webapp = create_web(app, configuration=editor)
+    webapp.on_startup.clear()
+    webapp.on_cleanup.clear()
+    async with TestClient(TestServer(webapp)) as client:
+        headers = {"X-EnergyManager": "1"}
+        assert (await client.post("/api/ev/control", json={"enabled": False})).status == 403
+        assert (await client.post("/api/ev/control", json={"enabled": "false"}, headers=headers)).status == 400
+        response = await client.post("/api/ev/control", json={"enabled": False}, headers=headers)
+        assert response.status == 200 and not (await response.json())["requested"]
+        assert (await client.post("/api/ev/control/phase", json={"option": "2"}, headers=headers)).status == 400
+        assert calls == []
+
+
+async def test_takeover_between_reboot_steps_never_presses_button(installation):
+    from energymanager.control import StaleDispatch
+    app, _, control, _, calls = installation
+    await control.set_requested(True)
+    started, release = asyncio.Event(), asyncio.Event()
+    original = app.actuator.client.service
+    async def delayed(domain, service, data):
+        await original(domain, service, data)
+        if data.get("entity_id") == "select.force":
+            started.set()
+            await release.wait()
+    app.actuator.client.service = delayed
+    attempts = []
+    reboot = asyncio.create_task(app.actuator.reboot_ev("button.synthetic_reboot", lambda: True,
+                                                     lambda: attempts.append(True)))
+    await started.wait()
+    off = asyncio.create_task(control.set_ev_requested(False))
+    await asyncio.sleep(0)
+    release.set()
+    with pytest.raises(StaleDispatch):
+        await reboot
+    await off
+    assert not attempts and all(row["service"] != "press" for row in calls)

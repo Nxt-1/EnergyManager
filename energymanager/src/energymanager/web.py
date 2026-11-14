@@ -15,6 +15,7 @@ from .domain import instant, json_data
 from .service import Application
 from .settings import ConfigurationConflict, ConfigurationFile, SettingsValidationError
 from .hardware import HardwareControl
+from .control import GuardedActuator
 from . import __version__
 from .dashboard import dashboard_manifest
 from .graph_history import graph_history
@@ -328,6 +329,36 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         except (RuntimeError, OSError, sqlite3.Error) as exc:
             return web.json_response({"error": str(exc)}, status=503)
 
+    async def ev_control(request: web.Request) -> web.Response:
+        if application.hardware is None:
+            raise ValueError("Hardware control is not configured")
+        body = await request.json()
+        if not isinstance(body, dict) or set(body) != {"enabled"} or type(body["enabled"]) is not bool:
+            raise ValueError("An EV control state is required")
+        try:
+            return web.json_response(await application.hardware.set_ev_requested(body["enabled"]))
+        except (RuntimeError, OSError, sqlite3.Error) as exc:
+            return web.json_response({"error": str(exc)}, status=503)
+
+    async def ev_phase(request: web.Request) -> web.Response:
+        hardware = application.hardware
+        body = await request.json()
+        if not isinstance(body, dict) or set(body) != {"option"} or body["option"] not in ("0", "1", "2"):
+            raise ValueError("A charger phase option is required")
+        if hardware is None or not hardware.ev_state()["enabled"] or hardware.readiness_reason():
+            raise ValueError("EV hardware control is unavailable")
+        actuator = application.actuator
+        if not isinstance(actuator, GuardedActuator):
+            raise ValueError("EV hardware adapter is unavailable")
+        epoch = actuator.ev_epoch
+        async with actuator.lock:
+            if not hardware.ev_state()["enabled"] or epoch != actuator.ev_epoch or hardware.readiness_reason():
+                raise ValueError("EV hardware control was revoked")
+            actuator.command_generation = application.revision
+            actuator.dispatch_ev_epoch = epoch
+            await actuator.write("select", "select_option", "phase", "option", body["option"])
+        return web.json_response({"requested": body["option"]})
+
     async def goals(request: web.Request) -> web.Response:
         return web.json_response(json_data(application.upsert_goal(await request.json())), status=201)
 
@@ -508,6 +539,8 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
             web.post("/api/journeys/{id}", journeys),
             web.delete("/api/journeys/{id}", journeys),
             web.post("/api/control", control),
+            web.post("/api/ev/control", ev_control),
+            web.post("/api/ev/control/phase", ev_phase),
             web.get("/api/settings", settings),
             web.post("/api/settings", settings),
             web.get("/api/settings/entities", entities),

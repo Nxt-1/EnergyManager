@@ -1,4 +1,13 @@
+## 4.7.2 — EV hands-off control
+
+- Add a persisted EV-only hardware switch; off observes without charger writes or a takeover stop.
+- Keep ESS independent and account for external EV demand in live peak balancing.
+- Revoke queued EV phase/recovery work and guard native phase actions server-side.
+
 ## 4.7.1 — Browser planning dataset export
+
+
+
 
 - Add Diagnostics to the shared standalone and native HA dashboards: check history,
   download coverage, select installation-local dates and prepare/download a consistent ZIP.

@@ -31,7 +31,7 @@ export function evDiagnosisMarkup(state, model = evStatusModel(state), activity 
   // controller evidence here; genuine sequence steps/timers keep their live view.
   const faultActivity = control?.stage === 'fault';
   return `<section class="ev-diagnosis" aria-label="EV diagnosis">
-    <strong>${esc(active ? 'EV charging stopped' : model.status)}</strong>
+    <strong>${esc(active ? state.ev_control?.requested === false ? 'EV fault recorded' : 'EV charging stopped' : model.status)}</strong>
     ${reason ? `<p>${esc(powerText(reason))}</p>` : ''}
     ${active ? `<dl>${field('Detected', stamp(incident.detected_at))}${field('Began', stamp(incident.started_at))}
       ${field('Delivery at detection', Number.isFinite(incident.observation?.ev_power_kw) ? `${watts(incident.observation.ev_power_kw)} W` : null)}
@@ -198,7 +198,7 @@ export function evStatusModel(state) {
   return {soc, power, connected, phase, current, requestedPower, summary,
     diagnostics: diagnosticReadings(healthy, states, connected, vehicle, vehicleHealthy),
     requestedPhases, status, tone, reason, healthy, states, charger,
-    flowing: power > 0.1, demo: !!state.demo, controlled: !!state.control_enabled};
+    flowing: power > 0.1, demo: !!state.demo, controlled: !!state.control_enabled && state.ev_control?.requested !== false};
 }
 
 export function evStatusMarkup(state, interaction = {}) {
@@ -218,7 +218,7 @@ export function evStatusMarkup(state, interaction = {}) {
   const selector = !model.demo && state.phase_selector;
   const selectedPhaseText = ({0:'Auto', 1:'1 φ', 2:'3 φ'})[selector?.value] || phaseText;
   const buttons = [['1', '1 φ'], ['2', '3 φ'], ['0', 'Auto']].map(([value, label]) =>
-    `<button type="button" data-ev-phase="${value}" aria-label="Set charger phase mode to ${label}" aria-pressed="${selector?.value === value}" ${!selector?.options?.includes(value) || interaction.phaseChanging ? 'disabled' : ''}>${label}</button>`).join('');
+    `<button type="button" data-ev-phase="${value}" aria-label="Set charger phase mode to ${label}" aria-pressed="${selector?.value === value}" ${!selector?.options?.includes(value) || interaction.phaseChanging || state.ev_control?.enabled === false ? 'disabled' : ''}>${label}</button>`).join('');
   const extraFields = [
     ['Phase selector code', model.states.phase, 'phase'],
     ['Device status age (s)', model.states.heartbeat, 'heartbeat'],
@@ -248,7 +248,7 @@ export function evStatusMarkup(state, interaction = {}) {
       `Unverified · ${raw}` : field.key === 'charge_allowed' && raw ? `${field.text} (${raw})` : field.text;
     return `<div data-ev-field="${field.key}" class="ev-reading-${field.tone}"><dt>${field.key === 'connected' ? connectionIcon(model.connected) : '<i aria-hidden="true"></i>'}${field.label}</dt><dd>${historyValue(field.key, esc(text), field.label)}</dd></div>`;
   }).join('');
-  return `<div class="ev-status-heading"><h2>EV &amp; charger</h2><div class="ev-header-controls"><div class="ev-header-control"><span>Hardware control</span><span>${model.demo ? 'Demo' : model.controlled ? 'On' : 'Off'}</span></div>${manualMarkup}</div></div>
+  return `<div class="ev-status-heading"><h2>EV &amp; charger</h2><div class="ev-header-controls"><label class="ev-header-control"><span>Hardware control</span><input type="checkbox" role="switch" aria-label="EV hardware control" data-ev-control-toggle ${state.ev_control?.requested !== false ? 'checked' : ''} ${state.demo || !state.ev_control || interaction?.evControlBusy ? 'disabled' : ''}></label><span data-ev-control-message role="status">${esc(interaction?.evControlError || state.ev_control?.reason || '')}</span>${manualMarkup}</div></div>
     <div class="ev-status-body ev-tone-${model.tone}">
       <div class="ev-combined-layout">
       <div class="ev-flow ${model.flowing ? 'ev-flowing' : ''}">

@@ -1076,6 +1076,7 @@ class Application:
             "demo": self.demo,
             "control_enabled": bool(getattr(self.actuator, "enabled", False)),
             "hardware_control": self.hardware.state() if self.hardware else None,
+            "ev_control": self.hardware.ev_state() if self.hardware else None,
             "actuator_health": {
                 "delivery_fault": bool(getattr(self.actuator, "delivery_fault", False)),
                 "write_failures": getattr(self.actuator, "failures", 0),
