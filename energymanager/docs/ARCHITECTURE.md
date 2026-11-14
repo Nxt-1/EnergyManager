@@ -3574,6 +3574,11 @@ This is a bounded UI/API/persistence and dispatch-guard patch, not a charger-err
 No live HA/database access, hardware experiment, deployment or automatic-retry changes
 are authorized by this implementation assignment.
 
+From4.7.3 the switch immediately renders the successful save response, including its
+persisted application revision. A later refresh failure cannot restore an older switch
+value; an in-flight read from before that acknowledgement cannot overwrite it. This
+changes UI acknowledgement only, not hardware permission or dispatch behavior.
+
 ### EV charging supervision and incident recovery (4.3.2)
 
 From4.4.10 persistent blocked charging requests escalate after120seconds. The existing

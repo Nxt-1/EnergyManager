@@ -1,3 +1,8 @@
+## 4.7.3 — Preserve acknowledged EV switch state
+
+- Show a saved EV control response immediately when a later status refresh times out.
+- Prevent an older in-flight read from replacing the acknowledged switch state.
+
 ## 4.7.2 — EV hands-off control
 
 - Add a persisted EV-only hardware switch; off observes without charger writes or a takeover stop.

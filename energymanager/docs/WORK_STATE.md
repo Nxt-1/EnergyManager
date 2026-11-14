@@ -1,15 +1,13 @@
-## Active V4.7 follow-up — EV hands-off
+## Active V4.7 follow-up — EV switch acknowledgement
 
-Authorized14November through EV charging-errors architecture01a1b5ee-a26d-7481-8cfe-f160c58f7efc.
-Managed checkout C:/Users/Arne/.codex/worktrees/ev-hands-off/EnergyManager; baseline99ad72f/4.7.1.
-Scoped preference/API/UI, EV dispatch epochs, ESS independence, supervision gate,
-backend native phase and external-load peak accounting implemented. Full912 tests
-254.95s pass; final34 acceptance cases1.63s,126frontend403.5ms, Ruff/mypy73 pass.
-Desktop/narrow synthetic browser keyboard/pointer/persistence pass. Standard fake E2E
-2019intervals25.507s/max4.334ms passes; wheel/sdist108 parity/isolated4.7.2 import pass.
-Routed fake E2E2023intervals55.766s/max2.816ms passes.
-No live operations. Next: scoped integration/release. Evidence under
-~/.codex/project-data/EnergyManager/runs/ev-hands-off-*.
+Managed checkout C:/Users/Arne/.codex/worktrees/ev-hands-off/EnergyManager, branch
+codex/ev-hands-off. Authorized EV hands-off dispatch/API/UI is on main77ec5ae/4.7.2.
+A native synthetic timeout check found a saved switch could be hidden by failed status
+refresh.4.7.3 renders the API save response immediately and rejects older read revisions.
+34 affected cases1.68s,126frontend406.1ms pass; native timeout/keyboard/off reload pass.
+Hardware dispatch is unchanged. Next: package/check final correction, integrate/publish
+in version order. Evidence/checkpoints are external ev-hands-off-* / ev-switch-ack-*.
+No live installation actions. Architecture partner01a1b5ee-a26d-7481-8cfe-f160c58f7efc.
 
 # EnergyManager work state
 

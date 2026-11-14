@@ -135,8 +135,11 @@ export async function mountApplication(root, options = {}) {
       await refresh(true);
     },
     evControl: async enabled => {
-      await api('ev/control', 'POST', {enabled});
-      await refresh(true);
+      const control = await api('ev/control', 'POST', {enabled});
+      state = {...state, ev_control: control};
+      backendState = {...backendState, ev_control: control};
+      evPage.updateStatus(state);
+      void refresh(true);
     },
     phase: options.setPhase ? async option => {
       await api('ev/control/phase', 'POST', {option});
@@ -688,6 +691,8 @@ export async function mountApplication(root, options = {}) {
     try {
       const nextState = await statePoller.poll(force);
       if (!nextState || lifecycle.signal.aborted) return;
+        // A read begun before a successful switch save cannot undo its acknowledgement.
+        if (nextState.revision < state?.ev_control?.revision) nextState.ev_control = state.ev_control;
       planningActivity.update(nextState);
       connectionError = null;
       renderConnectionError();

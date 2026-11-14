@@ -35,6 +35,7 @@ class HardwareControl:
         effective = (self.ev_requested and not self.ev_changing and readiness is None
                      and bool(getattr(self.application.actuator, "enabled", False)))
         return {"requested": self.ev_requested, "enabled": effective, "changing": self.ev_changing,
+                "revision": self.application.revision,
                 "reason": ("EV commands are settling" if self.ev_changing else
                            "Hands-off: observe only; plans are advisory" if not self.ev_requested else
                            readiness or (None if effective else "Master hardware control is off"))}

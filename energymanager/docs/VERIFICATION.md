@@ -1,5 +1,15 @@
 # EnergyManager 4 verification
 
+## 4.7.3 — EV switch acknowledgement
+
+Native synthetic HA-contract timeout test exposed a successful save followed by a
+failed status read showing the previous switch value. The API acknowledgement now
+renders immediately and its revision rejects older reads. Native keyboard toggle,
+phase-disable while off, simulated15s status timeout and off-state reload pass.
+34 affected cases1.68s and126frontend406.1ms pass; the prior4.7.2 full912/control/E2E
+checks cover unchanged dispatch behavior. Physical HA/touch/deployment remain unverified.
+
+
 ## 4.7.2 — EV hands-off
 
 Offline: full912 tests pass254.95s; final34 hands-off/persistence/API/race cases pass

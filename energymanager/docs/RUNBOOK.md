@@ -954,8 +954,8 @@ protective stops remain responsive. Existing command/readback/error/watchdog gua
 remain. The old phase-switch cooldown (600s by default) is removed from planning
 and control, and its Settings field is retired. Existing JSON values are accepted
 and ignored; no configuration edit is required. Update the add-on and reload HA.
-Native manual phase buttons still send direct one-time HA changes and do not run
-this automatic sequence. No installation/hardware checks were performed by the agent.
+From4.7.2 native manual phase buttons use the EV-gated backend API for one-time
+changes; they do not run this automatic sequence. No installation/hardware checks were performed by the agent.
 
 Release4.3.12 gives each economic planning stage a bounded continuity refinement and
 tries a single constant-current one-phase session for the next grid-only requirement.

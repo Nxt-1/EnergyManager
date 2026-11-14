@@ -474,6 +474,10 @@ async def test_ev_control_api_rejects_writes_while_hands_off(installation):
         response = await client.post("/api/ev/control", json={"enabled": False}, headers=headers)
         assert response.status == 200 and not (await response.json())["requested"]
         assert (await client.post("/api/ev/control/phase", json={"option": "2"}, headers=headers)).status == 400
+        response = await client.post("/api/ev/control", json={"enabled": True}, headers=headers)
+        saved = await response.json()
+        assert saved["revision"] == app.revision
+        assert saved["requested"] and not saved["enabled"]  # The EV switch cannot enable the master.
         assert calls == []
 
 
