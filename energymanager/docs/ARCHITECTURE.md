@@ -901,9 +901,10 @@ its AC bus boundary; DC solar is not counted twice. The P1 demand sensor builds 
 zero and is converted from W/kW to quarter import kWh using a fixed0.25h denominator.
 The go-e phase selector supplies forced-mode readback; no additional phase sensor is
 required. Auto/unavailable is unknown and pauses EV while fresh ESS balancing continues.
-Stop/zero, post-switch readback and a30second restart settling hold are enforced
-without claiming physical contactor telemetry. There is no minimum interval between
-phase switches. Meter/controller clock alignment remains a commissioning check.
+The guarded EV protocol enforces stop-first phase changes with60s continuously
+confirmed stop and6A restart; ordinary same-phase restarts retain30s settling.
+Readback is not physical contactor telemetry. There is no added phase cooldown or
+minimum charging block. Meter/controller clock alignment remains a commissioning check.
 
 Settings exposes only these sensor mappings, with no source/type selectors or computed
 house/phase-count inputs. Daily readiness is in the EV group. Older JSON is interpreted
@@ -1779,18 +1780,15 @@ device status age, HA read and device frame timestamps. Stale raw values stay vi
 as unverified. The separate Charger details foldout and redundant phase-current footer
 are removed. Red/neutral/green status meaning remains.
 
-The phase-mode annotation has1φ/3φ/Auto buttons in native HA. The user explicitly chose
-one-time direct charger changes that automatic control may overwrite, rather than a
-planner constraint or EV-control pause. Dashboard discovery supplies only the mapped
-actuator phase selector (no credentials, none in demo). Buttons use that actual HA
-select entity, validate its offered0/1/2 options, and call HA `select.select_option`
-once under the current user's permissions. Pending writes disable the buttons; errors
-are visible and never retried automatically. Pressed state follows HA readback; focus
-survives refreshes. Unknown/unavailable mappings, unsupported options, demo and standalone
-have no enabled action. Automatic stop/settling/fault policies apply to controller
-restarts; these direct HA buttons themselves do not run the automatic sequence.
-Auto means the charger's own automatic phase mode, not EnergyManager scheduling; the
-existing controller requires fixed1/3-phase readback and may hold EV control for Auto.
+The phase-mode annotation offers fixed1φ/3φ actions in both dashboards through the
+EnergyManager API and guarded actuator. They retain existing permitted power, quantity,
+source and peak bounds. When no legal current fits that power in the requested phase,
+the request prepares the phase while OFF; it never rounds upward or grants charging
+energy. This is a one-time request, superseded by new ordinary controller authority,
+not a persistent manual override. Auto is unavailable and rejected with an explanation.
+Buttons remain disabled without effective EV hardware authority; pressed state follows
+readback, and pending/errors remain visible. External HA/go-e controls remain external
+observations and are not represented as having followed EnergyManager's sequence.
 
 HA Recorder supplies the native historical view under its own coverage/retention settings.
 It does not import EnergyManager's SQLite archive. Accepted plans/decisions/settings
@@ -1906,14 +1904,12 @@ hard. Simultaneous nominal PV ESS charging and household grid purchase is prohib
 to avoid relabelling grid-supplied storage as solar. Genuine DC-bus routing is allowed.
 
 EV uses integer6–16A and supported one/three-phase modes. Modes exclude each other.
-From4.3.13 there is no minimum separation between opposite active phase modes in
-planning, its incumbent or independent validation. The actuator still stops10s and
-confirms zero3s before phase writes, then holds force off for30s after selector
-acknowledgement in either direction. An ordinary restart requires30s from confirmed
-force off and power below100W; an already long enough stop counts toward that hold.
-Current-only adjustments stay live. It prepares a future phase during an off interval.
-The five-minute plan uses nominal slot power; sub-minute control holds can postpone
-actual delivery, which is reconciled from measurements rather than fabricated.
+The [Ford/go-e operating contract](#ford-puma--go-e-operating-constraints) and
+[EV-A015](#pending-ev-a015--setpoint-driven-ev-actuator) govern current/stop/phase
+transitions. Current reductions integrate acknowledged1A/5s events within planning
+intervals; phase changes stop first and require60s continuously confirmed stop. No
+minimum charging-block duration or legacy post-selector hold is added. Requested
+settings remain separate from interval-integrated forecast delivery and measured energy.
 Planning holds the currently valid EV setting through the calculation budget plus15s,
 as a forecast of command continuity during the solve. It is not proof that the expected
 energy was measured as delivered, and does not require matching publication-time stock.
@@ -2269,19 +2265,34 @@ Implementation contracts in4.6.6:
   Instruction hashes distinguish changed work from a publication-ID-only change;
   the active absolute energy endpoint persists through restart and source pauses.
 - Requested integer current is distinct from average delivered power during waits.
-  A future phase switch reserves130s: stop acknowledgement30s, preparation10s,
-  selector acknowledgement30s, restart hold30s and start acknowledgement30s; current
-  confirmation overlaps the hold. These are conservative existing protocol allowances,
-  not measured installation latency. Same-phase restarts retain the remaining30s
-  restart hold. Waits cross partial intervals; joint source/converter/battery limits
-  constrain instantaneous delivery as well as average energy. An independent audit
-  reconstructs the timeline. Continuity counts physical phase interruptions.
+  Fixed candidate traces integrate live1A/5s decreases (including partial-interval
+  boundaries), direct increases and immediate OFF. Phase forecasting reserves180s:
+  stop acknowledgement30s, continuous confirmed stop60s, selector acknowledgement30s,
+  start acknowledgement30s and expected startup30s. The final30s is an explicit
+  forecasting assumption, not a measured guarantee or additional actuator dwell.
+  Current confirmation overlaps the stopped period. Actual restart begins at6A and
+  requires positive measured delivery before increasing. Ordinary same-phase restart
+  settling remains30s. Pending current/readback clocks seed the trace independently
+  of plan IDs. The original seven-day MILP proposes integer profiles; candidate-local
+  joint reallocation uses the original remaining deadline and stage/source/service/
+  economic constraints. Independent audits check integrated energy, instantaneous
+  source/converter/battery envelopes and event-boundary stocks. An unresolved repaired
+  candidate is not global infeasibility/phase-necessity/permission evidence; a repaired
+  Optimal allocation has only that fixed-candidate scope, with no global gap claim.
+  The existing absolute task quantity also bounds the template: ramp delivery may
+  reach it before a requested slot ends, triggering the already permitted immediate
+  quantity-completion OFF. This is not a stop/restart shortcut for a current reduction.
+  Fixed requested profiles are allocated directly against their trace before nominal
+  arithmetic can reject them. Candidate/trace digests, forecast assumptions and scoped
+  status are exposed alongside requested settings and measured counter progress.
+  Five-second current acknowledgements are a forecast assumption; live progress still
+  waits for actual readback and counters. Counter evidence alone establishes delivery.
 - Admission suppresses only an ineffective immediate-return phase prefix shorter
-  than the mandatory40s physical preparation/restart. It adds no phase preference or
-  dwell. Zero-energy phase preparation keeps force-off; a submitted selector write
-  remains pending until fresh acknowledgement or fault. Live peak/source/permission
-  and charger guards still determine actual charging. The counter determines actual
-  progress even when real acknowledgements complete earlier than the model reserve.
+  than the mandatory60s stopped period. It adds no phase preference or charging dwell.
+  OFF phase preparation never authorizes energy; an already submitted selector remains
+  tracked until fresh acknowledgement or fault. Live peak/source/permission guards
+  use observed/transitional response, including protective OFF when a ramp cannot fit.
+
 
 The original hour's complete incident attribution remains limited by missing prior
 decisions/command history; synthetic regressions do not become installation evidence.
@@ -3498,6 +3509,213 @@ failure backs off and non-delivery latches EV stopping. A solver-parent watchdog
 orphan workers after service loss. None of this authorizes executing elapsed commands,
 ignoring a genuine safety stop or bypassing a goal/permission revision.
 
+### Ford Puma / go-e operating constraints
+
+**Agreed16November2026.** Stop the exploratory test campaign. Use the following as
+working constraints for this installation, assumed to operate consistently until
+contradictory real-use evidence appears. These are accepted engineering assumptions,
+not a claim that the fault's physical cause has been established. They are inputs to
+control/planning design, not authorization to change the application or deploy it.
+
+**Current commands.** Within the configured charger, vehicle and installation limits,
+allow direct increases to the required current. While charging, reduce the current
+setting by no more than1A per command, with at least5s between downward steps; use current-setting
+readback to avoid skipped/unacknowledged steps becoming a larger reduction. A new
+lower target continues this ramp rather than issuing an immediate multi-ampere drop.
+The confirmed installation range tested was6–16A; direct6→16A increases passed.
+Use the same rule for1p and3p. Current variation on3p is an explicitly accepted,
+untested assumption; its separate validation is deferred until suitable PV conditions.
+The3p6A limit in the experiments was a test power budget, not a production current cap.
+An OFF/stop request, for any reason, may be issued immediately; no ramp to6A is a
+prerequisite. Once force-stop and near-zero actual power are confirmed, current may
+be changed directly within valid limits. This stopped-current freedom is the user's
+16November clarification/accepted operating assumption, not a separately demonstrated
+test result. For a current-only reduction, keep charging and use the ramp; do not
+deliberately stop/change/restart as a shortcut. Stops remain available when requested,
+for phase changes or for protection. Never delay a protective stop to finish a ramp.
+
+**Phase transitions, either direction.** Use this ordered normal-control sequence:
+
+1. Request force stop immediately. Confirm stopped permission/force state and near-zero actual
+   power from current observations; a successful service call alone is insufficient.
+2. Set the current to6A while confirmed stopped; the active-charging downward ramp
+   does not apply. Confirm the current-setting readback before restart.
+3. Remain continuously confirmed stopped for at least60s before issuing the phase-selector command.
+   If the stopped condition is lost, do not treat the elapsed interval as completed.
+4. Set the required fixed1p or3p mode while stopped and confirm selector readback.
+   Selector acknowledgement is not proof that all electrical switching is complete.
+5. Request force charging at6A, allow startup/ramp time and verify actual delivery.
+   Subsequent current changes follow the current-command rule.
+
+Keep go-e simulated unplugging disabled for this assumed operating setup. Comparisons
+found no measurable timing benefit or clear reliability improvement from enabling it.
+Do not add a separate simulated disconnect, charger reboot, longer pause, minimum
+three-minute charging block or phase-switch preference solely from these tests.
+Existing physical limits, phase preferences, execution authority and fault guards
+continue to apply. The experimental three-minute blocks and approximately30s observed
+restart latency are evidence, not newly imposed dwell/acknowledgement requirements.
+Planning must represent the ramp and mandatory stopped interval, and distinguish
+expected startup latency from delivered energy; use shared execution/timing contracts
+for acknowledgements, supervision and measured progress.
+
+**Delivery and diagnosis.** Charging permission, a selected phase, Ford's app/HA
+charging label and absence of errors do not establish delivery. Verify measured
+positive EV power and account for energy through the existing counter contract.
+Preserve raw small negative power readings: in these traces they preceded successful
+startup and are a useful startup clue, not delivered charging, an immediate fault,
+or verified proof that contactors are closed. Persistent zero with charging permitted
+is non-delivery to supervise even if Ford still reports charging. Retain bounded
+delivery/fault supervision; accepting this operating envelope does not remove it.
+
+**Evidence and limits.** User-operated tests15–16November2026 reproduced persistent
+stops with larger current reductions, including2A/5s. One-amp reductions passed two
+30-minute runs at30s intervals and one at5s intervals. The60s-stop phase-only sequence
+had46 successful transitions and one failed3p start across five runs. Two later mixed
+runs completed about119minutes with28/28 successful phase transitions,480 one-amp
+reductions and48 direct6→16A increases, with no reported faults or sampled loss of
+delivery after startup. Small negative startup readings appeared before all28 mixed
+restarts. Five-second HA sampling cannot rule out shorter interruptions. The earlier
+isolated failed start remains evidence requiring supervision, not an instruction to
+keep repeating test runs before using the accepted assumptions.
+
+Ford feedback can lag measured non-delivery or disagree with actual charging. The
+connected integration is read-only: Ford-app stop/start and climate recovery remain
+user actions. They recovered observed sessions but are not guaranteed/agent-authorized
+recovery paths; climate has a remote-use limit, and stop/start disappears when Ford
+reports a fault. No vehicle-command capability or automatic recovery is introduced.
+
+<a id="pending-ev-a015--setpoint-driven-ev-actuator"></a>
+
+### EV-A015 — setpoint-driven EV actuator
+
+**Implemented in4.7.4; offline verified, publication pending.** See WORK_STATE.md and
+its external checkpoint for current delivery evidence. No live installation validation.
+
+**Authorized16November2026.** The user requested handoff to a fresh implementation
+chat on GPT-6.1 Sol / medium. This authorizes this scoped work package, offline
+verification and delivery under the standing release workflow. Deployment/live
+operation and replacement-model research remain outside the authorization.
+Base implementation on current main, including4.7.2 EV hands-off control and4.7.3
+acknowledged-switch-state retention. Do not regress those independently delivered tasks.
+
+**Outcome and interface.** All EnergyManager EV control paths submit desired state to
+one guarded actuator instead of issuing a raw current/phase/force sequence. A target
+describes charging versus OFF, a permitted fixed1p/3p phase and valid integer current
+when charging, with the existing plan/goal/permission identity and expiry. Phase-only
+preparation while stopped is supported without granting charging energy or starting
+the car. Exact Python/API representation is a routine implementation choice.
+
+Treat a valid end target that requires a transition, e.g.16A→6A or1p→3p, as accepted
+pending work and execute the fastest permitted ordinary path. Do not reject it merely
+because an immediate write would be invalid. Invalid final targets are different:
+reject/report unsupported phases or out-of-range current; never round an insufficient
+power request upward into extra unauthorized charging. Observed charger/vehicle/
+installation limits and execution authority remain binding throughout the transition.
+
+This task preserves existing control ownership and existing manual-action scope; it
+does not introduce a persistent manual charging override. User-facing EV actions and
+planner/controller requests share the guarded path. Existing fixed-phase buttons/API
+must not retain a direct-selector bypass. Charger Auto mode is outside this fixed-phase
+operating contract: do not expose it as a compliant EnergyManager actuator target or
+silently map it to1p/3p. Disable/reject that action with a clear explanation. External
+HA/go-e controls cannot be prevented by this application; observe/reconcile external
+changes without claiming that they passed the guarded sequence.
+
+**Execution behaviour.**
+
+1. Implement the ordinary current, stop and stop-first phase paths from the single
+   maintained operating contract. Current-only decreases remain live, increases can
+   be direct, and all explicit/protective stops pre-empt pending transition work.
+   A phase restart begins at6A; verify actual positive delivery before ordinary
+   increases toward the live target, without inventing a fixed charging-duration hold.
+2. Use acknowledged current readback as the starting setting for each live downward
+   step. Keep at most the appropriate outstanding write for each controlled property;
+   service-call success is not acknowledgement. At least5s separates downward writes,
+   and the next step also waits for confirmation. Preserve that clock across repeated
+   requests/plan generations; do not send multiple catch-up steps after a delayed tick.
+3. Track the continuously confirmed stopped condition independently of target IDs.
+   Count actual qualifying elapsed time, including a previously confirmed stop when
+   still valid. Missing/stale/lost stop evidence cannot authorize the phase command.
+   Set6A during the stopped period, not through an unnecessary pre-stop ramp.
+4. Newer valid targets replace obsolete pending intent. A repeated identical target
+   is idempotent; it does not restart a ramp, a60s wait or delivery supervision. Cancel
+   superseded queued current/phase/start actions. If a hardware write is already in
+   flight, reconcile fresh readback before proceeding toward the latest target.
+   Never finish an obsolete phase change/start just because its old timer expired.
+5. OFF cancels pending ordinary starts and can be sent immediately even without a
+   current readback. Do not resume from an old positive target after a stop, goal
+   completion, authority expiry, cancellation, fault or protective override. Recheck
+   validity at every write and after awaits; an instruction still needs its original
+   quantity/source/peak permission. A new SoC/plan identity alone is not a new stop.
+6. EV hands-off/disabled control remains distinct from an OFF target: relinquishing
+   control sends no EV write and cancels pending EV work, including timer callbacks.
+   Preserve the existing master/shutdown policy and4.7.3 confirmed-control state
+   retention. No EV target/transition blocks independent ESS control.
+7. Drive progress from control/readback/timer events; a new planner result or repeated
+   setpoint submission is not needed for each step. Do not sleep through waits or hold
+   an actuator lock for5s/60s. Do not add arbitrary debouncing, minimum charging blocks,
+   simulated unplugging, reboot, extra post-selector dwell or Ford-side commands.
+   Retain applicable device-readiness, acknowledgement, restart and fault supervision
+   under the shared contract, distinguishing mandatory phase stop from non-delivery.
+   The obsolete10s phase preparation is not a substitute for60s confirmed stop; do not
+   automatically append the legacy fixed30s post-selector hold. Actual device-busy/
+   readiness and acknowledgement conditions still gate progress. Existing ordinary
+   restart requirements may already be satisfied by the confirmed phase-stop period.
+8. Reconstruct safe progress from fresh readings after restart or telemetry loss.
+   Do not invent previous acknowledgements or stopped duration from an old target.
+   Update existing acknowledgement/transition watchdog accounting for the accepted
+   sequence; its mandatory60s wait is not a charging failure. Bounded existing
+   delivery/fault handling remains; no new retry/recovery policy is introduced.
+9. Expose desired target, confirmed setting/phase, transition stage, blocking reason
+   and next eligible action time in the existing actuator diagnostics/state interface.
+   Report accepted/pending/reached/blocked/fault separately; reached settings or charge
+   permission are not proof of positive delivery. Preserve negative raw power samples
+   and actual counter-based energy accounting.
+
+**Planning compatibility.** Update the existing shared execution/timing/state adapter,
+affected model/audit transition calculations and controller integration as necessary
+to reflect the protocol now enforced. Planning cannot credit power through the60s
+stop or instantaneous completion of a live multi-amp decrease. Use the same contract
+as the proposed model requirements above; report any approximation explicitly and
+independently check it. This is compatibility work, not a redesign of the released
+optimization objectives, full horizon, permissions or multi-stage search pipeline.
+The new model remains requirements work, not an additional implementation mandate.
+
+**Starting points and scope.** Inspect `control.py`/`goe.py`, `service.py`,
+`execution.py` and applicable model/validation timing users; inspect `web.py` and the
+native/standalone fixed-phase action paths for raw writes. Reuse current readback,
+generation/EV-epoch, hardware-switch and diagnostic contracts. A setpoint request
+does not require new HA entities. Do not operate the installation, change configuration,
+collect further hardware tests or create a new manual-control/recovery feature.
+
+**Completion criteria and offline verification.** Use fake HA/device readings and
+a controllable clock. Verify real requested write sequences and propagated timing/
+energy, not just target-state values:
+
+- Live16→6A produces acknowledged1A downward steps at least5s apart with no force-off;
+ 6→16A can be direct. A stopped16→6A setting change can be direct. No3p6A production
+ cap is introduced;1p and3p follow their configured bounds and the accepted assumption.
+- All explicit/protective stops are immediate from ramp, stopped wait, phase-write
+ and startup states. A pure current reduction never inserts a stop/restart shortcut.
+- Both phase directions stop first, use6A, forbid a selector write before60s of
+ confirmed stop, require selector acknowledgement and restart at6A. Lost/stale stop
+ evidence, missed current acknowledgement, delayed phase readback and non-delivery
+ cannot silently advance the sequence; status and bounded supervision remain correct.
+- Rapidly replaced/identical targets, delayed ticks, new plan IDs, goal completion,
+ authority expiry, disconnection and restart cannot reset clocks, send stale starts
+ or queue obsolete lower-current steps. Trace cancellation before and after writes.
+- EV hands-off produces no EV writes through any request/timer/manual phase path;
+ ESS dispatch remains responsive. Test master/shutdown and4.7.3 refresh-failure cases.
+- All EnergyManager phase actions use the guarded target path; no direct-selector
+ or Auto bypass remains. Invalid final targets never cause unintended charging or
+ additional authority. Phase preparation while OFF never becomes a charging request.
+- Shared planning/execution/audit fixtures agree on live ramps and stopped/startup
+ intervals, including a phase transition straddling a5minute boundary and a stop from
+ 16A. Actual peak/source/quantity guards use transitional delivery, not just the target.
+- Run focused existing control/go-e/execution/permission/frontend cases, then required
+ integration/release checks under RUNBOOK.md. Record implemented/tested/live-unverified
+ scope in WORK_STATE.md. Release/version assignment follows separate authorization.
+
 ### EV-specific hands-off control (4.7.2)
 
 Work package requested on14November2026; the user subsequently authorized handoff to
@@ -3613,8 +3831,8 @@ From4.3.15 the EV page shows a separate EnergyManager action strip, alongside th
 charger's reported state and measured power. The read-only `charger.activity` API
 projection exposes the active step, detail, server timestamp and actual timer deadline.
 The strip highlights Stop → Settings → Wait → Start → Power, with a numeric countdown
-and ring for the deliberate30second restart hold. It separately labels the10second
-phase preparation and90second delivery check; command readback waits remain explicit.
+and ring for the ordinary30second restart hold, continuous60second confirmed phase
+stop, live5second current-step spacing and90second delivery check. Readback waits remain explicit.
 Fault/blocked/disabled/idle states take priority where applicable. Normal action text
 replaces the redundant generic verdict; fault/recovery/unavailable detail is retained.
 The browser advances only the countdown each second, anchored to a new server activity
@@ -3642,9 +3860,10 @@ ranges fail the EV guard. Sampler frames retain actual limit evidence.
 EV writes are staged across sampler frames, never sleeps under the control lock.
 Current must match before forced start. Current-only increases and reductions do
 not force a stop or start a settling interval. Pending writes require a later advancing device frame;
-HA service acceptance alone is not a charger acknowledgement. A superseded pending
-write is followed by the newly desired command even if an older frame already shows
-that value. Missing confirmation after30seconds latches/escalates without reboot.
+HA service acceptance alone is not a charger acknowledgement. Outstanding current/
+selector writes are reconciled from fresh readback before a newer setting; OFF still
+pre-empts a pending start immediately. Missing confirmation after30seconds escalates
+without reboot. Generation, target, EV-epoch and expiry guards apply across each await.
 From4.3.16 a submitted command is identified by its target setting and original
 submission time, independently of later control revisions. A still-authorized
 identical request continues awaiting the same advancing device readback, without
@@ -3656,12 +3875,15 @@ retains the enabled/current-generation guard. If that guard revokes a write befo
 the HA service is called, restore the prior pending operation and timing metadata;
 never await an acknowledgement for the unsent command. An unknown service response
 retains the pending evidence, since the device may already have accepted the write.
-Stop/zero/10second phase preparation remains; selector echo alone does not complete
-an active modelStatus22/23 transition. A30second nonblocking hold starts at phase
-acknowledgement, or at confirmed force off plus power below100W for ordinary stops.
-Repeated ticks, current changes and plan revisions preserve the deadline; another
-observed phase change or lost stopped-power confirmation requires a new settling
-interval. A stop supersedes an unconfirmed start. Fault/input/enabled/generation
+Phase changes stop first, set6A while confirmed stopped and require60seconds of
+continuous fresh force-off plus below100W evidence before selector dispatch. Lost or
+stale stop evidence resets that clock. Selector readback and modelStatus22/23 readiness
+still gate restart, without an appended fixed30second post-selector hold. Restart is
+at6A; measured positive delivery gates increases. Ordinary same-phase restart retains
+its30second confirmed-stop settling interval. Current-only decreases stay live in
+acknowledged1A steps at least5seconds apart; direct increases/stopped settings remain
+permitted. Newer targets replace queued intent without resetting confirmation clocks.
+A stop supersedes an unconfirmed start. Fault/input/enabled/generation
 guards remain effective during every wait; ESS keeps running. Delivery timing starts
 after the start is acknowledged, not during settling. Initial/recovered control with
 unknown stop duration waits conservatively. Phase sequencing times out after180s,

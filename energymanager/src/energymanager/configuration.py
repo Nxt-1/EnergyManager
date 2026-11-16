@@ -95,6 +95,8 @@ def configured_application(path: Path, store: Store, *, weather_url: str = FOREC
     application.actuator = GuardedActuator(
         ha, data.get("actuators", {}), c, enabled=False,
         generation=lambda: application.revision,
+        clock=application.now,
+        ev_guard=application.ev_command_usable,
         on_write=lambda body: store.event("actuator_service", body),
         charger=GoEReadings(data.get("actuators", {}), data.get("ev_diagnostics", {}), p.measurement_max_age_seconds),
     )

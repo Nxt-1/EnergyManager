@@ -1,11 +1,10 @@
 """Refine a manual quantity endpoint, preserving full joint calculation contexts."""
 
 from dataclasses import replace
-from datetime import timedelta
 from typing import Any
 
 from .domain import Snapshot
-from .execution import delivery_fraction, wait_events
+from .execution import delivery_endpoint
 from .forecasts import apply_requirements
 from .validation import TOL
 
@@ -14,16 +13,13 @@ def completion_context(original: Snapshot, seed: Snapshot, flows: dict[str, list
     manual = dict((original.observation.ev_progress or {})["manual"])
     limit = max(original.observation.ev_kwh, manual["limit_kwh"])
     modes = [3 if b > .5 else 1 if a > .5 else 0 for a, b in zip(flows["one"], flows["three"])]
-    waits = wait_events(seed, modes)
     completion = None
     for t, interval in enumerate(seed.intervals):
         if flows["ev_energy"][t] < limit - TOL <= flows["ev_energy"][t + 1]:
             power = (flows["amps_one"][t] + 3 * flows["amps_three"][t]) * seed.capabilities.voltage / 1000
             if power <= TOL:
                 continue
-            lost = (1 - delivery_fraction(seed, t, waits)) * interval.hours * 3600
-            seconds = lost + (limit - flows["ev_energy"][t]) / power / seed.capabilities.ev_efficiency * 3600
-            completion = min(interval.end, max(interval.start, interval.start + timedelta(seconds=seconds)))
+            completion = delivery_endpoint(seed, flows, t, limit - flows["ev_energy"][t])
             break
     intervals = []
     profile: list[dict[str, Any]] = []
@@ -72,8 +68,6 @@ def advisory_context(snapshot: Snapshot) -> Snapshot | None:
 
 def additional_instructions(snapshot: Snapshot, advisory: Snapshot, flows: dict[str, list[float]]) -> list[dict[str, Any]]:
     manual = (snapshot.observation.ev_progress or {})["manual"]
-    modes = [3 if b > .5 else 1 if a > .5 else 0 for a, b in zip(flows["one"], flows["three"])]
-    waits = wait_events(advisory, modes)
     instructions = []
     for t, interval in enumerate(advisory.intervals):
         if flows["ev_energy"][t + 1] <= manual["limit_kwh"] + TOL:
@@ -81,9 +75,7 @@ def additional_instructions(snapshot: Snapshot, advisory: Snapshot, flows: dict[
         power = (flows["amps_one"][t] + 3 * flows["amps_three"][t]) * advisory.capabilities.voltage / 1000
         if power <= TOL:
             continue
-        lost = (1 - delivery_fraction(advisory, t, waits)) * interval.hours * 3600
-        seconds = lost + max(0, manual["limit_kwh"] - flows["ev_energy"][t]) / power / advisory.capabilities.ev_efficiency * 3600
-        at = interval.start + timedelta(seconds=seconds)
+        at = delivery_endpoint(advisory, flows, t, manual["limit_kwh"] - flows["ev_energy"][t])
         if at >= interval.end:
             continue
         goals = [g for g in advisory.goals if g.deadline > at and g.target(advisory.capabilities, advisory.policy)

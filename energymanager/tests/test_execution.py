@@ -130,3 +130,88 @@ def test_instruction_identity_and_persisted_endpoint_survive_publication_ids():
     changed["execution_id"] = execution_identity(changed)
     assert changed["execution_id"] != replacement["execution_id"]
     assert restored.tick(behind, at, changed, 3).current_a == 0
+
+
+def test_live_ramp_template_integrates_extra_energy_and_joint_reallocation_is_audited():
+    from energymanager.execution import transition_power
+
+    s = tiny(hours=1 / 6)
+    s = replace(s, observation=replace(s.observation, ev_power_kw=3.68, monthly_peak_kw=8),
+                goals=(Goal("g", "SYNTHETIC ramp", s.intervals[-1].end, target_soc_percent=40.6),))
+    s = freeze_execution(s, None, {"phase": 1, "current_a": 16, "ready_at": s.intervals[0].start.isoformat()})
+    model = JointModel(s)
+    for t, amps in enumerate((16, 6)):
+        for name, value in (("one", 1), ("three", 0), ("amps_one", amps), ("amps_three", 0)):
+            index = model.linear.variables[name][t]
+            model.linear.lower[index] = model.linear.upper[index] = value
+    result = model.run(10)
+    assert result["feasible"], result
+    flows = result["flows"]
+    expected = 1.38 + .23 * 5 * sum(range(1, 10)) / (s.intervals[1].hours * 3600)
+    assert transition_power(s, [16, 6], [0, 0])[1] == pytest.approx((expected, 15 * .23))
+    assert sum(flows[k][1] for k in ("grid_ev", "pv_ev", "solar_dis_ev")) == pytest.approx(expected)
+    assert validate(s, flows) == [] and model.linear.accepts(result["values"])
+    assert result["status"] == "Transition candidate checked" and result["gap"] is None
+    assert result["transition_scope"].startswith("fixed integer profile")
+    broken = {k: list(v) for k, v in flows.items()}
+    broken["grid_ev"][1] -= expected - 1.38
+    assert any("EV mode power 1" in e for e in validate(s, broken))
+
+
+def test_ramp_events_coalesce_across_short_boundaries_and_off_is_immediate():
+    from energymanager.domain import Interval
+    from energymanager.execution import transition_power
+
+    s = tiny()
+    at = s.intervals[0].start
+    ends = [at + timedelta(seconds=x) for x in (3, 7, 20)]
+    s = replace(s, observation=replace(s.observation, ev_power_kw=3.68),
+                intervals=tuple(Interval(a, b, .4, 0, 0) for a, b in zip([at] + ends, ends)),
+                execution={"initial_phase": 1, "charger": {"current_a": 16}})
+    trace = transition_power(s, [6, 8, 0], [0, 0, 0])
+    assert trace[0][0] == pytest.approx(15 * .23)
+    assert trace[1][0] == pytest.approx((15 * 2 + 14 * 2) * .23 / 4)
+    assert trace[2] == (0, 0)
+
+
+def test_guarded_manual_phase_target_preserves_existing_power():
+    from types import SimpleNamespace
+    from energymanager.control import Command
+    from energymanager.service import Application
+
+    s = tiny()
+    owner = SimpleNamespace(snapshot=s)
+    command = Command(1, "synthetic", s.observation.at, 3.68, 0, 1, 16, 4, "synthetic")
+    target = Application.phase_target(owner, command, 3)
+    assert target.ev_kw == 0 and target.current_a == 0 and target.prepare_phase
+    target = Application.phase_target(owner, replace(command, ev_kw=4.14, phases=3, current_a=6), 1)
+    assert target.current_a == 16 and target.ev_kw <= 4.14
+
+
+def test_phase_stop_straddles_five_minute_boundary_and_stop_from_sixteen_is_immediate():
+    from energymanager.domain import Interval
+    from energymanager.execution import transition_power
+
+    s = tiny()
+    at = s.intervals[0].start
+    boundaries = [at, at + timedelta(seconds=290), at + timedelta(seconds=300), at + timedelta(seconds=600)]
+    s = replace(s, intervals=tuple(Interval(a, b, .4, 0, 0) for a, b in zip(boundaries, boundaries[1:])),
+                observation=replace(s.observation, ev_power_kw=1.38, monthly_peak_kw=8),
+                goals=(Goal("g", "SYNTHETIC phase boundary", boundaries[-1], target_soc_percent=40.3),),
+                execution={"initial_phase": 1, "charger": {"current_a": 6}, "commitments": []})
+    trace = transition_power(s, [6, 0, 0], [0, 6, 6])
+    assert trace[1] == (0, 0)
+    assert trace[2][0] == pytest.approx(4.14 * 130 / 300)
+    model = JointModel(s)
+    for t, (one, three) in enumerate(((6, 0), (0, 6), (0, 6))):
+        for name, value in (("amps_one", one), ("amps_three", three)):
+            index = model.linear.variables[name][t]
+            model.linear.lower[index] = model.linear.upper[index] = value
+    result = model.run(10)
+    assert result["feasible"], result
+    assert validate(s, result["flows"]) == []
+    assert sum(result["flows"][name][2] for name in ("grid_ev", "pv_ev", "solar_dis_ev")) == pytest.approx(trace[2][0])
+    stopped = transition_power(replace(s, observation=replace(s.observation, ev_power_kw=3.68),
+                                       execution={"initial_phase": 1, "charger": {"current_a": 16}}),
+                               [16, 0, 0], [0, 0, 0])
+    assert stopped[0][0] == pytest.approx(3.68) and stopped[1:] == [(0, 0), (0, 0)]

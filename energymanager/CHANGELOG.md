@@ -1,3 +1,11 @@
+## 4.7.4 — Guarded EV setpoint actuator
+
+- Ramp live current reductions through acknowledged1A steps at least5s apart; allow direct increases and stopped settings.
+- Stop before phase changes, confirm60s stopped at6A, confirm fixed phase, restart at6A and verify actual delivery.
+- Coalesce targets, pre-empt with OFF, guard expiry/revocation across writes and preserve EV hands-off with independent ESS.
+- Route both dashboards' one-time phase actions through existing power/quantity/source/peak authority; remove Auto and raw selector writes.
+- Integrate transition/quantity events and independently audit joint allocation within existing planning budgets; retain bounded recovery.
+
 ## 4.7.3 — Preserve acknowledged EV switch state
 
 - Show a saved EV control response immediately when a later status refresh times out.

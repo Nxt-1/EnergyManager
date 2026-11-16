@@ -7,7 +7,7 @@ import {dailyEnergyRows, goalStatus, connectionIcon, displaySetting, entityState
 import {clockValue, localDateTime, localInstants, monthDays, validLocal}
   from '../src/energymanager/assets/date-time.js';
 import {EVSchedulePage, eventsOnDay, evSchedule, scheduleDays} from '../src/energymanager/assets/ev-schedule.js';
-import {nativeLiveState, phaseSelector, setChargerPhase} from '../src/energymanager/assets/native-live.js';
+import {nativeLiveState, phaseSelector} from '../src/energymanager/assets/native-live.js';
 import {evControlActivityModel, evMeasuredPower, evStatusModel, evStatusMarkup, progressWarningMarkup} from '../src/energymanager/assets/ev-status.js';
 import {PlanningActivity, planningActivityModel} from '../src/energymanager/assets/planning-activity.js';
 
@@ -260,33 +260,14 @@ test('EV faults and recovery stay visible above power flow; detail text is escap
   assert.equal(evStatusModel(state).status, 'Charging');
 });
 
-test('phase action targets the mapped actuator once and does not change the plan or invent readback', async () => {
-  const manifest = {entities:{ev_phases:'sensor.measured_phases'},phase_selector:'select.synthetic_phase'};
-  const calls = [], hass = {states:{'select.synthetic_phase':{state:'1',attributes:{options:['0','1','2']}}},
-    callService:async(...args)=>calls.push(args)};
-  const state = syntheticEVStatus(), command = state.command;
-  assert.equal(phaseSelector(hass,manifest).value,'1');
-  await setChargerPhase(hass,manifest,'2');
-  assert.deepEqual(calls,[['select','select_option',{entity_id:'select.synthetic_phase',option:'2'}]]);
-  assert.equal(hass.states['select.synthetic_phase'].state,'1');
-  assert.equal(state.command,command);
-  await setChargerPhase(hass,manifest,'0');
-  assert.equal(calls[1][2].option,'0');
-});
-
-test('phase actions reject demo, missing, unavailable, unsupported and non-select mappings without writes', async () => {
-  let calls=0;
-  const hass={states:{'select.phase':{state:'1',attributes:{options:['1','2']}}},callService:async()=>calls++};
-  for (const manifest of [{demo:true,phase_selector:'select.phase'},{phase_selector:'sensor.phases'},{}])
-    await assert.rejects(setChargerPhase(hass,manifest,'1'),/unavailable/);
-  const manifest={phase_selector:'select.phase'};
-  await assert.rejects(setChargerPhase(hass,manifest,'0'),/does not support/);
-  hass.states['select.phase'].state='unavailable';
-  await assert.rejects(setChargerPhase(hass,manifest,'1'),/unavailable/);
-  assert.equal(calls,0);
-  hass.states['select.phase'].state='1';
-  hass.callService=async()=>{throw new Error('SYNTHETIC HA denied');};
-  await assert.rejects(setChargerPhase(hass,manifest,'2'),/HA denied/);
+test('native phase selector is read-only and offers only guarded fixed options', () => {
+  const manifest={phase_selector:'select.synthetic_phase'};
+  const hass={states:{'select.synthetic_phase':{state:'1',attributes:{options:['0','1','2']}}},
+    callService:()=>{throw new Error('Direct phase writes are forbidden');}};
+  assert.deepEqual(phaseSelector(hass,manifest),{entity:'select.synthetic_phase',value:'1',options:['1','2']});
+  assert.deepEqual(phaseSelector(hass,{...manifest,demo:true}).options,[]);
+  hass.states['select.synthetic_phase'].state='unavailable';
+  assert.deepEqual(phaseSelector(hass,manifest).options,[]);
 });
 
 test('EV sidebar retains raw diagnostics without the removed details foldout and phase controls use HA readback', () => {
@@ -297,6 +278,8 @@ test('EV sidebar retains raw diagnostics without the removed details foldout and
   let markup=evStatusMarkup(state);
   assert.match(markup,/data-ev-phase="2"[^>]*aria-pressed="true"/);
   assert.match(markup,/data-ev-phase="1"[^>]*aria-pressed="false"/);
+  assert.doesNotMatch(markup,/data-ev-phase="0"/);
+  assert.match(markup,/Guarded one-time phase change/);
   assert.match(markup,/Allowed \(on\)/);
   assert.match(markup,/Device status age \(s\)[\s\S]*1234/);
   assert.match(markup,/HA read[\s\S]*Device frame/);

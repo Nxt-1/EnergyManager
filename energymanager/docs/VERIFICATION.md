@@ -2647,3 +2647,17 @@ focused on the changed UI and existing fake integration; full Python/routed/cont
 release checks run in CI. Screenshot retained privately as v451-ev-power-profile.png.
 No live HA/database/hardware/notification/deployment operation. Subsequent exact-commit
 CI/image results belong in the ignored release state/final reply, without another commit.
+
+
+## EV-A015 guarded setpoints (4.7.4)
+
+Deterministic fake go-e/HA frames and controlled clocks cover1p/3p16→6A acknowledged
+1A/5s live ramps, direct increases/stopped settings, both phase directions with60s stop
+and6A restart, delayed/missed acknowledgements, stale stop evidence, negative startup
+power, immediate OFF, replacement during an await, expiry, hands-off and independent ESS.
+Fixed-candidate ramp integration is checked against arithmetic energy and an independent
+source/stock audit; requested setpoints stay distinct from the realized template.
+Manual phase API rejects Auto and cannot enlarge the current permitted power.
+Current full integration/publication results and log paths are retained in the external
+`checkpoints/ev-a015/implementation.md` and WORK_STATE.md. These are synthetic offline
+checks;1p/3p hardware operation, actual timings and installation deployment are unverified.

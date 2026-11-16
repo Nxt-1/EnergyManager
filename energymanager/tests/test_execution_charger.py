@@ -83,7 +83,7 @@ async def test_required_switch_through_adoption_keeps_pending_ack_and_live_prote
         reading = Reading.parse("sensor.synthetic_eto", {"state": str(total),
             "attributes": {"unit_of_measurement": "kWh"}}, at, "kWh", 30, nonnegative=True)
         o = progress.update(raw, reading, "sensor.synthetic_eto", s.capabilities, s.policy)
-        if second == 35:
+        if second == 75:
             charger = fixture.actuator.goe_control.planning_state(at, o)
             if delay or missing:
                 assert charger["phase_committed"] and charger["phase"] == 3
@@ -122,7 +122,7 @@ async def test_required_switch_through_adoption_keeps_pending_ack_and_live_prote
         assert not fixture.incidents
         assert control.peak_evidence["unavoidable_kwh"] > 0
     else:
-        assert delivered >= .468 - .001
+        assert delivered >= .468 - .003  # Counter feedback and the one-second control endpoint.
         assert delivered <= maximum_target - s.observation.ev_kwh + .003
         assert power == 0 and not fixture.incidents
     store.close()

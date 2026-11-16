@@ -672,6 +672,51 @@ class Application:
                 active.add(key)
         self.store.put("issues", {key: value for key, value in issues.items() if key in active})
 
+    def ev_command_usable(self, command: Command) -> bool:
+        """Recheck freshly observed cancellation/quantity boundaries around each awaited EV write."""
+        observation, at = self.observation, self.now()
+        if (not observation.connected or observation.quality != "measured"
+                or not -5 <= (at - observation.at).total_seconds() <= self.policy.measurement_max_age_seconds):
+            return False
+        if command.target_kwh is not None and observation.ev_kwh >= command.target_kwh - 1e-6:
+            return False
+        if command.prepare_phase:
+            return True
+        progress = observation.ev_progress
+        if progress is not None and (not progress.get("usable") or not progress.get("valid_until")
+                                     or at > instant(progress["valid_until"])):
+            return False
+        manual = (progress or {}).get("manual") or {}
+        if manual.get("enabled") and (manual["status"] != "active" or at >= instant(manual["goal"]["deadline"])
+                or manual["delivered_kwh"] >= manual["quantity_kwh"] or observation.ev_kwh >= manual["limit_kwh"]):
+            return False
+        return observation.ev_state_known and observation.ev_phase_known
+
+    def phase_target(self, command: Command, phase: int) -> Command:
+        """A one-time phase choice may redistribute, but never enlarge, existing power authority."""
+        current = math.floor((command.ev_kw + 1e-9) * 1000 / (phase * self.snapshot.capabilities.voltage))
+        current = min(current, self.snapshot.capabilities.maximum_current_a)
+        if current < self.snapshot.capabilities.minimum_current_a:
+            current = 0
+        return replace(command, phases=phase, current_a=current,
+                       ev_kw=current * phase * self.snapshot.capabilities.voltage / 1000,
+                       prepare_phase=not bool(current), target_kwh=command.target_kwh if current else None,
+                       reason="Guarded one-time fixed-phase request")
+
+    async def request_ev_phase(self, phase: int) -> None:
+        """Prepare or charge using current authority; the next ordinary control target supersedes this request."""
+        hardware = self.hardware
+        if hardware is None or not hardware.ev_state()["enabled"] or hardware.readiness_reason():
+            raise ValueError("EV hardware control is unavailable")
+        if not isinstance(self.actuator, GuardedActuator) or self.actuator.goe_control is None:
+            raise ValueError("EV hardware adapter is unavailable")
+        self.ev_phase_request: tuple[int, int, int] | None = (phase, self.revision, self.actuator.ev_epoch)
+        command = self.controller.tick(self.observation, self.now(), self.accepted, self.revision,
+                                       self.ev_valid, self.ess_valid, self.conditional_valid)
+        command = self.phase_target(command, phase)
+        await self.actuator.apply(command, self.revision, self.observation)
+        self.current_command = command
+
     async def control_loop(self) -> None:
         while not self.shutdown:
             before = monotonic()
@@ -698,6 +743,18 @@ class Application:
                 self.ess_valid,
                 self.conditional_valid,
             )
+            phase_request = getattr(self, "ev_phase_request", None)
+            if phase_request is not None and isinstance(self.actuator, GuardedActuator):
+                phase, revision, epoch = phase_request
+                control = self.actuator.goe_control
+                if (revision != self.revision or epoch != self.actuator.ev_epoch or not self.actuator.ev_enabled
+                        or not self.actuator.enabled or control is None or self.actuator.delivery_fault):
+                    self.ev_phase_request = None
+                elif (self.observation.ev_phases == phase and control.phase_started is None
+                      and control.restart_phase is None and "phase" not in control.pending):
+                    self.ev_phase_request = None
+                else:
+                    command = self.phase_target(command, phase)
             self.save_ev_task()
             try:
                 await self.actuator.apply(command, self.revision, self.observation)
@@ -1084,6 +1141,9 @@ class Application:
                                     or getattr(self.actuator, "awaiting_phase", None)),
             },
             "ev_incident": self.ev_faults.current if self.ev_faults else None,
+            "phase_selector": ({"value": self.actuator.charger.rows.get("phase", {}).get("state"),
+                                "options": ["1", "2"] if self.actuator.charger.issue(now) is None else []}
+                               if isinstance(self.actuator, GuardedActuator) and self.actuator.charger else None),
             "charger": ({**self.actuator.charger.view(now), "control": self.actuator.goe_control.status,
                          "activity": self.actuator.goe_control.view(now, self.observation, self.current_command)}
                         if isinstance(self.actuator, GuardedActuator) and self.actuator.charger

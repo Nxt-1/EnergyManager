@@ -62,6 +62,11 @@ class ChargerFixture:
         await self.actuator.apply(command, generation, observation)
         return command, observation
 
+    async def advance(self, seconds, **target):
+        for _ in range(seconds // 5):
+            self.refresh(5)
+            await self.tick(**target)
+
     async def start(self, *, amps=6):
         await self.tick(amps=amps)
         self.refresh(30)
@@ -119,18 +124,18 @@ async def test_controller_activity_prioritizes_faults_stale_inputs_and_phase_wai
     command, observation = await f.tick(phases=3)
     control = f.actuator.goe_control
     assert control.view(f.at, observation, command)["stage"] == "stopping"
-    f.refresh(10)
+    await f.advance(60, phases=3)
     command, observation = await f.tick(phases=3)
     assert control.view(f.at, observation, command)["stage"] == "settings"
     f.auto_model = False
     f.set("charger_status", 23)
     f.refresh()
     command, observation = await f.tick(phases=3)
-    assert control.view(f.at, observation, command)["timer"] == "Restart hold"
+    assert control.view(f.at, observation, command)["stage"] == "settings"
     f.refresh(30)
     command, observation = await f.tick(phases=3)
     view = control.view(f.at, observation, command)
-    assert view["until"] is None and "hold complete" in view["detail"]
+    assert view["until"] is None and "readiness" in view["detail"]
     f.set("charger_error", 8)
     f.refresh()
     assert control.view(f.at, observation, command)["stage"] == "fault"
@@ -268,8 +273,7 @@ async def test_unchanged_pending_settings_and_stops_keep_original_timeout_across
         f.refresh()
     await f.tick(amps=amps, phases=phases)
     if key == "phase":
-        f.refresh(10)
-        await f.tick(phases=phases)
+        await f.advance(60, phases=phases)
     original = f.actuator.goe_control.pending[key]
     for generation in range(2, 8):
         f.refresh()
@@ -306,7 +310,11 @@ async def test_revoked_replacement_restores_the_previous_inflight_setting():
     f.service = original
     f.calls.clear()
     await f.tick(amps=6, generation=2)
-    # The old 8 A command can still arrive, so 6 A must be sent even though the old frame says 6.
+    # Do not race the still outstanding 8 A setting. Reconcile its readback first.
+    assert not any(c[2]["entity_id"] == f.actuators["current"] for c in f.calls)
+    f.set("current", 8)
+    f.refresh()
+    await f.tick(amps=6, generation=2)
     assert any(c[2] == {"entity_id": f.actuators["current"], "value": 6} for c in f.calls)
 
 
@@ -376,7 +384,7 @@ async def test_start_confirmation_precedes_delivery_watchdog_and_current_changes
     assert not f.actuator.delivery_fault
     f.calls.clear()
     await f.tick(amps=6, power=1.84)
-    assert f.calls[-1][2] == {"entity_id": f.actuators["current"], "value": 6}
+    assert f.calls[-1][2] == {"entity_id": f.actuators["current"], "value": 7}
     assert not any(c[2].get("entity_id") == f.actuators["force"] for c in f.calls)
 
 
@@ -446,8 +454,7 @@ async def test_phase_write_timeout_alerts_and_ess_keeps_receiving_commands():
     f = ChargerFixture()
     f.ignore.add(f.actuators["phase"])
     await f.tick(phases=3)
-    f.refresh(10)
-    await f.tick(phases=3)
+    await f.advance(60, phases=3)
     assert f.actuator.target_phase == 3
     f.refresh(30)
     await f.tick(phases=3)
@@ -464,8 +471,7 @@ async def test_phase_readback_does_not_bypass_active_transition_and_it_eventuall
     f.set("charger_status", 23)
     f.refresh()
     await f.tick(phases=3)
-    f.refresh(10)
-    await f.tick(phases=3)
+    await f.advance(60, phases=3)
     f.refresh()
     await f.tick(phases=3)
     assert f.rows[f.actuators["force"]]["state"] == "1"
@@ -565,8 +571,7 @@ async def test_runtime_limits_replan_without_increasing_the_configured_maximum(t
 async def test_charging_can_resume_after_confirmed_phase_change():
     f = ChargerFixture()
     await f.tick(phases=3)
-    f.refresh(10)
-    await f.tick(phases=3)
+    await f.advance(60, phases=3)
     f.refresh()
     await f.tick(phases=3)
     f.refresh(30)
@@ -661,8 +666,7 @@ async def test_stop_supersedes_an_unconfirmed_start_even_if_old_frame_shows_stop
 async def test_cancelled_phase_request_can_restart_without_a_cooldown_or_stale_timeout():
     f = ChargerFixture()
     await f.tick(phases=3)
-    f.refresh(10)
-    await f.tick(phases=3)
+    await f.advance(60, phases=3)
     assert "phase" in f.actuator.goe_control.pending
     f.refresh()
     await f.tick(amps=0)
@@ -680,8 +684,7 @@ async def test_finished_charger_transition_resumes_without_waiting_another_dwell
     f.set("charger_status", 23)
     f.refresh()
     await f.tick(phases=3)
-    f.refresh(10)
-    await f.tick(phases=3)
+    await f.advance(60, phases=3)
     f.refresh()
     await f.tick(phases=3)
     assert f.actuator.target_phase == 3
@@ -689,7 +692,7 @@ async def test_finished_charger_transition_resumes_without_waiting_another_dwell
     f.refresh()
     await f.tick(phases=3)
     assert f.actuator.target_phase is None
-    assert f.rows[f.actuators["force"]]["state"] == "1"
+    assert f.rows[f.actuators["force"]]["state"] == "2"
     f.refresh(25)
     await f.tick(phases=3)
     assert f.rows[f.actuators["force"]]["state"] == "2"
@@ -802,29 +805,34 @@ async def test_short_stop_waits_remaining_time_but_a_long_stop_does_not_add_anot
 
 
 @pytest.mark.parametrize("initial,target", [(1, 3), (3, 1)])
-async def test_each_phase_direction_holds_thirty_seconds_after_acknowledgement(initial, target):
+async def test_each_phase_direction_stops_sixty_seconds_before_selector_and_restarts_at_six(initial, target):
     f = ChargerFixture()
     f.actuator.c = replace(f.actuator.c, phase_dwell_seconds=900)
-    f.actuator.switched_at = f.at  # Even a legacy configured cooldown must be ignored.
     f.set("phase", 2 if initial == 3 else 1)
     f.set("force", 2)
+    f.set("current", 16)
     f.refresh()
-    await f.tick(phases=target, power=2)
+    await f.tick(amps=16, phases=target, power=2)
+    assert f.calls[-1][2] == {"entity_id": f.actuators["force"], "option": "1"}
     f.refresh()
-    await f.tick(phases=target)
-    f.refresh(10)
-    await f.tick(phases=target)
+    await f.tick(amps=16, phases=target)
+    stopped = f.at
+    await f.advance(55, amps=16, phases=target)
+    assert not any(c[2]["entity_id"] == f.actuators["phase"] for c in f.calls)
+    f.refresh(5)
+    await f.tick(amps=16, phases=target)
+    assert f.at - stopped == timedelta(seconds=60)
     assert "phase" in f.actuator.goe_control.pending
     f.refresh()
-    await f.tick(phases=target)
-    acknowledged = f.at
-    assert f.actuator.resume_after == acknowledged + timedelta(seconds=30)
-    f.refresh(29)
-    await f.tick(phases=target)
-    assert f.rows[f.actuators["force"]]["state"] == "1"
-    f.refresh(1)
-    await f.tick(phases=target)
+    await f.tick(amps=16, phases=target)
     assert f.rows[f.actuators["force"]]["state"] == "2"
+    assert f.rows[f.actuators["current"]]["state"] == "6"
+    f.refresh()
+    await f.tick(amps=16, phases=target, power=-.02)
+    assert f.rows[f.actuators["current"]]["state"] == "6"
+    f.refresh()
+    await f.tick(amps=16, phases=target, power=6 * target * .23)
+    assert f.rows[f.actuators["current"]]["state"] == "16"
     assert not f.incidents
 
 
@@ -867,7 +875,7 @@ async def test_restart_never_treats_continuing_power_as_a_settled_stop():
 
 async def test_phase_preparation_never_enables_energy_and_preserves_the_restart_hold():
     f = ChargerFixture()
-    for _ in range(50):
+    for _ in range(70):
         await f.tick(amps=0, phases=3, prepare=True)
         assert f.rows[f.actuators["force"]]["state"] == "1"
         f.refresh(1)
@@ -892,8 +900,7 @@ async def test_stopping_retains_a_submitted_phase_write_until_ack_or_fault():
     f = ChargerFixture()
     f.ignore.add(f.actuators["phase"])
     await f.tick(amps=0, phases=3, prepare=True)
-    f.refresh(10)
-    await f.tick(amps=0, phases=3, prepare=True)
+    await f.advance(60, amps=0, phases=3, prepare=True)
     assert "phase" in f.actuator.goe_control.pending
     f.refresh(1)
     await f.tick(amps=0, phases=1)
@@ -904,3 +911,175 @@ async def test_stopping_retains_a_submitted_phase_write_until_ack_or_fault():
     await f.tick(amps=0, phases=1)
     assert f.actuator.delivery_fault and "not confirmed" in f.incidents[0]
     assert not any(c[2].get("entity_id") == f.actuators["force"] and c[2].get("option") == "2" for c in f.calls)
+
+
+@pytest.mark.parametrize("phases", [1, 3])
+async def test_live_sixteen_to_six_uses_one_acknowledged_amp_per_five_seconds(phases):
+    f = ChargerFixture()
+    f.set("phase", 2 if phases == 3 else 1)
+    f.set("force", 2)
+    f.set("current", 16)
+    f.refresh()
+    original = f.service
+    writes = []
+
+    async def traced(domain, service, data):
+        if data["entity_id"] == f.actuators["current"]:
+            writes.append((f.at, data["value"]))
+        await original(domain, service, data)
+
+    f.service = traced
+    for second in range(55):
+        await f.tick(amps=6, phases=phases, power=16 * phases * .23, generation=second + 1)
+        f.refresh(1)
+    assert [value for _, value in writes] == list(range(15, 5, -1))
+    assert all((b[0] - a[0]).total_seconds() >= 5 for a, b in zip(writes, writes[1:]))
+    assert not [c for c in f.calls if c[2]["entity_id"] == f.actuators["force"]]
+    await f.tick(amps=16, phases=phases, power=6 * phases * .23)
+    assert writes[-1][1] == 16
+
+
+async def test_live_ramp_requires_ack_and_delayed_tick_does_not_catch_up():
+    f = ChargerFixture()
+    f.set("force", 2)
+    f.set("current", 16)
+    f.refresh()
+    f.ignore.add(f.actuators["current"])
+    await f.tick(amps=6, power=3.68)
+    f.refresh(20)
+    await f.tick(amps=6, power=3.68)
+    assert [c[2]["value"] for c in f.calls if c[2]["entity_id"] == f.actuators["current"]] == [15]
+    f.ignore.clear()
+    f.set("current", 15)
+    f.refresh(1)
+    await f.tick(amps=6, power=3.45)
+    assert [c[2]["value"] for c in f.calls if c[2]["entity_id"] == f.actuators["current"]] == [15, 14]
+    # An OFF target never waits for the outstanding setting.
+    await f.tick(amps=0, power=3.45)
+    assert f.calls[-1][2] == {"entity_id": f.actuators["force"], "option": "1"}
+
+
+async def test_stale_stop_evidence_restarts_sixty_second_clock():
+    f = ChargerFixture()
+    await f.tick(phases=3)
+    await f.advance(55, phases=3)
+    f.refresh(31)
+    await f.tick(phases=3)
+    assert not any(c[2]["entity_id"] == f.actuators["phase"] for c in f.calls)
+    await f.advance(55, phases=3)
+    assert not any(c[2]["entity_id"] == f.actuators["phase"] for c in f.calls)
+    await f.advance(5, phases=3)
+    assert "phase" in f.actuator.goe_control.pending
+
+
+async def test_phase_target_replacement_and_hands_off_cancel_old_start():
+    f = ChargerFixture()
+    await f.tick(phases=3)
+    await f.advance(55, phases=3)
+    await f.tick(phases=1, amps=0)
+    await f.advance(10, phases=1, amps=0)
+    assert not any(c[2]["entity_id"] == f.actuators["phase"] for c in f.calls)
+    f.calls.clear()
+    f.actuator.ev_enabled = False
+    await f.tick(phases=3, amps=16)
+    assert f.calls and all(c[2]["entity_id"] == f.actuators["ess_setpoint"] for c in f.calls)
+
+
+async def test_stopped_setting_reduction_is_direct_and_invalid_phase_cannot_start():
+    f = ChargerFixture()
+    f.set("current", 16)
+    f.refresh()
+    await f.tick(amps=6)
+    assert f.calls[-1][2] == {"entity_id": f.actuators["current"], "value": 6}
+    await f.tick(amps=6, phases=2)
+    assert f.actuator.delivery_fault and f.rows[f.actuators["force"]]["state"] == "1"
+
+
+async def test_expiry_during_setting_await_never_sends_start_and_keeps_dispatched_evidence():
+    f = ChargerFixture()
+    clock = [f.at]
+    f.actuator.clock = lambda: clock[0]
+    command, observation = await f.tick(amps=0)
+    f.refresh(30)
+    command = replace(command, at=f.at, current_a=8, ev_kw=1.84,
+                      valid_until=f.at + timedelta(seconds=1))
+    clock[0] = f.at
+    observation = replace(observation, at=f.at)
+    original = f.service
+
+    async def expire(domain, service, data):
+        await original(domain, service, data)
+        if data["entity_id"] == f.actuators["current"]:
+            clock[0] += timedelta(seconds=2)
+
+    f.service = expire
+    await f.actuator.apply(command, 1, observation)
+    assert f.actuator.goe_control.pending["current"][0] == 8
+    assert not any(c[2].get("option") == "2" and c[2]["entity_id"] == f.actuators["force"] for c in f.calls)
+
+
+async def test_newer_off_during_inflight_setting_cancels_old_start():
+    f = ChargerFixture()
+    await f.tick(amps=0)
+    f.refresh(30)
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = f.service
+
+    async def delayed(domain, service, data):
+        await original(domain, service, data)
+        if data["entity_id"] == f.actuators["current"]:
+            entered.set()
+            await release.wait()
+
+    f.service = delayed
+    old = asyncio.create_task(f.tick(amps=8))
+    await entered.wait()
+    off = asyncio.create_task(f.tick(amps=0))
+    await asyncio.sleep(0)
+    release.set()
+    await asyncio.gather(old, off)
+    assert not any(c[2].get("option") == "2" and c[2]["entity_id"] == f.actuators["force"] for c in f.calls)
+    assert f.rows[f.actuators["force"]]["state"] == "1"
+
+
+@pytest.mark.parametrize("revoke", ["quantity", "disconnect"])
+async def test_fresh_goal_completion_or_disconnect_during_await_blocks_old_start(revoke):
+    from types import SimpleNamespace
+    from energymanager.domain import Policy
+    from energymanager.service import Application
+
+    f = ChargerFixture()
+    command, observation = await f.tick(amps=0)
+    f.refresh(30)
+    observation = replace(observation, at=f.at)
+    owner = SimpleNamespace(observation=observation, now=lambda: f.at, policy=Policy())
+    f.actuator.ev_guard = lambda target: Application.ev_command_usable(owner, target)
+    command = replace(command, at=f.at, current_a=8, ev_kw=1.84, target_kwh=31.)
+    original = f.service
+
+    async def revoke_after_current(domain, service, data):
+        await original(domain, service, data)
+        if data["entity_id"] == f.actuators["current"]:
+            owner.observation = replace(owner.observation, **({"ev_kwh": 31.} if revoke == "quantity" else {"connected": False}))
+
+    f.service = revoke_after_current
+    await f.actuator.apply(command, 1, observation)
+    assert f.actuator.goe_control.pending["current"][0] == 8
+    assert not any(c[2].get("option") == "2" and c[2]["entity_id"] == f.actuators["force"] for c in f.calls)
+
+
+async def test_ev_io_backoff_does_not_suspend_ess_dispatch():
+    f = ChargerFixture()
+
+    async def unavailable(*_):
+        raise OSError("SYNTHETIC EV transport failure")
+
+    f.actuator.goe_control.apply = unavailable
+    for _ in range(3):
+        with pytest.raises(OSError, match="EV transport"):
+            await f.tick(amps=8)
+    assert f.actuator.fault_until > f.at
+    before = len(f.calls)
+    await f.tick(amps=8)
+    assert len(f.calls) == before + 1
+    assert f.calls[-1][2]["entity_id"] == f.actuators["ess_setpoint"]

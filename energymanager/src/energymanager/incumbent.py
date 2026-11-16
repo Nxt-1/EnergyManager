@@ -9,7 +9,7 @@ from bisect import bisect_right
 from .appliance_plan import CycleCurve, starts_for
 
 from .optimization import JointModel
-from .execution import delivery_fraction, wait_events
+from .execution import delivery_fraction, wait_events, transition_power
 
 
 def seed(model: JointModel, peak_limit_kw: float | None = None,
@@ -161,7 +161,13 @@ def seed(model: JointModel, peak_limit_kw: float | None = None,
         requested_modes.append(phases if amps > 0 else 0)
         waits = wait_events(s, requested_modes)
         fraction = delivery_fraction(s, t, waits)
-        power *= fraction
+        if s.execution:
+            power, peak_power = transition_power(s,
+                [values[m.variables["amps_one"][k]] for k in range(t)] + [amps if phases == 1 else 0],
+                [values[m.variables["amps_three"][k]] for k in range(t)] + [amps if phases == 3 else 0])[-1]
+            fraction = power / peak_power if peak_power > 1e-8 else 0.0
+        else:
+            power *= fraction
         dc_invert = min(
             interval.pv_dc_kw,
             c.ac_discharge_kw / c.ac_discharge_efficiency,

@@ -29,6 +29,8 @@ class Command:
     reason: str
     replan: bool = False
     prepare_phase: bool = False
+    valid_until: datetime | None = None
+    target_kwh: float | None = None
 
 
 class FastControl:
@@ -382,7 +384,7 @@ class FastControl:
             )
             solar_source = o.pv_ac_kw + direct_dc_ac + eligible_discharge
             source_limit = max(0, solar_source - (0 if conditional else o.house_kw))
-            source_limited = source_limit < ev - 1e-6
+            source_limited = source_limit < max(ev, o.ev_power_kw - phases * c.voltage / 1000) - 1e-6
             ev = min(ev, source_limit)
         if not o.ev_phase_known or not o.connected or not ev_valid or not o.ev_state_known or not progress_usable:
             ev = 0.0
@@ -394,6 +396,16 @@ class FastControl:
             ev = min(ev, max(0.0, remaining) / c.ev_efficiency / period_h) if manual_allowed else 0.0
         amps = min(c.maximum_current_a, math.floor((ev + 1e-9) * 1000 / (c.voltage * phases)))
         if amps < c.minimum_current_a:
+            amps = 0
+        observed_amps = math.ceil(max(0., o.ev_power_kw) * 1000 / (phases * c.voltage))
+        ramp_steps = max(0, observed_amps - amps)
+        ramp_battery = sum(max(amps, observed_amps - step) * phases * c.voltage / 1000 * 5 / 3600
+                           for step in range(1, ramp_steps)) * c.ev_efficiency
+        quantity_limited = task_target is not None and ramp_battery > max(0., task_target - o.ev_kwh)
+        if (amps and phases == o.ev_phases and o.ev_power_kw > amps * phases * c.voltage / 1000 + .01
+                and (emergency or source_limited or quantity_limited or manual.get("enabled"))):
+            # A live ramp cannot purchase extra source/peak/quantity permission.
+            # Protection requests OFF; ordinary lower setpoints still ramp without stopping.
             amps = 0
         prepare_phase = bool(plan and plan.get("execution") and position is not None
             and f["one"][position] + f["three"][position] > .5 and task_target is not None
@@ -436,6 +448,10 @@ class FastControl:
             reason,
             plan is not None and position is None,
             prepare_phase,
+            min(o.at + timedelta(seconds=p.measurement_max_age_seconds),
+                instant(plan["intervals"][position]["end"])) if plan and position is not None else
+                o.at + timedelta(seconds=p.measurement_max_age_seconds),
+            target_kwh=task_target,
         )
 
 
@@ -468,11 +484,17 @@ class GuardedActuator:
         generation: Callable[[], int] | None = None,
         on_write: Callable[[dict[str, Any]], None] | None = None,
         charger: GoEReadings | None = None,
+        clock: Callable[[], datetime] | None = None,
+        ev_guard: Callable[[Command], bool] | None = None,
     ) -> None:
         self.client, self.entities, self.c, self.enabled = client, entities, capabilities, enabled
+        self.clock, self.ev_guard = clock, ev_guard
+        self.active_command: Command | None = None
+        self.command_valid_until: datetime | None = None
         self.ev_enabled = True
         self.ev_epoch = 0
         self.dispatch_ev_epoch = 0
+        self.target_epoch = self.dispatch_target_epoch = 0
         self.generation = generation
         self.on_write = on_write
         self.command_generation = 0
@@ -519,11 +541,19 @@ class GuardedActuator:
             self.last = None
 
     async def write(self, domain: str, service: str, key: str, value_key: str, value: Any) -> None:
+        self.write_dispatched = False
+        ordinary_ev = key != "ess_setpoint" and not (key == "force" and str(value) == "1")
+        if ordinary_ev and self.clock and self.command_valid_until and self.clock() >= self.command_valid_until:
+            raise StaleDispatch("EV target expired")
+        if ordinary_ev and self.ev_guard and self.active_command and not self.ev_guard(self.active_command):
+            raise StaleDispatch("EV target no longer has usable live authority")
         if not self.enabled or self.generation and self.generation() != self.command_generation:
             raise StaleDispatch()
-        if key != "ess_setpoint" and (not self.ev_enabled or self.dispatch_ev_epoch != self.ev_epoch):
-            raise StaleDispatch("EV control was revoked")
+        if key != "ess_setpoint" and (not self.ev_enabled or self.dispatch_ev_epoch != self.ev_epoch
+                or self.dispatch_target_epoch != self.target_epoch):
+            raise StaleDispatch("EV control or target was revoked")
         await self.client.service(domain, service, {"entity_id": self.entities[key], value_key: value})
+        self.write_dispatched = True
         if self.on_write:
             self.on_write(
                 {
@@ -535,6 +565,12 @@ class GuardedActuator:
                     value_key: value,
                 }
             )
+        if (ordinary_ev and self.ev_guard and self.active_command and not self.ev_guard(self.active_command)
+                or ordinary_ev and self.clock and self.command_valid_until and self.clock() >= self.command_valid_until
+                or not self.enabled or self.generation and self.generation() != self.command_generation
+                or key != "ess_setpoint" and (not self.ev_enabled or self.dispatch_ev_epoch != self.ev_epoch
+                    or self.dispatch_target_epoch != self.target_epoch)):
+            raise StaleDispatch("Control revoked during device write")
 
     async def stop(self, generation: int, *, at: datetime | None = None) -> None:
         """Stop EV charging and clear the ESS setpoint after ordinary writes are revoked."""
@@ -568,18 +604,23 @@ class GuardedActuator:
     async def apply(self, command: Command, generation: int, observation: Observation) -> None:
         if not self.enabled:
             return  # Disabled control ticks must not wait behind the final hardware stop.
+        self.target_epoch += 1
+        epoch = self.target_epoch
         async with self.lock:
+            if epoch != self.target_epoch:
+                return
+            self.dispatch_target_epoch = epoch
             await self.apply_serial(command, generation, observation)
 
     async def apply_serial(self, command: Command, generation: int, observation: Observation) -> None:
         if not self.enabled or command.generation != generation:
             return
         self.command_generation, self.command_plan = command.generation, command.plan_id
+        self.command_valid_until = command.valid_until
+        self.active_command = command
         self.dispatch_ev_epoch = self.ev_epoch
         if not all(self.entities.get(name) for name in ("force", "phase", "current", "ess_setpoint")):
             raise ValueError("Incomplete actuator mapping")
-        if self.fault_until and command.at < self.fault_until and (command.current_a or command.prepare_phase):
-            return
         if not observation.ev_phase_known:
             self.phase = None
         elif self.phase is None:
@@ -591,6 +632,8 @@ class GuardedActuator:
             )
             if not self.ev_enabled or self.dispatch_ev_epoch != self.ev_epoch:
                 return
+            if self.fault_until and command.at < self.fault_until and (command.current_a or command.prepare_phase):
+                return  # EV backoff must not suspend independent ESS dispatch.
             if self.goe_control:
                 await self.goe_control.apply(command, observation)
                 return

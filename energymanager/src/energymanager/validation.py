@@ -9,8 +9,8 @@ from zoneinfo import ZoneInfo
 
 import math
 
-from .domain import Snapshot
-from .execution import PHASE_SWITCH_SECONDS, RESTART_SECONDS
+from .domain import Snapshot, instant
+from .execution import PHASE_SWITCH_SECONDS, RESTART_SECONDS, CURRENT_STEP_SECONDS
 from .appliance_plan import resolved_power, selected_start
 
 TOL = 2e-5
@@ -136,6 +136,17 @@ def validate(
     execution_phase = s.execution["initial_phase"] if s.execution else o.ev_phases
     execution_on = o.ev_power_kw > .1
     execution_waits: list[tuple[datetime, datetime]] = []
+    initial_current = ((s.execution or {}).get("charger") or {}).get("current_a")
+    ramp_current = int(initial_current if initial_current is not None else
+                       round(max(0., o.ev_power_kw) * 1000 / (c.voltage * execution_phase)))
+    ramp_on = execution_on
+    charger = (s.execution or {}).get("charger") or {}
+    downward_at = instant(charger["last_downward_at"]) if charger.get("last_downward_at") else None
+    pending_current = (charger.get("pending") or {}).get("current")
+    if pending_current and ramp_on:
+        ramp_current = max(ramp_current, int(pending_current["value"]))
+        downward_at = s.intervals[0].start
+    quantity_area: float | None = None
     quarters: dict[datetime, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
     for t, interval in enumerate(s.intervals):
         f = {name: flows[name][t] for name in needed}
@@ -221,6 +232,7 @@ def validate(
             )
         check(amps1 < TOL or amps3 < TOL, f"Simultaneous EV modes {t}")
         fraction = 1.0
+        expected_power = (amps1 + 3 * amps3) * c.voltage / 1000
         if s.execution is not None:
             check(close(f["one"], float(amps1 > TOL)) and close(f["three"], float(amps3 > TOL)),
                   f"EV requested mode/current {t}")
@@ -241,6 +253,58 @@ def validate(
             fraction = max(0.0, 1 - lost / (interval.hours * 3600))
             check(not lost or on, f"EV transition request interrupted before readiness {t}")
             execution_phase, execution_on = phase, on
+            if on and (t == 0 or flows["one"][t - 1] + flows["three"][t - 1] < .5):
+                end = t + 1
+                while end < n and flows["one"][end] + flows["three"][end] > .5:
+                    end += 1
+                quantity_area = max(0., flows["ev_energy"][end] - flows["ev_energy"][t]
+                                    + sum(i.withdrawal_kwh for i in s.intervals[t:end])) / c.ev_efficiency * 3600
+            # Independent chronological integration, including ramps crossing interval boundaries.
+            cursor, area, highest = interval.start, 0.0, 0.0
+            ramp_segments = []
+            ramp_target = round(amps3 if phase == 3 else amps1)
+            while cursor < interval.end:
+                wait_end = max((end for start, end in execution_waits if start <= cursor < end), default=cursor)
+                if not on or wait_end > cursor or quantity_area is not None and quantity_area <= 1e-8:
+                    ramp_on = False
+                    until = min(wait_end, interval.end) if wait_end > cursor else interval.end
+                    ramp_segments.append((until, area))
+                    cursor = until
+                    continue
+                if not ramp_on or ramp_target >= ramp_current:
+                    ramp_current = ramp_target
+                elif downward_at is None or (cursor - downward_at).total_seconds() >= CURRENT_STEP_SECONDS:
+                    ramp_current -= 1
+                    downward_at = cursor
+                ramp_on = True
+                next_event = interval.end
+                if ramp_current > ramp_target and downward_at is not None:
+                    next_event = min(next_event, downward_at + timedelta(seconds=CURRENT_STEP_SECONDS))
+                power = ramp_current * phase * c.voltage / 1000
+                if quantity_area is not None:
+                    next_event = min(next_event, cursor + timedelta(seconds=quantity_area / power))
+                    used = power * (next_event - cursor).total_seconds()
+                    quantity_area = max(0., quantity_area - used)
+                    if (next_event - cursor).total_seconds() <= 1e-6:
+                        quantity_area = 0.
+                        continue
+                area += power * (next_event - cursor).total_seconds()
+                ramp_segments.append((next_event, area))
+                highest = max(highest, power)
+                cursor = next_event
+            expected_power = area / (interval.hours * 3600)
+            fraction = expected_power / highest if highest > TOL else 0.0
+            for point, delivered in ramp_segments[:-1]:
+                elapsed = (point - interval.start).total_seconds() / 3600
+                ev_hours = delivered / expected_power / 3600 if expected_power > TOL else 0.
+                solar_at = f["ess_solar"] + elapsed * (f["dc_store"] * c.dc_efficiency
+                    + f["pv_store"] * c.ac_charge_efficiency - f["solar_dis_house"] / c.ac_discharge_efficiency)
+                solar_at -= ev_hours * f["solar_dis_ev"] / c.ac_discharge_efficiency
+                grid_at = f["ess_grid"] + elapsed * (f["grid_store"] * c.ac_charge_efficiency
+                    - f["grid_dis_house"] / c.ac_discharge_efficiency)
+                check(solar_at >= -TOL and grid_at >= -TOL
+                      and solar_at + grid_at <= c.ess_capacity_kwh - c.ess_min_kwh + TOL,
+                      f"EV transition event stock {t}")
             commitment = s.ev_commitment(t)
             if commitment is not None:
                 expected_kw, expected_phase = commitment
@@ -258,7 +322,7 @@ def validate(
                 check((f["solar_dis_ev"] / fraction + f["solar_dis_house"] + f["grid_dis_house"])
                       / c.ac_discharge_efficiency <= c.battery_discharge_kw + TOL,
                       f"Instantaneous EV battery supply {t}")
-        check(close(ev_power, (amps1 + 3 * amps3) * c.voltage / 1000 * fraction), f"EV mode power {t}")
+        check(close(ev_power, expected_power), f"EV mode power {t}")
         imp = f["grid_ev"] + f["grid_house"] + f["grid_store"]
         check(
             imp <= c.grid_connection_kw + TOL and (imp < TOL or f["export"] < TOL),

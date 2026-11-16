@@ -1,5 +1,26 @@
 # Run, configure, review and roll back
 
+## Guarded EV setpoints (4.7.4 / EV-A015)
+
+All automatic and one-time fixed-phase requests use the guarded actuator. Live current
+reductions step by1A, await readback and wait at least5s between downward writes.
+Increases and settings while confirmed stopped may be direct. Every requested/protective
+stop can be immediate. Phase changes stop first, set6A, require60s continuous confirmed
+stop before selecting a fixed phase, confirm readiness, restart at6A and verify measured
+delivery before increasing. Auto is unavailable in EnergyManager. A manual phase request
+retains existing permitted power; insufficient power prepares while OFF, never rounds up.
+No persistent manual mode is added. EV hands-off blocks every EV request while ESS remains
+independent. Ordinary same-phase restart settling and existing bounded supervision/recovery
+remain. No new hardware recovery policy or vehicle command is introduced.
+
+Inspect charger activity for desired/confirmed settings, pending/readback stage, blocking
+reason and next eligible time. Settings reached or permission granted do not prove energy
+delivery. Negative startup power remains raw evidence. Planning's phase/start allowances
+and five-second acknowledgement assumption are labelled forecasts; measured counters
+remain authoritative. Verify using fake/local endpoints and controlled clocks only unless
+live installation operation is separately authorized.
+
+
 ## EV hands-off control (4.7.2)
 
 Use Hardware control in the EV heading to hand charging over to go-e/external controls.

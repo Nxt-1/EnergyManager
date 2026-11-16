@@ -85,7 +85,11 @@ class LivePeak:
             projected = sum(duration * max(0.0, net + ev * scale - confirmed_discharge)
                             for duration, net, ev in shape)
             # An issued reduction does not reduce observed import until its response arrives.
-            projected += max(0.0, o.ev_power_kw - requested_ev * scale) * delay_h
+            # A live reduction remains above its final target through acknowledged 1 A steps.
+            target = requested_ev * scale
+            step_kw = o.ev_phases * self.c.voltage / 1000
+            ramp_seconds = max(0., (o.ev_power_kw - target) / step_kw - 1) * 5 if target > .1 else 0.
+            projected += max(0.0, o.ev_power_kw - target) * max(delay_h, ramp_seconds / 3600)
             return projected
 
         low, high = 0.0, 1.0

@@ -504,3 +504,24 @@ async def test_takeover_between_reboot_steps_never_presses_button(installation):
         await reboot
     await off
     assert not attempts and all(row["service"] != "press" for row in calls)
+
+
+async def test_phase_api_rejects_auto_and_submits_guarded_off_preparation(installation):
+    from energymanager.web import create_web
+    app, editor, control, _, calls = installation
+    await control.set_requested(True)
+    await asyncio.gather(*app.protective_tasks)
+    webapp = create_web(app, configuration=editor)
+    webapp.on_startup.clear()
+    webapp.on_cleanup.clear()
+    async with TestClient(TestServer(webapp)) as client:
+        headers = {"X-EnergyManager": "1"}
+        calls.clear()
+        response = await client.post("/api/ev/control/phase", json={"option": "0"}, headers=headers)
+        assert response.status == 400 and "Auto" in (await response.json())["error"]
+        assert calls == []
+        response = await client.post("/api/ev/control/phase", json={"option": "2"}, headers=headers)
+        assert response.status == 200
+        assert app.current_command.prepare_phase and app.current_command.current_a == 0
+        assert not any(c.get("entity_id") == app.actuator.entities["phase"] for c in calls)
+        assert not any(c.get("entity_id") == app.actuator.entities["force"] and c.get("option") == "2" for c in calls)

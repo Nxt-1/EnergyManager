@@ -6,7 +6,7 @@ from bisect import bisect_right
 
 import math
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
 from time import monotonic
 from typing import Any
@@ -17,7 +17,7 @@ import numpy as np
 
 from .appliance_plan import CycleCurve, starts_for
 from .domain import Snapshot
-from .execution import PHASE_SWITCH_SECONDS, RESTART_SECONDS
+from .execution import PHASE_SWITCH_SECONDS, RESTART_SECONDS, transition_power, transition_trace
 from .validation import TOL
 
 INF = highspy.kHighsInf
@@ -37,6 +37,7 @@ class LinearModel:
         self.indices: list[int] = []
         self.values: list[float] = []
         self.variables: dict[str, list[int]] = {}
+        self.execution_check: Callable[[list[float]], tuple[list[int], list[float]]] | None = None
 
     def variable(
         self, name: str, count: int, upper: float = INF, lower: float = 0, integer: bool = False
@@ -82,6 +83,11 @@ class LinearModel:
         totals = np.zeros(len(self.row_lower))
         products = np.asarray(self.values) * candidate[self.indices]
         totals[occupied] = np.add.reduceat(products, starts[:-1][occupied])
+        execution = getattr(self, "execution_check", None)
+        if execution is not None:
+            rows, corrections = execution(values)
+            for row, correction in zip(rows, corrections):
+                totals[row] -= correction
         return bool(np.all(totals >= np.asarray(self.row_lower) - tolerance)
                     and np.all(totals <= np.asarray(self.row_upper) + tolerance))
 
@@ -152,6 +158,7 @@ class JointModel:
         self.rolling_metadata: dict[int, tuple[int, int, list[tuple[list[int], float]]]] = {}
         self.continuity_limits_added = False
         self.execution_products: list[tuple[int, int, int]] = []
+        self.execution_power_rows: list[int] = []
         self.build(ceilings, grid_ess, ev_total_limit)
         # Append operational bookkeeping after the physical model. Keep its variable
         # ordering stable for the economic MIP and its checked starting schedule.
@@ -853,9 +860,136 @@ class JointModel:
                         bound = sum(max(0, coefficient) * m.upper[index] for index, coefficient in terms)
                         m.row(terms + [(flag, bound)], upper=upper + bound)
             m.row(overlapping, upper=1)
+            self.execution_power_rows.append(len(m.row_lower))
             m.equality(power)
+        m.execution_check = self.execution_corrections
         m.variables.pop("_execution_product", None)
         m.variables["execution_loss"] = [product for product, _, _ in self.execution_products]
+
+    def execution_corrections(self, values: list[float]) -> tuple[list[int], list[float]]:
+        """Candidate-local ramp energy, leaving the released optimization horizon unchanged."""
+        v, s = self.linear.variables, self.snapshot
+        one = [values[i] for i in v["amps_one"]]
+        three = [values[i] for i in v["amps_three"]]
+        trace = transition_power(s, one, three, [values[i] for i in v["ev_energy"]])
+        # The original sparse equality already removes phase/start forecast waits.
+        from .execution import delivery_fraction, wait_events
+
+        modes = [3 if b > .5 else 1 if a > .5 else 0 for a, b in zip(one, three)]
+        waits = wait_events(s, modes)
+        return self.execution_power_rows, [average - (one[t] + 3 * three[t]) * s.capabilities.voltage / 1000
+                * delivery_fraction(s, t, waits) for t, (average, _) in enumerate(trace)]
+
+    def reconcile_transition(self, model: highspy.Highs, values: list[float], seconds: float, *, solve: bool = True) -> bool:
+        """Reallocate joint flows for the proposed fixed profile inside the same solve budget.
+
+        This certifies the candidate, not global optimality of all possible ramp profiles.
+        No nominal instantaneous-reduction candidate can pass acceptance/publication.
+        """
+        repair_started = monotonic()
+        rows, corrections = self.execution_corrections(values)
+        v, s = self.linear.variables, self.snapshot
+        for name in ("one", "three", "amps_one", "amps_three", "phase_setting", "phase_change"):
+            for index in v[name]:
+                model.changeColBounds(index, round(values[index]), round(values[index]))
+        # The endpoint is the candidate's existing task quantity, not permission
+        # to consume extra ramp energy. A final partial interval may stop at it.
+        for t in range(len(s.intervals)):
+            on = values[v["one"][t]] + values[v["three"][t]] > .5
+            next_on = t + 1 < len(s.intervals) and values[v["one"][t + 1]] + values[v["three"][t + 1]] > .5
+            if on and not next_on:
+                index = v["ev_energy"][t + 1]
+                model.changeColBounds(index, values[index], values[index])
+        for row, correction in zip(rows, corrections):
+            model.changeRowBounds(row, correction, correction)
+        trace = transition_power(s, [values[i] for i in v["amps_one"]], [values[i] for i in v["amps_three"]],
+                                 [values[i] for i in v["ev_energy"]])
+        c = s.capabilities
+        segments_by_interval = transition_trace(s, [values[i] for i in v["amps_one"]],
+                                               [values[i] for i in v["amps_three"]], [values[i] for i in v["ev_energy"]])
+        for t, (average, peak) in enumerate(trace):
+            if average <= 1e-8:
+                continue
+            ratio = peak / average
+            limits = [
+                ([(v["grid_ev"][t], ratio), (v["grid_house"][t], 1), (v["grid_store"][t], 1)], c.grid_connection_kw),
+                ([(v["pv_ev"][t], ratio), (v["pv_house"][t], 1), (v["pv_store"][t], 1),
+                  (v["dc_invert"][t], -c.ac_discharge_efficiency)], s.intervals[t].pv_ac_kw),
+                ([(v["solar_dis_ev"][t], ratio), (v["solar_dis_house"][t], 1), (v["grid_dis_house"][t], 1),
+                  (v["dc_invert"][t], c.ac_discharge_efficiency)], c.ac_discharge_kw),
+                ([(v["solar_dis_ev"][t], ratio / c.ac_discharge_efficiency),
+                  (v["solar_dis_house"][t], 1 / c.ac_discharge_efficiency),
+                  (v["grid_dis_house"][t], 1 / c.ac_discharge_efficiency)], c.battery_discharge_kw),
+            ]
+            for terms, upper in limits:
+                model.addRow(-INF, upper, len(terms), np.asarray([i for i, _ in terms], dtype=np.int32),
+                             np.asarray([a for _, a in terms]))
+            segments = segments_by_interval[t]
+            delivered_area = 0.0
+            for left, right, power in segments[:-1]:
+                delivered_area += (right - left).total_seconds() * power
+                elapsed = (right - s.intervals[t].start).total_seconds() / 3600
+                ev_hours = delivered_area / average / 3600
+                solar = [(v["ess_solar"][t], 1), (v["dc_store"][t], elapsed * c.dc_efficiency),
+                         (v["pv_store"][t], elapsed * c.ac_charge_efficiency),
+                         (v["solar_dis_house"][t], -elapsed / c.ac_discharge_efficiency),
+                         (v["solar_dis_ev"][t], -ev_hours / c.ac_discharge_efficiency)]
+                restricted = [(v["ess_grid"][t], 1), (v["grid_store"][t], elapsed * c.ac_charge_efficiency),
+                              (v["grid_dis_house"][t], -elapsed / c.ac_discharge_efficiency)]
+                for terms, lower, upper in ((solar, 0., INF), (restricted, 0., INF),
+                        (solar + restricted, 0., c.ess_capacity_kwh - c.ess_min_kwh)):
+                    model.addRow(lower, upper, len(terms), np.asarray([i for i, _ in terms], dtype=np.int32),
+                                 np.asarray([a for _, a in terms]))
+        if not solve:
+            return True
+        model.setOptionValue("time_limit", max(.001, seconds - (monotonic() - repair_started)))
+        model.run()
+        return model.getInfo().primal_solution_status == highspy.SolutionStatus.kSolutionStatusFeasible
+
+    def fixed_transition_values(self) -> list[float] | None:
+        """Build a known pinned profile before allocation, so nominal arithmetic cannot reject its ramp."""
+        if self.snapshot.execution is None:
+            return None
+        m, s = self.linear, self.snapshot
+        v = m.variables
+        wanted = set(v["amps_one"] + v["amps_three"] + v["ev_energy"])
+        fixed = {i: m.lower[i] for i in wanted if abs(m.upper[i] - m.lower[i]) < 1e-8}
+        for row, (low, high) in enumerate(zip(m.row_lower, m.row_upper)):
+            start, end = m.starts[row], m.starts[row + 1]
+            if end - start == 1 and abs(high - low) < 1e-8:
+                index = m.indices[start]
+                if index in wanted:
+                    fixed[index] = low / m.values[start]
+        if not all(index in fixed for index in v["amps_one"] + v["amps_three"]):
+            return None
+        values = [0.] * len(m.lower)
+        one, three = [fixed[i] for i in v["amps_one"]], [fixed[i] for i in v["amps_three"]]
+        for t in range(len(s.intervals)):
+            for name, value in (("amps_one", one[t]), ("amps_three", three[t]),
+                                ("one", float(one[t] > .5)), ("three", float(three[t] > .5))):
+                values[v[name][t]] = value
+        stock = s.observation.ev_kwh
+        values[v["ev_energy"][0]] = stock
+        for t, (average, _) in enumerate(transition_power(s, one, three)):
+            stock += average * s.intervals[t].hours * s.capabilities.ev_efficiency - s.intervals[t].withdrawal_kwh
+            values[v["ev_energy"][t + 1]] = stock
+        # Preserve explicit matching-quantity rows. Their endpoint may precede
+        # trailing OFF intervals; a quantity stop belongs inside the trace.
+        for end in range(1, len(s.intervals) + 1):
+            on = one[end - 1] + three[end - 1] > .5
+            if not on or end < len(s.intervals) and one[end] + three[end] > .5:
+                continue
+            for k in range(end, len(s.intervals) + 1):
+                if k > end and one[k - 1] + three[k - 1] > .5:
+                    break
+                index = v["ev_energy"][k]
+                if index in fixed:
+                    target = fixed[index] + sum(i.withdrawal_kwh for i in s.intervals[end:k])
+                    difference = target - values[v["ev_energy"][end]]
+                    for j in range(end, len(s.intervals) + 1):
+                        values[v["ev_energy"][j]] += difference
+                    break
+        return self.canonical_values(values)
 
     def canonical_values(self, initial: list[float]) -> list[float]:
         """Tighten unpriced auxiliary indicators without altering any physical decision."""
@@ -1033,6 +1167,9 @@ class JointModel:
         for index, value in (objective if objective is not None else self.economic).items():
             m.cost[index] = value
         model = m.solver()
+        fixed_template = self.fixed_transition_values()
+        if fixed_template is not None:
+            self.reconcile_transition(model, fixed_template, seconds - (monotonic() - before), solve=False)
         if objective is not None and any(index in objective for index in m.variables["start"]):
             model.setOptionValue("mip_heuristic_effort", 0.5)
         if warm:
@@ -1061,11 +1198,32 @@ class JointModel:
         ):
             if math.isfinite(value):
                 result[key] = value
+        if fixed_template is not None:
+            result.update(raw_search_status=status, repair_status=status, bound=None, gap=None,
+                          status="Transition candidate checked" if feasible else "Transition candidate unresolved",
+                          transition_scope="fixed integer profile; joint source/stock/peak reallocation")
         if feasible:
+            proposed = list(model.getSolution().col_value)
+            if self.snapshot.execution is not None and fixed_template is None:
+                _, corrections = self.execution_corrections(proposed)
+                trace = transition_trace(self.snapshot,
+                    [proposed[i] for i in m.variables["amps_one"]], [proposed[i] for i in m.variables["amps_three"]],
+                    [proposed[i] for i in m.variables["ev_energy"]])
+                if any(abs(x) > 1e-7 for x in corrections) or any(len(segments) > 1 for segments in trace):
+                    remaining = seconds - (monotonic() - before)
+                    if remaining <= .001 or not self.reconcile_transition(model, proposed, remaining):
+                        return {**result, "raw_search_status": result["status"], "repair_status": model.modelStatusToString(model.getModelStatus()),
+                                "feasible": False, "status": "Transition candidate unresolved", "bound": None, "gap": None,
+                                "seconds": monotonic() - before}
+                    result.update(raw_search_status=result["status"], repair_status=model.modelStatusToString(model.getModelStatus()),
+                                  status="Transition candidate checked", bound=None, gap=None,
+                                  transition_scope="fixed integer profile; joint source/stock/peak reallocation")
             values = self.canonical_values(list(model.getSolution().col_value))
             result["canonical_objective"] = self.value(
                 objective if objective is not None else self.economic, values
             )
+            result["objective"] = result["canonical_objective"]
+            result["seconds"] = monotonic() - before
             result["values"] = values
             result["flows"] = {
                 name: [max(0.0, values[index]) for index in indexes]

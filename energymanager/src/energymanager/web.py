@@ -350,13 +350,9 @@ def create_web(application: Application, *, configuration: ConfigurationFile | N
         actuator = application.actuator
         if not isinstance(actuator, GuardedActuator):
             raise ValueError("EV hardware adapter is unavailable")
-        epoch = actuator.ev_epoch
-        async with actuator.lock:
-            if not hardware.ev_state()["enabled"] or epoch != actuator.ev_epoch or hardware.readiness_reason():
-                raise ValueError("EV hardware control was revoked")
-            actuator.command_generation = application.revision
-            actuator.dispatch_ev_epoch = epoch
-            await actuator.write("select", "select_option", "phase", "option", body["option"])
+        if body["option"] == "0":
+            raise ValueError("Auto phase mode is outside guarded fixed-phase control; choose 1 or 3 phases")
+        await application.request_ev_phase(3 if body["option"] == "2" else 1)
         return web.json_response({"requested": body["option"]})
 
     async def goals(request: web.Request) -> web.Response:

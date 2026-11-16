@@ -13,7 +13,7 @@ from copy import deepcopy
 
 from .domain import PeakPermission, Snapshot, json_data, instant, encode
 from .charging_timing import ChargingTiming
-from .execution import execution_identity
+from .execution import execution_identity, transition_trace, transition_power
 from .charging_candidates import fixed_grid_reference, reachable_deadline_bounds
 from .deadline_guard import deadline_certificate
 from .charging_continuity import ChargingContinuity, ChargingWindow
@@ -122,7 +122,9 @@ class Planner:
         if warm is not None:
             values = model.canonical_values(warm)
             objective = kwargs.get("objective", model.economic)
-            timed_out = not result["feasible"] and result["status"] == "Time limit reached"
+            timed_out = not result["feasible"] and (result["status"] == "Time limit reached"
+                or result["status"] == "Transition candidate unresolved" and "Time limit reached" in
+                    (result.get("raw_search_status"), result.get("repair_status")))
             better_start = (result["feasible"] and model.value(objective, values)
                             < model.value(objective, result["values"]) - 1e-6)
             if model.linear.accepts(values) and (timed_out or better_start):
@@ -1296,7 +1298,8 @@ class Planner:
         output["coherent_candidate"] = self.coherent_scope
         output["deadline_guard"] = deadline_guard
         output["reference_fingerprint"] = sha256(encode(reference["flows"]).encode()).hexdigest()
-        output["status"] = planning_status
+        output["status"] = ("Transition candidate checked" if output.get("execution_transition", {}).get("has_transitions")
+                            else planning_status)
         output["minimum_grid_certified"] = source_certificate
         output["permission_proposals"] = permission_proposals
         output["polish_reference_summary"] = polish_reference_summary
@@ -1563,6 +1566,18 @@ class Planner:
             "input_digest": original.digest,
             "effective_snapshot": json_data(s) if s != original else None,
         }
+        if s.execution is not None:
+            trace = transition_trace(s, flows["amps_one"], flows["amps_three"], flows["ev_energy"])
+            powers = transition_power(s, flows["amps_one"], flows["amps_three"], flows["ev_energy"])
+            output["execution_transition"] = {
+                "protocol": 2, "kind": "calculated_transition_forecast", "measured": False,
+                "input_digest": s.digest, "trace_digest": sha256(encode(trace).encode()).hexdigest(),
+                "has_transitions": any(len(segments) > 1 for segments in trace),
+                "interval_peak_kw": [peak for _, peak in powers],
+                "scope": "fixed requested profile; joint source/stock/peak allocation, independently audited",
+                "assumptions": {"downward_acknowledgement_seconds": 5, "phase_forecast_seconds": 180,
+                                "quantity_endpoint": "existing task quantity; measured counter stops live execution"},
+            }
         output["execution_id"] = execution_identity(output)
         return output
 

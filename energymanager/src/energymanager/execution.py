@@ -7,15 +7,16 @@ from datetime import datetime, timedelta
 from hashlib import sha256
 from typing import Any
 
-from .domain import Capabilities, Snapshot, encode, instant
+from .domain import Capabilities, Interval, Snapshot, encode, instant
 
 
-# Existing sequencer: stop acknowledgement, 10 s preparation, phase acknowledgement,
-# 30 s restart hold, and start acknowledgement. Current confirmation overlaps the hold.
+# Forecast allowances, not actuator dwell timers: stop acknowledgement, continuous
+# stopped period, selector/start acknowledgement and expected delivery startup.
 ACK_SECONDS = 30.0
 RESTART_SECONDS = 30.0
-PHASE_SWITCH_SECONDS = 10.0 + ACK_SECONDS + ACK_SECONDS + RESTART_SECONDS + ACK_SECONDS
-MINIMUM_PHASE_SWITCH_SECONDS = 10.0 + RESTART_SECONDS
+CURRENT_STEP_SECONDS = 5.0
+PHASE_SWITCH_SECONDS = ACK_SECONDS + 60.0 + ACK_SECONDS + ACK_SECONDS + 30.0
+MINIMUM_PHASE_SWITCH_SECONDS = 60.0
 
 
 def execution_identity(plan: dict[str, Any]) -> str:
@@ -72,7 +73,8 @@ def task_target(plan: dict[str, Any], at: datetime) -> float | None:
     return float(f["ev_energy"][t + 1])
 
 
-def running_context(snapshot: Snapshot, plan: dict[str, Any] | None, phase: int) -> dict[str, Any] | None:
+def running_context(snapshot: Snapshot, plan: dict[str, Any] | None, phase: int,
+                    charger: dict[str, Any] | None = None) -> dict[str, Any] | None:
     """Freeze the running accepted profile as preference evidence, never new authority."""
     at = snapshot.intervals[0].start
     if not plan or not snapshot.observation.connected or not snapshot.observation.ev_state_known:
@@ -99,25 +101,37 @@ def running_context(snapshot: Snapshot, plan: dict[str, Any] | None, phase: int)
         # Older releases already had this whole-plan envelope but no per-task
         # ledger. Never buy a second allowance when upgrading a running task.
         spent = snapshot.policy.polish_tolerance_eur if "polish_reference_summary" in source else 0.0
-    profile = []
-    remaining = target - snapshot.observation.ev_kwh
-    finish = None
+    profile: list[dict[str, Any]] = []
+    ready = max(at, instant((charger or {}).get("ready_at", at.isoformat())))
     for t, item in enumerate(source["intervals"]):
         left, right = max(at, instant(item["start"])), min(deadline, instant(item["end"]))
-        if left >= right:
-            continue
-        amps_one, amps_three = round(f["amps_one"][t]), round(f["amps_three"][t])
-        profile.append({"start":left.isoformat(), "end":right.isoformat(), "one":amps_one, "three":amps_three})
-        if t <= last and finish is None:
-            power = sum(f[name][t] for name in ("grid_ev", "pv_ev", "solar_dis_ev"))
-            gain = power * (right-left).total_seconds()/3600 * snapshot.capabilities.ev_efficiency
-            if power > 1e-7 and remaining <= gain + 1e-8:
-                finish = left + timedelta(hours=remaining/power/snapshot.capabilities.ev_efficiency)
-            remaining -= gain
-    if finish is None and remaining > 0:
-        power = (f["amps_one"][last] + 3*f["amps_three"][last])*snapshot.capabilities.voltage/1000
-        if power > 0:
-            finish = old_end + timedelta(hours=remaining/power/snapshot.capabilities.ev_efficiency)
+        if left < right:
+            points = [left] + ([ready] if left < ready < right else []) + [right]
+            for begin, end in zip(points, points[1:]):
+                profile.append({"start": begin.isoformat(), "end": end.isoformat(),
+                                "one": round(f["amps_one"][t]) if begin >= ready else 0,
+                                "three": round(f["amps_three"][t]) if begin >= ready else 0})
+    # A finish-only endpoint must include the live ramp, even when the accepted
+    # profile predates this protocol. Extend only this task's final setting.
+    intervals = tuple(Interval(instant(item["start"]), instant(item["end"]), 0., 0., 0.) for item in profile)
+    trajectory = replace(snapshot, intervals=intervals,
+                         execution={"initial_phase": phase, "charger": charger or {}})
+    last_one, last_three = round(f["amps_one"][last]), round(f["amps_three"][last])
+    one = [0 if instant(item["start"]) < ready else item["one"]
+           if instant(item["start"]) < old_end else last_one for item in profile]
+    three = [0 if instant(item["start"]) < ready else item["three"]
+             if instant(item["start"]) < old_end else last_three for item in profile]
+    remaining = (target - snapshot.observation.ev_kwh) / snapshot.capabilities.ev_efficiency * 3600
+    finish = None
+    for segments in transition_trace(trajectory, one, three):
+        for left, right, power in segments:
+            area = power * (right - left).total_seconds()
+            if power > 1e-8 and remaining <= area + 1e-8:
+                finish = left + timedelta(seconds=max(0., remaining) / power)
+                break
+            remaining -= area
+        if finish is not None:
+            break
     return {"plan_id":source["id"], "phase":phase, "target_kwh":target,
             "goal_id":goal.id if goal else None, "goal_revision":goal.revision if goal else None,
             "deadline":deadline.isoformat(), "old_end":old_end.isoformat(), "profile":profile,
@@ -131,7 +145,7 @@ def freeze_execution(snapshot: Snapshot, plan: dict[str, Any] | None,
     start = snapshot.intervals[0].start
     ready = max(start, instant(charger.get("ready_at", start.isoformat())))
     initial_phase = int(charger.get("phase", snapshot.observation.ev_phases))
-    running = running_context(snapshot, plan, initial_phase)
+    running = running_context(snapshot, plan, initial_phase, charger)
     end = max(ready, start + timedelta(seconds=snapshot.policy.planning_budget_seconds + 15)) if plan else ready
     boundaries = {start, end, ready}
     if running and running["finish_at"]:
@@ -165,6 +179,8 @@ def freeze_execution(snapshot: Snapshot, plan: dict[str, Any] | None,
                                  withdrawal_kwh=original.withdrawal_kwh if left == original.start else 0.0))
     commitments = []
     modes: list[int] = []
+    requested_one: list[float] = []
+    requested_three: list[float] = []
     stock = snapshot.observation.ev_kwh
     phase_before = initial_phase
     index = 0
@@ -196,17 +212,22 @@ def freeze_execution(snapshot: Snapshot, plan: dict[str, Any] | None,
                 if target is not None and stock >= target - 1e-6:
                     power = 0.0
         modes.append(phases if power else 0)
-        context = replace(snapshot, intervals=tuple(intervals), execution={"initial_phase": initial_phase})
-        fraction = delivery_fraction(context, index, wait_events(context, modes))
-        gain = power * interval.hours * snapshot.capabilities.ev_efficiency * fraction
+        context = replace(snapshot, intervals=tuple(intervals),
+                          execution={"initial_phase": initial_phase, "charger": charger})
+        amps = round(power * 1000 / (phases * snapshot.capabilities.voltage)) if power else 0
+        requested_one.append(amps if phases == 1 else 0)
+        requested_three.append(amps if phases == 3 else 0)
+        average, _ = transition_power(context, requested_one, requested_three)[-1]
+        gain = average * interval.hours * snapshot.capabilities.ev_efficiency
         if power and target is not None and stock + gain > target + 1e-8:
-            lost_seconds = interval.hours * 3600 * (1 - fraction)
-            completion = interval.start + timedelta(seconds=lost_seconds
-                + (target - stock) / power / snapshot.capabilities.ev_efficiency * 3600)
+            completion = delivery_endpoint(context, {"amps_one": requested_one, "amps_three": requested_three},
+                                           index, target - stock)
             if interval.start < completion < interval.end:
                 intervals[index:index + 1] = [replace(interval, end=completion),
                     replace(interval, start=completion, withdrawal_kwh=0.0)]
                 modes.pop()
+                requested_one.pop()
+                requested_three.pop()
                 continue
         commitments.append({"start": interval.start.isoformat(), "end": interval.end.isoformat(),
                             "power_kw": power, "phases": phases})
@@ -249,3 +270,95 @@ def delivery_fraction(snapshot: Snapshot, t: int, events: list[tuple[int, float]
                         - max(interval.start, snapshot.intervals[k].start)).total_seconds())
                for k, seconds in events if k <= t)
     return max(0.0, 1 - lost / (interval.hours * 3600))
+
+
+def transition_trace(snapshot: Snapshot, one: list[float], three: list[float],
+                     stocks: list[float] | None = None) -> list[list[tuple[datetime, datetime, float]]]:
+    """Integrate a fixed candidate's coalesced live ramp over the original interval grid.
+
+    Phase/start waits use the shared conservative forecast allowance. Current readback
+    is assumed to acknowledge each five-second event; live control still requires it.
+    Segments retain the requested task quantity endpoint and calculated power; neither
+    is measured energy or a grant of additional command authority.
+    """
+    c, o = snapshot.capabilities, snapshot.observation
+    modes = [3 if b > .5 else 1 if a > .5 else 0 for a, b in zip(one, three)]
+    waits = wait_events(snapshot, modes)
+    blocked = [(snapshot.intervals[k].start, snapshot.intervals[k].start + timedelta(seconds=seconds))
+               for k, seconds in waits]
+    phase = (snapshot.execution or {}).get("initial_phase", o.ev_phases)
+    initial = ((snapshot.execution or {}).get("charger") or {}).get("current_a")
+    current = int(initial if initial is not None else round(max(0., o.ev_power_kw) * 1000 / (c.voltage * phase)))
+    on = o.ev_power_kw > .1
+    charger = (snapshot.execution or {}).get("charger") or {}
+    last_down = instant(charger["last_downward_at"]) if charger.get("last_downward_at") else None
+    pending = (charger.get("pending") or {}).get("current")
+    if pending and on:
+        current = max(current, int(pending["value"]))
+        last_down = snapshot.intervals[0].start
+    result = []
+    remaining_area: float | None = None
+    for t, (interval, mode) in enumerate(zip(snapshot.intervals, modes)):
+        segments = []
+        if stocks is not None and mode and (t == 0 or not modes[t - 1]):
+            end = t + 1
+            while end < len(modes) and modes[end]:
+                end += 1
+            quantity = stocks[end] - stocks[t] + sum(i.withdrawal_kwh for i in snapshot.intervals[t:end])
+            remaining_area = max(0., quantity) / c.ev_efficiency * 3600
+        target = round(three[t] if mode == 3 else one[t]) if mode else 0
+        at = interval.start
+        while at < interval.end:
+            active_wait = next((end for start, end in blocked if start <= at < end), None)
+            if not mode or active_wait or remaining_area is not None and remaining_area <= 1e-8:
+                on = False
+                until = min(interval.end, active_wait) if active_wait else interval.end
+                segments.append((at, until, 0.0))
+                at = until
+                continue
+            phase = mode
+            if not on:
+                current = target  # Startup at 6 A and delivery verification are included in the startup allowance.
+            elif target >= current:
+                current = target
+            elif last_down is None or (at - last_down).total_seconds() >= CURRENT_STEP_SECONDS:
+                current -= 1
+                last_down = at
+            on = True
+            until = interval.end
+            if current > target and last_down is not None:
+                until = min(until, last_down + timedelta(seconds=CURRENT_STEP_SECONDS))
+            future_wait = next((start for start, _ in blocked if at < start < until), None)
+            if future_wait:
+                until = future_wait
+            power = current * phase * c.voltage / 1000
+            if remaining_area is not None:
+                until = min(until, at + timedelta(seconds=remaining_area / power))
+                remaining_area = max(0., remaining_area - power * (until - at).total_seconds())
+                if (until - at).total_seconds() <= 1e-6:
+                    remaining_area = 0.
+                    continue
+            segments.append((at, until, power))
+            at = until
+        result.append(segments)
+    return result
+
+
+def transition_power(snapshot: Snapshot, one: list[float], three: list[float],
+                     stocks: list[float] | None = None) -> list[tuple[float, float]]:
+    """Average and peak of the fixed candidate's interval-integrated transition template."""
+    return [(sum((end - start).total_seconds() * power for start, end, power in segments)
+             / (interval.hours * 3600), max((power for _, _, power in segments), default=0.))
+            for interval, segments in zip(snapshot.intervals, transition_trace(snapshot, one, three, stocks))]
+
+
+def delivery_endpoint(snapshot: Snapshot, flows: dict[str, list[float]], index: int, battery_kwh: float) -> datetime:
+    """Locate a quantity endpoint inside the actual transition template, including a live ramp."""
+    segments = transition_trace(snapshot, flows["amps_one"], flows["amps_three"], flows.get("ev_energy"))[index]
+    remaining = max(0., battery_kwh) / snapshot.capabilities.ev_efficiency * 3600
+    for start, end, power in segments:
+        area = (end - start).total_seconds() * power
+        if power > 0 and area >= remaining:
+            return start + timedelta(seconds=remaining / power)
+        remaining -= area
+    return snapshot.intervals[index].end

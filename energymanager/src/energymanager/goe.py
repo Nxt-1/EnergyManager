@@ -22,6 +22,8 @@ WAITING = {
     32: "Unbalanced-load protection", 34: "Grid monitoring", 35: "OCPP fallback",
 }
 CHARGING = {3, 7, 8, 9, 10, 11, 12, 13, 14, 15, 19, 20, 33}
+PHASE_STOP_SECONDS = 60
+CURRENT_STEP_SECONDS = 5
 RESUME_DELAY_SECONDS = 30
 WAITING_TIMEOUT_SECONDS = 120
 
@@ -164,6 +166,10 @@ class GoEControl:
         self.stopping_since: datetime | None = None
         self.disabled_stop_at: datetime | None = None
         self.observed_phase: int | None = None
+        self.last_downward_at: datetime | None = None
+        self.stop_observed_at: datetime | None = None
+        self.restart_phase: int | None = None
+        self.desired: Command | None = None
         self.status = "Waiting for charger inputs"
 
     def reset(self) -> None:
@@ -171,6 +177,9 @@ class GoEControl:
         self.phase_started = self.waiting_since = self.no_power_since = self.unhealthy_since = self.stop_sent = None
         self.stopping_since = self.disabled_stop_at = None
         self.observed_phase = None
+        self.last_downward_at = self.stop_observed_at = None
+        self.restart_phase = None
+        self.desired = None
         self.actuator.resume_after = None
         self.actuator.last = None
 
@@ -181,14 +190,18 @@ class GoEControl:
                         if self.readings.issue(at) is None else observation.ev_phases)
         phase = acknowledged
         ready = at
-        committed = "phase" in self.pending or a.awaiting_phase is not None
+        committed = "phase" in self.pending or a.awaiting_phase is not None or self.phase_started is not None
         if committed:
-            phase = a.target_phase or a.awaiting_phase or observation.ev_phases
-            ready = max(at, (self.phase_started or at) + timedelta(seconds=180))
+            phase = ({1: 1, 2: 3}[self.pending["phase"][0]] if "phase" in self.pending
+                     else a.target_phase or a.awaiting_phase or observation.ev_phases)
+            ready = max(at, (a.zero_since or self.phase_started or at) + timedelta(seconds=150))
         elif (observation.ev_power_kw < .1 or "force" in self.pending or self.phase_started is not None
               or str(self.readings.rows.get("force", {}).get("state")) != "2"):
             ready = max(at, a.resume_after or at + timedelta(seconds=RESUME_DELAY_SECONDS))
         return {"phase": phase, "acknowledged_phase": acknowledged,
+                "current_a": self.readings.number("current") if self.readings.issue(at) is None else None,
+                "last_downward_at": self.last_downward_at.isoformat() if self.last_downward_at else None,
+                "stopped_since": a.zero_since.isoformat() if a.zero_since else None,
                 "ready_at": ready.isoformat(), "phase_committed": committed,
                 "pending": {key: {"value": value, "requested_at": when.isoformat()}
                             for key, (value, when) in self.pending.items()},
@@ -200,8 +213,25 @@ class GoEControl:
 
         def activity(stage: str, label: str, detail: str = "", *,
                      until: datetime | None = None, seconds: int = 0, timer: str = "") -> dict[str, Any]:
+            settings_reached = bool(command and r.issue(at) is None
+                and str(r.rows.get("phase", {}).get("state")) == str(2 if command.phases == 3 else 1)
+                and str(r.rows.get("force", {}).get("state")) == str(2 if command.current_a and not command.prepare_phase else 1)
+                and (command.prepare_phase or not command.current_a
+                     or str(r.rows.get("current", {}).get("state")) == str(command.current_a))
+                and not self.pending)
             return {"as_of": at.isoformat(), "stage": stage, "label": label, "detail": detail,
-                    "until": until.isoformat() if until else None, "duration_seconds": seconds, "timer": timer}
+                    "until": until.isoformat() if until else None, "duration_seconds": seconds, "timer": timer,
+                    "desired": {"current_a": command.current_a, "phases": command.phases,
+                                "prepare_phase": command.prepare_phase} if command else None,
+                    "confirmed": {key: r.rows.get(key, {}).get("state") for key in ("force", "current", "phase")},
+                    "target_status": "fault" if stage == "fault" else "blocked" if stage in ("blocked", "disabled")
+                        else "reached" if settings_reached else "pending",
+                    "accepted": bool(command and command.phases in a.c.phases and (command.prepare_phase
+                        or command.current_a == 0 or a.c.minimum_current_a <= command.current_a <= a.c.maximum_current_a)),
+                    "settings_reached": settings_reached,
+                    "delivery_confirmed": observation.ev_power_kw >= .1
+                        and -5 <= (at - observation.at).total_seconds() <= r.maximum_age,
+                    "blocking_reason": detail, "next_eligible_at": until.isoformat() if until else None}
 
         if not a.ev_enabled:
             return activity("disabled", "EV hands-off", "Observation only; charging is externally controlled.")
@@ -231,28 +261,25 @@ class GoEControl:
             if "phase" in self.pending:
                 return activity("settings", f"Selecting {target}-phase mode", "Waiting for charger readback.")
             if a.awaiting_phase is not None:
-                if a.resume_after is not None and at >= a.resume_after:
-                    return activity("settings", "Waiting for charger phase transition",
-                                    "Restart hold complete; the charger still reports a phase transition.")
-                return activity("settings", "Waiting for charger phase transition",
-                                "The charger still reports simulated unplugging or phase switching.",
-                                until=a.resume_after, seconds=RESUME_DELAY_SECONDS, timer="Restart hold")
+                return activity("settings", "Waiting for charger phase transition", "Waiting for device readiness.")
             if observation.ev_power_kw >= .1:
                 return activity("stopping", "Waiting for EV power to stop", "Charging must stop before changing phases.")
-            ready = a.stopped_at + timedelta(seconds=10) if a.stopped_at else None
-            if ready and a.zero_since:
-                ready = max(ready, a.zero_since + timedelta(seconds=3))
-            if ready and at >= ready:
-                ready = None
-            return activity("stopping", "Preparing phase change", "Confirming stopped power before changing phases.",
-                            until=ready, seconds=10, timer="Stop preparation")
+            ready = a.zero_since + timedelta(seconds=PHASE_STOP_SECONDS) if a.zero_since else None
+            return activity("stopping", "Preparing phase change", "Requires continuously confirmed stop and 6 A readback.",
+                            until=ready, seconds=PHASE_STOP_SECONDS, timer="Confirmed stop")
         if self.stopping_since is not None:
             return activity("stopping", "Waiting for EV power to stop", "Confirming stopped power before the restart hold.")
         if not command.current_a and not command.prepare_phase:
             return activity("idle", "Stopped as requested", command.reason)
+        if command.prepare_phase and not self.pending and r.code("force") == 1 and observation.ev_power_kw < .1:
+            return activity("idle", "Phase prepared", "Waiting for a fresh permitted charging target.")
         if a.resume_after is not None and at < a.resume_after:
             return activity("settling", "Settling before restart", "Charging is deliberately held off before starting.",
                             until=a.resume_after, seconds=RESUME_DELAY_SECONDS, timer="Restart hold")
+        if self.last_downward_at is not None and command.current_a < r.number("current"):
+            return activity("settings", "Reducing live current", "Each 1 A step needs readback and at least 5 seconds.",
+                            until=self.last_downward_at + timedelta(seconds=CURRENT_STEP_SECONDS),
+                            seconds=CURRENT_STEP_SECONDS, timer="Current ramp")
         if "current" in self.pending:
             return activity("settings", f"Confirming {command.current_a} A limit", "Current changes do not require a restart hold.")
         if self.waiting_since is not None:
@@ -318,12 +345,20 @@ class GoEControl:
             if (command.at - pending[1]).total_seconds() >= 30:
                 await self.fail(command, observation, f"go-e {key} command was not confirmed within 30 seconds")
             return False
+        if pending is not None and key != "force":
+            if r.number(key) == pending[0] and r.device_at is not None and r.device_at > pending[1]:
+                self.pending.pop(key)
+            else:
+                if (command.at - pending[1]).total_seconds() >= 30:
+                    await self.fail(command, observation, f"go-e {key} command was not confirmed within 30 seconds")
+                return False
         domain, service, value_key = ("number", "set_value", "value") if key == "current" else ("select", "select_option", "option")
         previous_resume, previous_stop = a.resume_after, self.stop_sent
         self.pending[key] = value, command.at
         if key == "force" and value == 1:
             a.resume_after = None
         if key == "force" and value == 2:
+            a.zero_since = self.stop_observed_at = None
             self.stop_sent = None  # A newer start request revokes any earlier stop acknowledgement.
         # Import here because the actuator module also imports this sequencer.
         from .control import StaleDispatch
@@ -332,6 +367,8 @@ class GoEControl:
             await a.write(domain, service, key, value_key, value if key == "current" else str(value))
         except StaleDispatch:
             # A revoked write never reached the device; do not await a phantom acknowledgement.
+            if getattr(a, "write_dispatched", False):
+                raise
             a.resume_after, self.stop_sent = previous_resume, previous_stop
             if pending is None:
                 self.pending.pop(key, None)
@@ -351,7 +388,10 @@ class GoEControl:
             await self.fail(command, observation, error)
             return
         issue = r.issue(command.at)
+        if not -5 <= (command.at - observation.at).total_seconds() <= r.maximum_age:
+            issue = "EV power read watchdog expired"
         if issue:
+            a.zero_since = self.stop_observed_at = None
             a.charging_since = None
             self.pending.clear()
             self.status = issue
@@ -365,39 +405,39 @@ class GoEControl:
         if error := r.error():
             await self.fail(command, observation, error + "; inspect before restart")
             return
-        phase = r.code("phase")
-        if self.observed_phase is not None and phase != self.observed_phase:
-            a.resume_after = command.at + timedelta(seconds=RESUME_DELAY_SECONDS)
-        self.observed_phase = phase
-        if (self.phase_started is not None and command.phases == {1: 1, 2: 3}[phase]
-                and a.target_phase != command.phases and "phase" not in self.pending and a.awaiting_phase is None):
-            # An obsolete preparation is still reversible until its selector write.
-            # Keep the confirmed stop/restart hold; never await a phantom phase change.
+        # Stop evidence belongs to continuous observations, not a plan/target identity.
+        pending_force = self.pending.get("force")
+        force_fresh = (pending_force is None or pending_force[0] == 1 and r.device_at is not None
+                       and r.device_at > pending_force[1])
+        stopped = force_fresh and r.code("force") == 1 and observation.ev_power_kw < .1
+        fresh_power = -5 <= (command.at - observation.at).total_seconds() <= r.maximum_age
+        contiguous = (self.stop_observed_at is not None
+                      and 0 <= (observation.at - self.stop_observed_at).total_seconds() <= r.maximum_age)
+        if stopped and fresh_power:
+            if not contiguous:
+                a.zero_since = None
+            a.zero_since = a.zero_since or observation.at
+            self.stop_observed_at = observation.at
+        else:
+            a.zero_since = self.stop_observed_at = None
+        phase = {1: 1, 2: 3}[r.code("phase")]
+        self.observed_phase = r.code("phase")
+        a.phase = phase
+        self.desired = command
+        off = (not command.current_a and not command.prepare_phase) or not observation.connected
+        if off:
+            # OFF pre-empts every start/setting. Dispatched settings remain tracked for reconciliation.
+            self.restart_phase = None
             self.phase_started = None
-            a.target_phase = None
-        if not command.current_a and not command.prepare_phase or not observation.connected:
+            a.target_phase = a.awaiting_phase = None
             a.charging_since = None
             self.waiting_since = self.no_power_since = None
             self.pending.pop("current", None)
-            pending_phase = self.pending.get("phase")
-            if pending_phase:
-                value, requested = pending_phase
-                if r.code("phase") == value and r.device_at is not None and r.device_at > requested:
-                    self.pending.pop("phase")
-                    a.phase = {1: 1, 2: 3}[value]
-                    a.awaiting_phase = a.phase
-                    a.resume_after = command.at + timedelta(seconds=RESUME_DELAY_SECONDS)
-                elif (command.at - requested).total_seconds() >= 30:
-                    await self.fail(command, observation, "go-e phase command was not confirmed within 30 seconds")
-                    return
-            transition_pending = "phase" in self.pending or a.awaiting_phase is not None and r.code("charger_status") in (22, 23)
-            if not transition_pending:
-                self.phase_started = None
-                a.target_phase = a.awaiting_phase = None
-                a.stopped_at = a.zero_since = None
             self.status = "EV stopped"
             confirmed = await self.confirm("force", 1, command, observation)
             self.observe_stopped(command, observation, confirmed)
+            if confirmed and (pending_phase := self.pending.get("phase")):
+                await self.confirm("phase", pending_phase[0], command, observation)
             if observation.ev_power_kw >= .1:
                 self.stopping_since = self.stopping_since or command.at
                 if confirmed and (command.at - self.stopping_since).total_seconds() >= 30:
@@ -406,48 +446,54 @@ class GoEControl:
                 self.stopping_since = None
             return
         minimum, maximum = r.limits(a.c.minimum_current_a, a.c.maximum_current_a)
-        if not command.prepare_phase and not minimum <= command.current_a <= maximum:
-            self.status = f"EV paused: requested {command.current_a} A outside charger limits {minimum}–{maximum} A"
+        if (command.phases not in a.c.phases or type(command.current_a) is not int
+                or not command.prepare_phase and (not minimum <= command.current_a <= maximum
+                    or command.ev_kw + 1e-8 < command.current_a * command.phases * a.c.voltage / 1000)):
+            self.status = f"Invalid EV target: fixed supported phase and current within charger limits {minimum}–{maximum} A required"
             await self.fail(command, observation, self.status)
             return
-        if command.phases != {1: 1, 2: 3}[r.code("phase")] or self.phase_started is not None:
+        # Reconcile an already-dispatched selector before acting on a replacement target.
+        pending_phase = self.pending.get("phase")
+        if pending_phase and not await self.confirm("phase", pending_phase[0], command, observation):
+            return
+        if command.phases != phase or self.phase_started is not None:
             self.status = "Preparing charger phase change"
             self.no_power_since = None
             a.charging_since = None
             self.phase_started = self.phase_started or command.at
-            a.target_phase = a.target_phase or command.phases
-            phase_target = a.target_phase
+            a.target_phase = command.phases
             if (command.at - self.phase_started).total_seconds() >= 180:
                 await self.fail(command, observation, "go-e phase change timed out; EV remains stopped")
                 return
             if not await self.confirm("force", 1, command, observation):
                 return
-            a.stopped_at = a.stopped_at or command.at
-            a.zero_since = (a.zero_since or observation.at) if observation.ev_power_kw < .1 else None
-            if (a.zero_since is None or (observation.at - a.zero_since).total_seconds() < 3
-                    or (command.at - a.stopped_at).total_seconds() < 10):
+            if not stopped or not fresh_power:
+                self.status = "Waiting for EV power to stop"
                 return
-            if not await self.confirm("phase", 2 if phase_target == 3 else 1, command, observation):
+            self.observe_stopped(command, observation, True)
+            if not minimum <= 6 <= maximum:
+                await self.fail(command, observation, "Phase preparation requires a permitted 6 A setting")
                 return
-            # Selector acknowledgement starts the same tested hold in either direction.
-            if "phase" not in self.pending and a.awaiting_phase is None:
-                a.resume_after = command.at + timedelta(seconds=RESUME_DELAY_SECONDS)
-                a.awaiting_phase = phase_target
+            if not await self.confirm("current", 6, command, observation):
+                return
+            if command.phases != phase:
+                if a.zero_since is None or (command.at - a.zero_since).total_seconds() < PHASE_STOP_SECONDS:
+                    return
+                if not await self.confirm("phase", 2 if command.phases == 3 else 1, command, observation):
+                    return
             if r.code("charger_status") in (22, 23):
+                a.awaiting_phase = command.phases
                 self.status = "Waiting for charger phase transition"
                 return
-            a.switched_at = command.at
-            a.phase = phase_target
+            a.phase = command.phases
             a.target_phase = a.awaiting_phase = None
-            a.stopped_at = a.zero_since = None
             self.phase_started = None
-            if command.phases != phase_target:
-                return
+            self.restart_phase = command.phases
         if command.prepare_phase:
             confirmed = await self.confirm("force", 1, command, observation)
             self.observe_stopped(command, observation, confirmed)
             self.status = "Phase prepared; waiting for permitted charging energy"
-            return  # Phase preparation never writes a charge request.
+            return
         if (self.no_power_since is not None and observation.ev_power_kw < .1
                 and (command.at - self.no_power_since).total_seconds() >= WAITING_TIMEOUT_SECONDS):
             reason = r.waiting() or "Requested charging delivered less than 100 W across changing states"
@@ -470,7 +516,24 @@ class GoEControl:
                     await self.fail(command, observation, "EV power did not stop after the confirmed stop request")
                 return
             self.stopping_since = None
-        if not await self.confirm("current", command.current_a, command, observation):
+        target_current = command.current_a
+        if self.restart_phase is not None:
+            if observation.ev_power_kw >= .1 and r.code("force") == 2 and "force" not in self.pending:
+                self.restart_phase = None
+            else:
+                target_current = 6
+        pending_current = self.pending.get("current")
+        if pending_current and not await self.confirm("current", pending_current[0], command, observation):
+            return
+        current = int(r.number("current"))
+        if target_current < current and not (stopped and fresh_power):
+            if self.last_downward_at is not None and (command.at - self.last_downward_at).total_seconds() < CURRENT_STEP_SECONDS:
+                self.status = "Waiting for next live 1 A reduction"
+                return
+            target_current = current - 1
+            # Reserve the clock before the await; a target/generation change cannot erase a dispatched step.
+            self.last_downward_at = command.at
+        if not await self.confirm("current", target_current, command, observation):
             return
         if not starting and a.resume_after is not None and command.at < a.resume_after:
             remaining = math.ceil((a.resume_after - command.at).total_seconds())

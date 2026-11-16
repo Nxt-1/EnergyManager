@@ -141,10 +141,10 @@ export async function mountApplication(root, options = {}) {
       evPage.updateStatus(state);
       void refresh(true);
     },
-    phase: options.setPhase ? async option => {
+    phase: async option => {
       await api('ev/control/phase', 'POST', {option});
       await refresh(true);
-    } : null,
+    },
     entities: options.native ? options.entities : null,
     sync: async () => {
       await api('calendars/sync', 'POST', {});

@@ -2,7 +2,7 @@ import {
   mountApplication
 } from './application-view.js';
 import {
-  nativeLiveState, setChargerPhase
+  nativeLiveState
 } from './native-live.js';
 import {hasTextSelection} from './text-selection.js';
 import {historySources, genuineEntities} from './ha-history.js';
@@ -99,8 +99,7 @@ export function generateDashboard(config, manifest, connection) {
             history.pushState(null, '', `/${dashboard}/${name}`);
             window.dispatchEvent(new Event('location-changed'));
           },
-          liveState: state => nativeLiveState(state, this.currentHass, manifest),
-          setPhase: option => setChargerPhase(this.currentHass, manifest, option)
+          liveState: state => nativeLiveState(state, this.currentHass, manifest)
         });
         if (!this.isConnected || generation !== (this.generation || 0)) controller.dispose();
         else {
