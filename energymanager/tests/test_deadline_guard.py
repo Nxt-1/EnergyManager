@@ -95,3 +95,27 @@ def test_cautious_fallback_preserves_the_accepted_appliance_commitment():
     assert guard["flows"]["dishwasher_start"] == pytest.approx(nominal["flows"]["dishwasher_start"])
     assert guard["flows"]["dishwasher_power"] == pytest.approx(nominal["flows"]["dishwasher_power"])
     assert validate_certificate(guard) == []
+
+
+def test_existing_transition_reference_is_a_witness_only_after_same_phase_necessity_proof():
+    from energymanager.deadline_guard import deadline_certificate
+    from energymanager.deadline_audit import validate_certificate
+    from energymanager.optimization import JointModel
+    from test_running_task import running_case
+
+    snapshot, _ = running_case(-1.932, deadline_hours=2)
+    model = JointModel(snapshot)
+    for t in range(len(snapshot.intervals)):
+        commitment = snapshot.ev_commitment(t)
+        phase, amps = (1, 12) if commitment is not None else (3, 6)
+        for name, value in (("amps_one", amps if phase == 1 else 0), ("amps_three", amps if phase == 3 else 0)):
+            index = model.linear.variables[name][t]
+            model.linear.lower[index] = model.linear.upper[index] = value
+    model.linear.equality([(model.linear.variables["ev_energy"][-1], 1)], 23.4)
+    reference = model.run(5)
+    assert reference["feasible"], reference
+    certificate = deadline_certificate(snapshot, reference["flows"], 5)
+    assert certificate["status"] == "certified", certificate
+    assert certificate["phase_necessity"]["status"] == "Infeasible"
+    assert any(a["status"] == "Checked reference witness" for a in certificate["attempts"])
+    assert validate_certificate(certificate) == []

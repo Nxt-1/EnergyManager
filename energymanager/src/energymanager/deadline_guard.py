@@ -148,9 +148,23 @@ def deadline_certificate(snapshot: Snapshot, reference: dict[str, list[float]], 
         objective = {trial.linear.variables["grid_cumulative"][-1]: 1000.0}
         objective.update({trial.linear.variables["grid_ev"][t]: i.hours * (t + 1) / max(1, len(context.intervals))
                           for t, i in enumerate(context.intervals)})
-        outcome = trial.run(min(2.5, remaining), objective=objective, warm=warm)
-        if (warm is not None and trial.linear.accepts(warm)
-                and (not outcome["feasible"] and outcome["status"] == "Time limit reached")):
+        outcome: dict[str, Any]
+        checked_warm = warm is not None and trial.linear.accepts(warm)
+        if checked_warm and not any(i.pv_ac_kw > 0 or i.pv_dc_kw > 0 for i in context.intervals):
+            # With no uncertain generation, a checked reference is already a
+            # sufficient witness. Phase necessity still requires the separate
+            # unrestricted same-phase proof below; this grants no new permission.
+            assert warm is not None
+            outcome = {"feasible": True, "status": "Checked reference witness", "values": warm,
+                       "flows": {name: [warm[index] for index in indexes]
+                                 for name, indexes in trial.linear.variables.items()},
+                       "scope": "fixed existing reference; independently audited"}
+        else:
+            outcome = trial.run(min(2.5, remaining), objective=objective, warm=warm)
+        repair_timeout = (outcome["status"] == "Transition candidate unresolved" and "Time limit reached" in
+                          (outcome.get("raw_search_status"), outcome.get("repair_status")))
+        if (warm is not None and checked_warm
+                and not outcome["feasible"] and (outcome["status"] == "Time limit reached" or repair_timeout)):
             outcome.update(feasible=True, retained_starting_candidate=True, values=warm,
                            flows={name: [warm[index] for index in indexes]
                                   for name, indexes in trial.linear.variables.items()})
@@ -186,7 +200,7 @@ def deadline_certificate(snapshot: Snapshot, reference: dict[str, list[float]], 
                 record["phase_necessity"] = {"status":"Infeasible", "phase":running["phase"],
                     "deadline":running["deadline"], "input_digest":context.digest, "service":service or {}}
                 model = cautious_model(context,k,service=service)
-                best = solve(model,0)
+                best = solve(model, 0, model.warm_from(reference))
             if not best["feasible"] and best["status"] == "Infeasible":
                 record["status"] = "margin_shortfall"
         if not best["feasible"]:

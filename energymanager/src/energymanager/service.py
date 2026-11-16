@@ -70,6 +70,7 @@ class Application:
         self.demo_season = "winter" if "winter" in self.snapshot.forecast_id else "mixed"
         self.demo_plant = DemoPlant(self.snapshot)
         self.current_command: Command | None = None
+        self.ev_phase_request: tuple[int, int, int] | None = None
         self.accepted: dict[str, Any] | None = store.get("accepted")
         self.ev_valid = False  # Restart must reconcile measured state before using recorded commands.
         self.ess_valid = False
@@ -548,6 +549,12 @@ class Application:
             self.plan_recovery.stamp(result)
             self.store.record(snapshot, result, "accepted")
             self.accepted, self.snapshot = result, snapshot
+            # Acceptance transfers target ownership, even within the same revision.
+            # Preserve acknowledgement/transition clocks; the next control event
+            # follows the new plan's currently applicable target without an overlay.
+            self.ev_phase_request = None
+            if isinstance(self.actuator, GuardedActuator):
+                self.actuator.target_epoch += 1
             self.appliance_runs.accepted(result)
             if self.demo:
                 self.demo_plant.snapshot = effective
@@ -710,7 +717,7 @@ class Application:
             raise ValueError("EV hardware control is unavailable")
         if not isinstance(self.actuator, GuardedActuator) or self.actuator.goe_control is None:
             raise ValueError("EV hardware adapter is unavailable")
-        self.ev_phase_request: tuple[int, int, int] | None = (phase, self.revision, self.actuator.ev_epoch)
+        self.ev_phase_request = (phase, self.revision, self.actuator.ev_epoch)
         command = self.controller.tick(self.observation, self.now(), self.accepted, self.revision,
                                        self.ev_valid, self.ess_valid, self.conditional_valid)
         command = self.phase_target(command, phase)

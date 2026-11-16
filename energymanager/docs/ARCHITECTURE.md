@@ -1785,7 +1785,13 @@ EnergyManager API and guarded actuator. They retain existing permitted power, qu
 source and peak bounds. When no legal current fits that power in the requested phase,
 the request prepares the phase while OFF; it never rounds upward or grants charging
 energy. This is a one-time request, superseded by new ordinary controller authority,
-not a persistent manual override. Auto is unavailable and rejected with an explanation.
+not a persistent manual override. Normal ticks from the already accepted plan may
+advance that request with fresh guards. A subsequently accepted executable plan takes
+over the target even within the same control revision: retire the manual overlay and
+follow its currently applicable guarded target. Equivalent targets preserve transition
+clocks/readback; a conflicting phase or OFF cancels obsolete work, including a pending
+restart. A changed plan ID alone is not a reason to restart a transition. Auto is
+unavailable and rejected with an explanation.
 Buttons remain disabled without effective EV hardware authority; pressed state follows
 readback, and pending/errors remain visible. External HA/go-e controls remain external
 observations and are not represented as having followed EnergyManager's sequence.
@@ -3588,7 +3594,7 @@ reports a fault. No vehicle-command capability or automatic recovery is introduc
 
 ### EV-A015 — setpoint-driven EV actuator
 
-**Implemented in4.7.4; offline verified, publication pending.** See WORK_STATE.md and
+**Implemented in4.7.4.** See WORK_STATE.md and
 its external checkpoint for current delivery evidence. No live installation validation.
 
 **Authorized16November2026.** The user requested handoff to a fresh implementation
@@ -3652,7 +3658,9 @@ changes without claiming that they passed the guarded sequence.
    Preserve the existing master/shutdown policy and4.7.3 confirmed-control state
    retention. No EV target/transition blocks independent ESS control.
 7. Drive progress from control/readback/timer events; a new planner result or repeated
-   setpoint submission is not needed for each step. Do not sleep through waits or hold
+   setpoint submission is not needed for each step. The independent fast control loop
+   may recompute fresh guarded Commands on those events; no additional public
+   submit-once/advance API or autonomous retry path is required. Do not sleep through waits or hold
    an actuator lock for5s/60s. Do not add arbitrary debouncing, minimum charging blocks,
    simulated unplugging, reboot, extra post-selector dwell or Ford-side commands.
    Retain applicable device-readiness, acknowledgement, restart and fault supervision

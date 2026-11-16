@@ -168,6 +168,20 @@ async def test_real_planning_loop_only_publishes_latest_request(tmp_path, monkey
     app = Application(store, snapshot=snapshot, policy=snapshot.policy)
     monkeypatch.setattr(app, "build_snapshot", lambda: replace(snapshot, revision=app.revision))
     monkeypatch.setattr(app, "now", lambda: snapshot.observation.at)
+    from copy import deepcopy
+    from datetime import timedelta
+    from test_goe import ChargerFixture
+
+    fixture = ChargerFixture()
+    fixture.at = snapshot.observation.at
+    fixture.set("heartbeat", 6)
+    fixture.readings.update(deepcopy(fixture.rows), fixture.at)
+    await fixture.tick(amps=0, phases=3, prepare=True)
+    app.actuator = fixture.actuator
+    app.ev_phase_request = (3, app.revision, app.actuator.ev_epoch)
+    manual = app.ev_phase_request
+    stopped_since = app.actuator.zero_since
+    target_epoch = app.actuator.target_epoch
     started = asyncio.Event()
     calls = []
 
@@ -186,13 +200,26 @@ async def test_real_planning_loop_only_publishes_latest_request(tmp_path, monkey
     app.request_plan("synthetic")
     loop = asyncio.create_task(app.planning_loop())
     await started.wait()
+    assert app.ev_phase_request == manual  # Starting a calculation does not transfer ownership.
     for _ in range(5):
         newest = app.request_plan("manual", restart=True)["planning_activity"]["request_id"]
     await asyncio.wait_for(loop, 5)
     assert len(calls) == 2 and calls[-1] == newest
     assert app.accepted["id"] == newest and app.status == "ready"
     assert len(store.decisions()) == 1
+    assert app.ev_phase_request is None
+    assert app.actuator.target_epoch > target_epoch
+    assert app.actuator.zero_since == stopped_since  # Equivalent readback clocks are never reset on acceptance.
     assert app.state()["planning_activity"]["state"] == "ready"
+    fixture.at += timedelta(seconds=61)
+    fixture.set("heartbeat", 7)
+    fixture.readings.update(deepcopy(fixture.rows), fixture.at)
+    observation = replace(snapshot.observation, at=fixture.at)
+    command = app.controller.tick(observation, fixture.at, app.accepted, app.revision)
+    assert command.current_a == 0 and not command.prepare_phase
+    await app.actuator.apply(command, app.revision, observation)
+    assert app.actuator.goe_control.phase_started is None
+    assert not any(c[2]["entity_id"] == fixture.actuators["phase"] or c[2].get("option") == "2" for c in fixture.calls)
     store.close()
 
 

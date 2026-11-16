@@ -165,3 +165,52 @@ async def test_solar_phase_preparation_does_not_purchase_grid_or_bypass_progress
     assert command.current_a == 0 and not command.prepare_phase
     command = control.tick(raw, fixture.at, plan, 1, ev_valid=False)
     assert command.current_a == 0 and not command.prepare_phase
+
+
+async def test_one_accepted_plan_drives_a_complete_live_ramp_on_control_and_readback_events():
+    from energymanager.optimization import JointModel
+    from test_first_slice import tiny
+    from test_publication_closed_loop import result_for
+
+    s = tiny(hours=1 / 6)
+    s = replace(s, observation=replace(s.observation, ev_power_kw=3.68, monthly_peak_kw=8),
+                goals=(Goal("g", "SYNTHETIC fixed-plan ramp", s.intervals[-1].end, target_soc_percent=40.3),))
+    s = freeze_execution(s, None, {"phase": 1, "current_a": 16, "ready_at": s.observation.at.isoformat()})
+    model = JointModel(s)
+    for t in range(len(s.intervals)):
+        for name, value in (("amps_one", 16 if t == 0 else 6), ("amps_three", 0)):
+            index = model.linear.variables[name][t]
+            model.linear.lower[index] = model.linear.upper[index] = value
+    result = model.run(5)
+    assert result["feasible"], result
+    accepted = result_for(s, result["flows"])
+    fixture = ChargerFixture()
+    fixture.at = s.observation.at - timedelta(seconds=1)
+    fixture.set("force", 2)
+    fixture.set("current", 16)
+    fixture.set("charger_status", 3)
+    controller = FastControl(s.capabilities, s.policy)
+    original = fixture.service
+    reductions = []
+
+    async def traced(domain, service, data):
+        if data["entity_id"] == fixture.actuators["current"]:
+            reductions.append((fixture.at, data["value"]))
+        await original(domain, service, data)
+
+    fixture.service = traced
+    stock = s.observation.ev_kwh
+    for second in range(120):
+        fixture.at += timedelta(seconds=1)
+        fixture.set("heartbeat", second + 6)
+        fixture.readings.update(deepcopy(fixture.rows), fixture.at)
+        power = int(fixture.rows[fixture.actuators["current"]]["state"]) * .23
+        observation = replace(s.observation, at=fixture.at, ev_kwh=stock, ev_power_kw=power)
+        command = controller.tick(observation, fixture.at, accepted, 1)
+        await fixture.actuator.apply(command, 1, observation)
+        stock += power / 3600 * s.capabilities.ev_efficiency
+    assert [amps for _, amps in reductions] == list(range(15, 5, -1))
+    assert all((b[0] - a[0]).total_seconds() >= 5 for a, b in zip(reductions, reductions[1:]))
+    assert not any(c[2]["entity_id"] == fixture.actuators["force"] for c in fixture.calls)
+    assert not fixture.incidents
+    assert sum(c[2]["entity_id"] == fixture.actuators["ess_setpoint"] for c in fixture.calls) == 120
