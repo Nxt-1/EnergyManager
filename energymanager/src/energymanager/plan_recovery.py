@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from .control import GuardedActuator
 from .domain import Snapshot, encode, json_data
+from .execution import execution_protocol
 
 if TYPE_CHECKING:
     from .service import Application
@@ -90,7 +91,9 @@ class PlanRecovery:
         if self.plan.get("input_digest") != decision["digest"]:
             raise ValueError("Saved plan does not match its original input snapshot")
         original = Snapshot.from_dict(decision["snapshot"])
-        return Snapshot.from_dict(self.plan["effective_snapshot"]) if self.plan.get("effective_snapshot") else original
+        source = Snapshot.from_dict(self.plan["effective_snapshot"]) if self.plan.get("effective_snapshot") else original
+        execution_protocol(source)  # Unsupported archived formats cannot silently regain runtime authority.
+        return source
 
     def attempt(self) -> bool:
         app = self.app

@@ -17,7 +17,7 @@ import numpy as np
 
 from .appliance_plan import CycleCurve, starts_for
 from .domain import Snapshot
-from .execution import PHASE_SWITCH_SECONDS, RESTART_SECONDS, transition_power, transition_trace
+from .execution import RESTART_SECONDS, execution_protocol, phase_switch_seconds, transition_power, transition_trace
 from .validation import TOL
 
 INF = highspy.kHighsInf
@@ -143,6 +143,7 @@ class JointModel:
         ev_total_limit: float | None = None,
         tight_ceilings: bool = False,
     ) -> None:
+        execution_protocol(snapshot)
         self.snapshot = snapshot
         self.deadline_bounds: dict[str, int] | None = None
         self.linear = LinearModel()
@@ -804,7 +805,7 @@ class JointModel:
             wait = restarts[t]
             prior_off = s.intervals[t - 1].hours * 3600 if t else RESTART_SECONDS
             remaining = max(0, RESTART_SECONDS - prior_off)
-            events.append((t, change, PHASE_SWITCH_SECONDS))
+            events.append((t, change, phase_switch_seconds(s)))
             if remaining:
                 m.integer.append(wait)
                 m.row([(wait, 1)] + [(i, -a) for i, a in active], upper=0)
@@ -948,7 +949,7 @@ class JointModel:
 
     def fixed_transition_values(self) -> list[float] | None:
         """Build a known pinned profile before allocation, so nominal arithmetic cannot reject its ramp."""
-        if self.snapshot.execution is None:
+        if self.snapshot.execution is None or execution_protocol(self.snapshot) == 1:
             return None
         m, s = self.linear, self.snapshot
         v = m.variables
@@ -1204,7 +1205,7 @@ class JointModel:
                           transition_scope="fixed integer profile; joint source/stock/peak reallocation")
         if feasible:
             proposed = list(model.getSolution().col_value)
-            if self.snapshot.execution is not None and fixed_template is None:
+            if self.snapshot.execution is not None and execution_protocol(self.snapshot) != 1 and fixed_template is None:
                 _, corrections = self.execution_corrections(proposed)
                 trace = transition_trace(self.snapshot,
                     [proposed[i] for i in m.variables["amps_one"]], [proposed[i] for i in m.variables["amps_three"]],

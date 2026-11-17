@@ -13,7 +13,7 @@ from copy import deepcopy
 
 from .domain import PeakPermission, Snapshot, json_data, instant, encode
 from .charging_timing import ChargingTiming
-from .execution import execution_identity, transition_trace, transition_power
+from .execution import execution_identity, execution_protocol, phase_switch_seconds, transition_trace, transition_power
 from .charging_candidates import fixed_grid_reference, reachable_deadline_bounds
 from .deadline_guard import deadline_certificate
 from .charging_continuity import ChargingContinuity, ChargingWindow
@@ -1298,7 +1298,8 @@ class Planner:
         output["coherent_candidate"] = self.coherent_scope
         output["deadline_guard"] = deadline_guard
         output["reference_fingerprint"] = sha256(encode(reference["flows"]).encode()).hexdigest()
-        output["status"] = ("Transition candidate checked" if output.get("execution_transition", {}).get("has_transitions")
+        output["status"] = ("Transition candidate checked" if execution_protocol(s) == 2
+                            and output.get("execution_transition", {}).get("has_transitions")
                             else planning_status)
         output["minimum_grid_certified"] = source_certificate
         output["permission_proposals"] = permission_proposals
@@ -1570,13 +1571,17 @@ class Planner:
             trace = transition_trace(s, flows["amps_one"], flows["amps_three"], flows["ev_energy"])
             powers = transition_power(s, flows["amps_one"], flows["amps_three"], flows["ev_energy"])
             output["execution_transition"] = {
-                "protocol": 2, "kind": "calculated_transition_forecast", "measured": False,
+                "protocol": execution_protocol(s),
+                "kind": "historical_calculation_replay" if execution_protocol(s) == 1 else "calculated_transition_forecast",
+                "measured": False,
                 "input_digest": s.digest, "trace_digest": sha256(encode(trace).encode()).hexdigest(),
                 "has_transitions": any(len(segments) > 1 for segments in trace),
                 "interval_peak_kw": [peak for _, peak in powers],
                 "scope": "fixed requested profile; joint source/stock/peak allocation, independently audited",
                 "assumptions": {"downward_acknowledgement_seconds": 5, "phase_forecast_seconds": 180,
-                                "quantity_endpoint": "existing task quantity; measured counter stops live execution"},
+                                "quantity_endpoint": "existing task quantity; measured counter stops live execution"}
+                    if execution_protocol(s) == 2 else {"phase_forecast_seconds": phase_switch_seconds(s),
+                        "current_changes": "historical instantaneous slot arithmetic; audit only, no live authority"},
             }
         output["execution_id"] = execution_identity(output)
         return output

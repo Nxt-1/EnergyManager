@@ -25,7 +25,7 @@ or the referenced external checkpoint. Historical wording is not new authorizati
 - Authorized guarded setpoint actuator; no live operation or replacement-model work.
 - Chat: Implementation — EV-A015 guarded EV setpoints, `01a1e662-443c-74d3-a39c-c8d5e1c17736` (local); architecture: Planning review `01a1cc3a-ed08-7f50-9aba-20552446bce1`.
 - Branch `codex/ev-a015`, managed checkout `C:/Users/Arne/.codex/worktrees/ev-a015/EnergyManager`, based on main `bb782b3` (4.7.3). Intended next release 4.7.4, subject to integration order.
-- State:4.7.4 corrected candidate ready for required CI. First CI927 pass/1 certificate-witness integration failure is corrected under existing proof/audit criteria;17 certificate/control-event and127 ownership/control cases pass, with Ruff/mypy. Offline full Windows924 pass/1 reproduced main limitation; frontend125, both fake-endpoint E2E variants and wheel/sdist passed. Next CI, ordered main integration and image publication; no live operation.
+- State: candidate `e0a0623` passed full Linux CI (930 tests, frontend, both offline E2E variants and builds). Final approved historical-protocol compatibility correction passes69 execution/admission/recovery cases; current execution is protocol2, historical protocol1 audit-only, unknown formats rejected. Next final corrected CI, main integration and image publication; no live operation.
 - Compatibility: candidate-local 5s ramp and existing quantity-completion events plus conservative phase/start allowances; bounded joint source/stock/peak reallocation and independent event audit. Repair scope/status never establishes global infeasibility/optimality or extra permission.
 - Evidence/checkpoint: `C:/Users/Arne/.codex/project-data/EnergyManager/checkpoints/ev-a015/implementation.md`; synthetic logs under external `runs/ev-a015-*`.
 - Interface clarification: the independent fast control loop may advance accepted
@@ -39,6 +39,10 @@ or the referenced external checkpoint. Historical wording is not new authorizati
   current targets continue without resetting physical clocks/readback, while a
   conflicting current phase/OFF supersedes obsolete pending actions. Ordinary ticks
   of the original plan do not themselves cancel the requested phase preparation.
+- Historical-audit clarification: preserve explicit protocol1 frozen arithmetic and
+  immutable evidence for replay/audit; all newly frozen execution uses protocol2,
+  including handover from old accepted plans. Historical validity does not authorize
+  legacy actuation or renew permission. Unknown explicit protocols fail clearly.
 - Architecture clarification: manual fixed-phase requests retain existing permitted
   power/quantity/source/peak bounds; no legal current in the requested phase means OFF/
   prepare-only until fresh authority, not rounding up. Protective OFF is allowed when

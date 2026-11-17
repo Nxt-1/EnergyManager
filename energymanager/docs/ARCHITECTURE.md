@@ -2265,7 +2265,14 @@ Implementation contracts in4.6.6:
   `vehicle_observed_at` must be an actual vehicle sample time; absent timing is unknown.
 - A frozen `Snapshot.execution` records actual/pending charger state and segmented
   accepted instructions, capped to their remaining task quantity. Legacy snapshots
-  omit this field and retain their original digest and arithmetic. A separate admitted
+  omit this field and retain their original digest and arithmetic. Recorded protocol1
+  execution snapshots likewise retain their historical130s phase allowance and
+  instant-current arithmetic for historical replay/audit. New snapshots use protocol2
+  transition semantics, including when freezing execution from an older accepted plan.
+  Historical audit validity grants or renews no live authority: all current actuator
+  writes obey EV-A015. Unknown explicit protocol versions are unsupported, not silently
+  interpreted as legacy. Preserve original snapshots/results/digests unchanged; label
+  the audit's protocol scope. A separate admitted
   `execution_handover` continues the valid prior source through the frozen boundary,
   intersecting current EV/ESS/conditional authority. It never repairs frozen flows.
   Instruction hashes distinguish changed work from a publication-ID-only change;

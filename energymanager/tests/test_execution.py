@@ -215,3 +215,51 @@ def test_phase_stop_straddles_five_minute_boundary_and_stop_from_sixteen_is_imme
                                        execution={"initial_phase": 1, "charger": {"current_a": 16}}),
                                [16, 0, 0], [0, 0, 0])
     assert stopped[0][0] == pytest.approx(3.68) and stopped[1:] == [(0, 0), (0, 0)]
+
+
+def test_historical_protocol_one_audits_recorded_math_without_new_live_admission():
+    from energymanager.execution import transition_power
+    from energymanager.publication import admit
+    from test_publication_closed_loop import result_for
+
+    current, _ = transition_model()
+    assert current.execution["protocol"] == 2
+    historical = replace(current, execution={**current.execution, "protocol": 1, "phase_switch_seconds": 130.})
+    original_digest = historical.digest
+    model = JointModel(historical)
+    for t, phase in ((0, "one"), (1, "three")):
+        for name in ("one", "three"):
+            for key, value in ((name, float(name == phase)), ("amps_" + name, 6 if name == phase else 0)):
+                index = model.linear.variables[key][t]
+                model.linear.lower[index] = model.linear.upper[index] = value
+    result = model.run(5)
+    assert result["feasible"], result
+    seconds = historical.intervals[1].hours * 3600
+    power = sum(result["flows"][name][1] for name in ("grid_ev", "pv_ev", "solar_dis_ev"))
+    assert power == pytest.approx(4.14 * (seconds - 130) / seconds)
+    assert validate(historical, result["flows"]) == []
+    accepted_before_upgrade = {**result_for(historical, result["flows"]), "execution": historical.execution}
+    refused, errors = admit(historical, accepted_before_upgrade, historical.observation, historical.observation.at)
+    assert any("protocol 1 is audit-only" in error for error in errors)
+    assert not refused["admission"]["passed"]
+    fresh = freeze_execution(replace(historical, execution=None), accepted_before_upgrade,
+                             {"phase": 1, "ready_at": historical.observation.at.isoformat()})
+    assert fresh.execution["protocol"] == 2 and fresh.execution["phase_switch_seconds"] == 180
+    assert historical.digest == original_digest
+    historical_live_shape = replace(historical, observation=replace(historical.observation, ev_power_kw=3.68))
+    assert transition_power(historical_live_shape, [16, 6], [0, 0])[1][0] == pytest.approx(1.38)
+    modern = replace(historical_live_shape, execution={**fresh.execution, "charger": {"current_a": 16}})
+    assert transition_power(modern, [16, 6], [0, 0])[1][0] > 1.38
+
+
+@pytest.mark.parametrize("protocol", [99, "2"])
+def test_unknown_explicit_execution_protocol_is_not_silently_legacy(protocol):
+    current, model = transition_model()
+    result = model.run(5)
+    assert result["feasible"]
+    unknown = replace(current, execution={**current.execution, "protocol": protocol})
+    assert any("Unsupported frozen EV execution protocol" in error for error in validate(unknown, result["flows"]))
+    with pytest.raises(ValueError, match="Unsupported frozen EV execution protocol"):
+        JointModel(unknown)
+    with pytest.raises(ValueError, match="Unsupported frozen EV execution protocol"):
+        freeze_execution(unknown, None, {"phase": 1})

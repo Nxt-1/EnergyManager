@@ -18,6 +18,8 @@ def admit(
 ) -> tuple[dict[str, Any], list[str]]:
     """Preserve the calculated schedule; current readings gate authority, not its economics."""
     errors = validate(snapshot, result["flows"], result.get("service"))
+    if snapshot.execution is not None and snapshot.execution.get("protocol") == 1:
+        errors.append("Historical execution protocol 1 is audit-only; freeze current protocol 2 before publication")
     guard = result.get("deadline_guard", {})
     if guard.get("status") == "certified":
         errors.extend(validate_certificate(guard))

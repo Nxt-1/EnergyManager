@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime, timedelta
 from hashlib import sha256
+import math
 from typing import Any
 
 from .domain import Capabilities, Interval, Snapshot, encode, instant
@@ -17,6 +18,28 @@ RESTART_SECONDS = 30.0
 CURRENT_STEP_SECONDS = 5.0
 PHASE_SWITCH_SECONDS = ACK_SECONDS + 60.0 + ACK_SECONDS + ACK_SECONDS + 30.0
 MINIMUM_PHASE_SWITCH_SECONDS = 60.0
+
+
+def execution_protocol(snapshot: Snapshot) -> int:
+    """Select immutable calculation arithmetic, never the active hardware protocol."""
+    if snapshot.execution is None:
+        return 0
+    protocol = snapshot.execution.get("protocol", 2)
+    if type(protocol) is not int or protocol not in (1, 2):
+        raise ValueError(f"Unsupported frozen EV execution protocol: {protocol!r}")
+    if protocol == 2 and snapshot.execution.get("phase_switch_seconds", PHASE_SWITCH_SECONDS) != PHASE_SWITCH_SECONDS:
+        raise ValueError("Invalid protocol-2 phase forecast timing")
+    return int(protocol)
+
+
+def phase_switch_seconds(snapshot: Snapshot) -> float:
+    """Historical protocol 1 retains its recorded forecast; current calculations use protocol 2."""
+    if execution_protocol(snapshot) == 1:
+        seconds = float((snapshot.execution or {}).get("phase_switch_seconds", 130.0))
+        if not math.isfinite(seconds) or seconds < 0:
+            raise ValueError("Invalid historical EV phase forecast timing")
+        return seconds
+    return PHASE_SWITCH_SECONDS
 
 
 def execution_identity(plan: dict[str, Any]) -> str:
@@ -142,6 +165,7 @@ def running_context(snapshot: Snapshot, plan: dict[str, Any] | None, phase: int,
 def freeze_execution(snapshot: Snapshot, plan: dict[str, Any] | None,
                      charger: dict[str, Any], *, conditional_valid: bool = True) -> Snapshot:
     """Commit the accepted trajectory, rather than extending the current command."""
+    execution_protocol(snapshot)  # Unknown explicit formats cannot become current authority.
     start = snapshot.intervals[0].start
     ready = max(start, instant(charger.get("ready_at", start.isoformat())))
     initial_phase = int(charger.get("phase", snapshot.observation.ev_phases))
@@ -237,7 +261,7 @@ def freeze_execution(snapshot: Snapshot, plan: dict[str, Any] | None,
         index += 1
     return replace(snapshot, intervals=tuple(intervals), hold_until=end, hold_ev_kw=0.0,
                    hold_phases=initial_phase, hold_plan_id=plan["id"] if plan else None,
-                   execution={"protocol": 1, "phase_switch_seconds": PHASE_SWITCH_SECONDS,
+                   execution={"protocol": 2, "phase_switch_seconds": PHASE_SWITCH_SECONDS,
                               "initial_phase": initial_phase, "ready_at": ready.isoformat(),
                               "commitment_until": end.isoformat(), "commitments": commitments,
                               "charger": charger, "running_task":running})
@@ -253,7 +277,7 @@ def wait_events(snapshot: Snapshot, modes: list[int]) -> list[tuple[int, float]]
     for t, mode in enumerate(modes):
         if mode:
             if mode != phase:
-                events.append((t, PHASE_SWITCH_SECONDS))
+                events.append((t, phase_switch_seconds(snapshot)))
             elif not previous_on:
                 prior_off = snapshot.intervals[t - 1].hours * 3600 if t else RESTART_SECONDS
                 remaining = max(0, RESTART_SECONDS - prior_off)
@@ -282,6 +306,7 @@ def transition_trace(snapshot: Snapshot, one: list[float], three: list[float],
     is measured energy or a grant of additional command authority.
     """
     c, o = snapshot.capabilities, snapshot.observation
+    historical = execution_protocol(snapshot) == 1
     modes = [3 if b > .5 else 1 if a > .5 else 0 for a, b in zip(one, three)]
     waits = wait_events(snapshot, modes)
     blocked = [(snapshot.intervals[k].start, snapshot.intervals[k].start + timedelta(seconds=seconds))
@@ -300,7 +325,7 @@ def transition_trace(snapshot: Snapshot, one: list[float], three: list[float],
     remaining_area: float | None = None
     for t, (interval, mode) in enumerate(zip(snapshot.intervals, modes)):
         segments = []
-        if stocks is not None and mode and (t == 0 or not modes[t - 1]):
+        if not historical and stocks is not None and mode and (t == 0 or not modes[t - 1]):
             end = t + 1
             while end < len(modes) and modes[end]:
                 end += 1
@@ -317,7 +342,7 @@ def transition_trace(snapshot: Snapshot, one: list[float], three: list[float],
                 at = until
                 continue
             phase = mode
-            if not on:
+            if historical or not on:
                 current = target  # Startup at 6 A and delivery verification are included in the startup allowance.
             elif target >= current:
                 current = target
