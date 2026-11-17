@@ -78,7 +78,7 @@ def test_small_manual_quantity_includes_a_phase_wait_spanning_the_completion_slo
     if first.end > AT+timedelta(seconds=15):
         intervals = (replace(first,end=AT+timedelta(seconds=15)),
                      Interval(AT+timedelta(seconds=15),first.end,first.house_kw,first.pv_ac_kw,first.pv_dc_kw),*intervals[1:])
-    execution = {"protocol":1,"phase_switch_seconds":130,"initial_phase":1,"ready_at":AT.isoformat(),
+    execution = {"protocol":2,"phase_switch_seconds":180,"initial_phase":1,"ready_at":AT.isoformat(),
         "commitment_until":(AT+timedelta(seconds=15)).isoformat(),"charger":{"phase":1},
         "commitments":[{"start":AT.isoformat(),"end":(AT+timedelta(seconds=15)).isoformat(),"power_kw":0,"phases":1}]}
     s = replace(base,observation=o,capabilities=replace(C,phases=(3,)),policy=replace(P,planning_budget_seconds=4),
@@ -89,7 +89,7 @@ def test_small_manual_quantity_includes_a_phase_wait_spanning_the_completion_slo
     assert not validate(effective,result["flows"],result["service"])
     assert not admit(effective,result,o,AT)[1]
     completion = instant(effective.observation.ev_progress["manual"]["completion_at"])
-    assert completion >= AT+timedelta(seconds=145)
+    assert completion >= AT+timedelta(seconds=195)
     assert max(result["flows"]["ev_energy"]) == pytest.approx(23.4)
     assert any(result["flows"]["amps_three"])
     assert not any(result["flows"]["amps_one"])
